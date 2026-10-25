@@ -1,0 +1,56 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The body of one readiness finding: its title with the explanation as a tooltip, the items
+   (each with what it is for, as a tooltip) and the fix. *@
+<OmniStack Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <strong>@L[PipelineReadinessText.TitleKey(Check.Kind)]</strong>
+        <PipelineInfoTip Text="@L[PipelineReadinessText.HintKey(Check.Kind)].Value" />
+    </OmniStack>
+    @if (Check.EmptyValues.Count > 0)
+    {
+        @* R-10: library or vault, key and pipeline, one row per value and pipeline that reads it. *@
+        <PipelineReadinessEmptyValues Rows="@Check.EmptyValues" ReturnUrl="@ReturnUrl"
+                                      IsVault="@(Check.Kind == PipelineSetupReadinessKind.EmptyVaultSecrets)" />
+    }
+    else if (Check.Items.Count > 0)
+    {
+        <ul class="pipeline-setup-readiness-items">
+            @foreach (var item in Check.Items)
+            {
+                <li>
+                    @if (PipelineReadinessText.ItemOwnerHref(Check, item, ReturnUrl) is { } ownerHref)
+                    {
+                        <OmniLink Href="@ownerHref" data-testid="setup-readiness-item-link"><code>@item</code></OmniLink>
+                    }
+                    else
+                    {
+                        <code>@item</code>
+                    }
+                    @if (PipelineReadinessText.ItemRoleKey(Check.Kind, item) is { } role)
+                    {
+                        <span data-testid="setup-readiness-item-role"> : @L[role]</span>
+                    }
+                    @if (ItemPurpose(item) is { } purpose)
+                    {
+                        <PipelineInfoTip Text="@purpose" />
+                    }
+                    @if (PipelineReadinessText.ItemCreationKey(Check.Kind) is { } creationKey)
+                    {
+                        <OmniLink Href="@PipelineReadinessText.ItemCreationHref(Check.Kind, item, ProjectId, ReturnUrl)"
+                                  data-testid="setup-readiness-item-create"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[creationKey]</OmniLink>
+                    }
+                </li>
+            }
+        </ul>
+    }
+    @if (Check.Kind == PipelineSetupReadinessKind.NoRepository)
+    {
+        <div>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync" data-testid="setup-readiness-create-repository"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateGitRepository"]</span></ChildContent></OmniButton>
+        </div>
+    }
+    else if (Check.EmptyValues.Count == 0 && PipelineReadinessText.RemediationHref(Check.Kind, ProjectId, ReturnUrl) is { } href)
+    {
+        <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[PipelineReadinessText.RemediationKey(Check.Kind)!]</OmniLink>
+    }
+</OmniStack>

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Sockets;
+using Aetheus.Back.Components.Audit;
+using Aetheus.Back.Seeding;
+using Aetheus.Back.Services;
 using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Pipelines;
 
 public static class PipelinesModuleExtensions
 {
-    public const string EnvironmentCheckHttpClient = "PipelineEnvironmentCheck";
-
     public static IServiceCollection AddPipelinesModule(this IServiceCollection services)
     {
         services.AddScoped<IPipelineRepository, PipelineRepository>();
@@ -27,15 +28,17 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineRunRetentionRepository, PipelineRunRetentionRepository>();
         services.AddScoped<IPipelineProjectOwnerReader, PipelineProjectOwnerRepository>();
         services.AddScoped<IPipelineResourceLockRepository, PipelineResourceLockRepository>();
+        services.AddScoped<IPipelineResumeWaitRepository, PipelineResumeWaitRepository>();
         services.AddScoped<IPipelineRunLineageService, PipelineRunLineageService>();
         services.AddScoped<IPipelineFavoriteRepository, PipelineFavoriteRepository>();
         services.AddScoped<IPipelineFavoriteService, PipelineFavoriteService>();
         services.AddScoped<IPipelineGitService, PipelineGitService>();
-        services.AddScoped<DemoContentSeeder>();
-        services.AddScoped<TotoConformanceSeeder>();
-        services.AddScoped<DeliveryPipelineTemplateSeeder>();
+        services.AddScoped<IProjectConfigRepositoryService, ProjectConfigRepositoryService>();
+        services.AddScoped<IPipelineEnvFilePreparer, PipelineEnvFilePreparer>();
+        services.AddScoped<IPipelineProductionSetupService, PipelineProductionSetupService>();
         services.AddScoped<IPipelineVariableResolver, PipelineVariableResolver>();
         services.AddScoped<IPipelineService, PipelineService>();
+        services.AddHostedService<TaskTimeoutService>();
         services.AddScoped<IPipelineRunService, PipelineRunService>();
         services.AddScoped<IPipelineLauncher>(sp => (IPipelineLauncher)sp.GetRequiredService<IPipelineRunService>());
         services.AddScoped<IPipelineApprovalService, PipelineApprovalService>();
@@ -65,13 +68,17 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineScannerManifestPreflight, PipelineScannerManifestPreflight>();
         services.AddScoped<IPipelineReleaseArtifactPreflight, PipelineReleaseArtifactPreflight>();
         services.AddScoped<IPipelineAiProfilePreflight, PipelineAiProfilePreflight>();
+        services.AddScoped<IPipelineConfigTemplatePreflight, PipelineConfigTemplatePreflight>();
         services.AddScoped<IPipelineRunPreflightService, PipelineRunPreflightService>();
         services.AddScoped<IPipelineSetupReadinessService, PipelineSetupReadinessService>();
         services.AddScoped<IPipelineRequirementsProvisioner, PipelineRequirementsProvisioner>();
+        services.AddScoped<IPipelineResourceUsageRepository, PipelineResourceUsageRepository>();
+        services.AddScoped<IPipelineResourceUsageService, PipelineResourceUsageService>();
         services.AddScoped<IPipelineProjectCopyService, PipelineProjectCopyService>();
         services.AddScoped<IRunStageBaselineService, RunStageBaselineService>();
         services.AddScoped<IPipelineMigrationGateRepository, PipelineMigrationGateRepository>();
         services.AddScoped<IPipelineMigrationGateService, PipelineMigrationGateService>();
+        services.AddScoped<IPipelineSchemaTrackingService, PipelineSchemaTrackingService>();
         services.AddScoped<IPipelinePortRegistryGuard, PipelinePortRegistryGuard>();
         services.AddScoped<IPipelineRunDefinitionParser, PipelineRunDefinitionParser>();
         services.AddScoped<IPipelineRunControlService, PipelineRunControlService>();
@@ -106,6 +113,9 @@ public static class PipelinesModuleExtensions
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<Events.PipelineRunCompletedEvent>, PipelineRunCompletedDownstreamHandler>();
         // Orchestration: complete a waiting `type: trigger` step when its child run finishes.
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<Events.PipelineRunCompletedEvent>, PipelineRunCompletedTriggerHandler>();
+        // A failed parent run cancels the runs it triggered that are still in flight (R-31).
+        services.AddScoped<PipelineFailedParentChildCanceller>();
+        services.AddScoped<Services.DomainEvents.IDomainEventHandler<Events.PipelineRunCompletedEvent>, PipelineRunCompletedChildCancellationHandler>();
         // Notifications: a failed or succeeded run, and an approval gate, become notification events.
         services.AddScoped<PipelineRunNotificationPublisher>();
         services.AddScoped<PipelineRefusedLaunchRecorder>();
@@ -113,9 +123,15 @@ public static class PipelinesModuleExtensions
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<Events.PipelineApprovalRequestedEvent>, PipelineApprovalRequestedNotificationHandler>();
         // Git announces a push; this module decides what it means for pipelines. Observer dispatch:
         // a push already written to disk must not be reported as failed because a trigger did not fire.
+        services.AddScoped<PipelineDefinitionSynchronizer>();
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<Git.Events.GitPushProcessedEvent>,
             GitPushPipelineTriggerHandler>();
+        // A branch the server moved itself (post-deployment advance, merged pull request) follows the
+        // same definition sync as a push, and triggers nothing (ADR-044).
+        services.AddScoped<
+            Services.DomainEvents.IDomainEventHandler<Git.Events.GitBranchMovedEvent>,
+            GitBranchMovedPipelineSyncHandler>();
         // Orchestration, inverted: Tasks announces that a pipeline-owned task settled, and this side
         // decides what the run does next. Both are dispatched strictly, so a failure here reaches the
         // Tasks caller exactly as the direct call it replaced did.
@@ -132,7 +148,7 @@ public static class PipelinesModuleExtensions
         // bypassed by DNS-rebinding (TOCTOU between the check and the request). Re-validate the
         // resolved IP at connect time via SocketsHttpHandler.ConnectCallback, mirroring the
         // "webhooks" client, so a short-TTL host that resolves to a forbidden address is rejected.
-        services.AddHttpClient(EnvironmentCheckHttpClient)
+        services.AddHttpClient(PipelineEnvironmentCheckGuard.EnvironmentCheckHttpClient)
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,

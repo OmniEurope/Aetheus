@@ -8,7 +8,7 @@
                 <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@record.Kind.ToString().ToUpperInvariant()</OmniText>
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@record.Name</OmniText>
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@MailUiText.VerdictStyle(record.Verdict)">@MailUiText.Verdict(L, record.Verdict)</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@MailUiText.VerdictStyle(record.Verdict)">@MailUiText.Verdict(L, record.Verdict)</OmniBadge>
                     @if (!string.IsNullOrEmpty(record.Detail))
                     {
                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@MailUiText.Detail(L, record.Detail)</OmniText>

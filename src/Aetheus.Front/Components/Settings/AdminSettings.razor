@@ -24,13 +24,13 @@
                                 ValueExpression="@(() => setting.Value)" Class="omni-u-w-100" />
                         </OmniColumn>
                         <OmniColumn Span="12" MediumSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => SaveSetting(setting.Key))" Class="@(_savingKeys.Contains(setting.Key) ? "btn-busy" : null)" Busy="@(_savingKeys.Contains(setting.Key))"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => SaveSetting(setting.Key))" Class="@(_savingKeys.Contains(setting.Key) ? "btn-busy" : null)" Busy="@(_savingKeys.Contains(setting.Key))"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                         </OmniColumn>
                     </OmniRow>
                 }
             </OmniCard>
             @* A switch, saved as soon as it changes: "run to end" is a safety choice, not free text. *@
-            <OmniSettingsSection Title="@L["Pipelines"]" Class="omni-u-mt-sm">
+            <OmniSettingsSection Title="@L["Pipelines"]" Class="omni-u-mt-md">
                 <OmniSettingsTile Title="@L["AllowRunToEnd"]" Description="@L["AllowRunToEndDescription"]">
                     <OmniSwitch Value="@_allowRunToEnd" ValueExpression="@(() => _allowRunToEnd)"
                                 ValueChanged="@((bool value) => SaveRunToEndAsync(value))" Disabled="@_savingRunToEnd"
@@ -66,7 +66,7 @@
                     <OmniFormField Label="@L["Value"]" For="oe-formfield-pages-settings-adminsettings-2">
                         <OmniPassword Id="oe-formfield-pages-settings-adminsettings-2" @bind-Value="_newSecretValue" />
                     </OmniFormField>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddSecret"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddSecret"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 </OmniRow>
 
                 <OmniDataGrid FillAvailableHeight="true" Items="@_secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="SecretDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
@@ -80,7 +80,7 @@
                         <OmniDataGridColumn TItem="SecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
                         <OmniDataGridColumn TItem="SecretDto" Title="" Width="6.25rem" Sortable="false">
                             <Template Context="secret">
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret.Id))" title="@L["DeleteSecret"]" Label="@L["DeleteSecret"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret.Id))" title="@L["DeleteSecret"]" Label="@L["DeleteSecret"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                     </Columns>
@@ -90,7 +90,7 @@
 
         <OmniTabsItem Key="tokens" Title="@L["RegistrationTokens"]">
             <OmniCard Class="omni-u-mt-sm">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GenerateToken" Class="omni-u-mb-lg" title="@L["GenerateToken"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Generate"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GenerateToken" Class="omni-u-mb-lg" title="@L["GenerateToken"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Generate"]</span></ChildContent></OmniButton>
 
                 <OmniDataGrid @ref="_tokensGrid" ExportMarkdown="false" FillAvailableHeight="true" Items="@_tokens" TItem="RegistrationTokenDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" Class="aetheus-grid-fullheight" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                     <Columns>
@@ -104,8 +104,8 @@
                                 {
                                     <code class="token-code">----------------</code>
                                 }
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ToggleTokenReveal(t.Id))" title="@(_revealedTokens.Contains(t.Id) ? L["HideToken"].Value : L["ShowToken"].Value)" Label="@(_revealedTokens.Contains(t.Id) ? L["HideToken"].Value : L["ShowToken"].Value)"><OmniIcon Name="@MaterialIconMap.Resolve((_revealedTokens.Contains(t.Id) ? "visibility_off" : "visibility"))" /></OmniButton>
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyToken(t.Token))" title="@L["CopyToken"]" Label="@L["CopyToken"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ToggleTokenReveal(t.Id))" title="@(_revealedTokens.Contains(t.Id) ? L["HideToken"].Value : L["ShowToken"].Value)" Label="@(_revealedTokens.Contains(t.Id) ? L["HideToken"].Value : L["ShowToken"].Value)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_revealedTokens.Contains(t.Id) ? "visibility_off" : "visibility"))" /></Icon></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyToken(t.Token))" title="@L["CopyToken"]" Label="@L["CopyToken"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="RegistrationTokenDto" Property="IsUsed" Title="@L["Used"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@UsedText">

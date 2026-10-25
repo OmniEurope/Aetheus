@@ -200,15 +200,14 @@ public sealed class PipelineAdvisoryAiStepTests
     [Fact]
     public async Task AMissingProfile_OnAnAdvisoryStep_FailsOnlyThatStep()
     {
-        var (_, finalizer, stepRun) = await DispatchAiStepAsync(
+        var (_, refusal, stepRun) = await DispatchAiStepAsync(
             advisory: true,
             new AiPipelineExecution(null, "AI runner profile 'claude-sonnet' was not found in the pipeline's organization."));
 
         Assert.Equal(TaskExecutionStatus.Failed, stepRun.Status);
         Assert.Contains("claude-sonnet", stepRun.FailureReason, StringComparison.Ordinal);
         Assert.StartsWith("Advisory step not run", stepRun.FailureReason, StringComparison.Ordinal);
-        await finalizer.DidNotReceive().FailRunWithUnmatchedStagesAsync(
-            Arg.Any<int>(), Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+        Assert.Null(refusal);
     }
 
     [Fact]
@@ -232,38 +231,36 @@ public sealed class PipelineAdvisoryAiStepTests
     [Fact]
     public async Task ANullOrganization_OnAnAdvisoryStep_FailsOnlyThatStep_SayingSo()
     {
-        var (_, finalizer, stepRun) = await DispatchAiStepAsync(advisory: true, organizationId: null);
+        var (_, refusal, stepRun) = await DispatchAiStepAsync(advisory: true, organizationId: null);
 
         Assert.Equal(TaskExecutionStatus.Failed, stepRun.Status);
         Assert.Equal(TaskFailureCodes.InfrastructureMismatch, stepRun.FailureCode);
         Assert.Contains("belongs to no organization", stepRun.FailureReason, StringComparison.Ordinal);
-        await finalizer.DidNotReceive().FailRunWithUnmatchedStagesAsync(
-            Arg.Any<int>(), Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+        Assert.Null(refusal);
     }
 
     [Fact]
     public async Task AMissingProfile_OnAnOrdinaryAiStep_StillFailsTheRun()
     {
-        var (_, finalizer, _) = await DispatchAiStepAsync(
+        var (_, refusal, stepRun) = await DispatchAiStepAsync(
             advisory: false,
             new AiPipelineExecution(null, "AI runner profile 'claude-sonnet' was not found in the pipeline's organization."));
 
-        await finalizer.Received(1).FailRunWithUnmatchedStagesAsync(
-            7, Arg.Is<List<string>>(reasons => reasons.Single().Contains("was not found", StringComparison.Ordinal)),
-            Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+        Assert.NotNull(refusal);
+        Assert.Contains("was not found", refusal.Reason, StringComparison.Ordinal);
+        Assert.Same(stepRun, refusal.RefusedStep);
     }
 
     [Fact]
     public async Task ACliProfile_OnAnAdvisoryStep_FailsThatStepWithTheReconfigureReason()
     {
-        var (_, finalizer, stepRun) = await DispatchAiStepAsync(
+        var (_, refusal, stepRun) = await DispatchAiStepAsync(
             advisory: true,
             new AiPipelineExecution(null, "AI runner profile 'claude-sonnet' must be reconfigured as an API profile (provider, model and API key)."));
 
         Assert.Equal(TaskExecutionStatus.Failed, stepRun.Status);
         Assert.Contains("must be reconfigured", stepRun.FailureReason, StringComparison.Ordinal);
-        await finalizer.DidNotReceive().FailRunWithUnmatchedStagesAsync(
-            Arg.Any<int>(), Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+        Assert.Null(refusal);
     }
 
     [Fact]
@@ -350,11 +347,10 @@ public sealed class PipelineAdvisoryAiStepTests
         Assert.Equal("AI review", environment["AETHEUS_STAGE_NAME"]);
     }
 
-    private static async Task<(PipelineStepTaskDispatcher, IPipelineRunFinalizer, PipelineStepRun)> DispatchAiStepAsync(
+    private static async Task<(PipelineStepTaskDispatcher, StageDispatchRefusal?, PipelineStepRun)> DispatchAiStepAsync(
         bool advisory, AiPipelineExecution? execution = null, string? gitRange = null, Action<ServerTask>? onTracked = null,
         int? organizationId = 1, IAiTaskService? aiService = null, IPipelineRepository? pipelineRepository = null)
     {
-        var finalizer = Substitute.For<IPipelineRunFinalizer>();
         var ai = aiService ?? Substitute.For<IAiTaskService>();
         ai.BuildPipelineExecutionAsync(
                 Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<bool>(),
@@ -366,7 +362,7 @@ public sealed class PipelineAdvisoryAiStepTests
         encryption.EncryptValue(Arg.Any<string>()).Returns(call => call.Arg<string>());
         var dispatcher = new PipelineStepTaskDispatcher(
             repository, Substitute.For<IPipelineDispatchServerResolver>(),
-            Substitute.For<IPipelineStepTaskBuilder>(), finalizer, Substitute.For<IPipelineTriggerStepCoordinator>(),
+            Substitute.For<IPipelineStepTaskBuilder>(), Substitute.For<IPipelineTriggerStepCoordinator>(),
             Substitute.For<IPipelineBranchAdvanceStep>(), Substitute.For<IPipelineAnalysisTaskFactory>(),
             Substitute.For<IPipelineDotnetTestTaskFactory>(), Substitute.For<IPipelineFunctionTaskFactory>(),
             Substitute.For<IPipelineGateStatusTaskFactory>(),
@@ -390,10 +386,10 @@ public sealed class PipelineAdvisoryAiStepTests
         var stepRun = new PipelineStepRun { Id = 3, PipelineRunId = 7, StageName = "AI review", StepName = "Review commits" };
         var server = new Server { Id = 5, Name = "runner", OsType = OsType.Linux, OrganizationId = 1 };
 
-        await dispatcher.CreateTasksForStageAsync(
+        var refusal = await dispatcher.CreateTasksForStageAsync(
             7, server, [stepRun], stageDef, new Dictionary<string, string> { ["WORKSPACE"] = "/w", ["BASELINE"] = "0123456789abcdef0123456789abcdef01234567" }, [], false,
             [], organizationId, projectId: 2, Substitute.For<IPipelineChildRunLauncher>(),
             TestContext.Current.CancellationToken);
-        return (dispatcher, finalizer, stepRun);
+        return (dispatcher, refusal, stepRun);
     }
 }

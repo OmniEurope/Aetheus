@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/run-qa-deployed-integration-suite.sh</c>, run through the real
+/// The C# port of the former <c>run-qa-deployed-integration-suite.sh</c> script, run through the real
 /// executor against an in-memory QA backend: the argument refusals, the health endpoints as a technical
 /// failure, the five graded probes, the proof and the failed entry the gate step publishes.
 /// </summary>

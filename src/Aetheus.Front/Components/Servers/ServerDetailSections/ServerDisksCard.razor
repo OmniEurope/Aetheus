@@ -1,0 +1,33 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-47: the storage of the server in words an operator reads without a calculator: for each filesystem
+   the free space over the total, a bar of what is used, and the number of files with its help mark. *@
+<OmniCard Class="omni-u-mb-lg server-disks-card" data-testid="server-disks-card">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+        <OmniIcon Name="OmniIconName.HardDrive" Class="omni-u-text-muted" />
+        <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["DisksTitle"]</OmniText>
+    </OmniStack>
+    @if (Rows.Count == 0)
+    {
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">@L["Unavailable"]</OmniText>
+    }
+    else
+    {
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+            @foreach (var row in Rows)
+            {
+                <div class="server-disk-item" data-testid="server-disk-item">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+                        <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 server-disk-name">@row.Name</OmniText>
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@row.FreeOfTotal</OmniText>
+                    </OmniStack>
+                    <OmniProgressBar Value="@row.UsedGb" Maximum="@Math.Max(1, row.TotalGb)" ShowValue="false" ValueText="@row.UsedText"
+                        Class="@($"metric-bar metric-bar-thin {row.BarClass}")" />
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniText Element="OmniTextElement.Small" Tone="@row.FileCountTone" Class="omni-u-m-0">@row.FileCountText</OmniText>
+                        <FileCountHelp />
+                    </OmniStack>
+                </div>
+            }
+        </OmniStack>
+    }
+</OmniCard>

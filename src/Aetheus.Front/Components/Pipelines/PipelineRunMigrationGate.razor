@@ -2,7 +2,7 @@
 
 @* Recette R1-43: what the expand/contract gate of each blue-green migrate step concluded, kept by the
    control plane instead of living only in the step log. Nothing renders for a run without a gate. *@
-@if (_gates is { Count: > 0 } gates)
+@if (Gates is { Count: > 0 } gates)
 {
     <OmniCard Class="run-attestation-card run-migration-gate-card" data-testid="run-migration-gate">
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.ShieldCheck" Class="run-tile-icon" /> @L["MigrationGateTitle"]</OmniText>

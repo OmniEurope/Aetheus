@@ -8,14 +8,14 @@
     <Badges>
         <HelpLink PageKey="alerts" />
     </Badges>
-    <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_recent.Count > 0)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
         <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentAlerts"] (@_recent.Count)</OmniHeading>
         @* The section's action sits in its action menu, named after what it does: it empties this
            session's list of recent alerts (and the unread count), it does not mark them read. *@
@@ -24,15 +24,16 @@
         </OmniOverflowMenu>
     </OmniStack>
     @* Never a pager; the list keeps at most AlertNotificationService.MaxRecent (50) alerts. *@
-    @* A fired alert has no id; its trigger instant tells the rows apart for the bold new-row mark. *@
-    <AetheusDataGrid @ref="_recentGrid" ExportName="@L["RecentAlerts"]" Data="@_recent" TItem="AlertTriggeredDto" PageSize="50" Virtualize="@(_recent.Count > 50)" KeyProperty="TriggeredAt" class="omni-u-mb-2xl">
+    @* The trigger instant tells the rows apart for the bold new-row mark. A row opens its alert's page
+       when the alert's source stores its occurrences (OccurrenceId), the others stay unlinked. *@
+    <AetheusDataGrid @ref="_recentGrid" RowClick="@OpenRecentAlert" ExportName="@L["RecentAlerts"]" Data="@_recent" TItem="AlertTriggeredDto" PageSize="50" Virtualize="@(_recent.Count > 50)" KeyProperty="TriggeredAt" class="omni-u-mb-2xl">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AlertTriggeredDto" Property="TriggeredAt" Title="@L["TriggeredAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Severity" Title="@L["Severity"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
                 <Template Context="a"><OmniBadge Fill="OmniFill.Solid" Tone="@RecentSeverityBadge(a.Severity)">@a.Severity</OmniBadge></Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="ServerName" Title="@L["Server"]" Width="170px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
-            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Message" Title="@L["AlertMessage"]" Filterable="true" />
+            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Message" Truncate="true" Title="@L["AlertMessage"]" Filterable="true" />
         </Columns>
     </AetheusDataGrid>
 }
@@ -44,7 +45,7 @@
             <EmptyState Icon="notifications_off" Title="@L["NoAlerts"]" Description="@L["NoAlertsDescription"]" />
         </EmptyTemplate>
         <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="AlertRuleDto" Property="Name" Title="@L["AlertName"]" MinWidth="10rem" Filterable="true" />
+            <OmniDataGridColumn Frozen="true" TItem="AlertRuleDto" Property="Name" Title="@L["AlertName"]" Filterable="true" />
             <OmniDataGridColumn TItem="AlertRuleDto" Property="Severity" Title="@L["Severity"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
                 <Template Context="alert">
                     <OmniBadge Fill="OmniFill.Solid" Tone="@GetSeverityBadgeStyle(alert.Severity)">@L.Localize(alert.Severity)</OmniBadge>
@@ -65,11 +66,11 @@
                 <Template Context="alert">
                     @if (alert.IsEnabled)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["Disabled"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["Disabled"]</OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>
@@ -85,12 +86,12 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Actions"]" MinWidth="14rem" Sortable="false" Filterable="false" >
+            <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Actions"]" Sortable="false" Filterable="false" >
                 <Template Context="alert">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(alert))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAlert(alert.Id))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(alert))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAlert(alert.Id))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </OmniStack>
                     </span>
                 </Template>

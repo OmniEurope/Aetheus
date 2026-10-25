@@ -29,5 +29,9 @@
     {
         <OmniCodeBlock Code="@Error.TopFrame" Title="@L["ErrorTopFrame"]" Wrap="true" Class="app-error-detail-frame code-block-bounded code-block-tall" />
     }
-    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]" />
+    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
+        <SecondaryContent>
+            <OmniCopyButton Label="@L["CopyAsMarkdown"]" TextFactory="@MarkdownAsync" Class="app-error-detail-copy" />
+        </SecondaryContent>
+    </DialogFooter>
 </OmniStack>

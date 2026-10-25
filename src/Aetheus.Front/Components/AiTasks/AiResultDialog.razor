@@ -23,7 +23,7 @@ else
         <OmniColumn Span="12" MediumSpan="8">
             @if (_selected is not null)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
                              Class="omni-u-mb-md">
                     <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(_selected.Verdict)">@AiVerdictText.Label(L, _selected.Verdict)</OmniBadge>
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
@@ -40,12 +40,13 @@ else
                 </OmniStack>
                 <OmniTabs>
                         <OmniTabsItem Title="@L["Report"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("description"))" /></Icon><ChildContent>
+                            @* nosemgrep: aetheus.razor.markupstring-dynamic - Markdig pipeline with DisableHtml, raw HTML is dropped *@
                             <div class="markdown-content omni-u-p-md">@((MarkupString)_reportHtml)</div>
                         </ChildContent></OmniTabsItem>
                         <OmniTabsItem Title="@L["Diff"]" Disabled="@string.IsNullOrWhiteSpace(_selected.DiffPatch)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("difference"))" /></Icon><ChildContent>
                             @if (!string.IsNullOrWhiteSpace(_selected.DiffPatch))
                             {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DownloadPatch"]</span></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton>
                                 @if (!string.IsNullOrWhiteSpace(_selected.ProposedBranchName))
                                 {
                                     <OmniAlert Severity="OmniSeverity.Success" Class="omni-u-mb-sm">

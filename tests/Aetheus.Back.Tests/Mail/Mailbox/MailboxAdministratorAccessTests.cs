@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
-using Aetheus.Back.Components.Mail;
 using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Exceptions;
 using Microsoft.Extensions.Time.Testing;

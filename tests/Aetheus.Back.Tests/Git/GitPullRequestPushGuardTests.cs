@@ -5,7 +5,6 @@ using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
 using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
@@ -137,7 +136,7 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
         var released = Commit("released");
         RunGit(_work, $"push --quiet origin +{released}:refs/fixtures/objects");
         var advance = new GitBranchAdvanceService(
-            _repos, _runner, Options.Create(new GitLightOptions { RepositoriesPath = _root }),
+            _repos, _runner, Substitute.For<IGitBranchMovedAnnouncer>(), Options.Create(new GitLightOptions { RepositoriesPath = _root }),
             NullLogger<GitBranchAdvanceService>.Instance);
 
         var result = await advance.TryFastForwardAsync(ProjectId, "main", released, TestContext.Current.CancellationToken);
@@ -237,7 +236,7 @@ public sealed class GitPullRequestPushGuardTests : IDisposable
     }
 
     private GitBranchAdvanceService Advance() => new(
-        _repos, _runner, Options.Create(new GitLightOptions { RepositoriesPath = _root }),
+        _repos, _runner, Substitute.For<IGitBranchMovedAnnouncer>(), Options.Create(new GitLightOptions { RepositoriesPath = _root }),
         NullLogger<GitBranchAdvanceService>.Instance);
 
     private static BranchProtectionRule Rule(string pattern, BranchProtectionLevel level) =>

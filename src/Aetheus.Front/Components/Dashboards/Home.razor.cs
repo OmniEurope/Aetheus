@@ -26,8 +26,9 @@ public partial class Home : IAsyncDisposable
     private Func<string, string>? _serverStatusText;
     private Func<string, string> ServerStatusText => _serverStatusText ??= GridFilterText.ForEnum<ServerStatus>(L);
 
-    /// <summary>How many of the recent runs listed in the tile have this status (its summary badges).</summary>
-    private int RecentRunCount(PipelineStatus status) => _dashboard?.RecentRuns.Count(run => run.Status == status) ?? 0;
+    /// <summary>How many ROOT runs of the tile are running (R-36): a run nobody triggered counts once, the
+    /// runs it triggered never count, so a parent and its running child read "1".</summary>
+    private int RunningRootRunCount => PipelineRunTableItem.GroupRuns(_dashboard?.RecentRuns ?? []).Count(run => run.Status == PipelineStatus.Running);
     private AppMonitoringSummaryDto? _appSummary;
     private HubConnection? _serversHub;
     private HubConnection? _pipelinesHub;

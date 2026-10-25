@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>app-version</c> function, port of <c>deploy/scripts/app-version.sh</c>: composes
+/// The <c>app-version</c> function, port of the former <c>app-version.sh</c> script: composes
 /// <c>&lt;major&gt;.&lt;minor&gt;.&lt;release number&gt;&lt;suffix&gt;</c> from the single
 /// <c>&lt;VersionPrefix&gt;</c> of the workspace's <c>Directory.Build.props</c>, with the same checks and
 /// the same messages. The script printed the version for <c>APP_VERSION="$(sh app-version.sh N)"</c>;

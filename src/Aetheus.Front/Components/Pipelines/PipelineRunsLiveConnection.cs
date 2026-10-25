@@ -27,6 +27,7 @@ internal sealed class PipelineRunsLiveConnection(
             eventPipelineId == pipelineId ? invokeAsync(ScheduleReloadAsync) : Task.CompletedTask);
         _hub.On<int, PipelineStatus>("PipelineRunCompleted", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int>("PipelineRunCancelled", _ => invokeAsync(ScheduleReloadAsync));
+        _hub.On<int, DateTime>("PipelineRunAwaitingResume", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int>("StepStarted", _ => invokeAsync(ScheduleReloadAsync));
         _hub.On<int, TaskExecutionStatus>("StepCompleted", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int, string, string>("ApprovalRequired", (_, _, _) => invokeAsync(ScheduleReloadAsync));

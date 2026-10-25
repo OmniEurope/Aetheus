@@ -3,7 +3,7 @@ using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Tasks;
 
-public interface ITaskService
+public interface ITaskService : ITaskServerReader
 {
     Task<PaginatedResult<ServerTaskDto>> GetTasksAsync(TaskPaginationRequest request, CancellationToken ct = default);
 
@@ -43,7 +43,6 @@ public interface ITaskService
         CancellationToken ct = default);
     Task<bool> CancelTaskAsync(int id, CancellationToken ct = default);
     Task<Dictionary<int, string>> GetTaskStatusesAsync(List<int> taskIds, int serverId, CancellationToken ct = default);
-    Task<int?> GetTaskServerIdAsync(int taskId, CancellationToken ct = default);
     Task<bool> AllowsLegacyUnfencedTaskProtocolAsync(int serverId, CancellationToken ct = default);
     Task<Dictionary<int, int>> GetServerIdsForTasksAsync(IReadOnlyCollection<int> taskIds, CancellationToken ct = default);
     Task<bool> HasCurrentAgentLeaseAsync(

@@ -75,7 +75,7 @@ public class ServerCertbotSectionComplexTests : BunitContext
     {
         var cut = RenderSection();
         var method = typeof(ServerCertbotSection).GetMethod("ExecuteActionAsync", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [CertbotAction.RenewAll, null])!);
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [CertbotAction.RenewAll, null, null])!);
         // The action toggles _actionRunning on entry and clears it in the finally block.
         Assert.False((bool)typeof(ServerCertbotSection).GetField("_actionRunning", Priv)!.GetValue(cut.Instance)!);
     }

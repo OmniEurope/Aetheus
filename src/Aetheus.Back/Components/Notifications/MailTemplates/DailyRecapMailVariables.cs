@@ -7,7 +7,7 @@ public static class DailyRecapMailVariables
     /// <summary>The day the recap covers, written in the recap's language.</summary>
     public const string Date = "Date";
 
-    /// <summary>The period and the time zone of the recap, and when it was generated.</summary>
+    /// <summary>Always empty since recette R-56 (the period and generation time were dropped); kept so a template edited before still renders.</summary>
     public const string Period = "Period";
 
     /// <summary>The recap settings page; empty when no web address is configured.</summary>

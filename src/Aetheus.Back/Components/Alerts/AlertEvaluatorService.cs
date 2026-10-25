@@ -49,6 +49,7 @@ public sealed class AlertEvaluatorService(
         await using var scope = scopeFactory.CreateAsyncScope();
         var alertRepo = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+        var occurrenceService = scope.ServiceProvider.GetRequiredService<IAlertOccurrenceService>();
 
         var rules = await alertRepo.GetEnabledAsync(ct).ConfigureAwait(false);
 
@@ -104,10 +105,29 @@ public sealed class AlertEvaluatorService(
                     "Alert '{RuleName}' triggered: server {ServerId} {Metric} {Operator} {Threshold} for {Seconds}s",
                     rule.Name, rule.ServerId, rule.Metric, rule.Operator, rule.Threshold, rule.SustainedSeconds);
 
+                // The alert gets its identifier before anything is emitted: it is in the event, so the
+                // mail's button opens this very alert (recette R-52).
+                var alertId = await occurrenceService.RecordAsync(new NewAlertOccurrence
+                {
+                    AlertRuleId = rule.Id,
+                    RuleName = rule.Name,
+                    ServerId = rule.ServerId,
+                    ServerName = rule.Server?.Name,
+                    Metric = rule.Metric.ToString(),
+                    Operator = rule.Operator,
+                    Threshold = rule.Threshold,
+                    ObservedValue = ReadMetricValue(rule.Metric, metrics[^1]),
+                    SustainedSeconds = rule.SustainedSeconds,
+                    Severity = rule.Severity,
+                    TriggeredAt = triggeredAt
+                }, ct).ConfigureAwait(false);
+
                 await notificationService.SendEventAsync("alert.triggered", new
                 {
+                    AlertId = alertId,
                     RuleName = rule.Name,
                     rule.ServerId,
+                    ServerName = rule.Server?.Name,
                     Metric = rule.Metric.ToString(),
                     Operator = rule.Operator.ToString(),
                     rule.Threshold,
@@ -116,6 +136,7 @@ public sealed class AlertEvaluatorService(
 
                 await alertHub.Clients.Group(HubGroups.Alerts).SendAsync("AlertTriggered", new AlertTriggeredDto
                 {
+                    OccurrenceId = alertId,
                     RuleId = rule.Id,
                     RuleName = rule.Name,
                     ServerId = rule.ServerId,

@@ -18,7 +18,7 @@
             <OmniDescriptionList Columns="2" Class="project-deletion-counts">
                 @foreach (var item in _preview.Items)
                 {
-                    <OmniDescriptionItem Label="@L.Localize(item.Kind)">@item.Count</OmniDescriptionItem>
+                    <OmniDescriptionItem Term="@L.Localize(item.Kind)">@item.Count</OmniDescriptionItem>
                 }
             </OmniDescriptionList>
         }
@@ -36,6 +36,6 @@
         </OmniFormField>
     }
     <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
     </Aetheus.Front.Components.Shared.DialogFooter>
 </OmniStack>

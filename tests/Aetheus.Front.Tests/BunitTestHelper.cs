@@ -58,12 +58,16 @@ internal static class BunitTestHelper
         // Nothing stops a project's or a pipeline's runs unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/project-readiness", new PipelineSetupReadinessDto());
         handler.SetJsonResponse("api/pipelines/setup/pipeline-readiness", new PipelineSetupReadinessDto());
+        // The wizard's production setup reads nothing from the repository unless a test says it does (ADR-057).
+        handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/production-analysis", new PipelineProductionAnalysisDto());
         // External repositories are always on; no project has one unless a test says so.
         handler.SetResponse("api/external-repos/project/", System.Net.HttpStatusCode.NotFound);
         // A run with no successful predecessor has no usual durations.
         handler.SetJsonResponse("/stage-baselines", new RunStageBaselinesDto());
         // No approval waits unless a test says otherwise (top bar, home page).
         handler.SetJsonResponse("api/pipelines/approvals/pending", new List<PendingApprovalDto>());
+        // Nothing reads a library or a vault unless a test says otherwise (the "Used by" line and column).
+        handler.SetJsonResponse("api/pipelines/resource-usage", new ResourceUsageDto());
         // Default to no notifications, preferences or subscriptions unless overridden by a test.
         handler.SetJsonResponse("api/notifications/me/unread-count", 0);
         handler.SetPaginatedJsonResponse("api/notifications/me?", new List<NotificationDeliveryDto>());
@@ -144,6 +148,12 @@ internal static class BunitTestHelper
             sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectDetailLoader>.Instance,
             sp.GetRequiredService<HubConnectionFactory>()));
+        // The side menu reads the open server (R1-28: the mail entry shows only when the stack is installed).
+        ctx.Services.AddScoped(sp => new Aetheus.Front.Components.Shared.ServerDetailLoader(
+            sp.GetRequiredService<ApiClient>(),
+            sp.GetRequiredService<HubConnectionFactory>(),
+            sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Shared.ServerDetailLoader>.Instance));
         ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, preferences));
         ctx.Services.AddScoped<NotifyHelper>();
         ctx.Services.AddScoped<GridExportContext>();
@@ -161,7 +171,7 @@ internal static class BunitTestHelper
         // The deployed front version is read through the test handler (a test that sets
         // "appsettings.json" there decides it); the handler is shared, so the client must not
         // dispose it.
-        ctx.Services.AddSingleton(new Aetheus.Front.Layout.ApplicationVersionState(
+        ctx.Services.AddSingleton(new Aetheus.Front.Components.Shared.ApplicationVersionState(
             () => new HttpClient(handler, disposeHandler: false), new Uri("http://test/"), "test-version"));
 
         var permissionService = new PermissionService();
@@ -190,11 +200,11 @@ internal static class BunitTestHelper
             sp.GetRequiredService<AuthStateProvider>(),
             sp.GetRequiredService<HubConnectionFactory>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<PendingApprovalsService>.Instance));
-        ctx.Services.AddSingleton(sp => new Aetheus.Front.Components.Notifications.UserNotificationsFeed(
+        ctx.Services.AddSingleton(sp => new Aetheus.Front.Components.Shared.UserNotificationsFeed(
             sp.GetRequiredService<ApiClient>(),
             sp.GetRequiredService<AuthStateProvider>(),
             sp.GetRequiredService<TimeProvider>(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Notifications.UserNotificationsFeed>.Instance));
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Shared.UserNotificationsFeed>.Instance));
         ctx.Services.AddSingleton(sp => new AlertNotificationService(
             sp.GetRequiredService<AuthStateProvider>(),
             sp.GetRequiredService<HubConnectionFactory>()));

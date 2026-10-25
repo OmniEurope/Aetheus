@@ -64,7 +64,7 @@ public sealed class ProjectDataRetentionService(
 
     private static string Describe(ProjectDataRetentionDto dto) => string.Format(
         CultureInfo.InvariantCulture,
-        "profile={0}; export={1} min; telemetry detail={2} d; aggregates={3} months; analysis detail={4} d; logs={5} d; budget={6} MB",
+        "profile={0}; export={1} min; telemetry detail={2} d; aggregates={3} months; analysis detail={4} d; logs={5} d; budget={6} Mo",
         dto.Profile, dto.Effective.TelemetryExportIntervalMinutes, dto.Effective.TelemetryDetailRetentionDays,
         dto.Effective.TelemetryAggregateRetentionMonths, dto.Effective.AnalysisDetailRetentionDays,
         dto.Effective.AppLogRetentionDays, dto.StorageBudgetMegabytes ?? ProjectStorageDefaults.DefaultBudgetMegabytes);

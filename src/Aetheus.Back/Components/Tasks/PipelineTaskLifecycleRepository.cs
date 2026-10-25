@@ -14,6 +14,7 @@ public sealed class PipelineTaskLifecycleRepository(AppDbContext db, TimeProvide
                 TaskExecutionStatus.Running
             ],
             null,
+            null,
             ct);
 
     public Task CancelPendingTasksExceptStagesAsync(
@@ -24,17 +25,40 @@ public sealed class PipelineTaskLifecycleRepository(AppDbContext db, TimeProvide
             pipelineRunId,
             [TaskExecutionStatus.Pending, TaskExecutionStatus.Assigned],
             preservedStages,
+            null,
             ct);
+
+    public Task CancelActiveTasksOfStepRunsAsync(
+        int pipelineRunId,
+        IReadOnlyCollection<int> stepRunIds,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(stepRunIds);
+        return stepRunIds.Count == 0
+            ? Task.CompletedTask
+            : CancelAsync(
+                pipelineRunId,
+                [TaskExecutionStatus.Pending, TaskExecutionStatus.Assigned, TaskExecutionStatus.Running],
+                null,
+                stepRunIds,
+                ct);
+    }
 
     private async Task CancelAsync(
         int pipelineRunId,
         IReadOnlyCollection<TaskExecutionStatus> statuses,
         IReadOnlyCollection<string>? preservedStages,
+        IReadOnlyCollection<int>? onlyStepRunIds,
         CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var query = db.Tasks.Where(task =>
             task.PipelineRunId == pipelineRunId && statuses.Contains(task.Status));
+        if (onlyStepRunIds is not null)
+        {
+            var stepRunIds = onlyStepRunIds.ToArray();
+            query = query.Where(task => task.PipelineStepRunId != null && stepRunIds.Contains(task.PipelineStepRunId.Value));
+        }
         if (preservedStages is not null)
         {
             var preserved = preservedStages.ToArray();

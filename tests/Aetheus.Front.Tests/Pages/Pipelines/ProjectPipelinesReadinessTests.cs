@@ -47,6 +47,32 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
         Assert.Contains($"/environments/new?projectId=5&returnUrl={Uri.EscapeDataString("/projects/5/pipelines")}", hrefs);
     }
 
+    /// <summary>R-15: the branch the files were checked on is an information tooltip next to the heading, not a
+    /// sentence of the page; R-10 to R-13: the findings about the default commands read like the others.</summary>
+    [Fact]
+    public void ProjectPage_CheckedBranchIsAnInfoTooltip_AndTheDefaultCommandFindingsAreListed()
+    {
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(
+            Blocking(PipelineSetupReadinessKind.NoDotNetSolution, "APPLICATION_CI_COMMANDS"),
+            Blocking(PipelineSetupReadinessKind.NoDotNetTestProject, "APPLICATION_QA_COMMANDS"),
+            Blocking(PipelineSetupReadinessKind.NoComposeFile, "compose.yaml", "compose.yml"),
+            Blocking(PipelineSetupReadinessKind.NoDockerRunner, "APPLICATION_DEPLOY_PROD_COMMANDS")));
+
+        var cut = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 5));
+
+        cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll("[data-testid='setup-readiness-check']").Count));
+        foreach (var title in new[] { "ReadinessNoDotNetSolution", "ReadinessNoDotNetTestProject", "ReadinessNoComposeFile", "ReadinessNoDockerRunner" })
+            Assert.Contains(title, cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("compose.yaml", cut.Markup, StringComparison.Ordinal);
+
+        // The branch is carried by the heading's info tip (an OE tooltip), and no longer by a sentence.
+        var heading = cut.Find("[data-testid='project-pipelines-readiness'] h5").ParentElement!;
+        var tip = Assert.Single(heading.QuerySelectorAll("[data-testid='pipeline-info-tip']"));
+        Assert.Contains("PipelineSetupReadinessCheckedOn", tip.GetAttribute("aria-label"), StringComparison.Ordinal);
+        // The tip belongs to an OE tooltip, whose trigger the keyboard reaches.
+        Assert.NotNull(tip.Closest(".omni-tooltip, [tabindex]"));
+    }
+
     [Fact]
     public void ProjectPage_DrawsNothing_WhenNothingIsMissing()
     {
@@ -58,14 +84,48 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
     }
 
     [Fact]
-    public void ProjectPage_ARequiredLibraryLinksToTheProjectsLibraries()
+    public void ProjectPage_ARequiredLibraryLinksToItsOwnCreationPage()
     {
         _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(
             Blocking(PipelineSetupReadinessKind.MissingRequiredLibraries, "atlas-host")));
 
         var cut = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 5));
 
-        cut.WaitForAssertion(() => Assert.Contains("/projects/5/libraries", cut.Markup, StringComparison.Ordinal));
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-item-create']")));
+        Assert.Equal(
+            $"/variable-libraries/new?projectId=5&name=atlas-host&returnUrl={Uri.EscapeDataString("/projects/5/pipelines")}",
+            cut.Find("[data-testid='setup-readiness-item-create']").GetAttribute("href"));
+        Assert.DoesNotContain("/projects/5/libraries", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>R2-22: the link of a missing vault leads to the creation of that vault, its name filled
+    /// in, not to the generic list of vaults; the explanation is a tooltip and the only alert is the
+    /// blocking one.</summary>
+    [Fact]
+    public void ProjectPage_ARequiredVaultLinksToItsOwnCreationPage_AndExplainsInTooltips()
+    {
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(
+            Blocking(PipelineSetupReadinessKind.MissingRequiredVaults, "wordmorrow.qa"),
+            new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.ExternalRepositoryNotInspected,
+                Severity = PipelineSetupReadinessSeverity.Warning,
+                Items = [".pipeline/scripts/ci.sh"]
+            }));
+
+        var cut = Render<ProjectPipelinesReadiness>(parameters => parameters.Add(panel => panel.ProjectId, 5));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-item-create']")));
+        Assert.Equal(
+            $"/vaults/new?projectId=5&name=wordmorrow.qa&returnUrl={Uri.EscapeDataString("/projects/5/pipelines")}",
+            cut.Find("[data-testid='setup-readiness-item-create']").GetAttribute("href"));
+        Assert.DoesNotContain("href=\"/projects/5/vaults\"", cut.Markup, StringComparison.Ordinal);
+        // The vault is for the QA environment: said by a tooltip, not by a sentence in the page.
+        Assert.Contains("PipelineSetupPurposeVaultQa", cut.Markup, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("[data-testid='pipeline-info-tip']"));
+        // Only the blocking finding is an alert; the warning is a row.
+        Assert.Single(cut.FindAll(".omni-alert"));
+        Assert.Equal(2, cut.FindAll("[data-testid='setup-readiness-check']").Count);
     }
 
     /// <summary>Before a run: the confirmation names what is missing, Revenir stops the launch.</summary>

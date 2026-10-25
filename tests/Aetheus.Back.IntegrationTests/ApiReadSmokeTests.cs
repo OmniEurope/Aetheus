@@ -54,6 +54,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/pipelines/approvals/pending")]
     [InlineData("/api/pipelines/ownership/candidates")]
+    [InlineData("/api/pipelines/resource-usage")]
     [InlineData("/api/service-connections")]
     [InlineData("/api/test-suites")]
     [InlineData("/api/webhooks")]
@@ -192,7 +193,7 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
         var key = $"smoke-{Guid.NewGuid():N}";
         using (var scope = fixture.Factory.Services.CreateScope())
         {
-            var hasher = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.AppMonitoring.Ingest.IngestKeyHasher>();
+            var hasher = scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.AppMonitoring.IngestKeyHasher>();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             db.MonitoredApps.Add(new Aetheus.Back.Data.Entities.MonitoredApp
             {

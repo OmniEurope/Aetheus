@@ -20,12 +20,12 @@ else
                 @if (_unmet.Count > 0 && !_unmetDismissed)
                 {
                     <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md unmet-requirements-alert" data-testid="unmet-requirements">
-                        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small">
+                        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small">
                             @* A project that is never deployed can dismiss this warning for good,
                                until its list of missing libraries and vaults changes. *@
                             <div class="unmet-requirements-head">
                                 <strong>@string.Format(L["UnmetRequirementsTitle"], _unmet.SelectMany(item => item.Pipelines).Distinct().Count())</strong>
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DismissUnmetAsync" Class="unmet-requirements-dismiss"><OmniIcon Name="OmniIconName.Close" /> <span>@L["IgnoreMessage"]</span></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DismissUnmetAsync" Class="unmet-requirements-dismiss"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["IgnoreMessage"]</span></ChildContent></OmniButton>
                             </div>
                             @foreach (var item in _unmet)
                             {
@@ -39,7 +39,7 @@ else
                             {
                                 @* The button and its explanation wrap instead of overlapping. *@
                                 <div class="unmet-requirements-actions">
-                                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ProvisionUnmetAsync" Class="@(_provisioningUnmet ? "btn-busy" : null)" Busy="@(_provisioningUnmet)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["PipelineSetupProvision"]</span></OmniButton>
+                                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ProvisionUnmetAsync" Class="@(_provisioningUnmet ? "btn-busy" : null)" Busy="@(_provisioningUnmet)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["PipelineSetupProvision"]</span></ChildContent></OmniButton>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 unmet-requirements-hint">@L["PipelineSetupProvisionHint"]</OmniText>
                                 </div>
                             }
@@ -52,29 +52,28 @@ else
                 }
                 @* Two balanced cards: "Information" (description, status, dates, tags) on the left,
                    "Repository" (git source, branch, last git activity) on the right. *@
-                <OmniRow Gap="OmniSpacing.Large">
-                    <OmniColumn Span="12" MediumSpan="6">
+                <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
                         @* Both card headers occupy one control-height row so their details align. *@
                         <OmniCard Class="overview-info-card">
-                            <Header>
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="overview-card-heading">
+                            <HeaderContent>
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="overview-card-heading">
                                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Information"]</OmniText>
                                 </OmniStack>
-                            </Header>
+                            </HeaderContent>
                             <ChildContent>
                             @* OE labelled lines, each with its icon (OmniDescriptionItem.Icon). *@
                             <OmniDescriptionList>
                                 @if (!string.IsNullOrWhiteSpace(Project.Description))
                                 {
-                                    <OmniDescriptionItem Label="@L["Description"]"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@Project.Description</ChildContent></OmniDescriptionItem>
+                                    <OmniDescriptionItem Term="@L["Description"]"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@Project.Description</ChildContent></OmniDescriptionItem>
                                 }
                                 @* Status and grade share a row, followed by dates and tags for
                                    compact project information. *@
-                                <OmniDescriptionItem Label="@($"{L["Status"]} · {L["AnalysisGrade"]}")">
+                                <OmniDescriptionItem Term="@($"{L["Status"]} · {L["AnalysisGrade"]}")">
                                     <Icon><OmniIcon Name="OmniIconName.Broadcast" /></Icon>
                                     <ChildContent>
                                         @* Status and grade retain distinct spacing. *@
-                                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="project-status-grade">
+                                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="project-status-grade">
                                         <OmniBadge Fill="OmniFill.Solid" Tone="@(Project.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[Project.Status.ToString()]</OmniBadge>
                                         @* The latest candidate grade links to its Gate tab;
                                            projects without a graded run link to quality. *@
@@ -95,13 +94,13 @@ else
                                         </OmniStack>
                                     </ChildContent>
                                 </OmniDescriptionItem>
-                                <OmniDescriptionItem Label="@($"{L["Created"]} · {L["Updated"]}")">
+                                <OmniDescriptionItem Term="@($"{L["Created"]} · {L["Updated"]}")">
                                     <Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon>
                                     <ChildContent>@Project.CreatedAt.ToString("g") · @Project.UpdatedAt.ToString("g")</ChildContent>
                                 </OmniDescriptionItem>
                                 @if (Project.Tags.Count > 0)
                                 {
-                                    <OmniDescriptionItem Label="@L["Tags"]">
+                                    <OmniDescriptionItem Term="@L["Tags"]">
                                         <Icon><OmniIcon Name="OmniIconName.Tag" /></Icon>
                                         <ChildContent>
                                             @foreach (var tag in Project.Tags)
@@ -114,18 +113,16 @@ else
                             </OmniDescriptionList>
                             </ChildContent>
                         </OmniCard>
-                    </OmniColumn>
-                    <OmniColumn Span="12" MediumSpan="6">
                         <OmniCard Class="overview-info-card">
-                            <Header>
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="overview-card-heading">
+                            <HeaderContent>
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="overview-card-heading">
                                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Repository"]</OmniText>
                                     @if (Permissions.CanWrite(ResourceType.Project, Project.Id))
                                     {
-                                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="AddGitRepository" title="@L["AddGitRepository"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="AddGitRepository" title="@L["AddGitRepository"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                                     }
                                 </OmniStack>
-                            </Header>
+                            </HeaderContent>
                             <ChildContent>
                             @if (string.IsNullOrWhiteSpace(Project.RepositoryUrl) && _primaryGitRepository is null)
                             {
@@ -136,21 +133,21 @@ else
                                 <OmniDescriptionList>
                                     @if (_primaryGitRepository is not null)
                                     {
-                                        <OmniDescriptionItem Label="@L["RepositoryName"]">
+                                        <OmniDescriptionItem Term="@L["RepositoryName"]">
                                             <Icon><OmniIcon Name="OmniIconName.FolderOpen" /></Icon>
                                             <ChildContent><a class="pipeline-name-link" href="@($"/git-repositories/{_primaryGitRepository.Id}")">@_primaryGitRepository.Name</a></ChildContent>
                                         </OmniDescriptionItem>
                                     }
                                     @if (!string.IsNullOrWhiteSpace(RepositoryDisplayUrl))
                                     {
-                                        <OmniDescriptionItem Label="@L["RepositoryUrl"]">
+                                        <OmniDescriptionItem Term="@L["RepositoryUrl"]">
                                             <Icon><OmniIcon Name="OmniIconName.Link" /></Icon>
                                             @* The clone address, read-only in OE's copyable field,
                                                so a long URL stays inside the card (the field
                                                scrolls, the page does not) and the Copy button
                                                welded to its end puts it on the clipboard. *@
                                             <ChildContent>
-                                                <OmniTextBox Value="@RepositoryDisplayUrl" ReadOnly="true" Copyable="true"
+                                                <OmniTextBox Value="@RepositoryDisplayUrl" ReadOnly="true" ShowCopy="true"
                                                              Id="project-overview-clone-url" ValueExpression="@(() => RepositoryDisplayUrl)"
                                                              aria-label="@L["RepositoryUrl"]" Class="overview-clone-url" />
                                             </ChildContent>
@@ -159,7 +156,7 @@ else
                                     @* Branch and latest activity share a repository row. *@
                                     @if (!string.IsNullOrWhiteSpace(RepositoryDisplayBranch) || Project.LastGitUpdateAt.HasValue)
                                     {
-                                        <OmniDescriptionItem Label="@RepositoryActivityLabel">
+                                        <OmniDescriptionItem Term="@RepositoryActivityLabel">
                                             <Icon><OmniIcon Name="OmniIconName.Graph" /></Icon>
                                             <ChildContent><span title="@(Project.LastGitUpdateAt?.ToString("F"))">@RepositoryActivityValue</span></ChildContent>
                                         </OmniDescriptionItem>
@@ -168,36 +165,34 @@ else
                             }
                             </ChildContent>
                         </OmniCard>
-                    </OmniColumn>
-                </OmniRow>
+                </OmniTileGrid>
 
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@L["ProjectSections"]</OmniHeading>
                 <div class="project-section-grid-scroll omni-u-mb-lg" role="region" aria-label="@L["ProjectSections"]" tabindex="0">
-                    <div class="project-section-grid">
+                    <OmniTileGrid Columns="6" Class="project-section-grid">
                         @* No Overview tile (it is the page being read), tiles wrap with the width. *@
                         @foreach (var navItem in ProjectNavigationCatalog.VisibleItems(Permissions, Project.Id).Where(item => item.Slug != "overview"))
                         {
                             var isPipeline = navItem.Slug == "pipelines";
                             var isCurrent = false;
-                            <a href="@(navItem.Href(Project.Id))"
-                               class="tile-link project-section-link"
-                               aria-current="@(isCurrent ? "page" : null)">
-                                <OmniCard Class="@($"tile-clickable project-section-tile{(isCurrent ? " project-section-tile-current" : string.Empty)}")">
-                                    <div class="project-section-tile-content">
-                                        <div class="project-section-tile-heading">
-                                            <OmniIcon Name="@MaterialIconMap.Resolve(navItem.Icon)" />
-                                            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L[navItem.LabelKey]</OmniText>
-                                        </div>
-                                        @* Only while something runs; a finished run is read on the Pipelines page. *@
-                                        @if (isPipeline && LatestRunStatus is PipelineStatus.Running or PipelineStatus.Pending or PipelineStatus.WaitingForApproval)
-                                        {
-                                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@L.Localize(PipelineStatus.Running)</OmniBadge>
-                                        }
+                            @* The tile is itself the link to the section (OmniCard.Href), not wrapped in one. *@
+                            <OmniCard Href="@(navItem.Href(Project.Id))"
+                                      Class="@($"project-section-tile{(isCurrent ? " project-section-tile-current" : string.Empty)}")"
+                                      aria-current="@(isCurrent ? "page" : null)">
+                                <div class="project-section-tile-content">
+                                    <div class="project-section-tile-heading">
+                                        <OmniIcon Name="@MaterialIconMap.Resolve(navItem.Icon)" />
+                                        <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L[navItem.LabelKey]</OmniText>
                                     </div>
-                                </OmniCard>
-                            </a>
+                                    @* Only while something runs; a finished run is read on the Pipelines page. *@
+                                    @if (isPipeline && LatestRunStatus is PipelineStatus.Running or PipelineStatus.Pending or PipelineStatus.WaitingForApproval)
+                                    {
+                                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@L.Localize(PipelineStatus.Running)</OmniBadge>
+                                    }
+                                </div>
+                            </OmniCard>
                         }
-                    </div>
+                    </OmniTileGrid>
                 </div>
 
                 @* F-bis: coverage + LOC of the run behind the most recent release (shown only when real data exists) *@
@@ -205,21 +200,21 @@ else
                 {
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@L["LastReleaseMetrics"]</OmniHeading>
                     <OmniCard Class="omni-u-p-md">
-                        <OmniRow Gap="OmniSpacing.XLarge" Align="OmniAlignment.Center">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniRow Gap="OmniSpacing.ExtraLarge" Align="OmniAlignment.Center">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                                 <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@metrics.Version"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@ReleaseHelper.ShortVersion(metrics.Version)</ChildContent></OmniBadge>
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0" title="@metrics.When.ToString("F")">@RelativeTime.FormatAgo(L, metrics.When)</OmniText>
                             </OmniStack>
                             @if (metrics.CoverageLineRate is { } cov)
                             {
-                                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XLarge">
+                                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.ExtraLarge">
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["Coverage"]</OmniText>
                                     <OmniHeading Level="OmniHeadingLevel.H5" Class="@($"{CoverageColorClass(cov)} omni-u-m-0")">@($"{cov * 100:F1}%")</OmniHeading>
                                 </OmniStack>
                             }
                             @if (metrics.LinesOfCode is { } loc)
                             {
-                                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XLarge">
+                                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.ExtraLarge">
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["LinesOfCode"]</OmniText>
                                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@loc.ToString("N0")</OmniHeading>
                                 </OmniStack>
@@ -228,11 +223,10 @@ else
                     </OmniCard>
                 }
 
-                @* The two tiles take the dashboard tiles' size. *@
-                <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-2xl dashboard-tile-row project-overview-recent-row">
-                    <OmniColumn Span="12" MediumSpan="6">
+                @* The two tiles take the dashboard tiles' size (R-3: OE cards of one OmniTileGrid). *@
+                <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-2xl dashboard-tile-row project-overview-recent-row">
                         <OmniCard Class="dashboard-tile project-overview-recent-card">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                                 <OmniIcon Name="OmniIconName.GitCommit" />
                                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentCommits"]</OmniHeading>
                             </OmniStack>
@@ -246,8 +240,8 @@ else
                                             <a href="@CommitHref(commit)" title="@commit.RepositoryName" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@commit.ShortSha</a>
                                         </Template>
                                     </OmniDataGridColumn>
-                                    <OmniDataGridColumn TItem="RecentCommitView" Property="BranchName" Title="@L["Branch"]" Width="5.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
-                                    <OmniDataGridColumn TItem="RecentCommitView" Property="Message" Title="@L["Message"]" MinWidth="8rem" Filterable="true" />
+                                    <OmniDataGridColumn TItem="RecentCommitView" Property="BranchName" Title="@L["Branch"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
+                                    <OmniDataGridColumn TItem="RecentCommitView" Property="Message" Truncate="true" Title="@L["Message"]" MinWidth="8rem" Filterable="true" />
                                     <OmniDataGridColumn TItem="RecentCommitView" Property="AuthorDate" Title="@L["Date"]" Width="6.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
                                         <Template Context="commit">
                                             <span title="@commit.AuthorDate.ToString("F")">@RelativeTime.FormatAgo(L, commit.AuthorDate)</span>
@@ -256,10 +250,8 @@ else
                                 </Columns>
                             </AetheusDataGrid>
                         </OmniCard>
-                    </OmniColumn>
-                    <OmniColumn Span="12" MediumSpan="6">
                         <OmniCard Class="dashboard-tile project-overview-recent-card">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                                 <OmniIcon Name="OmniIconName.Reset" />
                                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentPipelines"]</OmniHeading>
                             </OmniStack>
@@ -268,15 +260,14 @@ else
                                 CssClass="project-overview-recent-grid"
                                 EmptyTitleKey="NoRecentPipelines" EmptyDescriptionKey="NoRecentPipelines" />
                         </OmniCard>
-                    </OmniColumn>
-                </OmniRow>
+                </OmniTileGrid>
             </ChildContent></OmniTabsItem>
 
             <OmniTabsItem Key="readme" Title="@L["Readme"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("description"))" /></Icon><ChildContent>
                 <section class="project-readme-panel">
                     @if (!string.IsNullOrWhiteSpace(_readmeBranch))
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                             <OmniText Element="OmniTextElement.Strong" Class="omni-u-text-muted omni-u-m-0">@L["DefaultBranch"]</OmniText>
                             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@_readmeBranch</OmniBadge>
                         </OmniStack>
@@ -288,6 +279,7 @@ else
                     }
                     else
                     {
+                        @* nosemgrep: aetheus.razor.markupstring-dynamic - Markdig pipeline with DisableHtml, raw HTML is dropped *@
                         <article class="readme-rendered project-readme-content">@((MarkupString)_readmeHtml)</article>
                     }
                 </section>
@@ -306,7 +298,7 @@ else
                             {
                                 var when = release.PublishedAt ?? release.DetectedAt;
                                 <OmniTimelineItem>
-                                        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small" Class="project-changelog-entry">
+                                        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small" Class="project-changelog-entry">
                                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"
                                                 title="@when.ToString("F")">@RelativeTime.FormatAgo(L, when)</OmniText>
                                             <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">

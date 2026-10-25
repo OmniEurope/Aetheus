@@ -14,7 +14,7 @@ set -eu
 base_image="${1:-debian:bookworm-slim}"
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
-installer="$repo/deploy/scripts/install-agent-linux.sh"
+installer="$repo/deploy/agent-installer/install-agent-linux.sh"
 work="$(mktemp -d)"
 tag="aetheus-mailstack:$(printf '%s' "$base_image" | tr ':/' '--')"
 name="aetheus-mailstack-$$"

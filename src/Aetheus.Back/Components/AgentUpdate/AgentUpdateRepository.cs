@@ -473,9 +473,12 @@ internal sealed class AgentUpdateRepository(AppDbContext db, TimeProvider timePr
         request.EnableCapabilities = AgentEnableableCapabilities.Join(merged);
 
         var expected = JsonSerializer.Deserialize<List<string>>(request.ExpectedCapabilitiesJson) ?? [];
-        if (merged.Contains(AgentEnableableCapabilities.PatchManage)
-            && !expected.Contains(AgentCapabilities.PatchManagement, StringComparer.Ordinal))
-            expected.Add(AgentCapabilities.PatchManagement);
+        foreach (var token in merged)
+        {
+            if (AgentCapabilities.ForEnableableToken(token) is { } capability
+                && !expected.Contains(capability, StringComparer.Ordinal))
+                expected.Add(capability);
+        }
         request.ExpectedCapabilitiesJson = JsonSerializer.Serialize(expected.Order(StringComparer.Ordinal).ToList());
     }
 

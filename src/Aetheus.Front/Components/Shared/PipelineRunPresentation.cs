@@ -2,89 +2,140 @@
 
 namespace Aetheus.Front.Components.Shared;
 
-internal static class PipelineRunTablePresentation
+internal static class PipelineRunPresentation
 {
-    public static string PipelineHref(PipelineRunTableItem run, int? serverId) => serverId.HasValue
-        ? $"/pipelines/{run.PipelineId}?serverId={serverId}"
-        : run.ProjectId.HasValue
-            ? $"/pipelines/{run.PipelineId}?projectId={run.ProjectId}"
-            : $"/pipelines/{run.PipelineId}";
+    public static string EditBackHref(int? projectId, int? serverId) => serverId is { } server
+        ? $"/servers/{server}/pipelines"
+        : projectId is { } project ? $"/projects/{project}/pipelines" : "/pipelines";
 
-    public static string RunHref(PipelineRunTableItem run, int? serverId) => serverId.HasValue
-        ? $"/pipelines/runs/{run.RunId}?serverId={serverId}"
-        : run.ProjectId.HasValue
-            ? $"/pipelines/runs/{run.RunId}?projectId={run.ProjectId}"
-            : $"/pipelines/runs/{run.RunId}";
+    public static string Href(int runId, int? projectId, int? serverId) => serverId is { } server
+        ? $"/pipelines/runs/{runId}?serverId={server}"
+        : projectId is { } project ? $"/pipelines/runs/{runId}?projectId={project}" : $"/pipelines/runs/{runId}";
 
-    /// <summary>Link to the branch: its Aetheus repository page when the run names an internal
-    /// repository Aetheus resolved, otherwise the hosting web UI. Null (text) when the run has no
-    /// branch, when the URL is an internal clone Aetheus could not resolve (the smart-HTTP endpoint
-    /// has no branch page), or when it is not http(s) (a local path or an ssh remote).</summary>
-    public static string? BranchHref(PipelineRunTableItem run)
+    /// <summary>The run opened on its Gate tab, where its findings are listed.</summary>
+    public static string GateHref(int runId, int? projectId, int? serverId)
     {
-        if (string.IsNullOrWhiteSpace(run.BranchName)) return null;
-        if (run.RepositoryId is { } repositoryId)
-            return $"/git-repositories/{repositoryId}?tab=branches&branch={Uri.EscapeDataString(run.BranchName)}";
-        if (!IsExternalWebUrl(run.RepositoryUrl))
-            return null;
-        return $"{WebBase(run.RepositoryUrl!)}/tree/{Uri.EscapeDataString(run.BranchName)}";
+        var href = Href(runId, projectId, serverId);
+        return href + (href.Contains('?', StringComparison.Ordinal) ? "&tab=gate" : "?tab=gate");
     }
 
-    /// <summary>Link to the commit : its git-graph page when the run recorded it, its Aetheus
-    /// repository page when the run names an internal repository Aetheus resolved, otherwise the
-    /// hosting web UI. Same null (text) cases as the branch: an internal clone URL is never linked,
-    /// it serves git, not a page.</summary>
-    public static string? CommitHref(PipelineRunTableItem run)
+    public static string? CurrentStep(PipelineRunDto run) => PipelineHelper.GetCurrentStepLabel(run);
+    public static bool IsFailed(PipelineRunDto run) => run.Status == PipelineStatus.Failed;
+
+    /// <summary>A run can be cancelled while it is still going anywhere. Once the cancellation has been
+    /// durably accepted the run keeps its mandatory teardown, so asking again would change nothing.</summary>
+    public static bool CanCancel(PipelineRunDto run) =>
+        !run.CancellationRequested
+        && run.Status is PipelineStatus.Pending or PipelineStatus.Running or PipelineStatus.WaitingForApproval;
+
+    /// <summary>Cancellation attribution distinguishes a named operator from system cancellation;
+    /// unknown authors remain unspecified.</summary>
+    public static string? CancelledByText(PipelineRunDto run, IStringLocalizer localizer)
     {
-        if (string.IsNullOrWhiteSpace(run.CommitHash)) return null;
-        if (run.CommitId is { } commitId) return $"/git/commits/{commitId}";
-        if (run.RepositoryId is { } repositoryId)
-            return $"/git-repositories/{repositoryId}/commits/{Uri.EscapeDataString(run.CommitHash)}";
-        if (!IsExternalWebUrl(run.RepositoryUrl))
-            return null;
-        return $"{WebBase(run.RepositoryUrl!)}/commit/{Uri.EscapeDataString(run.CommitHash)}";
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(localizer);
+        if (string.IsNullOrWhiteSpace(run.CancelledBy)) return null;
+        return string.Equals(run.CancelledBy, "system", StringComparison.Ordinal)
+            ? localizer["RunCancelledBySystem"]
+            : string.Format(System.Globalization.CultureInfo.CurrentCulture, localizer["RunCancelledBy"], run.CancelledBy);
     }
 
-    private static bool IsExternalWebUrl(string? url) =>
-        !string.IsNullOrEmpty(url)
-        && (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        && !GitRepositoryUrl.IsInternalClone(url);
-
-    private static string WebBase(string repositoryUrl)
+    /// <summary>The frozen ID column accounts for the longest ID, an available row action and cell
+    /// padding. Explicit content-based sizing avoids equal-share allocation under fixed table
+    /// layout.</summary>
+    public static string IdColumnWidth(IEnumerable<PipelineRunDto> runs)
     {
-        var baseUrl = repositoryUrl.EndsWith(".git", StringComparison.OrdinalIgnoreCase)
-            ? repositoryUrl[..^4]
-            : repositoryUrl;
-        return baseUrl.TrimEnd('/');
+        var digits = 1;
+        var hasAction = false;
+        foreach (var run in runs)
+        {
+            digits = Math.Max(digits, run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
+            hasAction |= CanCancel(run) || IsFailed(run);
+        }
+
+        var text = FormattableString.Invariant($"max({digits + 2}ch, 2.5rem)");
+        return hasAction
+            ? $"calc({text} + var(--omni-badge-height) + var(--omni-space-xs) + 2 * var(--omni-space-md))"
+            : $"calc({text} + 2 * var(--omni-space-md))";
     }
 
-    public static string FormatDuration(
-        PipelineRunTableItem run,
-        IStringLocalizer<AppStrings> localizer) =>
-        FormatDuration(run, localizer, DateTime.Now);
+    public static bool IsConfigFailure(PipelineRunDto run) =>
+        run.Status == PipelineStatus.Failed &&
+        (run.Steps.Count == 0 || run.Steps.Any(step =>
+            step.Status == TaskExecutionStatus.Failed && step.TaskId is null));
+    public static bool IsExecutionFailure(PipelineRunDto run) =>
+        run.Status == PipelineStatus.Failed && !IsConfigFailure(run);
+    public static bool IsWindows(string? os) => os?.Contains("Windows", StringComparison.OrdinalIgnoreCase) == true;
+    public static OmniTone Badge(PipelineStatus status) => PipelineHelper.GetRunBadge(status);
 
-    public static string FormatDuration(
-        PipelineRunTableItem run,
-        IStringLocalizer<AppStrings> localizer,
-        DateTime currentTime)
+    public static string? GitBranch(PipelineRunDto? run) =>
+        run?.ResolvedVariables.GetValueOrDefault("BUILD_SOURCEBRANCH")
+        ?? run?.ResolvedVariables.GetValueOrDefault("DEFAULT_BRANCH");
+
+    public static IEnumerable<PipelineStepRunDto> AllSteps(
+        IEnumerable<StageViewModel> stages,
+        IReadOnlyDictionary<int, PipelineRunDto> children) =>
+        stages.SelectMany(stage => stage.Steps)
+            .Concat(children.Values.SelectMany(child => child.Steps));
+
+    public static IReadOnlyCollection<int> LiveChildRunIds(
+        IReadOnlyDictionary<int, PipelineRunDto> children) =>
+        children.Values
+            .Where(child => !PipelineRunFormatting.IsTerminal(child.Status))
+            .Select(child => child.Id)
+            .ToList();
+
+    public static IReadOnlyList<PipelineStepRunDto> LintSteps(
+        PipelineRunDto? run,
+        IReadOnlyDictionary<int, PipelineRunDto> children) =>
+        (run?.Steps ?? Enumerable.Empty<PipelineStepRunDto>())
+            .Concat(children.Values.SelectMany(child => child.Steps))
+            .Where(step => !step.IsSystem
+                && (step.StepName.Contains("lint", StringComparison.OrdinalIgnoreCase)
+                    || step.StageName.Contains("lint", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+    public static List<string> TabSlugs(PipelineRunDto? run, bool hasGateResult, bool hasYamlTab, bool hasLintTab, bool hasSchemaTab = false)
     {
-        if (run.StartedAt.Year < 2000)
-            return "-";
+        var slugs = new List<string> { "overview" };
+        slugs.Add("logs");
+        if (hasGateResult) slugs.Add("gate");
+        if (hasYamlTab) slugs.Add("yaml");
+        if (hasSchemaTab) slugs.Add("schema");
+        if (run?.Artifacts.Count > 0) slugs.Add("artifacts");
+        if (PipelineRunMetrics.HasCoverage(run)) slugs.Add("coverage");
+        if (run?.TestResultSummary is not null) slugs.Add("tests");
+        if (hasLintTab) slugs.Add("lint");
+        if (PipelineRunMetrics.HasComplexity(run)) slugs.Add("quality");
+        return slugs;
+    }
 
-        var completedAt = run.CompletedAt;
-        if (!completedAt.HasValue && run.Status != PipelineStatus.Running)
-            return "-";
+    public static (int Completed, int Total) StepProgress(PipelineRunDto run)
+    {
+        var steps = run.Steps.Where(step => !step.IsSystem).ToList();
+        var completed = steps.Count(step => step.Status is TaskExecutionStatus.Success
+            or TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout or TaskExecutionStatus.Cancelled);
+        // The total is every declared step, including those a terminal run never reached.
+        return (completed, steps.Count);
+    }
 
-        var duration = (completedAt ?? currentTime) - run.StartedAt;
-        if (duration < TimeSpan.Zero)
-            return "-";
-        if (duration.TotalDays >= 1)
-            return string.Format(localizer["DurationDaysHoursFormat"], (int)duration.TotalDays, duration.Hours);
-        if (duration.TotalHours >= 1)
-            return string.Format(localizer["DurationHoursMinutesFormat"], (int)duration.TotalHours, duration.Minutes);
-        if (duration.TotalMinutes >= 1)
-            return string.Format(localizer["DurationMinutesSecondsFormat"], (int)duration.TotalMinutes, duration.Seconds);
-        return string.Format(localizer["DurationSecondsFormat"], Math.Max(0, duration.Seconds));
+    public static string NextConnectorStatus(IReadOnlyList<StageViewModel> stages, int stageIndex)
+    {
+        if (stageIndex + 1 >= stages.Count) return "pending";
+        var current = stages[stageIndex];
+        var next = stages[stageIndex + 1];
+        if (current.Status == TaskExecutionStatus.Success && next.Status == TaskExecutionStatus.Failed)
+            return "success-failed";
+        if (current.Status == TaskExecutionStatus.Success && next.Status != TaskExecutionStatus.Pending)
+            return next.Status.ToString().ToLowerInvariant();
+        return current.Status.ToString().ToLowerInvariant();
+    }
+
+    public static string FormatDuration(DateTime started, DateTime? completed)
+    {
+        if (completed is null) return "\u2014";
+        var duration = completed.Value - started;
+        if (duration < TimeSpan.Zero) duration = TimeSpan.Zero;
+        return DisplayFormatting.Duration(duration);
     }
 }

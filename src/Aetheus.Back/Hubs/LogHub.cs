@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Back.Components.Tasks;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Aetheus.Back.Hubs;
 
 [Authorize]
-public class LogHub(ITaskService taskService, IResourceAuthorizationService authz) : Hub
+public class LogHub(ITaskServerReader taskService, IResourceAuthorizationService authz) : Hub
 {
     public async Task JoinTaskGroup(int taskId)
     {

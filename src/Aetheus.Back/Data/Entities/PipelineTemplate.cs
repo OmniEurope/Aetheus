@@ -21,25 +21,8 @@ public class PipelineTemplate
     [NotMapped]
     public string YamlContent
     {
-        get => Versions.OrderByDescending(version => version.Version).FirstOrDefault()?.YamlContent ?? string.Empty;
-        set
-        {
-            var version = Versions.FirstOrDefault(item => item.Version == LatestVersion);
-            if (version is null)
-            {
-                Versions.Add(new PipelineTemplateVersion
-                {
-                    Version = LatestVersion,
-                    YamlContent = value,
-                    ChangelogEntry = "Initial version",
-                    CreatedByUsername = "system"
-                });
-            }
-            else
-            {
-                version.YamlContent = value;
-            }
-        }
+        get => PipelineTemplateVersionFacade.LatestYaml(Versions);
+        set => PipelineTemplateVersionFacade.SetYaml(Versions, LatestVersion, value);
     }
 
     [NotMapped]
@@ -48,8 +31,7 @@ public class PipelineTemplate
     [NotMapped]
     public string Changelog
     {
-        get => string.Join('\n', Versions.OrderBy(version => version.Version)
-            .Select(version => $"v{version.Version}: {version.ChangelogEntry}"));
+        get => PipelineTemplateVersionFacade.Changelog(Versions);
         set { }
     }
 }

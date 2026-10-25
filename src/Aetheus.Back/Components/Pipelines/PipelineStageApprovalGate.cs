@@ -34,7 +34,10 @@ internal sealed class PipelineStageApprovalGate(
             var own = existingApprovals
                 .Where(a => a.Scope == ApprovalScope.Pipeline && a.StageName == stageName)
                 .ToList();
-            if (own.Count == 0)
+            // R-39: a confirmation that only ever timed out is asked again when its stage is ready again.
+            // The timeout failed the stage, so a stage ready here was reset for a new attempt (a resume,
+            // or a retry of the failed steps) and needs a fresh decision. A refusal stays final.
+            if (own.Count == 0 || own.All(a => a.Status == ApprovalStatus.TimedOut))
                 return await RaiseApprovalAsync(
                     runId, stageName, ApprovalScope.Pipeline, env, stageDef.ApprovalTimeoutMinutes, ct).ConfigureAwait(false);
             // Resume path: the approved stage re-enters dispatch and goes on to the environment policy.

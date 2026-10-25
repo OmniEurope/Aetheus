@@ -4,7 +4,7 @@
 @using Microsoft.JSInterop
 @using Aetheus.Front.Resources
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
     <OmniLabel For="docker-project-filter">@L["Project"]</OmniLabel>
     <OmniDropDown Id="docker-project-filter" TValue="string" name="docker-project-filter" Options="@(_projectOptions.ToOptions(item => (string)item, item => item))" @bind-Value="_selectedProject"
         @bind-Value:after="RebuildAndLoad" AllowEmpty="true" Placeholder="@L["AllProjects"]" Class="docker-graph-filter-dropdown" />
@@ -15,7 +15,7 @@
         <OmniCheckBox TValue="bool" Value="shown" ValueExpression="@(() => shown)" ValueChanged="@(v => { _kindFilter[kind.Key] = v; return RebuildAndLoad(); })">@kind.Label</OmniCheckBox>
     }
     <div class="flex-spacer"></div>
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ResetViewAsync"><OmniIcon Name="OmniIconName.Target" /> <span>@L["ResetView"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ResetViewAsync"><Icon><OmniIcon Name="OmniIconName.Target" /></Icon><ChildContent><span>@L["ResetView"]</span></ChildContent></OmniButton>
 </OmniStack>
 
 <svg id="@_svgId" class="docker-graph-svg" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -23,11 +23,11 @@
 @if (_selectedNodeLabel is not null)
 {
     <OmniCard Class="omni-u-mt-sm">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_selectedNodeKind</OmniBadge>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0"><strong>@_selectedNodeLabel</strong></OmniText>
             <div class="flex-spacer"></div>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _selectedNodeLabel = null; _selectedNodeKind = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _selectedNodeLabel = null; _selectedNodeKind = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
     </OmniCard>
 }

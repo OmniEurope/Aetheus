@@ -47,9 +47,9 @@ public class PipelineRunGateTests : BunitContext
     }
 
     [Fact]
-    public async Task ConfirmPreflightAsync_AllResolved_WithFallbacks_ReturnsTrueAndToasts()
+    public async Task ConfirmPreflightAsync_AllResolved_WithFallbacks_ReturnsTrueWithoutAToast()
     {
-        // 200 → resolved stages with server names (shows info toast)
+        // 200 → resolved stages with server names
         _handler.SetJsonResponse("api/pipelines/2/preflight", new PipelinePreflightDto
         {
             Stages =
@@ -61,15 +61,8 @@ public class PipelineRunGateTests : BunitContext
         var result = await Sut.ConfirmPreflightAsync(2);
 
         Assert.True(result);
-        // A resolved stage with a ServerName triggers the "PreflightResolved" info toast, whose detail
-        // names the stage, the picked server and the reason.
-        var toast = Assert.Single(Toasts.Toasts());
-        Assert.Equal(OmniSeverity.Info, toast.Severity);
-        Assert.Equal("PreflightResolved", toast.Summary?.ToString());
-        var detail = toast.Detail?.ToString() ?? "";
-        Assert.Contains("Deploy", detail);
-        Assert.Contains("web-01", detail);
-        Assert.Contains("tag match", detail);
+        // R-26: the "runners found" information toast is gone; a resolved launch says nothing.
+        Assert.Empty(Toasts.Toasts());
     }
 
     [Fact]
@@ -80,6 +73,20 @@ public class PipelineRunGateTests : BunitContext
         var result = await Sut.ConfirmPreflightAsync(3);
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task ConfirmPreflightAsync_SendsTheChosenParametersToThePreview()
+    {
+        _handler.SetJsonResponse("api/pipelines/14/preflight", new PipelinePreflightDto { Stages = [] });
+
+        var result = await Sut.ConfirmPreflightAsync(14, "main", new Dictionary<string, string> { ["deployServer"] = "web-01" });
+
+        Assert.True(result);
+        // The readiness call that follows has no body: read the preview request itself.
+        var preview = _handler.RequestDetails.Single(request => request.Url.Contains("api/pipelines/14/preflight", StringComparison.Ordinal));
+        Assert.Contains("web-01", preview.Body, StringComparison.Ordinal);
+        Assert.Contains("deployServer", preview.Body, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,16 +207,12 @@ public class PipelineRunGateTests : BunitContext
         var result = await Sut.ConfirmPreflightAsync(7);
 
         Assert.True(result);
-        // Both resolved stages carry a ServerName, so the single info toast lists both picks.
-        var toast = Assert.Single(Toasts.Toasts());
-        Assert.Equal(OmniSeverity.Info, toast.Severity);
-        var detail = toast.Detail?.ToString() ?? "";
-        Assert.Contains("build-01", detail);
-        Assert.Contains("web-01", detail);
+        // Two resolved stages with a server name raise no toast (R-26).
+        Assert.Empty(Toasts.Toasts());
     }
 
     [Fact]
-    public async Task ConfirmPreflightAsync_FallbackWithNoReason_IncludesServerNameOnly()
+    public async Task ConfirmPreflightAsync_FallbackWithNoReason_RaisesNoToast()
     {
         _handler.SetJsonResponse("api/pipelines/8/preflight", new PipelinePreflightDto
         {
@@ -222,11 +225,7 @@ public class PipelineRunGateTests : BunitContext
         var result = await Sut.ConfirmPreflightAsync(8);
 
         Assert.True(result);
-        // ServerName present but Reason null: the toast names the server without the parenthetical reason.
-        var toast = Assert.Single(Toasts.Toasts());
-        var detail = toast.Detail?.ToString() ?? "";
-        Assert.Contains("ci-01", detail);
-        Assert.DoesNotContain("(", detail);
+        Assert.Empty(Toasts.Toasts());
     }
 
     [Fact]

@@ -23,16 +23,16 @@
         }
         @if (Kind == FixKind.Services && CanManage)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnStartServices" Busy="@StartServicesBusy"><OmniIcon Name="OmniIconName.Play" /> <span>@L["MailStartServices"]</span></OmniButton>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnStartServices" Busy="@StartServicesBusy"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["MailStartServices"]</span></ChildContent></OmniButton>
             </OmniStack>
         }
         else if (Kind == FixKind.Certificate && CanManage && HostnameKnown)
         {
             @* Both mail-certificate actions use primary blue buttons. *@
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Busy="@ObtainCertificateBusy" Disabled="@InstallCertificateBusy"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["MailObtainCertificate"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Busy="@InstallCertificateBusy" Disabled="@ObtainCertificateBusy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallCertificate"]</span></OmniButton>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnObtainCertificate" Busy="@ObtainCertificateBusy" Disabled="@InstallCertificateBusy"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["MailObtainCertificate"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnInstallCertificate" Busy="@InstallCertificateBusy" Disabled="@ObtainCertificateBusy"><Icon><OmniIcon Name="OmniIconName.Monitor" /></Icon><ChildContent><span>@L["MailInstallCertificate"]</span></ChildContent></OmniButton>
             </OmniStack>
         }
         @if (Kind == FixKind.Dns)

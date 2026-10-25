@@ -12,7 +12,6 @@ namespace Aetheus.Front.Components.AiTasks;
 public partial class AiRunnerProfileDialog
 {
     // Model IDs are examples only; users may enter any provider-supported identifier.
-    private const string AnthropicModelExample = "claude-sonnet-5-5";
     private const string OpenAiModelExample = "gpt-5.5";
 
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -98,7 +97,7 @@ public partial class AiRunnerProfileDialog
 
     private string DefaultBaseUrl => AiProviderCatalog.DefaultBaseUrl(_model.Provider ?? AiProvider.Anthropic);
 
-    private string ModelExample => _model.Provider == AiProvider.OpenAi ? OpenAiModelExample : AnthropicModelExample;
+    private string ModelExample => _model.Provider == AiProvider.OpenAi ? OpenAiModelExample : EditModel.AnthropicModelExample;
 
     // What the backend names a profile created without a name (before any -2 suffix): shown as a hint.
     private string GeneratedName => _model.Provider is { } provider && !string.IsNullOrWhiteSpace(_model.Model)
@@ -293,6 +292,10 @@ public partial class AiRunnerProfileDialog
 
     private sealed class EditModel : IValidatableObject
     {
+        // The default model is also the example shown to the user; it lives here so the model does not
+        // depend on the dialog that owns it.
+        internal const string AnthropicModelExample = "claude-sonnet-5-5";
+
         // Empty on create names the profile after its provider and model (recette R3-5); an existing
         // profile keeps a name.
         [StringLength(120)]

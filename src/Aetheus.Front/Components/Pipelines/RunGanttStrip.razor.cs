@@ -110,7 +110,7 @@ public partial class RunGanttStrip
             // A stage that started at once has no wait to show; when none waited, the column is not
             // drawn, like the others.
             new(GanttColumn.Wait, "GanttColumnWait", "GanttColumnWaitHint",
-                (bar, _) => bar.Wait >= TimeSpan.FromSeconds(1) ? FormatDuration(bar.Wait) : string.Empty),
+                (bar, _) => bar.Wait >= TimeSpan.FromSeconds(1) ? DisplayFormatting.PreciseDuration(bar.Wait) : string.Empty),
             new(GanttColumn.Average, "GanttColumnAverage", "GanttColumnAverageHint",
                 (bar, _) => Seconds(Baseline(bar)?.AverageSeconds)),
             new(GanttColumn.Last, "GanttColumnLast", "GanttColumnLastHint",
@@ -171,8 +171,9 @@ public partial class RunGanttStrip
     private static TimeSpan Elapsed(RunGanttBar bar, RunGanttLayout layout) =>
         (bar.Stage.CompletedAt ?? layout.Start + layout.Duration) - bar.Stage.StartedAt!.Value;
 
+    // Every column of a row is a measurement, read in the same precision as Average, Last and CPU (R-23).
     private static string StageDuration(RunGanttBar bar, RunGanttLayout layout) =>
-        FormatDuration(Elapsed(bar, layout));
+        DisplayFormatting.PreciseDuration(Elapsed(bar, layout));
 
     /// <summary>Start, end, duration, the wait before the stage and, when this pipeline has a usual
     /// duration for it, how far this run is from it. One fact per line.</summary>
@@ -213,10 +214,25 @@ public partial class RunGanttStrip
         return reference.Kind == DateTimeKind.Local ? utc.ToLocalTime() : utc;
     }
 
-    /// <summary>The elapsed time at 0, 25, 50, 75 and 100 % of the axis.</summary>
-    internal static IReadOnlyList<Tick> Ticks(RunGanttLayout layout) =>
-        [.. new[] { 0, 25, 50, 75, 100 }.Select(percent =>
-            new Tick(percent, FormatDuration(TimeSpan.FromTicks(layout.Duration.Ticks * percent / 100))))];
+    /// <summary>The elapsed time at 0, 25, 50, 75 and 100 % of the axis. Under ten minutes the labels keep their
+    /// seconds (<see cref="DisplayFormatting.PreciseDuration"/>, so "1min10s" and "1min20s" never both read
+    /// "1min"); from ten minutes the quarters are at least 2.5 minutes apart and the whole-minute format
+    /// already tells them apart. A label equal to the previous one (a run of a couple of seconds) is left empty,
+    /// so two consecutive ticks never share a label. One axis reads in one precision: a 21-minute run never
+    /// mixes "5min19s" with "10min".</summary>
+    internal static IReadOnlyList<Tick> Ticks(RunGanttLayout layout)
+    {
+        var ticks = new List<Tick>();
+        Func<TimeSpan, string> format = layout.Duration.TotalMinutes < 10 ? DisplayFormatting.PreciseDuration : DisplayFormatting.Duration;
+        var previous = string.Empty;
+        foreach (var percent in new[] { 0, 25, 50, 75, 100 })
+        {
+            var label = format(TimeSpan.FromTicks(layout.Duration.Ticks * percent / 100));
+            ticks.Add(new Tick(percent, label == previous ? string.Empty : label));
+            previous = label;
+        }
+        return ticks;
+    }
 
     /// <summary>The run's own duration, measured like the Started tile (run start to run end, or to
     /// now while it runs). Null when the run carries no start.</summary>
@@ -274,14 +290,7 @@ public partial class RunGanttStrip
         (span < TimeSpan.Zero ? "-" : "+") + FormatDuration(span.Duration());
 
     private static string Seconds(double? seconds) =>
-        seconds is { } value ? FormatDuration(TimeSpan.FromSeconds(value)) : string.Empty;
+        seconds is { } value ? DisplayFormatting.PreciseDuration(TimeSpan.FromSeconds(value)) : string.Empty;
 
-    private static string FormatDuration(TimeSpan span) =>
-        span.TotalHours >= 1
-            ? $"{(int)span.TotalHours}h{span.Minutes:D2}"
-            : span.TotalMinutes >= 1
-                ? $"{(int)span.TotalMinutes}m{span.Seconds:D2}"
-                // A negative span cannot come from the layout (ends are clamped), but the floor keeps
-                // a "-0s" out of the UI if that ever changes.
-                : $"{Math.Max(0, (int)span.TotalSeconds)}s";
+    private static string FormatDuration(TimeSpan span) => DisplayFormatting.Duration(span);
 }

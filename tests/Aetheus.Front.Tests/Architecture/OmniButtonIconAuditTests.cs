@@ -50,6 +50,22 @@ public class OmniButtonIconAuditTests
     }
 
     [Fact]
+    public void ButtonIcons_LiveInTheIconFragment()
+    {
+        // OE 1.9.0 no longer detects an icon left in ChildContent: the button is not drawn square and the
+        // guards below would read it as a text button.
+        var violations = EnumerateButtons()
+            .Where(button => Regex.IsMatch(
+                Regex.Replace(button.Body, @"<Icon>.*?</Icon>", string.Empty, RegexOptions.Singleline),
+                @"<OmniIcon\b"))
+            .Select(button => $"{button.File}: the icon is outside the Icon fragment: {button.OpeningTag}")
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            "Every OmniButton icon belongs in <Icon>:\n  " + string.Join("\n  ", violations));
+    }
+
+    [Fact]
     public void IconOnlyButtons_HaveAnAccessibleNameAndTooltip()
     {
         var violations = EnumerateButtons()
@@ -173,12 +189,9 @@ public class OmniButtonIconAuditTests
         }
     }
 
-    private static bool IsIconOnly(string body)
-    {
-        var withoutIcons = Regex.Replace(body, @"<OmniIcon\b(?:(?:""[^""]*"")|[^>])*?/>", string.Empty,
-            RegexOptions.Singleline);
-        return string.IsNullOrWhiteSpace(Regex.Replace(withoutIcons, @"</?span\b[^>]*>", string.Empty));
-    }
+    /// <summary>OE 1.9.0: an icon-only button is one that has an Icon fragment and no ChildContent.</summary>
+    private static bool IsIconOnly(string body) =>
+        body.Contains("<Icon>", StringComparison.Ordinal) && !body.Contains("<ChildContent>", StringComparison.Ordinal);
 
     private static string? Attribute(string tag, string name)
     {

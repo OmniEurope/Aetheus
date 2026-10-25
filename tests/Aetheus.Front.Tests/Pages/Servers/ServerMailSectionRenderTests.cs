@@ -44,9 +44,11 @@ public class ServerMailSectionRenderTests : BunitContext
         _handler.SetJsonResponse($"api/servers/{serverId}/mail/diagnostics", new MailDiagnosticsDto());
     }
 
-    private IRenderedComponent<ServerMailSection> RenderSection(ServerDetailDto? server = null, int serverId = 10)
+    private IRenderedComponent<ServerMailSection> RenderSection(ServerDetailDto? server = null, int serverId = 10, string? tab = null)
     {
         StubMailApi(serverId);
+        if (tab is not null)
+            Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo($"/servers/{serverId}/mail?tab={tab}");
         var s = server ?? MakeMailServer();
         return Render<ServerMailSection>(p => p
             .Add(x => x.Server, s)
@@ -68,7 +70,7 @@ public class ServerMailSectionRenderTests : BunitContext
     {
         // Recette R3-41/R3-42: the DNS records stay visible; verify, DKIM rotation and the destructive
         // delete sit behind the row menu, delete in Danger.
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
         cut.WaitForState(() => cut.Markup.Contains("example.com"));
         var row = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("example.com", StringComparison.Ordinal)
             && r.QuerySelector(".mail-domain-row-actions") is not null);
@@ -150,7 +152,7 @@ public class ServerMailSectionRenderTests : BunitContext
     public void R3_35_DomainRow_OpensItsDnsRecords_AndItsRowControlsStayIsolated()
     {
         _handler.SetJsonResponse("api/servers/10/mail/domains/1/dns", new MailDnsRecordsDto { Domain = "example.com" });
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
         cut.WaitForAssertion(() => Assert.Contains(cut.FindAll(RowEventIsolation.ClickableRows),
             r => r.QuerySelector(".mail-domain-row-actions") is not null));
         var row = cut.FindAll(RowEventIsolation.ClickableRows).Single(r => r.TextContent.Contains("example.com", StringComparison.Ordinal)
@@ -267,9 +269,9 @@ public class ServerMailSectionRenderTests : BunitContext
     // ── Static helpers ────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(500, "B", "500")]
-    [InlineData(1024, "KB", "1")]
-    [InlineData(1024 * 1024, "MB", "1")]
+    [InlineData(500, "o", "500")]
+    [InlineData(1024, "Ko", "1")]
+    [InlineData(1024 * 1024, "Mo", "1")]
     public void FormatBytes_ReturnsHumanReadable(long bytes, string expectedUnit, string expectedNumber)
     {
         var result = ServerMailQueueTab.FormatBytes(bytes);

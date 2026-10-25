@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text;
 using Aetheus.Back.Components.Git;
+using Aetheus.Back.Components.Git.Events;
 
 namespace Aetheus.Back.Tests;
 

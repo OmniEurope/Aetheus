@@ -37,8 +37,8 @@
         <OmniTextArea @bind-Value="Notes" MaxLength="2000" Rows="2" Id="oe-pages-projects-projectdetailsections-projectserverdialog-6" />
     </ChildContent></OmniFormField>
 
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(Saving ? "btn-busy" : null)" Busy="@(Saving)"><OmniIcon Name="@MaterialIconMap.Resolve((_editMode ? "save" : "add"))" /> <span>@(_editMode ? L["Save"] : L["Add"])</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCancel"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(Saving ? "btn-busy" : null)" Busy="@(Saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_editMode ? "save" : "add"))" /></Icon><ChildContent><span>@(_editMode ? L["Save"] : L["Add"])</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>

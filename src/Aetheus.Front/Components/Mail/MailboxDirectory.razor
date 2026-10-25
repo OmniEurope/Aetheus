@@ -15,8 +15,8 @@
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<MailboxDirectoryEntryDto>(_items, _total))">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="MailboxDirectoryEntryDto" Property="Email" Title="@L["Email"]" Width="300px" Filterable="true" />
-        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="ServerName" Title="@L["Server"]" Width="220px" Filterable="false" />
+        <OmniDataGridColumn Frozen="true" TItem="MailboxDirectoryEntryDto" Property="Email" Title="@L["Email"]" Filterable="true" />
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="ServerName" Title="@L["Server"]" Filterable="false" />
         <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="Domain" Title="@L["MailboxDirectoryDomain"]" Width="200px" Sortable="false" Filterable="false" />
         <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Title="@L["Quota"]" Width="160px" Sortable="false" Filterable="false">
             <Template Context="entry">
@@ -25,8 +25,8 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Title="@L["Actions"]" Width="100px" Sortable="false" Filterable="false">
             <Template Context="entry">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Open(entry))" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Open(entry))" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></Icon></OmniButton>
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>

@@ -12,6 +12,28 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
     private Func<string, string>? _kindText;
     private Func<string, string> KindText => _kindText ??= GridFilterText.ForEnum<PackageRegistryKind>(L);
 
+    // Tab order: all, one per type, then the source addresses.
+    private static readonly IReadOnlyList<string> TabSlugs = ["all", "nuget", "npm", "maven", "addresses"];
+    private const int AddressesTab = 4;
+    private int _tab;
+    private PackageRegistryKind? _kind;
+    private bool ShowsAddresses => _tab == AddressesTab;
+
+    private async Task OnTabChangedAsync(int tab)
+    {
+        _tab = tab;
+        _kind = tab switch
+        {
+            1 => PackageRegistryKind.NuGet,
+            2 => PackageRegistryKind.Npm,
+            3 => PackageRegistryKind.Maven,
+            _ => null
+        };
+        // The grid is unmounted on the addresses tab and loads itself when it comes back.
+        if (!ShowsAddresses)
+            await ResetSearchAsync();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         if (!await InitializeAdminAsync(AdminEntities.PackageRegistry, "PackageRegistry"))
@@ -24,7 +46,7 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest(nameof(PackageRegistryPackageDto.Name));
-        return Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search,
+        return Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search, kind: _kind,
             sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
     }
 
@@ -37,7 +59,7 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
         try
         {
             // The header filters are applied by the API, not by the grid.
-            var result = await Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search,
+            var result = await Api.Packages.GetRegistryPackagesAsync(page, pageSize, _search, kind: _kind,
                 sortBy: sortBy, sortDescending: sortDescending, filters: args.ToApiFilters());
             _packages = result.Items;
             _totalCount = result.TotalCount;

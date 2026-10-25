@@ -5,7 +5,7 @@
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
             <OmniIcon Name="OmniIconName.Edit" Class="icon-md-app" /> @L["EditStage"]
         </OmniText>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCloseClicked" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCloseClicked" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
     </div>
 
     <OmniStack Gap="OmniSpacing.Medium">
@@ -46,13 +46,13 @@
                     <OmniTextBox aria-label="@L["Value"]" Value="@value" Placeholder="@L["Value"]"
                                    ValueChanged="@(val => OnVariableValueChanged(key, val))"
                                    Class="icon-input-sm" ValueExpression="@(() => value)" />
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveVariable(key))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveVariable(key))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 }
             </div>
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
                 <OmniTextBox aria-label="@L["Key"]" @bind-Value="_newVarKey" Placeholder="@L["Key"]" Class="text-input-flex" />
                 <OmniTextBox aria-label="@L["Value"]" @bind-Value="_newVarValue" Placeholder="@L["Value"]" Class="text-input-flex" />
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddVariable" Disabled="@string.IsNullOrWhiteSpace(_newVarKey)" title="@L["Add"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddVariable" Disabled="@string.IsNullOrWhiteSpace(_newVarKey)" title="@L["Add"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon></OmniButton>
             </OmniStack>
         </ChildContent></OmniFieldset>
 
@@ -62,18 +62,21 @@
             {
                 var step = Stage.Steps[i];
                 var index = i;
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" Class="omni-u-mb-xs">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" Class="omni-u-mb-xs">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 text-num-cell">@(index + 1).</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 flex-1">@step.Name</OmniText>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnMoveStep(index, -1))" title="@L["MoveUp"]" Disabled="@(index == 0)"><OmniIcon Name="OmniIconName.Upgrade" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnMoveStep(index, 1))" title="@L["MoveDown"]" Disabled="@(index == Stage.Steps.Count - 1)"><OmniIcon Name="OmniIconName.ArrowDown" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditStep.InvokeAsync(index))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemoveStep(index))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    @* One main action (Edit), the others in the row menu (R-2). *@
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditStep.InvokeAsync(index))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@(() => OnMoveStep(index, -1))" Disabled="@(index == 0)"><Icon><OmniIcon Name="OmniIconName.Upgrade" /></Icon><ChildContent>@L["MoveUp"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem OnClick="@(() => OnMoveStep(index, 1))" Disabled="@(index == Stage.Steps.Count - 1)"><Icon><OmniIcon Name="OmniIconName.ArrowDown" /></Icon><ChildContent>@L["MoveDown"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => OnRemoveStep(index))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
             }
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => AddStep.InvokeAsync())" Class="omni-u-mt-sm" title="@L["AddStep"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => AddStep.InvokeAsync())" Class="omni-u-mt-sm" title="@L["AddStep"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
         </ChildContent></OmniFieldset>
 
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDeleteClicked" title="@L["DeleteStage"]"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDeleteClicked" title="@L["DeleteStage"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
     </OmniStack>
 </div>

@@ -68,6 +68,11 @@ public sealed class AgentUpdateCapabilitiesTests
     [Theory]
     [InlineData("docker")]
     [InlineData("service-control")]
+    [InlineData("deployment")]
+    [InlineData("enable-all")]
+    [InlineData("--enable-all")]
+    [InlineData("FIREWALL-MANAGE")]
+    [InlineData("firewall-manage,docker")]
     [InlineData("PATCH-MANAGE")]
     [InlineData(" patch-manage")]
     [InlineData("patch-manage,docker")]
@@ -202,6 +207,64 @@ public sealed class AgentUpdateCapabilitiesTests
         var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(task!.EnvironmentVariables!)!;
         Assert.Equal("1.0.0", environment["AETHEUS_AGENT_TARGET_VERSION"]);
         Assert.Equal(AgentEnableableCapabilities.PatchManage, environment[AgentEnableableCapabilities.EnvironmentVariable]);
+    }
+
+    // ADR-055: every accepted token reaches the task environment as written and is expected back in the
+    // heartbeat under its own capability (rkhunter reports none, so nothing is expected for it).
+    [Theory]
+    [InlineData("package-manage", "package.manage")]
+    [InlineData("service-enable", "service.manage")]
+    [InlineData("cron-manage", "cron.manage")]
+    [InlineData("rkhunter-manage", null)]
+    [InlineData("apache-manage", "apache.manage")]
+    [InlineData("certbot-manage", "certbot.manage")]
+    [InlineData("portsentry-manage", "portsentry.manage")]
+    [InlineData("firewall-manage", "firewall.manage")]
+    [InlineData("mail-setup", "mail.manage")]
+    [InlineData("teamspeak-setup", "teamspeak.manage")]
+    public async Task EachAcceptedComponent_IsCarriedToTheAgentAndExpectedInTheHeartbeat(string token, string? capability)
+    {
+        await using var db = CreateDb();
+        db.Servers.Add(new Server { Id = 1, Name = "srv-1", Hostname = "srv-1", OsType = OsType.Linux });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var repository = new AgentUpdateRepository(db, new FakeTimeProvider(Now));
+        var release = new AgentReleaseManifestDto { SoftwareVersion = "1.0.0", ProtocolVersion = 2 };
+
+        var (request, _) = await repository.ReserveAsync(
+            (await db.Servers.FindAsync([1], TestContext.Current.CancellationToken))!, release, "admin",
+            TestContext.Current.CancellationToken, [token]);
+        var (_, task, _) = await repository.TryQueueAsync(request.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(token, request.EnableCapabilities);
+        var expected = JsonSerializer.Deserialize<List<string>>(request.ExpectedCapabilitiesJson)!;
+        if (capability is null)
+            Assert.DoesNotContain(expected, entry => entry.EndsWith(".manage", StringComparison.Ordinal));
+        else
+            Assert.Contains(capability, expected);
+        var environment = JsonSerializer.Deserialize<Dictionary<string, string>>(task!.EnvironmentVariables!)!;
+        Assert.Equal(token, environment[AgentEnableableCapabilities.EnvironmentVariable]);
+    }
+
+    [Fact]
+    public async Task SeveralComponents_AreAllExpectedInTheHeartbeat_AndNothingElse()
+    {
+        await using var db = CreateDb();
+        db.Servers.Add(new Server { Id = 1, Name = "srv-1", Hostname = "srv-1", OsType = OsType.Linux });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var repository = new AgentUpdateRepository(db, new FakeTimeProvider(Now));
+
+        var (request, _) = await repository.ReserveAsync(
+            (await db.Servers.FindAsync([1], TestContext.Current.CancellationToken))!,
+            new AgentReleaseManifestDto { SoftwareVersion = "1.0.0", ProtocolVersion = 2 }, "admin",
+            TestContext.Current.CancellationToken,
+            [AgentEnableableCapabilities.MailSetup, AgentEnableableCapabilities.PatchManage, AgentEnableableCapabilities.CronManage]);
+
+        Assert.Equal("patch-manage,cron-manage,mail-setup", request.EnableCapabilities);
+        var expected = JsonSerializer.Deserialize<List<string>>(request.ExpectedCapabilitiesJson)!;
+        Assert.Contains(AgentCapabilities.PatchManagement, expected);
+        Assert.Contains(AgentCapabilities.CronManagement, expected);
+        Assert.Contains(AgentCapabilities.MailManagement, expected);
+        Assert.DoesNotContain(AgentCapabilities.FirewallManagement, expected);
     }
 
     [Fact]

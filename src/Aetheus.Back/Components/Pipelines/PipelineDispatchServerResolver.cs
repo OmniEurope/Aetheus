@@ -37,6 +37,14 @@ public interface IPipelineDispatchServerResolver
     /// <summary>The reason to show when no runner matched.</summary>
     string BuildNoServerReason(string stageName, PipelineStageDefinition stageDef);
 
+    /// <summary>The reason to show when the parameter that names the stage's target is empty, so no
+    /// target is chosen: no agent was searched, and none could be missing.</summary>
+    string BuildEmptyTargetParameterReason(string stageName, string parameterName);
+
+    /// <summary>The reason a launch is refused when the parameter that names a stage's target is empty:
+    /// the stage would otherwise run on whichever runner is online first.</summary>
+    string BuildEmptyTargetParameterRefusal(string stageName, string parameterName);
+
     /// <summary>The reason to show when no deployment-capable agent matched.</summary>
     string BuildNoDeployTargetReason(string stageName, PipelineStageDefinition stageDef);
 
@@ -58,6 +66,13 @@ public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader r
         var osNote = !string.IsNullOrEmpty(stageDef.Os) ? $", os '{stageDef.Os}'" : string.Empty;
         return $"Stage '{stageName}': no online pipeline runner available in the organization (requested {target}{osNote}).";
     }
+
+    public string BuildEmptyTargetParameterReason(string stageName, string parameterName)
+        => $"Stage '{stageName}': parameter '{parameterName}' is empty, so no server is chosen for it.";
+
+    public string BuildEmptyTargetParameterRefusal(string stageName, string parameterName)
+        => $"{BuildEmptyTargetParameterReason(stageName, parameterName)} "
+           + $"The launch is refused instead of running the stage on any available runner: choose a value for '{parameterName}'.";
 
     // Only the native cross-agent `type: deploy` operation requires the deployment module.
     // `execution_role: deploy` is a workload classification used by deployment-only runners; shell,

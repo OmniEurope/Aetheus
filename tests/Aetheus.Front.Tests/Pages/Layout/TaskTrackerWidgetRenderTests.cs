@@ -34,10 +34,12 @@ public class TaskTrackerWidgetRenderTests : BunitContext
 
     [Theory]
     [InlineData(3, "3")]
-    [InlineData(120, "99+")]
+    [InlineData(9, "9")]
+    [InlineData(10, "9+")]
+    [InlineData(120, "9+")]
     public void Renders_WithNonZeroCount_TheIconThenTheNumber_InAWiderButton(int count, string shown)
     {
-        // Keep the task icon and widen the button when a count is present, displaying 99+ above 99.
+        // Keep the task icon and widen the button when a count is present, displaying 9+ above 9 (user decision of 2026-10-24).
         var cut = Render<TaskTrackerWidget>();
         var tracker = Services.GetRequiredService<TaskTrackerService>();
         var byId = typeof(TaskTrackerService)

@@ -2,7 +2,6 @@
 using Aetheus.Back.Components.Artifacts;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Logs;
-using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;

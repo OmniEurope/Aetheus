@@ -3,7 +3,6 @@ using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
-using Aetheus.Back.Hubs;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
@@ -52,6 +51,7 @@ public class GitLightServiceTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(_lightRepoMock, _cliMock, _auditMock, options),
+            Substitute.For<IGitBranchMovedAnnouncer>(),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
     }
@@ -449,6 +449,101 @@ public class GitLightServiceTests
             Arg.Any<string>(), "Main", TestContext.Current.CancellationToken);
     }
 
+    private static GitInternalRepo ProjectRepo(int id, bool configuration, bool mirror = false) => new()
+    {
+        Id = id,
+        ProjectId = 1,
+        Name = $"repo-{id}",
+        Slug = $"repo-{id}",
+        DefaultBranch = "main",
+        IsConfiguration = configuration,
+        Project = new Project { Id = 1, Name = "Project" },
+        GitConnection = new GitConnection
+        {
+            Id = 50 + id,
+            ProviderType = mirror ? GitProviderType.GitHub : GitProviderType.AetheusGit
+        }
+    };
+
+    private void ProjectHolds(params GitInternalRepo[] repositories)
+    {
+        _lightRepoMock.GetByProjectAsync(1, TestContext.Current.CancellationToken).Returns([.. repositories]);
+        foreach (var repository in repositories)
+        {
+            _lightRepoMock.FindByIdAsync(repository.Id, TestContext.Current.CancellationToken).Returns(repository);
+            _lightRepoMock.FindByIdWithProjectAsync(repository.Id, TestContext.Current.CancellationToken).Returns(repository);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateRepositoryAsync_DesignatingAnotherConfigurationRepository_MakesItTheOne_AndTheOldOneStopsBeingIt()
+    {
+        var wizards = ProjectRepo(2, configuration: true);
+        var users = ProjectRepo(3, configuration: false);
+        ProjectHolds(ProjectRepo(1, configuration: false), wizards, users);
+
+        var result = await _sut.UpdateRepositoryAsync(
+            3, new UpdateGitLightRepoRequest { IsConfiguration = true }, TestContext.Current.CancellationToken);
+
+        Assert.True(result!.IsConfiguration);
+        Assert.True(users.IsConfiguration);
+        await _lightRepoMock.Received(1).ClearConfigurationFlagAsync(1, 3, TestContext.Current.CancellationToken);
+        await _lightRepoMock.Received(1).SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateRepositoryAsync_GivingUpTheConfigurationRole_LeavesTheProjectWithNone()
+    {
+        var wizards = ProjectRepo(2, configuration: true);
+        ProjectHolds(ProjectRepo(1, configuration: false), wizards);
+
+        var result = await _sut.UpdateRepositoryAsync(
+            2, new UpdateGitLightRepoRequest { IsConfiguration = false }, TestContext.Current.CancellationToken);
+
+        Assert.False(result!.IsConfiguration);
+        Assert.False(wizards.IsConfiguration);
+        await _lightRepoMock.DidNotReceive().ClearConfigurationFlagAsync(
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateRepositoryAsync_WithoutAConfigurationAnswer_LeavesTheRoleAsItIs()
+    {
+        var wizards = ProjectRepo(2, configuration: true);
+        ProjectHolds(ProjectRepo(1, configuration: false), wizards);
+
+        await _sut.UpdateRepositoryAsync(2, new UpdateGitLightRepoRequest { Description = "x" }, TestContext.Current.CancellationToken);
+
+        Assert.True(wizards.IsConfiguration);
+        await _lightRepoMock.DidNotReceive().ClearConfigurationFlagAsync(
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateRepositoryAsync_TheOnlySourceRepository_CannotBecomeTheConfigurationRepository()
+    {
+        var only = ProjectRepo(1, configuration: false);
+        ProjectHolds(only, ProjectRepo(2, configuration: true));
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.UpdateRepositoryAsync(
+            1, new UpdateGitLightRepoRequest { IsConfiguration = true }, TestContext.Current.CancellationToken));
+
+        Assert.False(only.IsConfiguration);
+        await _lightRepoMock.DidNotReceive().SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateRepositoryAsync_TheMirrorOfAnExternalRepository_CannotBecomeTheConfigurationRepository()
+    {
+        var mirror = ProjectRepo(3, configuration: false, mirror: true);
+        ProjectHolds(ProjectRepo(1, configuration: false), mirror);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.UpdateRepositoryAsync(
+            3, new UpdateGitLightRepoRequest { IsConfiguration = true }, TestContext.Current.CancellationToken));
+
+        Assert.False(mirror.IsConfiguration);
+    }
+
     [Fact]
     public void BuildCloneUrl_ReturnsCorrectUrl()
     {
@@ -486,6 +581,7 @@ public class GitLightServiceTests
             new GitBranchProtectionService(
                 _lightRepoMock, _cliMock, _auditMock,
                 Options.Create(new GitLightOptions { RepositoriesPath = "/tmp/test-repos" })),
+            Substitute.For<IGitBranchMovedAnnouncer>(),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
 
@@ -519,6 +615,7 @@ public class GitLightServiceTests
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(
                 _lightRepoMock, _cliMock, _auditMock, options),
+            Substitute.For<IGitBranchMovedAnnouncer>(),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
 

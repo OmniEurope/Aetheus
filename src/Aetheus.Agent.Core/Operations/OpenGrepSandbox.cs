@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using Aetheus.Agent.Core.Executors;
 
 namespace Aetheus.Agent.Core.Operations;
 
@@ -27,7 +28,16 @@ internal static class OpenGrepSandbox
         "aetheus-delivery.yml",
         "aetheus-dockerfile.yml",
         "aetheus-javascript.yml",
-        "aetheus-pipeline.yml"
+        "aetheus-pipeline.yml",
+        "aetheus-csharp-injection.yml",
+        "aetheus-csharp-crypto.yml",
+        "aetheus-csharp-web.yml",
+        "aetheus-csharp-data.yml",
+        "aetheus-razor.yml",
+        "aetheus-js-injection.yml",
+        "aetheus-js-crypto.yml",
+        "aetheus-csharp-api.yml",
+        "aetheus-js-web.yml"
     ];
 
     /// <summary>Writes every embedded rule file into <paramref name="directory"/>, created if needed.
@@ -62,6 +72,15 @@ internal static class OpenGrepSandbox
         return scanner.RuntimeImage;
     }
 
+    /// <summary>The HTTPS download of a binary scanner, refused unless the manifest pins its SHA-256.</summary>
+    internal static Uri RequireVerifiedDownload(ScannerManifestEntry scanner)
+    {
+        if (!Uri.TryCreate(scanner.DownloadUriLinuxAmd64, UriKind.Absolute, out var downloadUri)
+            || downloadUri.Scheme != Uri.UriSchemeHttps || scanner.Sha256LinuxAmd64?.Length != 64)
+            throw new IOException("Binary scanner manifest entry is incomplete.");
+        return downloadUri;
+    }
+
     /// <summary>
     /// Leaves at <paramref name="binaryPath"/> a file whose bytes match the manifest's SHA-256: kept
     /// when already there, otherwise downloaded by <paramref name="downloadTo"/> into a temporary file
@@ -74,7 +93,7 @@ internal static class OpenGrepSandbox
         Func<Uri, string, CancellationToken, Task> downloadTo,
         CancellationToken cancellationToken)
     {
-        var downloadUri = ScannerOperationExecutor.RequireVerifiedDownload(scanner);
+        var downloadUri = RequireVerifiedDownload(scanner);
         var expected = scanner.Sha256LinuxAmd64!;
         if (File.Exists(binaryPath)
             && await ScannerOperationSupport.HasExpectedHashAsync(binaryPath, expected, cancellationToken).ConfigureAwait(false))
@@ -119,6 +138,7 @@ internal static class OpenGrepSandbox
         args.Add("--pids-limit"); args.Add(ScannerContainerProcessBuilder.PidsLimit.ToString());
         args.Add("--memory"); args.Add(scanner.Memory);
         args.Add("--cpus"); args.Add(scanner.Cpus);
+        args.Add("--cpu-shares"); args.Add(PipelineContainerCpuWeight.Shares);
         args.Add("--read-only");
         args.Add("--network"); args.Add("none");
         args.Add("--tmpfs"); args.Add("/tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777");

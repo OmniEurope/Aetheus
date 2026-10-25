@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.RegularExpressions;
+using Aetheus.Back.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Architecture;
 
@@ -11,7 +12,8 @@ public sealed partial class ExpandContractMigrationAuditTests
     /// <summary>
     /// Contract migrations allowed to drop a column or a table, through reviewed raw SQL, because the
     /// previous release (V-1) already stopped mapping what they drop. Each entry is a user-approved
-    /// contract step listed in docs/contracts/deployment.md (pending contract steps); any other
+    /// contract step and is also named in <c>SchemaContractionRegistry.ContractMigrations</c>
+    /// (<see cref="ReviewedContractDrops_AreNamedInTheContractionRegistry"/>); any other
     /// migration whose Up() drops a column or a table fails this guard.
     /// </summary>
     private static readonly HashSet<string> ReviewedContractDrops = new(StringComparer.Ordinal)
@@ -59,6 +61,19 @@ public sealed partial class ExpandContractMigrationAuditTests
         var missing = ReviewedContractDrops.Where(name => !File.Exists(Path.Combine(directory, name))).ToList();
 
         Assert.True(missing.Count == 0, "Reviewed contract drops name missing migrations: " + string.Join(", ", missing));
+    }
+
+    [Fact]
+    public void ReviewedContractDrops_AreNamedInTheContractionRegistry()
+    {
+        var registry = SchemaContractionRegistry.ContractMigrations
+            .Select(id => id + ".cs")
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(ReviewedContractDrops.SetEquals(registry),
+            "The reviewed contract drops of this guard and SchemaContractionRegistry.ContractMigrations must name the same migrations. "
+            + "Guard only: " + string.Join(", ", ReviewedContractDrops.Except(registry))
+            + ". Registry only: " + string.Join(", ", registry.Except(ReviewedContractDrops)));
     }
 
     private static string ExtractUpMethod(string source)

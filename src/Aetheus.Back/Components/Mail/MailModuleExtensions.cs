@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Components.Servers.Events;
 using Aetheus.Back.Services.DomainEvents;
+using Aetheus.Back.Services.Email;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Mail;
@@ -27,6 +29,11 @@ public static class MailModuleExtensions
         services.AddScoped<IMailDnsVerifier, MailDnsVerifier>();
         services.AddScoped<IMailDiagnosticsService, MailDiagnosticsService>();
         services.AddScoped<IMailNoReplySenderService, MailNoReplySenderService>();
+        // The default sender's secret follows every password set on the no-reply mailbox, and the sender
+        // re-provisions that password when the mail server refuses it (SMTP 535).
+        services.AddScoped<IMailSenderSecret, MailSenderSecret>();
+        services.AddSingleton<NoReplyRepairThrottle>();
+        services.AddScoped<INoReplyCredentialRepair, MailNoReplyCredentialRepair>();
         // Recette R1-41 / R3-50 / R3-49: the Dovecot master user, its secret, and the purge of absent mailbox rows.
         services.AddScoped<IMailMasterSecrets, MailMasterSecrets>();
         services.AddScoped<IMailMasterAccessService, MailMasterAccessService>();

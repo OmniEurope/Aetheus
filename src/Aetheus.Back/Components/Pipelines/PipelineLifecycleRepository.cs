@@ -103,7 +103,7 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
         var prepareSteps = await db.PipelineStepRuns
             .Where(s => s.PipelineRunId == runId
                 && s.IsSystem
-                && s.StageName == PipelineRunService.SystemPrepareStage
+                && s.StageName == PipelineRunHelpers.SystemPrepareStage
                 && s.Status == TaskExecutionStatus.Success)
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -123,9 +123,9 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             run.Status = PipelineStatus.Running;
             run.CompletedAt = null;
             var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
-            variables.Remove(PipelineRunService.CancellationRequestedVariable);
-            variables.Remove(PipelineRunService.CancelledByVariable);
-            variables.Remove(PipelineRunService.CancellationReasonVariable);
+            variables.Remove(PipelineRunHelpers.CancellationRequestedVariable);
+            variables.Remove(PipelineRunHelpers.CancelledByVariable);
+            variables.Remove(PipelineRunHelpers.CancellationReasonVariable);
             run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
         }
 
@@ -197,7 +197,7 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
             .AsNoTracking()
             .Where(r => r.Status == PipelineStatus.Running
                         && r.StartedAt < startedBefore
-                        && r.AdditionalVariablesJson.Contains(PipelineRunService.CancellationRequestedVariable)
+                        && r.AdditionalVariablesJson.Contains(PipelineRunHelpers.CancellationRequestedVariable)
                         // A pending deferred cleanup is deliberately ignored: reapplying cancellation
                         // releases orphan Running steps, then the scheduler dispatches that cleanup.
                         && !r.Tasks.Any(t => (t.Status == TaskExecutionStatus.Pending && !t.IsDeferredCleanup)
@@ -226,14 +226,16 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
     /// <summary>
     /// Every run still in flight, whatever its pipeline. Feeds the agents' workspace reaper, so the
     /// set has to be complete: a run missing from it has its sources deleted underneath it.
-    /// WaitingForApproval counts as in flight - such a run writes nothing for days and still resumes.
+    /// WaitingForApproval and AwaitingResume (R-39) count as in flight - such a run writes nothing for
+    /// hours or days and still resumes, in the same workspace.
     /// </summary>
     public async Task<List<int>> GetAllActiveRunIdsAsync(CancellationToken ct = default)
     {
         return await db.PipelineRuns.AsNoTracking()
             .Where(run => run.Status == PipelineStatus.Running
                           || run.Status == PipelineStatus.Pending
-                          || run.Status == PipelineStatus.WaitingForApproval)
+                          || run.Status == PipelineStatus.WaitingForApproval
+                          || run.Status == PipelineStatus.AwaitingResume)
             .Select(run => run.Id)
             .ToListAsync(ct).ConfigureAwait(false);
     }
@@ -244,7 +246,8 @@ internal sealed class PipelineLifecycleRepository(AppDbContext db, TimeProvider 
         var query = db.PipelineRuns.AsNoTracking()
             .Where(run => run.Status == PipelineStatus.Running
                 || run.Status == PipelineStatus.Pending
-                || run.Status == PipelineStatus.WaitingForApproval);
+                || run.Status == PipelineStatus.WaitingForApproval
+                || run.Status == PipelineStatus.AwaitingResume);
         if (accessiblePipelineIds is not null)
             query = query.Where(run => accessiblePipelineIds.Contains(run.PipelineId));
         if (projectId.HasValue)

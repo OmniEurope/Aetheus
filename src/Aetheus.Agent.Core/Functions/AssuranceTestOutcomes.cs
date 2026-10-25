@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>tests</c> section of the candidate assurance contract, built as
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c> built it from the gate-status
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c> built it from the gate-status
 /// variables of the run: property for property and in the same order, since the contract is sealed
 /// over its JSON text.
 ///

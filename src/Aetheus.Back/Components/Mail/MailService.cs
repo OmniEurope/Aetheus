@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
@@ -11,7 +12,7 @@ namespace Aetheus.Back.Components.Mail;
 
 public class MailService(
     IMailRepository repo, IAuditService audit, IEncryptionService encryption, IServerRepository serverRepo, ITaskService taskService,
-    IMailMasterSecrets masterSecrets) : IMailService
+    IMailMasterSecrets masterSecrets, IMailSenderSecret? senderSecret = null) : IMailService
 {
     // Dispatch typed operations through the root-owned mail-manage helper for the non-root agent.
     private static readonly Dictionary<MailAction, (OperationKind Kind, string Target)> s_actions = new()
@@ -198,10 +199,17 @@ public class MailService(
             OperationKind.MailAddAccount, request.Email, env, timeoutSeconds: 30);
         task.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(env));
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
+        await StoreSenderPasswordAsync(request.Email, request.Password, ct).ConfigureAwait(false);
 
         await audit.LogAsync("MailAddAccount", "Mail", serverId, request.Email, ct).ConfigureAwait(false);
         return MapAccount(account);
     }
+
+    /// <summary>When the mailbox is the default sender's (no-reply), the password just queued for the server is also
+    /// the one the sender logs in with: both are written once the task is queued, so a refused request keeps both
+    /// old values.</summary>
+    private Task StoreSenderPasswordAsync(string email, string password, CancellationToken ct) =>
+        senderSecret?.StoreIfSenderAsync(email, password, ct) ?? Task.CompletedTask;
 
     /// <summary>The Aetheus row the new mailbox is recorded on. The address is unique across servers, so a
     /// row already holding it is either reused or refused (409), never inserted twice. A row the heartbeat
@@ -285,6 +293,7 @@ public class MailService(
                 OperationKind.MailChangePassword, account.Email, pwdEnv, timeoutSeconds: 15);
             pwdTask.EnvironmentVariables = TaskEnvProtection.Protect(encryption, JsonSerializer.Serialize(pwdEnv));
             await QueueTaskAsync(pwdTask, ct).ConfigureAwait(false);
+            await StoreSenderPasswordAsync(account.Email, request.NewPassword, ct).ConfigureAwait(false);
         }
 
         await repo.UpdateAccountAsync(account, ct).ConfigureAwait(false);
@@ -437,6 +446,7 @@ public class MailService(
         await QueueTaskAsync(task, ct).ConfigureAwait(false);
         // Stored once the task is queued, like the no-reply password (R1-16): a refused setup keeps the old one.
         await masterSecrets.StoreAsync(serverId, masterPassword, ct).ConfigureAwait(false);
+        await StoreSenderPasswordAsync(request.AdminEmail, request.AdminPassword, ct).ConfigureAwait(false);
 
         await audit.LogAsync("MailSetup", "Mail", serverId, request.Domain, ct).ConfigureAwait(false);
         // The page keeps "Configurer" busy until this task completes.
@@ -585,16 +595,13 @@ public class MailService(
                 "capability (--enable-mail-setup) to grant the controlled-sudo helper.");
     }
 
-    /// <summary>DEP-005: the first mail-manage helper version that writes and enforces the mailbox quota.</summary>
-    internal const int QuotaMinimumHelperVersion = 5;
-
     private async Task EnsureQuotaHelperAsync(int serverId, CancellationToken ct)
     {
         var state = await repo.GetStateAsync(serverId, ct).ConfigureAwait(false);
-        if (state is null || state.HelperVersion < QuotaMinimumHelperVersion)
+        if (state is null || state.HelperVersion < MailHelperVersions.QuotaMinimum)
             throw new BadRequestException(
                 $"The mail helper of this server cannot enforce a mailbox quota (version {state?.HelperVersion ?? 0}, " +
-                $"{QuotaMinimumHelperVersion} required). Update the agent on this server (re-run the agent installer with --enable-mail-setup), then retry.");
+                $"{MailHelperVersions.QuotaMinimum} required). Update the agent on this server (re-run the agent installer with --enable-mail-setup), then retry.");
     }
 
     /// <summary>The first mail-manage helper version that has the <c>retry-tuning</c> sub-command.</summary>

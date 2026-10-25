@@ -74,13 +74,14 @@ public class ServerOverviewSectionTests : BunitContext
             new() { BuildCacheAvailable = true, BuildCacheBytes = 12L * 1024 * 1024 * 1024, Timestamp = now }
         };
 
+        ServerOverviewTabsTests.OpenTab(this, "storage");
         var cut = Render<ServerOverviewSection>(parameters => parameters
             .Add(component => component.Server, server)
             .Add(component => component.Metrics, metrics));
 
         Assert.Contains("StorageDiagnostics", cut.Markup);
-        Assert.Matches(@"8[,.]0 GiB", cut.Markup);
-        Assert.Matches(@"\+2[,.]0 GiB", cut.Markup);
+        Assert.Matches(@"8 Go", cut.Markup);
+        Assert.Matches(@"\+2 Go", cut.Markup);
     }
 
     [Fact]
@@ -100,6 +101,7 @@ public class ServerOverviewSectionTests : BunitContext
             }
         };
 
+        ServerOverviewTabsTests.OpenTab(this, "storage");
         var cut = Render<ServerOverviewSection>(parameters => parameters
             .Add(component => component.Server, server));
 

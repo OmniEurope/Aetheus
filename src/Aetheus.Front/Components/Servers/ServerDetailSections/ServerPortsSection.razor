@@ -3,12 +3,12 @@
 @* The port registry is compared with observed listeners; discrepancies are shown without automatic
    correction. *@
 
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniIcon Name="OmniIconName.Graph" />
         <div class="flex-spacer"></div>
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@ScanCaption</OmniText>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)" title="@ScanTooltip"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["PortScanRefresh"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)" title="@ScanTooltip"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
     </OmniStack>
 
     <OmniText Element="OmniTextElement.Paragraph">@L["PortRegistryHint"]</OmniText>
@@ -32,7 +32,7 @@
                         <OmniDropDown Id="oe-formfield-pages-servers-serverdetailsections-serverportssection-1" TValue="int?" @bind-Value="_form.ProjectId" Options="@(_projects.ToOptions(item => (int?)item.Id, item => item.Name))" AllowEmpty="true"
                             Placeholder="@L["PortNoProject"]" />
                     </OmniFormField>
-                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                     @* Allocation reuses the same holder and project: asking twice for the same two
                        facts, once to reserve a chosen port and once to be handed free ones, would be
                        two forms for one intent. *@
@@ -52,7 +52,7 @@
             <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End" Class="omni-u-mt-md">
                 <OmniFormField For="oe-pages-servers-serverdetailsections-serverportssection-numeric-3"><LabelContent>@L["PortRangeFrom"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_rangeFrom" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-serverportssection-numeric-3" /></ChildContent></OmniFormField>
                 <OmniFormField For="oe-pages-servers-serverdetailsections-serverportssection-numeric-4"><LabelContent>@L["PortRangeTo"]</LabelContent><ChildContent><OmniNumeric TValue="int" @bind-Value="_rangeTo" Minimum="1024" Maximum="65535" Id="oe-pages-servers-serverdetailsections-serverportssection-numeric-4" /></ChildContent></OmniFormField>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveRangeAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveRangeAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@RangeCaption</OmniText>
             </OmniRow>
         </OmniCard>
@@ -75,8 +75,8 @@
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="PortRow" Property="Port" Title="@L["Port"]" Width="6.875rem" Filterable="true" />
                 <OmniDataGridColumn TItem="PortRow" Property="Protocol" Title="@L["PortProtocol"]" Width="6.875rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
-                <OmniDataGridColumn TItem="PortRow" Property="OwnerLabel" Title="@L["PortHolder"]" MinWidth="12rem" Filterable="true" />
-                <OmniDataGridColumn TItem="PortRow" Property="ProjectName" Title="@L["PortLinkedProject"]" MinWidth="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
+                <OmniDataGridColumn TItem="PortRow" Property="OwnerLabel" Title="@L["PortHolder"]" Filterable="true" />
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PortRow" Property="ProjectName" Title="@L["PortLinkedProject"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                     <Template Context="row">
                         @if (row.ProjectId is { } projectId)
                         {
@@ -96,16 +96,16 @@
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="PortRow" Property="DeclaredAt" Title="@L["PortDeclaredAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
                 <OmniDataGridColumn TItem="PortRow" Property="UpdatedAt" Title="@L["PortUpdatedAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-                <OmniDataGridColumn TItem="PortRow" Title="@L["Actions"]" MinWidth="13rem" Sortable="false" Filterable="false">
+                <OmniDataGridColumn TItem="PortRow" Title="@L["Actions"]" Sortable="false" Filterable="false">
                     <Template Context="row">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
                             @if (CanWrite && row.Source == PortReservationSource.Observed)
                             {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ConvertAsync(row))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["PortConvertToReservation"]" Label="@L["PortConvertToReservation"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ConvertAsync(row))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["PortConvertToReservation"]" Label="@L["PortConvertToReservation"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon></OmniButton>
                             }
                             @if (CanWrite)
                             {
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ReleaseAsync(row))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["PortRelease"]" Label="@L["PortRelease"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ReleaseAsync(row))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["PortRelease"]" Label="@L["PortRelease"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             }
                         </OmniStack>
                     </Template>

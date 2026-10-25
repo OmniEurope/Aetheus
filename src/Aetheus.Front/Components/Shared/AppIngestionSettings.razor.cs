@@ -130,7 +130,7 @@ public partial class AppIngestionSettings
         }
     }
 
-    /// <summary>"Used: 12 % (1 MiB estimated of 100 MiB) ...", or null while the figures are unknown.</summary>
+    /// <summary>"Used: 12 % (1 Mo estimated of 100 Mo) ...", or null while the figures are unknown.</summary>
     private string? StorageUsageText => _audience is null
         ? null
         : string.Format(CultureInfo.CurrentCulture, L["AnalyticsStorageUsageLine"],
@@ -139,18 +139,7 @@ public partial class AppIngestionSettings
             FormatBytes(_audience.StorageBudgetBytes),
             _audience.RejectedEvents);
 
-    private static string FormatBytes(long bytes)
-    {
-        string[] units = ["B", "KiB", "MiB", "GiB"];
-        var value = Math.Max(0, bytes);
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1)
-        {
-            value /= 1024;
-            unit++;
-        }
-        return string.Create(CultureInfo.CurrentCulture, $"{value:N0} {units[unit]}");
-    }
+    private static string FormatBytes(long bytes) => DisplayFormatting.Size(bytes);
 
     private async Task GenerateKeyAsync()
     {

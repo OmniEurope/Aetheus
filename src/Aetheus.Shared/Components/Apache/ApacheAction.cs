@@ -11,5 +11,7 @@ public enum ApacheAction
     DisableSite,
     EnableModule,
     DisableModule,
-    TestConfig
+    TestConfig,
+    /// <summary>Recette R-12: deletes a disabled site file from sites-available.</summary>
+    DeleteSite
 }

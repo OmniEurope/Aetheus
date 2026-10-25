@@ -14,6 +14,13 @@ public class AlertEvaluatorServiceTests
 {
     private static readonly DateTime Now = new(2026, 7, 17, 12, 0, 0, DateTimeKind.Utc);
 
+    private readonly IAlertOccurrenceService _occurrences = Substitute.For<IAlertOccurrenceService>();
+
+    public AlertEvaluatorServiceTests()
+    {
+        _occurrences.RecordAsync(Arg.Any<NewAlertOccurrence>(), Arg.Any<CancellationToken>()).Returns(77L);
+    }
+
     [Fact]
     public async Task EvaluateAlertRulesAsync_LoadsAllServerWindowsInOneRepositoryCall()
     {
@@ -31,6 +38,7 @@ public class AlertEvaluatorServiceTests
         var services = new ServiceCollection()
             .AddSingleton(repository)
             .AddSingleton(Substitute.For<INotificationService>())
+            .AddSingleton(Substitute.For<IAlertOccurrenceService>())
             .BuildServiceProvider();
         var service = new AlertEvaluatorService(
             services.GetRequiredService<IServiceScopeFactory>(),
@@ -65,6 +73,19 @@ public class AlertEvaluatorServiceTests
     }
 
     [Fact]
+    public async Task EvaluateAlertRulesAsync_PayloadCarriesTheServerName()
+    {
+        var (_, notifications, service) = BreachedRuleEvaluator(reservationWon: true);
+
+        await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
+
+        var payload = notifications.ReceivedCalls().Select(call => call.GetArguments()[1]).Single();
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload));
+        Assert.Equal("web-1", json.RootElement.GetProperty("ServerName").GetString());
+        Assert.Equal(11, json.RootElement.GetProperty("ServerId").GetInt32());
+    }
+
+    [Fact]
     public async Task EvaluateAlertRulesAsync_ReservationLostToAnotherEvaluator_EmitsNothing()
     {
         var (_, notifications, service) = BreachedRuleEvaluator(reservationWon: false);
@@ -73,9 +94,52 @@ public class AlertEvaluatorServiceTests
 
         await notifications.DidNotReceive().SendEventAsync(
             Arg.Any<string>(), Arg.Any<object>(), Arg.Any<CancellationToken>());
+        await _occurrences.DidNotReceive().RecordAsync(Arg.Any<NewAlertOccurrence>(), Arg.Any<CancellationToken>());
     }
 
-    private static (IAlertRepository Repository, INotificationService Notifications, AlertEvaluatorService Service)
+    [Fact]
+    public async Task EvaluateAlertRulesAsync_StoresTheAlertBeforeEmitting_AndTheEventCarriesItsIdentifier()
+    {
+        var (_, notifications, service) = BreachedRuleEvaluator(reservationWon: true);
+
+        await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
+
+        Received.InOrder(() =>
+        {
+            _occurrences.RecordAsync(Arg.Any<NewAlertOccurrence>(), Arg.Any<CancellationToken>());
+            notifications.SendEventAsync("alert.triggered", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        });
+        var payload = notifications.ReceivedCalls().Select(call => call.GetArguments()[1]).Single();
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload));
+        Assert.Equal(77, json.RootElement.GetProperty("AlertId").GetInt64());
+        await _occurrences.Received(1).RecordAsync(
+            Arg.Is<NewAlertOccurrence>(occurrence => occurrence.AlertRuleId == 5
+                && occurrence.ServerId == 11
+                && occurrence.ServerName == "web-1"
+                && occurrence.Metric == "Cpu"
+                && occurrence.Operator == ComparisonOperator.GreaterThan
+                && occurrence.Threshold == 80
+                && occurrence.ObservedValue == 95
+                && occurrence.SustainedSeconds == 60
+                && occurrence.TriggeredAt == Now),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EvaluateAlertRulesAsync_AnAlertThatCouldNotBeStored_IsStillEmitted_WithoutItsIdentifier()
+    {
+        _occurrences.RecordAsync(Arg.Any<NewAlertOccurrence>(), Arg.Any<CancellationToken>()).Returns((long?)null);
+        var (_, notifications, service) = BreachedRuleEvaluator(reservationWon: true);
+
+        await service.EvaluateAlertRulesAsync(TestContext.Current.CancellationToken);
+
+        var payload = notifications.ReceivedCalls().Select(call => call.GetArguments()[1]).Single();
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, json.RootElement.GetProperty("AlertId").ValueKind);
+        Assert.Equal(11, json.RootElement.GetProperty("ServerId").GetInt32());
+    }
+
+    private (IAlertRepository Repository, INotificationService Notifications, AlertEvaluatorService Service)
         BreachedRuleEvaluator(bool reservationWon)
     {
         var repository = Substitute.For<IAlertRepository>();
@@ -83,7 +147,7 @@ public class AlertEvaluatorServiceTests
         [
             new AlertRule
             {
-                Id = 5, ServerId = 11, SustainedSeconds = 60, Metric = MetricType.Cpu,
+                Id = 5, ServerId = 11, Server = new Server { Id = 11, Name = "web-1" }, SustainedSeconds = 60, Metric = MetricType.Cpu,
                 Operator = ComparisonOperator.GreaterThan, Threshold = 80
             }
         ]);
@@ -101,6 +165,7 @@ public class AlertEvaluatorServiceTests
         var services = new ServiceCollection()
             .AddSingleton(repository)
             .AddSingleton(notifications)
+            .AddSingleton(_occurrences)
             .BuildServiceProvider();
         var service = new AlertEvaluatorService(
             services.GetRequiredService<IServiceScopeFactory>(),

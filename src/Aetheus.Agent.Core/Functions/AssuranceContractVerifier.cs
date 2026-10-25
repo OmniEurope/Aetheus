@@ -14,7 +14,7 @@ internal sealed record AssuranceVerificationMode(bool RequireEvidence, bool Requ
 }
 
 /// <summary>
-/// The checks of <c>deploy/scripts/verify-candidate-assurance-contract.mjs</c>, in its order and with its
+/// The checks of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-candidate-assurance-contract.mjs</c>, in its order and with its
 /// messages, over the contract parsed by <see cref="JsJson"/>. Every comparison keeps JavaScript's
 /// meaning (<c>===</c>, truthiness, <c>String()</c> before a regular expression test,
 /// <c>Object.entries</c> of whatever the contract holds), so a contract the script accepts is accepted

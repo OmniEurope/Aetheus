@@ -6,7 +6,7 @@ using System.Text;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The sealed identity of a delivery contract, as <c>deploy/scripts/generate-delivery-contract.mjs</c>
+/// The sealed identity of a delivery contract, as <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-delivery-contract.mjs</c>
 /// seals it and <c>verify-delivery-promotion.mjs</c> recomputes it: <c>candidateId</c> is the SHA-256 of
 /// <c>JSON.stringify(canonicalize(identity))</c>, the identity being the contract without
 /// <c>candidateId</c> and <c>candidateVersion</c>. <c>canonicalize</c> orders object keys with

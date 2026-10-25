@@ -13,7 +13,7 @@
                                 OnClick="@(_ => Toggle(run.RunId))"
                                 Label="@(expanded ? L["CollapseLinkedPipelineRuns"] : L["ExpandLinkedPipelineRuns"])"
                                 aria-expanded="@expanded">
-                        <OmniIcon Name="@(expanded ? OmniIconName.ChevronDown : OmniIconName.ChevronRight)" />
+                        <Icon><OmniIcon Name="@(expanded ? OmniIconName.ChevronDown : OmniIconName.ChevronRight)" /></Icon>
                     </OmniButton>
                 }
                 else
@@ -29,7 +29,7 @@
                     </span>
                 }
                 <span class="pipeline-run-tree-status">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@StatusVariant(run.Status)">@L.Localize(run.Status)</OmniBadge>
+                    <PipelineRunStatusBadge Status="run.Status" />
                     @if (run.GateGrade.HasValue)
                     {
                         @* Same rule as the runs grid: the gate letter rides with the status, and only

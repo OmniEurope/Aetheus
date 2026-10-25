@@ -3,7 +3,7 @@
 # =============================================================================
 # syntax=docker/dockerfile:1.7
 #
-# Consumes the frontend and static-server outputs produced by deploy/scripts/publish-application.sh
+# Consumes the frontend and static-server outputs produced by scripts/publish-application.sh
 # under .pipeline-publish, without rebuilding inside the image.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.13@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS runtime
 WORKDIR /app

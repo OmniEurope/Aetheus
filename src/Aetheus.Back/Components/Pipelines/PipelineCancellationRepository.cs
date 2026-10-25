@@ -39,6 +39,10 @@ internal sealed class PipelineCancellationRepository(
             await transaction.CommitAsync(ct).ConfigureAwait(false);
     }
 
+    public Task CancelActiveTasksOfStepRunsAsync(
+        int runId, IReadOnlyCollection<int> stepRunIds, CancellationToken ct) =>
+        taskLifecycle.CancelActiveTasksOfStepRunsAsync(runId, stepRunIds, ct);
+
     public async Task CancelPendingStepRunsAsync(int runId, CancellationToken ct)
     {
         var pendingSteps = await db.PipelineStepRuns
@@ -57,11 +61,11 @@ internal sealed class PipelineCancellationRepository(
         if (run is null) return;
 
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
-        variables[PipelineRunService.CancellationRequestedVariable] = "true";
+        variables[PipelineRunHelpers.CancellationRequestedVariable] = "true";
         // The first request names the author; a repeated click or the recovery that re-applies a
         // stalled cancellation does not rename it.
-        variables.TryAdd(PipelineRunService.CancelledByVariable, cancellation.By);
-        variables.TryAdd(PipelineRunService.CancellationReasonVariable, cancellation.Reason);
+        variables.TryAdd(PipelineRunHelpers.CancelledByVariable, cancellation.By);
+        variables.TryAdd(PipelineRunHelpers.CancellationReasonVariable, cancellation.Reason);
         run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
@@ -81,7 +85,7 @@ internal sealed class PipelineCancellationRepository(
             .ConfigureAwait(false);
         if (run is null) return;
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
-        variables[PipelineRunService.CancellationRequestedVariable] = "true";
+        variables[PipelineRunHelpers.CancellationRequestedVariable] = "true";
         run.AdditionalVariablesJson = JsonSerializer.Serialize(variables);
 
         await taskLifecycle.CancelPendingTasksExceptStagesAsync(runId, preserved, ct)

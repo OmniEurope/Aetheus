@@ -15,6 +15,7 @@ public partial class DockerContainerRiskBadges
         AetheusContainerRole.BuildKitBuilder => L["DockerRoleBuildKitBuilder"].Value,
         AetheusContainerRole.BrowserSmoke => L["DockerRoleBrowserSmoke"].Value,
         AetheusContainerRole.VpsSimulator => L["DockerRoleVpsSimulator"].Value,
+        AetheusContainerRole.TestcontainersReaper => L["DockerRoleTestcontainersReaper"].Value,
         _ => null
     };
 

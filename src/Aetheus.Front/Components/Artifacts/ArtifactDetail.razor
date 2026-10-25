@@ -23,13 +23,13 @@ else
             }
             <OmniBadge Fill="OmniFill.Solid" Tone="@GetRetentionBadge(_artifact.RetentionPolicy)">@L.Localize(_artifact.RetentionPolicy)</OmniBadge>
         </Badges>
-        <Actions>
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="DownloadAsync" Class="@(_downloading ? "btn-busy" : null)" Busy="@(_downloading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
-        </Actions>
+        <ActionsContent>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="DownloadAsync" Class="@(_downloading ? "btn-busy" : null)" Busy="@(_downloading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
+        </ActionsContent>
     </OmniPageHeader>
 
     @* Key facts *@
-    <OmniRow Gap="OmniSpacing.Large">
+    <OmniTileGrid Columns="3">
         <OmniCard Class="run-overview-card">
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.HardDrive" Class="run-tile-icon" /> @L["Size"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph">@DisplayFormatting.Size(_artifact.SizeBytes)</OmniText>
@@ -42,11 +42,10 @@ else
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Delete" Class="run-tile-icon" /> @L["Retention"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph" title="@_artifact.RetentionExpiresAt.ToString("F")">@Aetheus.Front.Components.Shared.RelativeTime.FormatUntil(L, _artifact.RetentionExpiresAt)</OmniText>
         </OmniCard>
-    </OmniRow>
+    </OmniTileGrid>
 
-    @* Provenance (where it comes from) vs Distribution (where it goes) *@
-    <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
-        <OmniColumn Span="12" MediumSpan="6">
+    @* Provenance (where it comes from) vs Distribution (where it goes). R-3: two OE cards of one OmniTileGrid. *@
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
             <OmniCard>
                 <div class="detail-panel-title">
                     <OmniIcon Name="OmniIconName.Graph" Class="run-tile-icon omni-u-text-accent" />
@@ -54,12 +53,12 @@ else
                 </div>
                 @if (!string.IsNullOrEmpty(_artifact.PipelineName))
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Graph" Class="run-tile-icon" /> @L["Pipeline"]</OmniText>
                         <a href="/pipelines/@_artifact.PipelineId" class="detail-value-link">@_artifact.PipelineName</a>
                     </OmniStack>
                 }
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["PipelineRun"]</OmniText>
                     <a href="/pipelines/runs/@_artifact.PipelineRunId" class="detail-value-link">#@_artifact.PipelineRunId</a>
                 </OmniStack>
@@ -67,7 +66,7 @@ else
                 {
                     @foreach (var branch in _artifact.Branches)
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.GitFork" Class="run-tile-icon" /> @L["Branch"]</OmniText>
                             <a href="@BranchHref(branch)" class="detail-value-link">@branch.Name</a>
                         </OmniStack>
@@ -75,7 +74,7 @@ else
                 }
                 else if (!string.IsNullOrEmpty(_artifact.BranchName))
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.GitFork" Class="run-tile-icon" /> @L["Branch"]</OmniText>
                         <a href="@BranchHref(_artifact.BranchName)" class="detail-value-link">@_artifact.BranchName</a>
                     </OmniStack>
@@ -84,7 +83,7 @@ else
                 {
                     @foreach (var commit in _artifact.Commits)
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.GitCommit" Class="run-tile-icon" /> @L["Commit"]</OmniText>
                             <ShortId Value="@commit.Sha" Href="@CommitHref(commit)" Copyable="false" Class="text-mono" />
                         </OmniStack>
@@ -92,17 +91,15 @@ else
                 }
                 else if (!string.IsNullOrEmpty(_artifact.CommitHash))
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.GitCommit" Class="run-tile-icon" /> @L["Commit"]</OmniText>
                         <ShortId Value="@_artifact.CommitHash" Href="@CommitHref(_artifact.CommitHash)" Copyable="false" Class="text-mono" />
                     </OmniStack>
                 }
             </OmniCard>
-        </OmniColumn>
 
         @if (HasDistribution)
         {
-            <OmniColumn Span="12" MediumSpan="6">
                 <OmniCard>
                     <div class="detail-panel-title">
                         <OmniIcon Name="OmniIconName.RocketLaunch" Class="run-tile-icon omni-u-text-success" />
@@ -110,10 +107,10 @@ else
                     </div>
                     @foreach (var release in _artifact.Releases)
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Sparkle" Class="run-tile-icon" /> @L["Release"]</OmniText>
                             <a href="/releases/@release.Id" class="detail-value-link">
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                     <ShortId Value="@release.Version" Copyable="false" Class="release-version" />
                                     <ReleaseStatusBadge Status="@release.Status" />
                                 </OmniStack>
@@ -122,35 +119,34 @@ else
                     }
                     @if (!string.IsNullOrEmpty(_artifact.EnvironmentName))
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Cloud" Class="run-tile-icon omni-u-text-warning" /> @L["Environment"]</OmniText>
                             <OmniText Element="OmniTextElement.Paragraph">@_artifact.EnvironmentName</OmniText>
                         </OmniStack>
                     }
                     @if (_artifact.ProjectId.HasValue)
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Folder" Class="run-tile-icon" /> @L["Project"]</OmniText>
                             <a href="/projects/@_artifact.ProjectId" class="detail-value-link">@(_artifact.ProjectName ?? L["Project"])</a>
                         </OmniStack>
                     }
                 </OmniCard>
-            </OmniColumn>
         }
-    </OmniRow>
+    </OmniTileGrid>
 
     @* File details *@
     <OmniCard Class="omni-u-mt-lg omni-u-p-lg">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
             <OmniIcon Name="OmniIconName.Document" Class="run-tile-icon" />
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Details"]</OmniText>
         </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-filepath-box">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-filepath-box">
             <OmniText Element="OmniTextElement.Paragraph" Class="text-mono">@_artifact.FilePath</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyPathAsync" title="@L["Copy"]" Label="@L["Copy"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyPathAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
         </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-filepath-box omni-u-mt-sm">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-filepath-box omni-u-mt-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 <OmniIcon Name="OmniIconName.Tag" Class="run-tile-icon omni-u-text-muted" />
                 @if (!string.IsNullOrEmpty(_artifact.Sha256))
                 {
@@ -163,7 +159,7 @@ else
             </OmniStack>
             @if (!string.IsNullOrEmpty(_artifact.Sha256))
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyChecksumAsync" title="@L["Copy"]" Label="@L["Copy"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CopyChecksumAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
             }
         </OmniStack>
     </OmniCard>

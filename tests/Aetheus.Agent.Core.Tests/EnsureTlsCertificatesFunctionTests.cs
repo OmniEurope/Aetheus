@@ -10,7 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/ensure-tls-certificates.sh</c>, run through the real executor as a
+/// The C# port of the former <c>ensure-tls-certificates.sh</c> script, run through the real executor as a
 /// deployment function on real PEM certificates and a fixed clock, with the certbot helpers answered by
 /// a fake that issues or renews like the real ones: issue when missing or incomplete, renew when it
 /// expires too soon, issue again with the carried names when renewal fails, and a final verdict over

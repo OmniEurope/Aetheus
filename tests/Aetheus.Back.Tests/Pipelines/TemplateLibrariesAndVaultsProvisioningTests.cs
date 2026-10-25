@@ -3,8 +3,8 @@ using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Components.Vaults;
-using Aetheus.Back.Data;
 using Aetheus.Back.Services;
+using Aetheus.Shared.Components.PortRegistry;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
@@ -44,6 +44,10 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         // A new project: no library and no vault of any name.
         _libraries.ResolveLibrariesWithNamesAsync(Arg.Any<List<string>>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns((new Dictionary<string, string>(), new HashSet<string>()));
+        _libraries.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(), new HashSet<string>()));
+        _vaults.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(), new HashSet<string>()));
         _vaults.GetVaultNamesAsync(Arg.Any<int?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
             .Returns(new List<string>());
         _libraries.GetLibrariesAsync(Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
@@ -66,12 +70,12 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         _templates.GetTemplatesAsync(Arg.Any<CancellationToken>())
             .Returns(new List<PipelineTemplateSummaryDto> { new() { Id = 1, Name = name, Version = 1 } });
         _templates.GetTemplateAsync(1, Arg.Any<CancellationToken>())
-            .Returns(new PipelineTemplateDto { Id = 1, Name = name, YamlContent = DeliveryPipelineTemplateSeeder.ReadResource(resource) });
+            .Returns(new PipelineTemplateDto { Id = 1, Name = name, YamlContent = DeliveryTemplateCatalog.ReadResource(resource) });
     }
 
     public static TheoryData<string, string, string[], string[]> ChangedTemplates => new()
     {
-        { "application-deploy-prod", "generic/application-deploy-prod.yaml", ["wordmorrow.share", "wordmorrow.prod"], [] },
+        { "application-deploy-prod", "generic/application-deploy-prod.yaml", ["wordmorrow.share", "wordmorrow.prod"], ["wordmorrow.prod"] },
         { "application-release-fast", "generic/application-release-fast.yaml", ["wordmorrow.share", "wordmorrow.prod"], [] },
         { "application-qa", "generic/application-qa.yaml", ["wordmorrow.share", "wordmorrow.qa"], ["wordmorrow.qa"] },
         { "publish-observability-packages", "generic/publish-observability-packages.yaml", [], ["wordmorrow.package"] }
@@ -105,7 +109,7 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         _pipelines.GetPipelineDefinitionsForProjectAsync(ProjectId, Arg.Any<CancellationToken>())
             .Returns(new List<(int, string, string)> { (9, template, pipelineYaml) });
         _pipelines.GetPipelineOrganizationIdAsync(9, Arg.Any<CancellationToken>()).Returns(3);
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource(resource);
+        var yaml = DeliveryTemplateCatalog.ReadResource(resource);
         _resolver.ResolveAsync(pipelineYaml, 3, null, Arg.Any<CancellationToken>())
             .Returns(new PipelineTemplateResolution(YamlParsingHelper.ParseAndValidate(yaml)!, yaml, template, 2, 2, false));
 
@@ -125,7 +129,7 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         string template, string resource, string[] libraries, string[] vaults)
     {
         _ = template;
-        var definition = YamlParsingHelper.ParseAndValidate(DeliveryPipelineTemplateSeeder.ReadResource(resource))!;
+        var definition = YamlParsingHelper.ParseAndValidate(DeliveryTemplateCatalog.ReadResource(resource))!;
         _libraries.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), ProjectId, Arg.Any<CancellationToken>())
             .Returns(call => (new Dictionary<string, string>(), call.Arg<List<string>>().ToHashSet(StringComparer.OrdinalIgnoreCase)));
         _vaults.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), ProjectId, Arg.Any<CancellationToken>())

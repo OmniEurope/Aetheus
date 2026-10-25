@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>publish-failed-tests</c> function, port of <c>deploy/scripts/publish-failed-tests.sh</c> and
+/// The <c>publish-failed-tests</c> function, port of the former <c>publish-failed-tests.sh</c> script and
 /// of the <c>publish</c> mode of <c>list-failed-tests.mjs</c> it ran: publishes, beside a gate status,
 /// the names of the tests that made it non-zero, as <c>&lt;VARIABLE&gt;=A, B, +N more</c> with a
 /// <c>Failed tests (N): ...</c> log line. The variable is named by the step (the catalog's

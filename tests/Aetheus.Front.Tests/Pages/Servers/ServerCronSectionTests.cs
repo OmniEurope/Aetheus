@@ -10,7 +10,7 @@ public class ServerCronSectionTests
     [InlineData("0 0 1 1 *", true)]
     public void ValidateCronExpression_ValidExpressions_ReturnsIsValidTrue(string expr, bool expected)
     {
-        var result = ServerCronSection.ValidateCronExpression(expr);
+        var result = CronSchedulePreview.ValidateCronExpression(expr);
         Assert.Equal(expected, result.IsValid);
         Assert.NotNull(result.NextRun);
         Assert.Null(result.Error);
@@ -23,7 +23,7 @@ public class ServerCronSectionTests
     [InlineData("*/30 * * * * *")] // 6-field (seconds): the preview mirrors the 5-field cron.d save rule
     public void ValidateCronExpression_InvalidExpressions_ReturnsError(string expr)
     {
-        var result = ServerCronSection.ValidateCronExpression(expr);
+        var result = CronSchedulePreview.ValidateCronExpression(expr);
         Assert.False(result.IsValid);
         Assert.NotNull(result.Error);
     }
@@ -31,7 +31,7 @@ public class ServerCronSectionTests
     [Fact]
     public void ValidateCronExpression_EmptyInput_ReturnsIsValidFalseWithoutError()
     {
-        var result = ServerCronSection.ValidateCronExpression("");
+        var result = CronSchedulePreview.ValidateCronExpression("");
         Assert.False(result.IsValid);
         Assert.Null(result.Error);
     }
@@ -39,7 +39,7 @@ public class ServerCronSectionTests
     [Fact]
     public void ValidateCronExpression_Null_ReturnsIsValidFalse()
     {
-        var result = ServerCronSection.ValidateCronExpression(null);
+        var result = CronSchedulePreview.ValidateCronExpression(null);
         Assert.False(result.IsValid);
         Assert.Null(result.Error);
     }

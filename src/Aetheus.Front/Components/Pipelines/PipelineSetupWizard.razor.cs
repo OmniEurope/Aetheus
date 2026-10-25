@@ -40,13 +40,14 @@ public partial class PipelineSetupWizard
 
     /// <summary>The application shape is explicitly selected, with no default choice.</summary>
     private PipelineArchitecture? _architecture;
-    /// <summary>Whether the server project serves the application's interface is a tri-state choice
-    /// with no default answer.</summary>
+    /// <summary>The application shape, a tri-state choice with no default tile: true is the Full-stack
+    /// tile (one monolith serving the interface and the API), false the front-end and back-end apart.
+    /// The address keeps its <c>sameProject=yes|no</c> key.</summary>
     private bool? _sameProject;
     private PipelineSetupStack _stack = PipelineSetupStack.DotNet;
     private bool _frontend = true;
     private bool _backend = true;
-    private bool _database;
+    private bool _database = true;
     private bool _ci = true;
     private bool _quality = true;
     private bool _security = true;
@@ -54,12 +55,25 @@ public partial class PipelineSetupWizard
     private bool _qaExtended;
     private bool _securityHistory;
     private bool _candidate = true;
-    private bool _nightly;
+    private bool _nightly = true;
     private bool _production = true;
     private bool _fastDeploy;
     private bool _rollback = true;
     private bool _packages;
     private bool _externalSecurity = true;
+
+    /// <summary>Index of the Capabilities step, where what the branch holds is read.</summary>
+    private const int CapabilitiesStep = 2;
+
+    /// <summary>What the branch files and the fleet say about the templates' default commands (R-10 to R-13),
+    /// read once per project when the Capabilities step opens; null while unknown, never a guess.</summary>
+    private PipelineSetupDetectionDto? _detection;
+    private string? _detectionBranch;
+    private int? _detectionProjectId;
+
+    /// <summary>True once the user (or the address he came back with) decided the QA option himself: the
+    /// detection then no longer sets it.</summary>
+    private bool _qaTouched;
 
     /// <summary>Index of the summary step, where the readiness check runs.</summary>
     private const int SummaryStep = 3;
@@ -67,26 +81,59 @@ public partial class PipelineSetupWizard
     private bool _readinessLoading;
     private string? _readinessSignature;
 
-    /// <summary>Start from an existing project instead of the templates.</summary>
-    private bool _copyMode;
+    /// <summary>The production setup read from the project's Compose file (ADR-057), created on first use; what the creation
+    /// of the production pipeline writes into its YAML once it was applied.</summary>
+    private PipelineSetupProduction? _productionSetup;
+    private PipelineSetupProductionInput? _productionInput;
+    private string _productionPending = string.Empty;
+    private PipelineSetupProduction ProductionSetup => _productionSetup ??= new PipelineSetupProduction(Api, RefreshSteps);
 
-    private IReadOnlyList<OmniOption<bool>> StartOptions =>
-    [
-        new OmniOption<bool>(false, L["PipelineSetupStartTemplates"].Value),
-        new OmniOption<bool>(true, L["PipelineSetupStartExistingProject"].Value)
-    ];
+    /// <summary>The flow of copying the pipelines of an existing project, set while that "start from"
+    /// choice is the one made; the steps, the gate and the finish are then its own.</summary>
+    private PipelineProjectCopyFlow? _copy;
 
-    private void OnModeChanged(bool copyMode) => _copyMode = copyMode;
+    /// <summary>The "start from" choice, the first thing of the Project step of either mode: one click
+    /// swaps the steps behind it, and it is no longer drawn once Next went past that step.</summary>
+    private RenderFragment StartFromContent => builder =>
+    {
+        builder.OpenComponent<PipelineSetupStartFrom>(0);
+        builder.AddAttribute(1, nameof(PipelineSetupStartFrom.CopyMode), _copy is not null);
+        builder.AddAttribute(2, nameof(PipelineSetupStartFrom.CopyModeChanged),
+            EventCallback.Factory.Create<bool>(this, OnModeChanged));
+        builder.CloseComponent();
+    };
+
+    /// <summary>Switching the mode keeps the project already chosen, in either direction.</summary>
+    private void OnModeChanged(bool copyMode)
+    {
+        if (copyMode == (_copy is not null)) return;
+        if (copyMode)
+            _copy = new PipelineProjectCopyFlow(Api, Nav, L, Toast, _projects, _selectedProjectId, RefreshSteps);
+        else
+        {
+            var projectId = _copy?.TargetProjectId;
+            _copy = null;
+            if (projectId is not null && projectId != _selectedProjectId)
+                OnProjectChanged(projectId);
+        }
+        RefreshSteps();
+    }
 
     private string BackHref => _selectedProjectId is { } id ? $"/projects/{id}/pipelines" : "/pipelines";
+    private string FinishText => _copy?.FinishText ?? L["CreatePipelines"].Value;
     private ProjectDto? SelectedProject => _projects.FirstOrDefault(project => project.Id == _selectedProjectId);
-    private bool CanAdvance => !_saving && _currentStep switch
+    private bool CanAdvance => _copy is { } copy ? copy.CanAdvance(_currentStep) : !_saving && _currentStep switch
     {
         0 => _selectedProjectId.HasValue && !string.IsNullOrWhiteSpace(_prefix),
         1 => PipelineSetupArchitecture.IsComplete(_architecture, _sameProject, _frontend, _backend),
         2 => SelectedRoles.Count > 0,
-        _ => _selectedProjectId is not { } projectId || ProvisionState.AllChecked(projectId)
+        // The summary waits for the repository and the libraries and vaults to exist (R2-17), never for
+        // the user to open each one of them (R2-19).
+        // Nothing else blocks the creation: the wizard asks for no command (R2-25).
+        _ => !PipelineSetupCreationGate.IsBlocked(_readiness)
     };
+
+    private IReadOnlyCollection<string> CreatedSuffixes => [.. SelectedRoles.Select(role => role.Suffix)];
 
     /// <summary>An option counts only when it is chosen AND the type proposes it: a choice made under
     /// another type and hidden since creates nothing and writes nothing.</summary>
@@ -109,8 +156,8 @@ public partial class PipelineSetupWizard
             Add(On("qa-extended", _qaExtended), "qa-extended", "application-qa-extended");
             Add(On("candidate", _candidate) || On("nightly", _nightly), "candidate", "application-candidate");
             Add(On("nightly", _nightly), "nightly", "application-nightly");
-            Add(On("production", _production), "deploy-prod", "application-deploy-prod");
-            Add(On("fast-deploy", _fastDeploy), "release-fast", "application-release-fast");
+            Add(On("production", _production), PipelineSetupRoles.DeployProd, PipelineSetupRoles.DeployProdTemplate);
+            Add(On("fast-deploy", _fastDeploy), "release-fast", PipelineSetupRoles.ReleaseFastTemplate);
             if (On("packages", _packages))
             {
                 Add(true, "package-telemetry", "package-telemetry");
@@ -153,7 +200,7 @@ public partial class PipelineSetupWizard
         }
         RefreshSteps();
         _loading = false;
-        if (_initialStep == SummaryStep) await LoadReadinessAsync();
+        if (_initialStep == SummaryStep) await LoadSummaryAsync();
     }
 
     /// <summary>The wizard's options, by the name they carry in the summary's address.</summary>
@@ -201,6 +248,7 @@ public partial class PipelineSetupWizard
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var choice in Choices)
             choice.Set(chosen.Contains(choice.Name));
+        _qaTouched = true;
         if (!string.IsNullOrWhiteSpace(PrefixQuery))
             _prefix = PrefixQuery.Trim();
         // An address written before the type existed named the parts only: those were the separate
@@ -231,7 +279,7 @@ public partial class PipelineSetupWizard
 
     private void RefreshSteps()
     {
-        _steps =
+        _steps = _copy?.Steps(StartFromContent) ??
         [
             new() { Title = L["Project"], Content = RenderStep(0) },
             new() { Title = L["PipelineArchitectureTitle"], Content = RenderStep(1) },
@@ -245,6 +293,7 @@ public partial class PipelineSetupWizard
     {
         builder.OpenComponent<PipelineSetupWizardStep>(0);
         builder.AddAttribute(1, nameof(PipelineSetupWizardStep.Step), step);
+        builder.AddAttribute(7, nameof(PipelineSetupWizardStep.StartFrom), StartFromContent);
         AddProjectAttributes(builder);
         AddPipelineToggles(builder);
         AddOptionToggles(builder);
@@ -279,7 +328,11 @@ public partial class PipelineSetupWizard
         AddToggle(builder, 60, nameof(PipelineSetupWizardStep.Security), _security,
             nameof(PipelineSetupWizardStep.SecurityChanged), value => _security = value);
         AddToggle(builder, 70, nameof(PipelineSetupWizardStep.Qa), _qa,
-            nameof(PipelineSetupWizardStep.QaChanged), value => _qa = value);
+            nameof(PipelineSetupWizardStep.QaChanged), value =>
+            {
+                _qa = value;
+                _qaTouched = true;
+            });
         AddToggle(builder, 80, nameof(PipelineSetupWizardStep.Candidate), _candidate,
             nameof(PipelineSetupWizardStep.CandidateChanged), value => _candidate = value);
     }
@@ -313,6 +366,12 @@ public partial class PipelineSetupWizard
         builder.AddAttribute(145, nameof(PipelineSetupWizardStep.OnReadinessChanged),
             EventCallback.Factory.Create(this, RecheckReadinessAsync));
         builder.AddAttribute(146, nameof(PipelineSetupWizardStep.ReturnUrl), SummaryUrl);
+        builder.AddAttribute(149, nameof(PipelineSetupWizardStep.ProductionSetup),
+            On("production", _production) ? ProductionSetup : null);
+        builder.AddAttribute(147, nameof(PipelineSetupWizardStep.DetectionWarnings), PipelineSetupDetectionText.Warnings(
+            L, _detection, _detectionBranch, [.. SelectedRoles.Select(role => role.TemplateName)]));
+        builder.AddAttribute(148, nameof(PipelineSetupWizardStep.QaNoTestsTip),
+            PipelineSetupDetectionText.QaNoTestsTip(L, _detection, _detectionBranch));
     }
 
     private void AddArchitectureAttributes(RenderTreeBuilder builder)
@@ -349,13 +408,30 @@ public partial class PipelineSetupWizard
         RefreshSteps();
     }
 
-    /// <summary>A package type is what the package pipelines exist for: choosing it turns them on.</summary>
+    /// <summary>A package type is what the package pipelines exist for: choosing it turns them on.
+    /// Going from one type to another forgets what was chosen under the first (the application shape
+    /// and every option), so nothing is created that was not chosen under the type that stays.</summary>
     private void OnArchitectureChanged(PipelineArchitecture? architecture)
     {
+        var typeChanged = _architecture is not null && architecture != _architecture;
         _architecture = architecture;
+        if (typeChanged)
+            ResetOptions();
         if (architecture == PipelineArchitecture.Package)
             _packages = true;
         RefreshSteps();
+    }
+
+    /// <summary>Every shape and option back to what a type starts with.</summary>
+    private void ResetOptions()
+    {
+        _sameProject = null;
+        _frontend = _backend = _database = true;
+        _ci = _quality = _security = _externalSecurity = true;
+        var application = _architecture == PipelineArchitecture.Application;
+        _qa = _candidate = _nightly = _production = _rollback = application;
+        _qaExtended = _securityHistory = _fastDeploy = _packages = false;
+        _qaTouched = false;
     }
 
     private string ArchitectureSummary
@@ -367,7 +443,9 @@ public partial class PipelineSetupWizard
             return string.Join(" · ", new[]
             {
                 L[PipelineSetupArchitecture.LabelKeys(architecture).Title].Value,
-                architecture == PipelineArchitecture.Application && _sameProject == true ? L["PipelineSameProjectSummary"].Value : null,
+                // The shape reads as the step 2 tile does: Full-stack, or front-end and back-end apart.
+                architecture == PipelineArchitecture.Application && _sameProject is { } fullStack
+                    ? L[fullStack ? "PipelineShapeFullStack" : "PipelineShapeSeparate"].Value : null,
                 parts.Frontend ? L["Frontend"].Value : null,
                 _sameProject == false && parts.Backend ? L["Backend"].Value : null,
                 parts.Database ? L["Database"].Value : null
@@ -377,6 +455,16 @@ public partial class PipelineSetupWizard
 
     private void OnProjectChanged(int? projectId)
     {
+        // Another project: what was read from the previous one's branch says nothing about this one, and a QA
+        // the detection had unticked goes back to its starting value until this project is read.
+        if (projectId != _selectedProjectId)
+        {
+            _detection = null;
+            _detectionBranch = null;
+            _detectionProjectId = null;
+            _productionSetup?.Reset();
+            if (!_qaTouched) _qa = true;
+        }
         _selectedProjectId = projectId;
         SetPrefixFromProject();
         RefreshSteps();
@@ -385,7 +473,7 @@ public partial class PipelineSetupWizard
     private void SetPrefixFromProject()
     {
         if (SelectedProject is { } project)
-            _prefix = Slug(project.Name);
+            _prefix = PipelinePrefix.FromName(project.Name);
     }
 
     private void SelectOnlyRequestedTemplate(int templateId)
@@ -396,6 +484,7 @@ public partial class PipelineSetupWizard
         _quality = name == "application-quality";
         _security = name == "application-security";
         _qa = name == "application-qa";
+        _qaTouched = true;
         _qaExtended = name == "application-qa-extended";
         _securityHistory = name == "application-security-history";
         _candidate = name == "application-candidate";
@@ -416,11 +505,56 @@ public partial class PipelineSetupWizard
     private async Task OnStepChanged(int step)
     {
         _currentStep = step;
+        if (_copy is { } copy)
+        {
+            await copy.OnStepChangedAsync(step);
+            return;
+        }
+        if (step == CapabilitiesStep) await LoadDetectionAsync();
         RefreshSteps();
         if (step != SummaryStep) return;
         if (SummaryUrl is { } summaryUrl)
             Nav.NavigateTo(summaryUrl, replace: true);
-        await LoadReadinessAsync();
+        await LoadSummaryAsync();
+    }
+
+    /// <summary>
+    /// Reads the project's branch when the Capabilities step opens, once per project: whether it holds a .NET
+    /// solution, a test project a QA can run, a Compose file, and whether a runner reports Docker. A QA that
+    /// would fail for lack of tests starts unticked, unless the user decided it himself.
+    /// </summary>
+    private async Task LoadDetectionAsync()
+    {
+        if (_selectedProjectId is { } projectId && _detectionProjectId != projectId)
+        {
+            _detectionProjectId = projectId;
+            try
+            {
+                var verdict = await Api.Pipelines.CheckSetupReadinessAsync(projectId, PipelineSetupDetectionText.DetectedTemplates);
+                _detection = verdict?.Detection;
+                _detectionBranch = verdict?.InspectedBranch;
+            }
+            catch (HttpRequestException)
+            {
+                // Nothing is read, so nothing is claimed: no warning, and the starting options stay.
+                _detection = null;
+                _detectionBranch = null;
+                _detectionProjectId = null;
+            }
+        }
+
+        if (!_qaTouched && _architecture == PipelineArchitecture.Application && _detection?.HasDotNetTestProject is { } hasTests)
+            _qa = hasTests;
+    }
+
+    /// <summary>The summary's two readings, in parallel: the readiness verdict and, when the production pipeline is
+    /// selected, the Compose file of the repository.</summary>
+    private async Task LoadSummaryAsync()
+    {
+        var production = On("production", _production) && _selectedProjectId is { } projectId
+            ? ProductionSetup.LoadAsync(projectId)
+            : Task.CompletedTask;
+        await Task.WhenAll(LoadReadinessAsync(), production);
     }
 
     /// <summary>
@@ -431,7 +565,7 @@ public partial class PipelineSetupWizard
     /// The selection is fingerprinted so stepping back and forth without changing anything does not
     /// re-issue a check that reads the repository tree.
     /// </summary>
-    private async Task LoadReadinessAsync()
+    private async Task LoadReadinessAsync(bool keepCurrent = false)
     {
         if (_selectedProjectId is not { } projectId) return;
         var names = SelectedRoles.Select(role => role.TemplateName).ToList();
@@ -439,7 +573,8 @@ public partial class PipelineSetupWizard
         if (signature == _readinessSignature) return;
 
         _readinessSignature = signature;
-        _readiness = null;
+        // A check run again after a creation keeps the verdict on screen under the panel's veil (R2-20).
+        if (!keepCurrent) _readiness = null;
         _readinessLoading = true;
         RefreshSteps();
         try
@@ -465,8 +600,10 @@ public partial class PipelineSetupWizard
     private async Task RecheckReadinessAsync()
     {
         _readinessSignature = null;
-        await LoadReadinessAsync();
+        await LoadReadinessAsync(keepCurrent: true);
     }
+
+    private Task FinishAsync() => _copy is { } copy ? copy.FinishAsync(_currentStep) : CreatePipelinesAsync();
 
     private async Task CreatePipelinesAsync()
     {
@@ -475,6 +612,7 @@ public partial class PipelineSetupWizard
         var created = new List<PipelineDto>();
         try
         {
+            await PrepareProductionAsync(projectId);
             foreach (var role in SelectedRoles)
             {
                 var template = TemplateFor(role.TemplateName)
@@ -493,6 +631,8 @@ public partial class PipelineSetupWizard
                 created.Add(outcome.Value!);
             }
             Toast.Success(string.Format(L["PipelinesCreated"], created.Count));
+            if (_productionPending.Length > 0)
+                Toast.Warning("ProductionValuesPending", "ProductionValuesPendingDetail", _productionPending);
             ProvisionState.Clear(projectId);
             Nav.NavigateTo($"/projects/{projectId}/pipelines");
         }
@@ -509,40 +649,34 @@ public partial class PipelineSetupWizard
         }
     }
 
-    private string BuildYaml(PipelineRole role, PipelineTemplateSummaryDto template)
+    /// <summary>ADR-057: before the production pipeline, the variables, secrets, ports and configuration repository its
+    /// Compose file asks for. A project whose repository could not be read gets its pipeline without it. Everything
+    /// the call does is idempotent, so a creation run again after a failure keeps what already exists.</summary>
+    private async Task PrepareProductionAsync(int projectId)
     {
-        var parts = PipelineSetupArchitecture.Parts(_architecture, _sameProject, _frontend, _backend, _database);
-        return $"""
-        name: {PipelineName(role)}
-        extends: {template.Name}@{template.Version}
-        trigger: manual
-        variables:
-          APPLICATION_PREFIX: "{_prefix}"
-          APPLICATION_HAS_FRONTEND: "{Flag(parts.Frontend)}"
-          APPLICATION_HAS_BACKEND: "{Flag(parts.Backend)}"
-          APPLICATION_HAS_DATABASE: "{Flag(parts.Database)}"
-          APPLICATION_ROLLBACK_ENABLED: "{Flag(On("rollback", _rollback))}"
-          APPLICATION_QUALITY_ENABLED: "{Flag(On("quality", _quality))}"
-          APPLICATION_SECURITY_ENABLED: "{Flag(On("security", _security))}"
-          APPLICATION_QA_ENABLED: "{Flag(On("qa", _qa))}"
-          APPLICATION_QA_EXTENDED_ENABLED: "{Flag(On("qa-extended", _qaExtended))}"
-          APPLICATION_SECURITY_HISTORY_ENABLED: "{Flag(On("security-history", _securityHistory))}"
-          APPLICATION_CI_PIPELINE: "{_prefix}-ci"
-          APPLICATION_QUALITY_PIPELINE: "{_prefix}-quality"
-          APPLICATION_SECURITY_PIPELINE: "{_prefix}-security"
-          APPLICATION_QA_PIPELINE: "{_prefix}-qa"
-          APPLICATION_QA_EXTENDED_PIPELINE: "{_prefix}-qa-extended"
-          APPLICATION_SECURITY_HISTORY_PIPELINE: "{_prefix}-security-history"
-          APPLICATION_CANDIDATE_PIPELINE: "{_prefix}-candidate"
-          APPLICATION_DEPLOY_PIPELINE: "{_prefix}-deploy-prod"
-          APPLICATION_PACKAGE_TELEMETRY_PIPELINE: "{_prefix}-package-telemetry"
-          APPLICATION_PACKAGE_DOTNET_ANALYTICS_PIPELINE: "{_prefix}-{_stack.AnalyticsPackageTemplate}"
-          APPLICATION_PACKAGE_BROWSER_ANALYTICS_PIPELINE: "{_prefix}-package-web-analytics-browser"
-        stages: []
-        """;
+        _productionInput = null;
+        _productionPending = string.Empty;
+        if (!On("production", _production) || !ProductionSetup.Ready) return;
 
-        static string Flag(bool value) => value ? "true" : "false";
+        var outcome = await ProductionSetup.ApplyAsync(projectId);
+        if (!outcome.IsSuccess)
+            throw new InvalidOperationException(outcome.ErrorMessage ?? L["OperationFailed"]);
+        var result = outcome.Value!;
+        _productionInput = new PipelineSetupProductionInput(result.ComposeFile, result.Strategy, result.DeclaresApi, result.Server,
+            [.. ProductionSetup.Analysis?.Servers.Select(server => server.Name) ?? []]);
+        _productionPending = PipelineSetupProduction.PendingValues(result);
     }
+
+    /// <summary>R2-11: the variables the template reads, only for the pipelines created.</summary>
+    private string BuildYaml(PipelineRole role, PipelineTemplateSummaryDto template) =>
+        PipelineSetupYamlBuilder.Build(PipelineName(role), template.Name, template.Version, new PipelineSetupYamlInput(
+            _prefix,
+            PipelineSetupArchitecture.Parts(_architecture, _sameProject, _frontend, _backend, _database),
+            _stack.AnalyticsPackageTemplate,
+            On("rollback", _rollback), On("quality", _quality), On("security", _security), On("qa", _qa),
+            On("qa-extended", _qaExtended), On("security-history", _securityHistory),
+            CreatedSuffixes),
+            _productionInput);
 
     /// <summary> The template the backend will resolve for this project, so the pinned version
     /// written into <c>extends:</c> is that template's. The project's organization's own template
@@ -554,16 +688,6 @@ public partial class PipelineSetupWizard
 
     private string PipelineName(PipelineRole role) => $"{_prefix}-{role.Suffix}";
     private void GoBack() => Nav.NavigateTo(BackHref);
-
-    internal static string Slug(string value)
-    {
-        var slug = new string(value.Trim().ToLowerInvariant()
-            .Select(character => char.IsLetterOrDigit(character) ? character : '-')
-            .ToArray());
-        while (slug.Contains("--", StringComparison.Ordinal))
-            slug = slug.Replace("--", "-", StringComparison.Ordinal);
-        return slug.Trim('-');
-    }
 
     private sealed record PipelineRole(string Suffix, string TemplateName);
 }

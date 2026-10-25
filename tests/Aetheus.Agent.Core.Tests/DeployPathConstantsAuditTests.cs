@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Tests;
 /// <summary>
 /// Drift guard: <see cref="DeployOperationExecutor.DeployBaseDir"/> and
 /// <see cref="DeployOperationExecutor.RestartHelperPath"/> are hard-coded in the agent AND in
-/// <c>deploy/scripts/install-agent-linux.sh</c> (the script creates the dirs/helper; the agent writes
+/// <c>deploy/agent-installer/install-agent-linux.sh</c> (the script creates the dirs/helper; the agent writes
 /// releases there and shells out to the helper). If they drift, every deploy fails at runtime - there
 /// is no compile-time link. This test resolves the script's shell variables and asserts equality.
 /// </summary>
@@ -103,7 +103,7 @@ public sealed class DeployPathConstantsAuditTests
     }
 
     private static string ReadInstallScript()
-        => File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "scripts", "install-agent-linux.sh"));
+        => File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "agent-installer", "install-agent-linux.sh"));
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 }

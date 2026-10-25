@@ -133,7 +133,7 @@ internal sealed class PipelineRunGateState
             ReportCount = reports.Count,
             FindingCount = findings.Count(finding => finding.Status == AnalysisFindingStatus.Open),
             NewFindingCount = findings.Count(finding => finding.IsNew && finding.Status == AnalysisFindingStatus.Open),
-            DecidedFindingCount = findings.Count(finding => finding.Status != AnalysisFindingStatus.Open),
+            DecidedFindingCount = findings.Count(finding => finding.Status.IsDecision()),
             ComponentCount = reports.Sum(report => report.ComponentCount),
             MetricCount = reports.Sum(report => report.MetricCount),
             BlockerCount = reports.Sum(report => report.BlockerCount),

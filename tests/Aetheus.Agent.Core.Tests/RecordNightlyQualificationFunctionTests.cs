@@ -11,7 +11,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/record-nightly-qualification.mjs</c>, run through the real executor
+/// The C# port of the former <c>record-nightly-qualification.mjs</c> script, run through the real executor
 /// on every input the script itself processed (<c>TestData/nightly-qualification-cases.json</c>,
 /// <see cref="ScriptReferenceData"/>): the cases of <c>nightly-qualification.test.mjs</c>, nested,
 /// duplicated, unreadable and falsy summaries, odd grades, run ids and severities, the TypeErrors and

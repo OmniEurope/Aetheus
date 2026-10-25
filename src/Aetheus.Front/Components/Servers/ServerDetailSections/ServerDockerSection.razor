@@ -1,13 +1,14 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 <AgentOfflineNotice Server="@Server" />
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md docker-toolbar" Gap="OmniSpacing.Small">
-    <div class="blade-content-spacer"></div>
-    @if (CanAdmin)
-    {
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Disabled="@AgentOffline" Class="@(_pruning ? "btn-busy" : null)" Busy="@(_pruning)"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton>
-    }
-    @* Docker inventory follows agent heartbeats delivered through ServerDetailLoader. *@
-</OmniStack>
+@* Recette R-29: the page's action sits in the page header, on the title line. Docker inventory follows agent
+   heartbeats delivered through ServerDetailLoader, so there is no refresh button. *@
+@if (CanAdmin)
+{
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OpenPruneDialogAsync" Disabled="@AgentOffline" Class="@(_pruning ? "btn-busy docker-prune" : "docker-prune")" Busy="@(_pruning)"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent><span>@L["DockerPrune"]</span></ChildContent></OmniButton>
+    </SectionContent>
+}
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
 

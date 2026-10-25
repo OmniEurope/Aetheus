@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/app-version.sh</c>, run through the real executor on a temp
+/// The C# port of the former <c>app-version.sh</c> script, run through the real executor on a temp
 /// workspace unique to each test: the composed version, the parameter and variable inputs, and the
 /// script's refusals with its messages.
 /// </summary>

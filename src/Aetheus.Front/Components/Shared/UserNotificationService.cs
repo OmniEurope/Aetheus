@@ -16,7 +16,7 @@ public sealed class UserNotificationService(
     ApiClient api,
     PermissionService permissions,
     TimeProvider timeProvider,
-    Aetheus.Front.Components.Notifications.UserNotificationsFeed? notificationsFeed = null) : IAsyncDisposable
+    Aetheus.Front.Components.Shared.UserNotificationsFeed? notificationsFeed = null) : IAsyncDisposable
 {
     private HubConnection? _hub;
     private ITimer? _debounce;

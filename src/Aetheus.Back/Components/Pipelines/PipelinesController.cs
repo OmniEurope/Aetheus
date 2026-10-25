@@ -207,7 +207,8 @@ public class PipelinesController(
     /// warn before a run starts when no online agent matches (the YAML 400 doesn't cover that).</summary>
     [HttpPost("{id:int}/preflight")]
     public async Task<ActionResult<PipelinePreflightDto>> Preflight(
-        int id, CancellationToken ct, [FromQuery] string? sourceBranch = null)
+        int id, CancellationToken ct, [FromQuery] string? sourceBranch = null,
+        [FromBody] PipelineRunRequest? request = null)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Write, ct))
             return Forbid();
@@ -228,7 +229,12 @@ public class PipelinesController(
         if (!await CallerAdministersAllTargetsAsync(preparation.TargetServerIds, ct))
             return Forbid();
 
-        var result = await runService.PreflightAsync(preparation, ct: ct);
+        // The values the user chose in the launch dialog, when it has been answered: the preview then
+        // resolves the stage targets a parameter names (deployServer) exactly as the launch will.
+        var parameters = request?.Parameters is { Count: > 0 } supplied
+            ? new Dictionary<string, string>(supplied, StringComparer.OrdinalIgnoreCase)
+            : null;
+        var result = await runService.PreflightAsync(preparation, parameters, ct);
         if (result is null) return NotFound();
         return Ok(result);
     }
@@ -310,6 +316,22 @@ public class PipelinesController(
 
         var cancelled = await runService.CancelRunAsync(runId, PipelineRunCancellation.ByUser(User.Identity?.Name), ct);
         if (!cancelled) return NotFound();
+        return NoContent();
+    }
+    /// <summary>R-39: resumes a run waiting after a missed confirmation. Same permission as cancelling the
+    /// run or deciding its approval (Pipeline.Write): it replays steps that run already authorised. A run
+    /// that is not waiting, or whose window elapsed, answers 409 with the reason.</summary>
+    [HttpPost("runs/{runId:int}/resume")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ResumeRun(int runId, CancellationToken ct)
+    {
+        var pipelineId = await runService.GetPipelineIdForRunAsync(runId, ct);
+        if (pipelineId is null) return NotFound();
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+            return Forbid();
+
+        await runService.ResumeAwaitingRunAsync(runId, User.Identity?.Name, ct);
         return NoContent();
     }
     /// <summary>Re-runs failed or cancelled steps of a terminal run (instead of a brand-new run).</summary>

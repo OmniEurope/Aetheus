@@ -8,5 +8,5 @@
         <OmniCheckBox @bind-Value="_model.Volumes"><OmniIcon Name="OmniIconName.Database" /> @L["DockerPruneUnusedVolumes"]</OmniCheckBox>
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="prune-summary">@string.Format(L["PruneSummary"], SelectedCount)</OmniText>
     </OmniStack>
-    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Danger" Disabled="@(SelectedCount == 0)" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Broom" /> <span>@L["DockerPrune"]</span></OmniButton></DialogFooter>
+    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Danger" Disabled="@(SelectedCount == 0)" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent><span>@L["DockerPrune"]</span></ChildContent></OmniButton></DialogFooter>
 </OmniTemplateForm>

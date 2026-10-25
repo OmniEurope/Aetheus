@@ -21,12 +21,6 @@ public class ButtonRoleColourGuardTests
     [
         ("Components/Notifications/NotificationBell.razor", @"TriggerVariant=""OmniButtonVariant.Success""",
             "R-170, confirmed by R-385 (2026-09-28): the notification bell is green, the tasks button blue"),
-        ("Components/VariableLibraries/VariableLibraryEdit.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => EditEntry(entry))""",
-            "R2-066 (2026-10-02): a library entry's Edit is green, its History blue"),
-        ("Components/AiTasks/AiTasks.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => OpenDialogAsync(task))""",
-            "R3-12/R3-14 (2026-10-12): Edit is green where Run is the row's blue action"),
-        ("Components/AppBackups/Backups.razor", @"Variant=""OmniButtonVariant.Success"" OnClick=""@(() => EditPolicy(p))""",
-            "R3-12/R3-14 (2026-10-12): Edit is green where Run is the row's blue action"),
     ];
 
     /// <summary>
@@ -39,6 +33,9 @@ public class ButtonRoleColourGuardTests
             "R-436 (2026-09-28): Generate, the value field's helper, is blue beside Add"),
         ("Components/Servers/ServerDetailSections/MailStatusFix.razor", "OnInstallCertificate",
             "User decision (2026-09-28): Obtain and Install the mail certificate are both blue"),
+        ("Components/Pipelines/PipelineSetupReadinessPanel.razor", "ProvisionAsync",
+            "R2-26 (2026-10-21): in the summary's to-do block, the libraries and vaults line shows its create button blue, "
+            + "like the repository line's, both aligned in one column (one main action per line)"),
     ];
 
     /// <summary>
@@ -47,14 +44,14 @@ public class ButtonRoleColourGuardTests
     /// </summary>
     private static readonly (string File, string Markup, string Decision)[] UserChosenInfoOrWarningButtons =
     [
-        ("Components/Vaults/VaultEdit.razor", @"Variant=""OmniButtonVariant.Warning"" OnClick=""@(() => RotateSecret(secret))""",
-            "R-293: a vault secret's Rotate stays orange, chosen before the revision"),
+        ("Components/PackageRegistry/PackageRegistryPackageDialog.razor", @"Variant=""OmniButtonVariant.Warning"" OnClick=""@(() => ToggleListedAsync(v))""",
+            "R1-18: the registry version's Unlist / Relist is orange, chosen by the user"),
+        ("Components/PackageRegistry/PackageRegistryPackageDialog.razor", @"Variant=""OmniButtonVariant.Warning"" OnClick=""@(() => ToggleDeprecatedAsync(v))""",
+            "R1-18: the registry version's Deprecate is orange, chosen by the user"),
         ("Components/Shared/PipelineCatalogView.cs", "PipelineCatalogStatus.Running => OmniButtonVariant.Info",
             "R-165: each status chip of the pipelines catalogue has its colour (a selector, colour per state)"),
         ("Components/Shared/PipelineCatalogView.cs", "PipelineCatalogStatus.Outdated => OmniButtonVariant.Warning",
             "R-165: each status chip of the pipelines catalogue has its colour (a selector, colour per state)"),
-        ("Components/Analysis/AnalysisFindingDetail.razor.cs", "AnalysisFindingStatus.Accepted => OmniButtonVariant.Warning",
-            "ui-patterns, toggle and selector buttons: the decision selector keeps a colour per state, never green"),
     ];
 
     [Fact]
@@ -216,16 +213,12 @@ public class ButtonRoleColourGuardTests
     /// </summary>
     private static readonly (string File, string[] Actions, string Decision)[] UserChosenCrowdedZones =
     [
-        ("Components/AiTasks/AiTasks.razor", ["RunNow", "Results", "Edit", "Delete"],
-            "R3-12/R3-14, kept on 2026-10-17: an AI task row shows Run blue, Results, Edit green and Delete"),
-        ("Components/AppBackups/Backups.razor", ["BackupRuns", "BackupRunNow", "Edit", "Delete"],
-            "R3-12/R3-14, kept on 2026-10-17: a backup policy row shows Runs, Run blue, Edit green and Delete"),
-        ("Components/VariableLibraries/VariableLibraryEdit.razor", ["CopyKey", "CopyValue", "History", "Edit", "Delete"],
-            "R2-066 and R-435, kept on 2026-10-17: a library entry row shows its cell copy buttons, History blue, Edit green and Delete"),
+        ("Components/VariableLibraries/VariableLibraryEdit.razor", ["CopyKey", "CopyValue", "Edit"],
+            "R2-066 and R-435, narrowed by R1-4 on 2026-10-21: a library entry row shows its cell copy buttons and Edit; History and Delete are in the row menu"),
+        ("Components/Vaults/VaultEdit.razor", ["CopyKey", "CopyValue", "Edit"],
+            "R-293 and R-436, narrowed by R1-4 on 2026-10-21: a secret row shows its cell copy buttons and Edit; the other actions are in the row menu"),
         ("Components/Vaults/VaultEdit.razor", ["Generate", "Add"],
             "R-436, kept on 2026-10-17: the add row shows Generate blue beside Add"),
-        ("Components/Vaults/VaultEdit.razor", ["CopyKey", "CopyValue", "CopyKeyReference", "History", "Edit", "Rotate", "Delete"],
-            "R-293 and R-436, kept on 2026-10-17: a secret row shows its copy buttons, History, Edit, Rotate orange and Delete"),
         ("Components/Servers/ServerDetailSections/MailStatusFix.razor", ["MailObtainCertificate", "MailInstallCertificate"],
             "User decision of 2026-09-28, kept on 2026-10-17: Obtain and Install the mail certificate are both shown, both blue"),
         ("Components/Pipelines/PipelineRunApprovalPanel.razor", ["Approve", "Reject", "ApprovalAddComment"],

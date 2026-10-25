@@ -1,38 +1,23 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* One finding per alert, its items, and the fix: a page link, or for a missing repository the
-   creation dialog over the current page. *@
+@* One finding per row. Only a blocking finding is an OmniAlert (R2-18); the explanations are tooltips.
+   The fix is a link to the page that makes it, or for a missing repository the creation dialog over
+   the current page. *@
 @foreach (var check in Checks)
 {
-    <OmniAlert Severity="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniSeverity.Warning : OmniSeverity.Info)"
-               data-testid="setup-readiness-check">
-        <OmniStack Gap="OmniSpacing.Small">
-            <strong>@L[PipelineReadinessText.TitleKey(check.Kind)]</strong>
-            <span>@L[PipelineReadinessText.HintKey(check.Kind)]</span>
-            @if (check.Items.Count > 0)
-            {
-                <ul class="pipeline-setup-readiness-items">
-                    @foreach (var item in check.Items)
-                    {
-                        <li>
-                            <code>@item</code>
-                            @if (PipelineReadinessText.ItemRoleKey(check.Kind, item) is { } role)
-                            {
-                                <span data-testid="setup-readiness-item-role"> : @L[role]</span>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-            @if (check.Kind == PipelineSetupReadinessKind.NoRepository)
-            {
-                <div>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync" data-testid="setup-readiness-create-repository"><OmniIcon Name="OmniIconName.Add" /> <span>@L["CreateGitRepository"]</span></OmniButton>
-                </div>
-            }
-            else if (Href(check.Kind) is { } href)
-            {
-                <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[PipelineReadinessText.RemediationKey(check.Kind)!]</OmniLink>
-            }
+    @if (BlockingAsAlert && check.Severity == PipelineSetupReadinessSeverity.Blocking)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-readiness-check">
+            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" OnChanged="@OnChanged" />
+        </OmniAlert>
+    }
+    else
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Start" Gap="OmniSpacing.Small"
+                   data-testid="setup-readiness-check">
+            <OmniBadge Tone="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniTone.Warning : OmniTone.Info)" Fill="OmniFill.Tonal">
+                <Icon><OmniIcon Name="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniIconName.Warning : OmniIconName.Info)" /></Icon>
+            </OmniBadge>
+            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" OnChanged="@OnChanged" />
         </OmniStack>
-    </OmniAlert>
+    }
 }

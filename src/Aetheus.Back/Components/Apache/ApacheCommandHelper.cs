@@ -21,11 +21,9 @@ public static partial class ApacheCommandHelper
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
     };
 
-    public static string BuildEnableSiteCommand(string siteName) =>
-        $"a2ensite {siteName} && systemctl reload apache2";
-
-    public static string BuildDisableSiteCommand(string siteName) =>
-        $"a2dissite {siteName} && systemctl reload apache2";
+    // BuildEnableSiteCommand / BuildDisableSiteCommand were removed (recette R-12): the agent's
+    // CommandValidator refused their `a2ensite x && systemctl reload` strings. Enable, disable and delete
+    // a site now dispatch typed OperationKind.ApacheEnableSite / ApacheDisableSite / ApacheDeleteSite.
 
     public static string BuildEnableModuleCommand(string moduleName) =>
         $"a2enmod {moduleName} && systemctl restart apache2";

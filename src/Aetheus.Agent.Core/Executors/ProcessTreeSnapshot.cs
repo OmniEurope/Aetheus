@@ -16,8 +16,45 @@ internal static class ProcessTreeSnapshot
                 ? ReadLinuxParents()
                 : [];
         var descendants = new List<Process>();
+        foreach (var processId in SelectDescendantIds(rootProcessId, parents, ReadStartTimeTicks))
+        {
+            try
+            {
+                descendants.Add(Process.GetProcessById(processId));
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // The descendant exited between the system snapshot and opening its handle.
+            }
+        }
+
+        return descendants;
+    }
+
+    /// <summary>
+    /// The processes below the root, by parent id. A child counts only when it started after its parent:
+    /// Windows keeps the parent id of an orphan, so once that id is reused by the root (or one of its
+    /// descendants) the orphan looks like a child without being one. Counting it made a cancelled run wait
+    /// on an unrelated process it never killed. Same rule as Process.Kill(entireProcessTree); a start time
+    /// that cannot be read never proves the relation.
+    /// </summary>
+    internal static IReadOnlyList<int> SelectDescendantIds(
+        int rootProcessId, IReadOnlyDictionary<int, int> parents, Func<int, long?> startTimeTicks)
+    {
+        ArgumentNullException.ThrowIfNull(parents);
+        ArgumentNullException.ThrowIfNull(startTimeTicks);
+        var startTimes = new Dictionary<int, long?>();
+        long? StartOf(int processId)
+        {
+            if (!startTimes.TryGetValue(processId, out var ticks))
+                startTimes[processId] = ticks = startTimeTicks(processId);
+            return ticks;
+        }
+
+        var selected = new List<int>();
         var known = new HashSet<int> { rootProcessId };
         var remaining = new Dictionary<int, int>(parents);
+        remaining.Remove(rootProcessId);
 
         while (remaining.Count > 0)
         {
@@ -30,21 +67,32 @@ internal static class ProcessTreeSnapshot
 
             foreach (var processId in discovered)
             {
+                var parentId = remaining[processId];
                 remaining.Remove(processId);
-                if (!known.Add(processId))
+                var parentStart = StartOf(parentId);
+                var childStart = StartOf(processId);
+                if (parentStart is null || childStart is null || childStart < parentStart)
                     continue;
-                try
-                {
-                    descendants.Add(Process.GetProcessById(processId));
-                }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-                {
-                    // The descendant exited between the system snapshot and opening its handle.
-                }
+                if (known.Add(processId))
+                    selected.Add(processId);
             }
         }
 
-        return descendants;
+        return selected;
+    }
+
+    private static long? ReadStartTimeTicks(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return process.StartTime.ToUniversalTime().Ticks;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+            or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static Dictionary<int, int> ReadLinuxParents() => ReadParentsFromProc("/proc");

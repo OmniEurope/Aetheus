@@ -30,6 +30,16 @@ public static class AgentRuntimeDefaults
     public static readonly TimeSpan DockerInventoryTtl = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan SlowInventoryTtl = TimeSpan.FromSeconds(180);
 
+    /// <summary>How long a Docker probe that timed out keeps the last confirmed availability (R-31):
+    /// a daemon busy with builds answers late without being gone, but one that stays silent past this
+    /// window is reported unavailable. About three slow-inventory probes.</summary>
+    public static readonly TimeSpan DockerProbeIndeterminateHold = TimeSpan.FromMinutes(10);
+
+    /// <summary>How long after its pipeline task ended a Testcontainers reaper is still attributed to that
+    /// run (R-33). Ryuk exits about ten seconds after its test process disconnects; one still present past
+    /// this window is reported like any other privileged container.</summary>
+    public static readonly TimeSpan PipelineContainerGrace = TimeSpan.FromMinutes(2);
+
     /// <summary>How often the storage measurement (<c>docker system df</c>, directory and journal
     /// sizes) is refreshed. It runs in the background, outside the heartbeat collection budget,
     /// because it takes minutes during builds; the sizes it reports move slowly, and the build

@@ -154,15 +154,15 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.DoesNotContain("variable-libraries/new?projectId=1", cut.Markup);
             Assert.Contains("pipelines/setup?projectId=1", cut.Markup);
             // No Overview tile on the Overview page, 13 of the 14 sections.
-            Assert.Equal(13, cut.FindAll(".project-section-link").Count);
+            Assert.Equal(13, cut.FindAll("a.project-section-tile").Count);
             Assert.Equal(13, cut.FindAll(".project-section-tile").Count);
-            Assert.Empty(cut.FindAll(".project-section-link[href='/projects/1/overview']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/1/quality']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/1/artifacts']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/1/environments']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/1/monitoring']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/git-repositories?projectId=1']"));
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/1/edit']"));
+            Assert.Empty(cut.FindAll("a.project-section-tile[href='/projects/1/overview']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/quality']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/artifacts']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/environments']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/monitoring']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/git-repositories?projectId=1']"));
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/edit']"));
         });
 
         cut.FindAll("[role='tab']").Single(button => button.TextContent.Contains("Readme")).Click();
@@ -353,7 +353,7 @@ public class ProjectOverviewSectionTests : BunitContext
             new ProjectDetailDto { Id = 2, Name = "API" }));
 
         Assert.DoesNotContain("AddGitRepository", cut.Markup, StringComparison.Ordinal);
-        Assert.Equal(6, cut.FindAll(".project-section-link").Count);
+        Assert.Equal(6, cut.FindAll("a.project-section-tile").Count);
 
         permissions.SetPermissions(
         [
@@ -368,9 +368,9 @@ public class ProjectOverviewSectionTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("AddGitRepository", cut.Markup, StringComparison.Ordinal);
-            Assert.Equal(7, cut.FindAll(".project-section-link").Count);
-            Assert.NotNull(cut.Find(".project-section-link[href='/projects/2/edit']"));
-            Assert.Empty(cut.FindAll(".project-section-link[href='/projects/2/pipelines']"));
+            Assert.Equal(7, cut.FindAll("a.project-section-tile").Count);
+            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/2/edit']"));
+            Assert.Empty(cut.FindAll("a.project-section-tile[href='/projects/2/pipelines']"));
         });
     }
 

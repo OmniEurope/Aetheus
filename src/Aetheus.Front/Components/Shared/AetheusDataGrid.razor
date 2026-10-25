@@ -6,11 +6,11 @@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="grid-load-alert">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                    Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
             <OmniText>@L["GridLoadFailed"]</OmniText>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="RetryAsync">
-                <OmniIcon Name="OmniIconName.Refresh" /> @L["Retry"]
+                <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Retry"]</ChildContent>
             </OmniButton>
         </OmniStack>
     </OmniAlert>
@@ -35,7 +35,7 @@
                   EstimatedRowHeight="@AetheusGrid.RowHeightPixels"
                   Responsive="false" Density="@Density"
                   EmptyText="@EffectiveEmptyText" EmptyContent="@VisibleEmptyTemplate"
-                  OnRowClick="@EffectiveRowClick" OnRowUpdate="@RowUpdate" RowRender="@RowRender"
+                  OnRowClick="@EffectiveRowClick" OnRowUpdate="@RowUpdate" OnRowEdit="@RowEdit" EditTrigger="@EditTrigger"RowRender="@RowRender"
                   EditMode="@EditMode" ShowEditColumn="false" FillAvailableHeight="@FullHeight" VirtualBlockSize="@PageSize"
                   KeyOf="@EffectiveKeyOf" NewRowHighlight="@NewRowHighlight"
                   ShowFooterBar="@Exports" BarButtonSize="OmniControlSize.Medium" FooterBarExport="OmniDataGridBarExport.End"

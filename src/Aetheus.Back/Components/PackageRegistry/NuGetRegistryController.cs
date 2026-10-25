@@ -225,26 +225,38 @@ public class NuGetRegistryController(
 
         var leafUrl = BuildUrl(
             $"v3/registration/{Uri.EscapeDataString(normalizedId)}/{Uri.EscapeDataString(normalizedVersion)}.json");
+        var catalogEntry = new JsonObject
+        {
+            ["@id"] = leafUrl,
+            ["@type"] = "PackageDetails",
+            ["authors"] = registration.Authors,
+            ["dependencyGroups"] = dependencyGroups,
+            ["description"] = registration.Description,
+            ["id"] = registration.Id,
+            ["listed"] = version.IsListed,
+            ["packageContent"] = packageContent,
+            ["published"] = version.PublishedAt,
+            ["tags"] = registration.Tags,
+            ["version"] = version.Version
+        };
+        if (version.IsDeprecated)
+        {
+            // NuGet registration "deprecation": a reason from the protocol's list and a message.
+            catalogEntry["deprecation"] = new JsonObject
+            {
+                ["@id"] = $"{leafUrl}#deprecation",
+                ["reasons"] = new JsonArray("Other"),
+                ["message"] = PackageRegistryDefaults.DeprecationMessage
+            };
+        }
+
         return new JsonObject
         {
             ["@id"] = leafUrl,
             ["@type"] = "Package",
             ["packageContent"] = packageContent,
             ["registration"] = registrationUrl,
-            ["catalogEntry"] = new JsonObject
-            {
-                ["@id"] = leafUrl,
-                ["@type"] = "PackageDetails",
-                ["authors"] = registration.Authors,
-                ["dependencyGroups"] = dependencyGroups,
-                ["description"] = registration.Description,
-                ["id"] = registration.Id,
-                ["listed"] = version.IsListed,
-                ["packageContent"] = packageContent,
-                ["published"] = version.PublishedAt,
-                ["tags"] = registration.Tags,
-                ["version"] = version.Version
-            }
+            ["catalogEntry"] = catalogEntry
         };
     }
 

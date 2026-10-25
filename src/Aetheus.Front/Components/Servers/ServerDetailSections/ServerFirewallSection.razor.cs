@@ -32,7 +32,7 @@ public partial class ServerFirewallSection
         new(FirewallRuleAction.Deny, L["FirewallDeny"]),
     ];
 
-    private static OmniIconName? RuleActionIcon(FirewallRuleAction action) =>
+    private static OmniIconName RuleActionIcon(FirewallRuleAction action) =>
         action == FirewallRuleAction.Allow ? OmniIconName.LockOpen : OmniIconName.Prohibit;
 
     private static readonly string[] Protocols = ["tcp", "udp"];

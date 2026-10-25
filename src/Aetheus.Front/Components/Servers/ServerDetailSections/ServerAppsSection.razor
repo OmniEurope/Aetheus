@@ -1,13 +1,15 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @if (_apps is null)
 {
     <AetheusLoader />
 }
 else
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-lg" Gap="OmniSpacing.Large">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _addVisible = true)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
-    </OmniStack>
+    @* Recette R-29: the page's main action sits in the page header, on the title line. *@
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _addVisible = true)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+    </SectionContent>
 
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
         Class="pipeline-list-search omni-u-mb-sm" />
@@ -20,15 +22,15 @@ else
             <OmniDataGridColumn Frozen="true" TItem="ServerAppDto" Property="Name" Title="@L["Name"]" Filterable="true" />
             <OmniDataGridColumn TItem="ServerAppDto" Property="Status" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="a">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetAppStatusBadge(a.Status)">@L[a.Status.ToString()]</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@GetAppStatusBadge(a.Status)">@L[a.Status.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ServerAppDto" Property="Version" Title="@L["Version"]" Width="100px" Filterable="true" />
             <OmniDataGridColumn TItem="ServerAppDto" Property="Port" Title="@L["Port"]" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" FilterOperator="OmniDataGridFilterOperator.Equals" />
             <OmniDataGridColumn TItem="ServerAppDto" Property="Source" Title="@L["Source"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_sourceValues" FilterSearchable="true" />
-            <OmniDataGridColumn TItem="ServerAppDto" Title="@L["Actions"]" Width="80px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
+            <OmniDataGridColumn TItem="ServerAppDto" Title="@L["Actions"]" Width="80px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
                 <Template Context="a">
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAppAsync(a))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAppAsync(a))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 </Template>
             </OmniDataGridColumn>
         </Columns>
@@ -58,9 +60,9 @@ else
                     </OmniFormField>
                 </OmniColumn>
                 <OmniColumn Span="12" MediumSpan="2">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-xl">
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAppAsync" Class="@(_addSaving ? "btn-busy" : null)" Busy="@(_addSaving)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-xl">
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAppAsync" Class="@(_addSaving ? "btn-busy" : null)" Busy="@(_addSaving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniColumn>
             </OmniRow>

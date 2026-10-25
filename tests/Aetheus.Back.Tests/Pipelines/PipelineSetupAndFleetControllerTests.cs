@@ -31,7 +31,8 @@ public sealed class PipelineSetupAndFleetControllerTests
     private PipelineFleetController Fleet(bool admin) => new(_fleet, _authz) { ControllerContext = As(admin) };
 
     private PipelineSetupController Setup(bool admin = false) => new(
-        _readiness, _provisioner, Substitute.For<IPipelineProjectCopyService>(), Substitute.For<IPipelineOwnerAuthorization>(), _authz)
+        _readiness, _provisioner, Substitute.For<IPipelineProductionSetupService>(), Substitute.For<IPipelineProjectCopyService>(),
+        Substitute.For<IPipelineOwnerAuthorization>(), _authz)
     { ControllerContext = As(admin) };
 
     private void Allow(ResourceType type, int? id, Permission permission, bool allowed) =>

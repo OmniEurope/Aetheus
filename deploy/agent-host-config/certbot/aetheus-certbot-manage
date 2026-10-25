@@ -1,13 +1,15 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# aetheus-certbot-helper-version: 1
+# aetheus-certbot-helper-version: 6
 # Aetheus Agent certbot-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-certbot.
-# Args: $1 = verb (renew|renew-all|delete|revoke|normalize|renewal-check), $2 = cert lineage name
-# (only for renew, delete and revoke).
+# Args: $1 = verb (renew|renew-all|delete|revoke|normalize|renewal-check|remove-name), $2 = cert lineage name
+# (only for renew, delete, revoke and remove-name), $3 = the name remove-name takes out of the certificate.
 set -eu
 ACME_WEBROOT=#{ACME_WEBROOT}#
 RENEWAL_DIR=/etc/letsencrypt/renewal
 ACME_ALIAS=/etc/apache2/conf-enabled/aetheus-acme-webroot.conf
+APACHE_DIR=/etc/apache2
+ACME_CONF=/etc/apache2/conf-available/aetheus-acme-webroot.conf
 STATE_DIR=/var/lib/aetheus-certbot
 # grep tries each line on its own, so one valid line used to let a multi-line argument through whole
 # (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
@@ -17,6 +19,12 @@ NL='
 CR="$(printf '\r')"
 one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 valid_name() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$'; }
+valid_domain() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$'; }
+# The names a lineage covers, as certbot lists them ("Domains: a b c"), lower case, on one line.
+certificate_names() {
+    certbot certificates --cert-name "$1" 2>/dev/null \
+        | sed -n 's/^[[:space:]]*Domains:[[:space:]]*//p' | head -n 1 | tr 'A-Z' 'a-z' | tr -d '\r'
+}
 # authenticator value of a renewal file ("" when absent).
 renewal_authenticator() {
     sed -n 's/^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*//p' "$1" | head -n 1 | tr -d '\r '
@@ -30,8 +38,327 @@ renewal_webroots() {
         /^[[:space:]]*webroot_path[[:space:]]*=/ { print $2 }
     ' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '\r' | grep -v '^$' | sort -u
 }
+# Turns the output of `certbot renew --dry-run` (stdin) into the record lines the agent reads, after the
+# exit code in the renewal-check file. $1 = certbot exit code, $2 = seconds the run took.
+#   failed=<lineage><TAB><reason>   one per lineage certbot reported as failed
+#   output=<line>                   only when $1 is not 0: a header, then the last meaningful lines, so the
+#                                   cause stays visible whatever certbot printed (no known message needed)
+# The messages are certbot's own (renewal.py and the end-of-run summary); a detail the authenticator
+# printed just before "Failed to renew certificate" ("Some challenges have failed." alone says nothing)
+# is appended to that reason, and a reason that ends with a colon continues on the next line (the missing
+# web root of a domain is reported that way). Only POSIX awk features, mawk (Debian) included.
+renewal_record() {
+    # BEGIN renewal-record-awk
+    awk -v rc="$1" -v seconds="$2" '
+    function clip(text, max) { return length(text) > max ? substr(text, 1, max) : text }
+    function trim(text) { sub(/^[ \t]+/, "", text); sub(/[ \t]+$/, "", text); return text }
+    function after(text, marker) { return trim(substr(text, index(text, marker) + length(marker))) }
+    function record(name, reason) {
+        gsub(/\t/, " ", name)
+        if (name == "") return
+        if (!(name in known)) {
+            if (count >= 256) return
+            order[++count] = name; known[name] = 1; why[name] = ""
+        }
+        if (why[name] == "" && reason != "") why[name] = clip(reason, 500)
+    }
+    function fail(name, reason) {
+        if (reason ~ /:$/) { record(name, reason); cont = name; return }
+        if (reason != "" && detail != "") reason = reason " (" detail ")"
+        detail = ""
+        record(name, reason)
+    }
+    function meaningful(text) {
+        if (text ~ /^[ \t]*$/ || text ~ /^[- ]+$/) return 0
+        if (text ~ /^Saving debug log to / || text ~ /^Processing / || text ~ /^Simulating renewal of /) return 0
+        if (text ~ /^Account registered/ || text ~ /^\*\* DRY RUN/) return 0
+        return 1
+    }
+    {
+        line = $0
+        if (meaningful(line)) { ring[total % 15] = clip(trim(line), 300); total++ }
+        if (cont != "") {
+            if (trim(line) != "") why[cont] = clip(why[cont] " " trim(line), 500)
+            cont = ""
+            next
+        }
+        if (line ~ /^Processing .*\.conf[ \t]*$/) { detail = ""; domain = ""; next }
+        if (line ~ /^[ \t]+Domain:/) { domain = after(line, "Domain:"); next }
+        if (line ~ /^[ \t]+Detail:/) {
+            if (detail == "") detail = (domain != "" ? domain ": " : "") after(line, "Detail:")
+            next
+        }
+        if (line ~ /^Failed to renew certificate [^ ]+ with error: /) {
+            fail($5, after(line, " with error: ")); next
+        }
+        if (line ~ /^Attempting to renew cert \(/ && index(line, "produced an unexpected error: ")) {
+            name = line; sub(/^Attempting to renew cert \(/, "", name); sub(/\).*/, "", name)
+            fail(name, after(line, "produced an unexpected error: ")); next
+        }
+        if (line ~ /^Renewal configuration file / && index(line, "(cert: ") && index(line, "produced an unexpected error: ")) {
+            name = substr(line, index(line, "(cert: ") + 7); sub(/\).*/, "", name)
+            fail(name, after(line, "produced an unexpected error: ")); next
+        }
+        if (line ~ /^Renewal configuration file [^ ]+ is broken/) {
+            name = $4; sub(/^.*\//, "", name); sub(/\.conf$/, "", name)
+            record(name, "renewal configuration file is broken."); cont = name; next
+        }
+        if (index(line, "/live/") && line ~ /^[ \t]+\// && line ~ /fullchain\.pem \(failure\)[ \t]*$/) {
+            name = substr(line, index(line, "/live/") + 6); sub(/\/.*/, "", name)
+            record(name, ""); next
+        }
+        if (line ~ /^[ \t]+\/.*\.conf \(parsefail\)[ \t]*$/) {
+            name = trim(line); sub(/ .*/, "", name); sub(/^.*\//, "", name); sub(/\.conf$/, "", name)
+            record(name, ""); next
+        }
+    }
+    END {
+        for (i = 1; i <= count; i++) printf "failed=%s\t%s\n", clip(order[i], 255), why[order[i]]
+        if (rc != 0) {
+            printf "output=certbot renew --dry-run ran for %s s and exited with code %s\n", seconds, rc
+            for (i = (total > 15 ? total - 15 : 0); i < total; i++) printf "output=%s\n", ring[i % 15]
+        }
+    }'
+    # END renewal-record-awk
+}
+# Brings the server-level ACME conf (the alias and the proxy exclusions of the challenge path) to the
+# content this helper ships, so a host whose conf predates it is repaired before any lineage is converted:
+# without the exclusions a vhost that proxies everything answers the challenge itself and the dry run of
+# the conversion fails. Apache is tested and reloaded only when the content changes. A conf Apache rejects
+# or cannot load is put back as it was and the function fails, so no lineage is converted against a
+# half-applied server.
+refresh_acme_conf() {
+    rac_new="$(mktemp)"
+    cat > "$rac_new" <<CONF
+#{include:certbot/aetheus-acme-webroot.conf}#
+CONF
+    if [ -f "$ACME_CONF" ] && cmp -s "$rac_new" "$ACME_CONF"; then
+        rm -f "$rac_new"
+        return 0
+    fi
+    rac_old="$(mktemp)"
+    rac_had=0
+    if [ -f "$ACME_CONF" ]; then cp "$ACME_CONF" "$rac_old"; rac_had=1; fi
+    cat "$rac_new" > "$ACME_CONF"
+    rm -f "$rac_new"
+    rac_error=""
+    if ! a2enconf aetheus-acme-webroot >/dev/null; then
+        rac_error="could not enable the new ACME configuration in Apache"
+    elif ! apache2ctl configtest; then
+        rac_error="Apache rejected the new ACME configuration"
+    elif ! systemctl reload apache2; then
+        rac_error="Apache could not reload the new ACME configuration"
+    fi
+    if [ -n "$rac_error" ]; then
+        if [ "$rac_had" -eq 1 ]; then cat "$rac_old" > "$ACME_CONF"; else rm -f "$ACME_CONF"; fi
+        rm -f "$rac_old"
+        echo "$rac_error: the previous one was restored and no lineage was converted." >&2
+        return 1
+    fi
+    rm -f "$rac_old"
+    echo "ACME configuration updated: the challenge path is served from $ACME_WEBROOT on every virtual host."
+}
+# Reads one Apache config file ($2) and handles its RewriteRule lines that proxy ([P] or [proxy]) in server
+# or virtual host context. The server-wide alias cannot reach those: mod_rewrite translates the URI first,
+# so the challenge goes to the application whatever ProxyPass exclusion the server carries (a rule that
+# matches the path also short-circuits mod_alias, so the rule must not match it). What keeps the challenge
+# out is a RewriteCond ahead of the rule. $1 = mode:
+#   scan     prints the line number of each such rule that has no condition naming the challenge yet
+#   protect  prints the whole file with that condition (and a marker comment) added ahead of each of them,
+#            ahead of the rule's own conditions, which keeps an [OR] chain intact
+# A rule whose own conditions require a websocket upgrade (RewriteCond %{HTTP:Upgrade} websocket, with no [OR]
+# among them) is neither reported nor changed: the challenge is a plain GET and never reaches it.
+# Rules in Directory, Location, Files or If sections are left alone (their per-directory rewrite does not
+# take the challenge away from the alias; proved on Apache 2.4.58), and so are rules that do not proxy.
+# Only POSIX awk features, mawk (Debian) included.
+rewrite_guard() {
+    # BEGIN rewrite-guard-awk
+    awk -v mode="$1" '
+    function proxies(text,   n, parts, last, m, flags, i, flag) {
+        n = split(text, parts, /[ \t]+/)
+        if (n < 4) return 0
+        last = parts[n]
+        if (last !~ /^\[.*\]$/) return 0
+        m = split(tolower(substr(last, 2, length(last) - 2)), flags, ",")
+        for (i = 1; i <= m; i++) {
+            flag = flags[i]; sub(/=.*/, "", flag)
+            if (flag == "p" || flag == "proxy") return 1
+        }
+        return 0
+    }
+    # RewriteCond %{HTTP:Upgrade} <pattern> where the pattern requires "websocket" (not negated).
+    function upgrades_websocket(text,   n, parts, pattern) {
+        n = split(text, parts, /[ \t]+/)
+        if (n < 3 || tolower(parts[2]) != "%{http:upgrade}") return 0
+        pattern = tolower(parts[3]); gsub(/"/, "", pattern)
+        if (substr(pattern, 1, 1) == "!") return 0
+        return index(pattern, "websocket") > 0
+    }
+    # The condition carries the OR (or ornext) flag, which makes the conditions around it alternatives.
+    function has_or(text,   n, parts, last, m, flags, i) {
+        n = split(text, parts, /[ \t]+/)
+        last = parts[n]
+        if (n < 4 || last !~ /^\[.*\]$/) return 0
+        m = split(tolower(substr(last, 2, length(last) - 2)), flags, ",")
+        for (i = 1; i <= m; i++) if (flags[i] == "or" || flags[i] == "ornext") return 1
+        return 0
+    }
+    BEGIN {
+        split("virtualhost ifmodule ifdefine ifversion ifdirective iffile ifsection macro", names, " ")
+        for (i in names) allowed[names[i]] = 1
+    }
+    { raw[NR] = $0 }
+    END {
+        i = 1; depth = 0; outside = 0; grouped = 0
+        while (i <= NR) {
+            start = i
+            text = raw[i]; sub(/\r$/, "", text)
+            while (text ~ /\\$/ && i < NR) { sub(/\\$/, " ", text); i++; piece = raw[i]; sub(/\r$/, "", piece); text = text piece }
+            i++
+            sub(/^[ \t]+/, "", text); sub(/[ \t]+$/, "", text)
+            if (text == "" || text ~ /^#/) continue
+            if (text ~ /^<\//) {
+                if (depth > 0) { if (!(stack[depth] in allowed)) outside--; depth-- }
+                grouped = 0; continue
+            }
+            if (text ~ /^</) {
+                name = text; sub(/^</, "", name); sub(/[^A-Za-z].*$/, "", name); name = tolower(name)
+                stack[++depth] = name
+                if (!(name in allowed)) outside++
+                grouped = 0; continue
+            }
+            directive = tolower(text); sub(/[ \t].*$/, "", directive)
+            if (directive == "rewritecond") {
+                if (!grouped) { groupStart = start; grouped = 1; guarded = 0; websocket = 0; ored = 0 }
+                if (index(text, "acme-challenge") > 0) guarded = 1
+                if (upgrades_websocket(text)) websocket = 1
+                if (has_or(text)) ored = 1
+                continue
+            }
+            # A rule whose conditions require a websocket upgrade never sees the challenge (a plain GET):
+            # unless an [OR] makes that condition optional, the rule is left alone (recette R-11).
+            if (directive == "rewriterule" && outside == 0 && proxies(text)) {
+                at = grouped ? groupStart : start
+                if (!(grouped && (guarded || (websocket && !ored)))) {
+                    if (mode == "scan") printf "%d\n", at
+                    else {
+                        match(raw[at], /^[ \t]*/); indent = substr(raw[at], 1, RLENGTH)
+                        before[at] = before[at] indent "# aetheus-acme-webroot: keeps the ACME challenge out of the proxy rule below (it is served from the web root)\n"
+                        before[at] = before[at] indent "RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/\n"
+                    }
+                }
+            }
+            grouped = 0
+        }
+        if (mode != "scan") for (j = 1; j <= NR; j++) { if (j in before) printf "%s", before[j]; print raw[j] }
+    }' "$2"
+    # END rewrite-guard-awk
+}
+# The Apache configuration files in effect: the ones Apache reports as included (when it can say so), plus
+# the enabled sites and conf snippets, one per line.
+apache_config_files() {
+    {
+        apache2ctl -t -D DUMP_INCLUDES 2>/dev/null | sed -n 's/^[[:space:]]*([^)]*)[[:space:]]*//p'
+        for acf_file in "$APACHE_DIR"/sites-enabled/* "$APACHE_DIR"/conf-enabled/*; do
+            [ -e "$acf_file" ] && printf '%s\n' "$acf_file"
+        done
+    } | sort -u
+}
+# Resolves a config file to the real file that may hold a virtual host rule: a regular file that is neither a
+# module file nor the Aetheus ACME conf itself. Prints nothing otherwise.
+apache_rule_file() {
+    arf_real="$(readlink -f "$1" 2>/dev/null)" || return 0
+    [ -f "$arf_real" ] || return 0
+    case "$arf_real" in
+        "$(readlink -f "$ACME_CONF")"|"$(readlink -f "$APACHE_DIR")"/mods-*) return 0 ;;
+    esac
+    printf '%s\n' "$arf_real"
+}
+# The same file when this helper may edit it, that is when it lives under the Apache directory.
+editable_apache_file() {
+    eaf_real="$(apache_rule_file "$1")"
+    case "$eaf_real" in
+        "$(readlink -f "$APACHE_DIR")"/*) printf '%s\n' "$eaf_real" ;;
+    esac
+}
+# Adds the challenge condition ahead of every proxying RewriteRule that lacks it, in the Apache files that
+# are server or virtual host configuration. Idempotent: a rule already preceded by a condition naming the
+# challenge is left alone, so a second run changes nothing and does not reload Apache. Reversible: the file
+# as found is kept once in $STATE_DIR/vhost-originals, and the added lines carry an aetheus-acme-webroot
+# comment. Apache is tested and reloaded when a file changed; a rejected test or a failed reload puts every
+# file back and fails the function, so no lineage is converted against a half-applied server.
+protect_proxy_rewrite_rules() {
+    ppr_work="$(mktemp -d)"
+    apache_config_files > "$ppr_work/files"
+    ppr_count=0
+    ppr_error=""
+    while IFS= read -r ppr_listed; do
+        ppr_real="$(editable_apache_file "$ppr_listed")"
+        [ -n "$ppr_real" ] || continue
+        rewrite_guard protect "$ppr_real" > "$ppr_work/new" || continue
+        cmp -s "$ppr_work/new" "$ppr_real" && continue
+        ppr_count=$((ppr_count + 1))
+        mkdir -p "$STATE_DIR/vhost-originals"
+        chmod 700 "$STATE_DIR/vhost-originals"
+        ppr_kept="$STATE_DIR/vhost-originals/$(printf '%s' "$ppr_real" | tr '/' '_')"
+        [ -e "$ppr_kept" ] || cp -p "$ppr_real" "$ppr_kept"
+        cp -p "$ppr_real" "$ppr_work/old.$ppr_count"
+        printf '%s\n' "$ppr_real" > "$ppr_work/path.$ppr_count"
+        # cp, never a shell redirection: a redirection opens the file with O_CREAT, which fs.protected_regular=2
+        # (Ubuntu's default) refuses even to root for a file another user owns in a group-writable sticky
+        # directory, as the agent's own vhosts in sites-available are. cp opens an existing file without it.
+        # The caller runs this function under ||, where set -e is off: every failure is checked here.
+        if ! cp "$ppr_work/new" "$ppr_real"; then
+            ppr_count=$((ppr_count - 1))
+            ppr_error="Could not write the ACME challenge condition into $ppr_real"
+            break
+        fi
+        echo "ACME challenge kept out of the proxying RewriteRule of $ppr_real"
+    done < "$ppr_work/files"
+    if [ -z "$ppr_error" ] && [ "$ppr_count" -eq 0 ]; then rm -rf "$ppr_work"; return 0; fi
+    if [ -z "$ppr_error" ]; then
+        if ! apache2ctl configtest; then
+            ppr_error="Apache rejected the ACME challenge condition added to its RewriteRule lines"
+        elif ! systemctl reload apache2; then
+            ppr_error="Apache could not reload the ACME challenge condition added to its RewriteRule lines"
+        fi
+    fi
+    if [ -n "$ppr_error" ]; then
+        ppr_i=1
+        while [ "$ppr_i" -le "$ppr_count" ]; do
+            ppr_back="$(cat "$ppr_work/path.$ppr_i")"
+            cp "$ppr_work/old.$ppr_i" "$ppr_back" || ppr_error="$ppr_error (and $ppr_back could not be restored)"
+            ppr_i=$((ppr_i + 1))
+        done
+        rm -rf "$ppr_work"
+        echo "$ppr_error: the previous files were restored and no lineage was converted." >&2
+        return 1
+    fi
+    rm -rf "$ppr_work"
+}
+# Records where a proxying RewriteRule still lets the challenge reach the application (files this helper may
+# not edit, or rules it left alone), one "rule=<file>:<line>" per rule, for the agent to report. Silent on a
+# host without Apache.
+record_unprotected_rewrite_rules() {
+    command -v apache2ctl >/dev/null 2>&1 || return 0
+    mkdir -p "$STATE_DIR"
+    chmod 755 "$STATE_DIR"
+    rur_work="$(mktemp -d)"
+    apache_config_files > "$rur_work/files"
+    : > "$rur_work/out"
+    while IFS= read -r rur_listed; do
+        rur_real="$(apache_rule_file "$rur_listed")"
+        [ -n "$rur_real" ] || continue
+        rewrite_guard scan "$rur_real" | while IFS= read -r rur_line; do
+            printf 'rule=%s:%s\n' "$rur_real" "$rur_line"
+        done >> "$rur_work/out"
+    done < "$rur_work/files"
+    chmod 644 "$rur_work/out"
+    mv -f "$rur_work/out" "$STATE_DIR/acme-proxy-rules"
+    rm -rf "$rur_work"
+}
 # Prints the helper version before anything else, so it answers on a host where certbot is missing too.
-[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 1"; exit 0; }
+[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 6"; exit 0; }
 command -v certbot >/dev/null 2>&1 || { echo "certbot not installed" >&2; exit 1; }
 verb="${1:-}"
 case "$verb" in
@@ -45,6 +372,9 @@ case "$verb" in
     certbot reconfigure --help >/dev/null 2>&1 \
         || { echo "certbot reconfigure is unavailable (certbot 2.3 or newer is required)" >&2; exit 1; }
     mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge"
+    refresh_acme_conf || exit 1
+    protect_proxy_rewrite_rules || exit 1
+    record_unprotected_rewrite_rules
     failed=0
     converted=0
     for conf in "$RENEWAL_DIR"/*.conf; do
@@ -71,28 +401,24 @@ case "$verb" in
     mkdir -p "$STATE_DIR"
     chmod 755 "$STATE_DIR"
     rc=0
-    # Recette R3-56: certbot's output is kept (and still printed, for the journal) so each lineage that
-    # fails the rehearsal is recorded with its reason, one "failed=<name><TAB><reason>" line, for the page.
+    # Recette R3-56 and R1-7: certbot's output is kept (and still printed, for the journal) so each lineage
+    # that fails the rehearsal is recorded with its reason, one "failed=<name><TAB><reason>" line, for the
+    # page. When the run fails, the last meaningful lines of the output follow as "output=<line>" lines, so
+    # the cause is visible even when no known message matched.
     log="$(mktemp)"
+    started=$(date +%s)
     certbot renew --dry-run --non-interactive >"$log" 2>&1 || rc=$?
+    finished=$(date +%s)
     cat "$log"
     {
-        printf 'checked_at=%s\nexit_code=%s\n' "$(date +%s)" "$rc"
-        tr -d '\r' < "$log" | awk '
-            /^Failed to renew certificate [^ ]+ with error: / {
-                reason = substr($0, index($0, " with error: ") + 13)
-                printf "failed=%s\t%s\n", $5, substr(reason, 1, 500)
-                next
-            }
-            /^Attempting to renew cert \(/ && index($0, "produced an unexpected error: ") {
-                name = $0; sub(/^Attempting to renew cert \(/, "", name); sub(/\).*/, "", name)
-                reason = substr($0, index($0, "produced an unexpected error: ") + 30)
-                printf "failed=%s\t%s\n", name, substr(reason, 1, 500)
-            }'
+        printf 'checked_at=%s\nexit_code=%s\n' "$finished" "$rc"
+        # Control characters other than tab and line feed (carriage return, escape) are dropped first.
+        tr -d '\000-\010\013-\037' < "$log" | renewal_record "$rc" "$((finished - started))"
     } > "$STATE_DIR/renewal-check.tmp"
     rm -f "$log"
     chmod 644 "$STATE_DIR/renewal-check.tmp"
     mv -f "$STATE_DIR/renewal-check.tmp" "$STATE_DIR/renewal-check"
+    record_unprotected_rewrite_rules || true
     exit "$rc" ;;
   renew-all)
     certbot renew --non-interactive ;;
@@ -105,6 +431,38 @@ case "$verb" in
   revoke)
     name="${2:-}"; valid_name "$name" || { echo "invalid cert name" >&2; exit 2; }
     certbot revoke --cert-name "$name" --delete-after-revoke --non-interactive ;;
+  remove-name)
+    # Recette R-12: reissue the lineage with every name it covers but one. Only a name the certificate holds
+    # can go, never its last one, and the lineage is reissued in place (same name), never deleted: when
+    # certbot fails, the current certificate stays as it was. Through the ACME web root, like normalize.
+    name="${2:-}"; valid_name "$name" || { echo "invalid cert name" >&2; exit 2; }
+    drop="${3:-}"; valid_domain "$drop" || { echo "invalid domain name" >&2; exit 2; }
+    drop=$(printf '%s' "$drop" | tr 'A-Z' 'a-z')
+    if [ ! -f "$ACME_ALIAS" ]; then
+        echo "Aetheus ACME alias not enabled in Apache: $name cannot be reissued through the web root." >&2
+        exit 1
+    fi
+    names="$(certificate_names "$name")"
+    [ -n "$names" ] || { echo "certificate $name not found" >&2; exit 1; }
+    # The names are split on blanks but never globbed: a wildcard name ("*.example.com") must reach the check
+    # below as written, not as the file names it would match in the working directory.
+    set -f
+    set --
+    found=0
+    kept=""
+    for domain in $names; do
+        valid_domain "$domain" || { echo "certificate $name holds a name this helper refuses to pass on: $domain" >&2; exit 1; }
+        if [ "$domain" = "$drop" ]; then found=1; continue; fi
+        set -- "$@" -d "$domain"
+        kept="$kept $domain"
+    done
+    [ "$found" -eq 1 ] || { echo "certificate $name does not cover $drop" >&2; exit 1; }
+    [ "$#" -gt 0 ] || { echo "$drop is the last name of $name: delete the certificate instead" >&2; exit 1; }
+    mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge"
+    certbot certonly --cert-name "$name" --webroot --webroot-path "$ACME_WEBROOT" --non-interactive --agree-tos \
+        --renew-with-new-domains "$@" \
+        || { echo "certbot could not reissue $name without $drop: the certificate was left as it was" >&2; exit 1; }
+    echo "$name reissued without $drop, now covering:$kept" ;;
   *)
     echo "unknown certbot-manage verb: $verb" >&2; exit 2 ;;
 esac

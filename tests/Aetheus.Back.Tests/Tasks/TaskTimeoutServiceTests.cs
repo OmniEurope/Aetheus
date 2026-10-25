@@ -93,7 +93,8 @@ public class TaskTimeoutServiceTests
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(TaskExecutionStatus.Timeout, orphaned.Status);
+        Assert.Equal(TaskExecutionStatus.Failed, orphaned.Status);
+        Assert.Equal(PipelineOutageReplayPolicy.NotReplayedReason, orphaned.FailureReason);
         Assert.Equal(clock.GetUtcNow().UtcDateTime, orphaned.CompletedAt);
         await repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

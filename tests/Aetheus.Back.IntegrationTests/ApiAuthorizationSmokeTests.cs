@@ -45,11 +45,15 @@ public sealed class ApiAuthorizationSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/pipelines/runs/1/checkpoint-resume-preview")]
     [InlineData("/api/pipelines/runs/1/lineage")]
     [InlineData("/api/pipelines/runs/1/migration-gate")]
+    [InlineData("/api/pipelines/runs/1/schema-tracking")]
+    [InlineData("/api/environments/1/schema-tracking")]
     [InlineData("/api/pipelines/1/runs/1/stage-baselines")]
     // Pipeline approvals have a distinct controller under the pipeline route.
     [InlineData("/api/pipelines/approvals/pending")]
     // Pipeline owner transfer (admin only).
     [InlineData("/api/pipelines/ownership/candidates")]
+    // Who reads each library and vault (recette R-65, R-66).
+    [InlineData("/api/pipelines/resource-usage")]
     [InlineData("/api/admin/performance")]
     [InlineData("/api/pipelines/templates")]
     [InlineData("/api/work-items")]

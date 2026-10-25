@@ -108,11 +108,11 @@ else
                 }
                 else
                 {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@TestAsync" Busy="@_testing" Disabled="@(!CanTest)"><OmniIcon Name="OmniIconName.WifiHigh" /> <span>@L["TestConnection"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@TestAsync" Busy="@_testing" Disabled="@(!CanTest)"><Icon><OmniIcon Name="OmniIconName.WifiHigh" /></Icon><ChildContent><span>@L["TestConnection"]</span></ChildContent></OmniButton>
                 }
             </SecondaryContent>
             <ChildContent>
-                <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /> <span>@(IsEdit ? L["Save"] : L["Create"])</span></OmniButton>
+                <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /></Icon><ChildContent><span>@(IsEdit ? L["Save"] : L["Create"])</span></ChildContent></OmniButton>
             </ChildContent>
         </DialogFooter>
     </OmniTemplateForm>

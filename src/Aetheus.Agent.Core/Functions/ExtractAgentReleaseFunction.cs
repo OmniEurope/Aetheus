@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>extract-agent-release</c> function, port of
-/// <c>deploy/scripts/extract-agent-release-from-image.sh</c>: the agent release a backend image serves
+/// the former <c>extract-agent-release-from-image.sh</c> script: the agent release a backend image serves
 /// is copied out of a stopped container (<c>docker create</c>, <c>docker cp</c>, the container always
 /// removed), then verified (<see cref="AgentReleaseManifestCheck"/>): the manifest names the expected
 /// commit, satisfies the protocol policy (<c>upgrade-bridge</c>: protocol 2 with the 1-2 bridge;
@@ -21,7 +21,6 @@ namespace Aetheus.Agent.Core.Functions;
 public sealed class ExtractAgentReleaseFunction : IPipelineFunction
 {
     internal const string ManifestName = AgentReleaseManifest.FileName;
-    internal const string DefaultSource = "/app/wwwroot/downloads/";
 
     private readonly IPipelineFunctionTools _tools;
 
@@ -100,6 +99,8 @@ public sealed class ExtractAgentReleaseFunction : IPipelineFunction
 
     private sealed record Request(string Image, string Source, string Output, string ExpectedCommit, string Mode, string ProtocolPolicy)
     {
+        internal const string DefaultSource = "/app/wwwroot/downloads/";
+
         public static Request From(PipelineFunctionContext context) => new(
             context.Parameters["image"],
             Optional(context, "source") ?? DefaultSource,

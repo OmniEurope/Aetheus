@@ -6,9 +6,9 @@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["LoadFailed"]</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniAlert>
 }
@@ -23,7 +23,7 @@
                  OnExportError="@OnExportFailed">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="AppErrorEventDto" Property="ExceptionType" Title="@L["ErrorType"]" Width="220px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_exceptionTypes" FilterSearchable="true" />
-        <OmniDataGridColumn TItem="AppErrorEventDto" Property="Message" Title="@L["Message"]" Filterable="true" ExportValue="@MessageExport">
+        <OmniDataGridColumn TItem="AppErrorEventDto" Property="Message" Truncate="true" Title="@L["Message"]" Filterable="true" ExportValue="@MessageExport">
             <Template Context="e">
                 <span title="@e.Message">@e.Message</span>
                 @if (!string.IsNullOrEmpty(e.TopFrame))

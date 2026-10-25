@@ -7,7 +7,7 @@ using Aetheus.Tests.Shared;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c>, run through the real
+/// The C# port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c>, run through the real
 /// executor on every case the script itself was run on (<see cref="AssuranceReferenceData"/>): the
 /// contract and the evidence files must be the script's bytes, the published grade and the log line the
 /// script's, and a refusal the script's message. A case where the script crashed (a TypeError, a

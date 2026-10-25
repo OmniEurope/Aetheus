@@ -256,6 +256,21 @@ internal sealed class PipelineCoreRepository(
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<List<StepFailureProjection>> GetFailedStepsAsync(int runId, int max, CancellationToken ct = default)
+    {
+        return await db.PipelineStepRuns
+            .AsNoTracking()
+            .Where(s => s.PipelineRunId == runId && s.Status == TaskExecutionStatus.Failed)
+            .OrderBy(s => s.ContinueOnError)
+            .ThenBy(s => s.Order)
+            .Take(Math.Clamp(max, 1, 20))
+            .Select(s => new StepFailureProjection(
+                s.StageName, s.StepName, s.MatrixLeg, s.ExitCode,
+                s.Task != null && s.Task.FailureCode != null ? s.Task.FailureCode : s.FailureCode,
+                s.Task != null && s.Task.FailureReason != null ? s.Task.FailureReason : s.FailureReason))
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task<PipelineRun?> GetPipelineRunWithPipelineAsync(int runId, CancellationToken ct = default)
     {
         return await db.PipelineRuns
@@ -464,6 +479,10 @@ internal sealed class PipelineCoreRepository(
 
     public Task CancelActiveStepRunsAndTasksAsync(int runId, CancellationToken ct = default)
         => _cancellation.CancelActiveStepRunsAndTasksAsync(runId, ct);
+
+    public Task CancelActiveTasksOfStepRunsAsync(
+        int runId, IReadOnlyCollection<int> stepRunIds, CancellationToken ct = default)
+        => _cancellation.CancelActiveTasksOfStepRunsAsync(runId, stepRunIds, ct);
 
     public Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default)
         => _cancellation.CancelPendingStepRunsAsync(runId, ct);

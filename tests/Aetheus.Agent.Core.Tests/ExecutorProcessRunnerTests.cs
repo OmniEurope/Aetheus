@@ -38,6 +38,36 @@ public sealed class ExecutorProcessRunnerTests
         Assert.True(health.IsIdle);
     }
 
+    // R-36: the real lines of docker compose, jscpd and trivy arrive on a real stderr pipe; only the line that
+    // states an error is an Error, the others stay visible without being red, and none is lost.
+    [Fact]
+    public async Task RunAsync_ToolProgressOnStderr_IsNotLoggedAsAnError()
+    {
+        var runner = new ExecutorProcessRunner(
+            new AgentRuntimeHealth(TimeProvider.System),
+            NullLogger<ExecutorProcessRunner>.Instance);
+        var output = new ConcurrentQueue<(string Line, TaskLogLevel Level)>();
+
+        var result = await runner.RunAsync(
+            BuildStderrCommand(),
+            timeoutSeconds: 10,
+            (line, level) =>
+            {
+                output.Enqueue((line, level));
+                return Task.CompletedTask;
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        var levels = output
+            .GroupBy(entry => entry.Line.Trim())
+            .ToDictionary(group => group.Key, group => group.First().Level);
+        Assert.Equal(TaskLogLevel.Warning, levels["[stderr] Volume aetheus-qa-rollback-2848-x Creating"]);
+        Assert.Equal(TaskLogLevel.Warning, levels["[stderr] Using config from .jscpd.json"]);
+        Assert.Equal(TaskLogLevel.Info, levels["[stderr] INFO Detected OS family=ubuntu"]);
+        Assert.Equal(TaskLogLevel.Error, levels["ERROR the scan failed"]);
+    }
+
     [Fact]
     public async Task RunAsync_ExternalCancellation_TerminatesAndWaitsForDescendantTree()
     {
@@ -81,7 +111,8 @@ public sealed class ExecutorProcessRunnerTests
             while (health.ActiveProcessCount > 0 && settle.Elapsed < TimeSpan.FromSeconds(10))
                 await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
 
-            Assert.Equal(0, health.ActiveProcessCount);
+            Assert.True(health.ActiveProcessCount == 0,
+                "Still counted after cancellation: " + string.Join(" | ", health.DescribeActiveProcesses()));
             Assert.True(health.IsIdle);
 
             await Task.Delay(TimeSpan.FromSeconds(WitnessDelaySeconds + 1), TestContext.Current.CancellationToken);
@@ -128,6 +159,35 @@ public sealed class ExecutorProcessRunnerTests
         startInfo.ArgumentList.Add("-c");
         startInfo.ArgumentList.Add(
             $"/bin/sh -c 'sleep {WitnessDelaySeconds}; printf survived > \"{linuxSurvivor}\"' & wait");
+        return startInfo;
+    }
+
+    private static ProcessStartInfo BuildStderrCommand()
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        if (OperatingSystem.IsWindows())
+        {
+            startInfo.FileName = "cmd.exe";
+            startInfo.ArgumentList.Add("/d");
+            startInfo.ArgumentList.Add("/c");
+            startInfo.ArgumentList.Add(
+                "(echo Volume aetheus-qa-rollback-2848-x Creating)1>&2 & (echo Using config from .jscpd.json)1>&2"
+                + " & (echo INFO Detected OS family=ubuntu)1>&2 & (echo ERROR the scan failed)1>&2");
+            return startInfo;
+        }
+
+        startInfo.FileName = "/bin/sh";
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add(
+            "printf '%s\\n' 'Volume aetheus-qa-rollback-2848-x Creating' 'Using config from .jscpd.json'"
+            + " 'INFO Detected OS family=ubuntu' 'ERROR the scan failed' >&2");
         return startInfo;
     }
 

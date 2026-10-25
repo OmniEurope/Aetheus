@@ -2,7 +2,6 @@
 using Aetheus.Back.Components.Logs;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
-using Aetheus.Back.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

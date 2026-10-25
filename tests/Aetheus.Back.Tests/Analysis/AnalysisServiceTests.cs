@@ -66,6 +66,54 @@ public sealed class AnalysisServiceTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    private AnalysisService CreateServiceWithSignal(IAnalysisPublicationSignal signal)
+    {
+        var repository = new AnalysisRepository(_db);
+        return new AnalysisService(
+            repository,
+            new AnalysisIngestGate(Options.Create(new AnalysisPlatformOptions())),
+            new AnalysisPolicyEngine(repository),
+            _time,
+            Substitute.For<IAuditService>(),
+            Substitute.For<IDbTransactionScope>(),
+            Substitute.For<IEntityChangeNotifier>(),
+            Substitute.For<INotificationService>(),
+            _dependencyTrackOutbox,
+            Options.Create(new AnalysisPlatformOptions()),
+            Options.Create(new DependencyTrackOptions()),
+            signal);
+    }
+
+    /// <summary>R1-12: the people watching the run are told the publication started and, in the end, that it ended.</summary>
+    [Fact]
+    public async Task PublishReportAsync_AnnouncesTheStartAndTheEnd_ToTheRunsWatchers()
+    {
+        var signal = Substitute.For<IAnalysisPublicationSignal>();
+        var service = CreateServiceWithSignal(signal);
+
+        var report = await service.PublishReportAsync(1, Request(), TestContext.Current.CancellationToken);
+
+        Assert.NotNull(report);
+        Received.InOrder(() =>
+        {
+            signal.AnnounceAsync(1, true, Arg.Any<CancellationToken>());
+            signal.AnnounceAsync(1, false, Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task PublishReportAsync_AnnouncesTheEnd_EvenWhenThePublicationFails()
+    {
+        var signal = Substitute.For<IAnalysisPublicationSignal>();
+        var service = CreateServiceWithSignal(signal);
+
+        await Assert.ThrowsAsync<NotFoundException>(
+            () => service.PublishReportAsync(999, Request(), TestContext.Current.CancellationToken));
+
+        await signal.Received(1).AnnounceAsync(999, true, Arg.Any<CancellationToken>());
+        await signal.Received(1).AnnounceAsync(999, false, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task PublishReportAsync_MarksMissingFindingFixedOnReferenceScan()
     {
@@ -254,6 +302,17 @@ public sealed class AnalysisServiceTests : IDisposable
         Assert.Equal(0, decided.FindingCount);
         Assert.Equal(0, decided.NewFindingCount);
         Assert.Equal(1, decided.DecidedFindingCount);
+
+        // Recette R1-35: a fixed finding is no decision; it is neither counted as decided nor listed.
+        finding.Status = AnalysisFindingStatus.Fixed;
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var fixedGate = await new AnalysisRepository(_db).GetRunGateAsync(
+            1, TestContext.Current.CancellationToken);
+
+        Assert.Empty(fixedGate.Findings);
+        Assert.Equal(0, fixedGate.FindingCount);
+        Assert.Equal(0, fixedGate.DecidedFindingCount);
     }
 
     [Fact]
@@ -435,6 +494,57 @@ public sealed class AnalysisServiceTests : IDisposable
         Assert.Equal(AnalysisGrade.C, gate.Grade!.OverallGrade);
         Assert.Equal(AnalysisGrade.B, gate.Grade.MinimumGrade);
         Assert.Equal(AnalysisGateStatus.Blocked, gate.Status);
+    }
+
+    /// <summary>Recette R-17: the violations of a gate carry the human name of their policy, read from the
+    /// policy of the run's own organization and project, never from another tenant's homonym.</summary>
+    [Fact]
+    public async Task GetRunGateAsync_ViolationsCarryTheNameOfTheirPolicy_OfTheRunsOwnTenantOnly()
+    {
+        var report = new AnalysisReport
+        {
+            Id = 779,
+            OrganizationId = 1,
+            ProjectId = 1,
+            PipelineRunId = 3,
+            PipelineArtifactId = 103,
+            ScannerKey = "coverage",
+            ScannerName = "Coverage",
+            ScannerVersion = "1.0",
+            Category = AnalysisCategory.Coverage,
+            Status = AnalysisReportStatus.Passed,
+            Format = AnalysisReportFormat.MetricsJson,
+            ContentHash = new string('f', 64),
+            CommitHash = new string('b', 40),
+            CompletedAt = _now,
+            CreatedAt = _now,
+            Evaluation = new AnalysisEvaluation
+            {
+                OrganizationId = 1,
+                ProjectId = 1,
+                PipelineRunId = 3,
+                Status = AnalysisGateStatus.Blocked,
+                PolicySnapshotJson = """
+                    {"Aggregates":[{"Outcome":"Block","Source":"policy:coverage.line.minimum:Project:v1",
+                    "TargetKind":"metric","TargetKey":"coverage.line.percent","Count":1}]}
+                    """,
+                PolicySnapshotHash = new string('e', 64),
+                EvaluatedAt = _now,
+                CreatedAt = _now
+            }
+        };
+        _db.AnalysisReports.Add(report);
+        _db.AnalysisPolicies.AddRange(
+            new AnalysisPolicy { OrganizationId = 1, ProjectId = 1, PolicyKey = "coverage.line.minimum", Name = "Couverture de lignes minimale", Version = 1 },
+            new AnalysisPolicy { OrganizationId = 2, ProjectId = 7, PolicyKey = "coverage.line.minimum", Name = "Règle d'un autre client", Version = 1 });
+        await _db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var gate = await new AnalysisRepository(_db).GetRunGateAsync(
+            3, AnalysisGateScopes.Quality, TestContext.Current.CancellationToken);
+
+        var violation = Assert.Single(gate.Violations);
+        Assert.Equal("coverage.line.minimum", violation.PolicyKey);
+        Assert.Equal("Couverture de lignes minimale", violation.PolicyName);
     }
 
     [Fact]

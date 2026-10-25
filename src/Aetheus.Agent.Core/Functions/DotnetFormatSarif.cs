@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/convert-dotnet-format-report.mjs</c>, the helper
+/// Port of the former <c>convert-dotnet-format-report.mjs</c> script, the helper
 /// <c>run-affected-dotnet-format.sh</c> ran through Node: turns the JSON report of
 /// <c>dotnet format --report</c> into a SARIF 2.1.0 log, one <c>note</c> result per file change, with
 /// the same rule id, message, fingerprint and location rules, and the same refusals.

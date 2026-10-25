@@ -13,7 +13,7 @@ namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
 /// The frontend contract of the smoke step: the origin's root must answer 2xx with an HTML shell marked
-/// <c>no-store</c>, and each way of missing it is one blocking finding with its own explanation. Readiness
+/// <c>no-cache</c> (revalidated, never <c>no-store</c>: recette R-8), and each way of missing it is one blocking finding with its own explanation. Readiness
 /// answers 200 throughout, so the frontend is the only probe that can find anything. The probes go through
 /// the handler the executor is given, never a listening socket.
 /// </summary>
@@ -25,7 +25,10 @@ public sealed class SmokeFrontendContractTests
     {
         { "error", "Frontend returned 502." },
         { "not-html", "Frontend did not return an HTML shell." },
-        { "cacheable", "Frontend shell is cacheable; a cached shell strands the app on retired runtime hashes." },
+        { "cacheable", "Frontend shell is not revalidated on every use; a cached shell strands the app on retired runtime hashes." },
+        { "no-store", "Frontend shell is not revalidated on every use; a cached shell strands the app on retired runtime hashes." },
+        { "private","Frontend shell is not revalidated on every use; a cached shell strands the app on retired runtime hashes." },
+        { "no-header", "Frontend shell is not revalidated on every use; a cached shell strands the app on retired runtime hashes." },
         { "unreachable", "Frontend probe failed: connection refused" },
     };
 
@@ -42,12 +45,12 @@ public sealed class SmokeFrontendContractTests
     }
 
     [Fact]
-    public async Task ANoStoreHtmlShell_PassesTheContract()
+    public async Task ANoCacheHtmlShell_PassesTheContract()
     {
-        var (result, log) = await Smoke("no-store");
+        var (result, log) = await Smoke("no-cache");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains(("Frontend contract passed (HTML shell, no-store).", TaskLogLevel.Info), log);
+        Assert.Contains(("Frontend contract passed (HTML shell, no-cache).", TaskLogLevel.Info), log);
         Assert.Contains(("##aetheus[setvariable name=SMOKE_FINDINGS]0", TaskLogLevel.Info), log);
     }
 
@@ -81,9 +84,14 @@ public sealed class SmokeFrontendContractTests
             {
                 Content = new StringContent(shell == "not-html" ? "{\"status\":\"ok\"}" : "<!doctype html><html><body></body></html>"),
             };
-            response.Headers.CacheControl = shell == "no-store"
-                ? new CacheControlHeaderValue { NoStore = true }
-                : new CacheControlHeaderValue { MaxAge = TimeSpan.FromHours(1) };
+            response.Headers.CacheControl = shell switch
+            {
+                "no-store" => new CacheControlHeaderValue { NoStore = true, NoCache = true, MustRevalidate = true },
+                "no-cache" => new CacheControlHeaderValue { NoCache = true },
+                "private" => new CacheControlHeaderValue { Private = true },
+                "no-header" => null,
+                _ => new CacheControlHeaderValue { MaxAge = TimeSpan.FromHours(1) },
+            };
             return Task.FromResult(response);
         }
     }

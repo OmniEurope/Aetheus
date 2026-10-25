@@ -150,7 +150,7 @@ public sealed class ScannerOperationExecutor(
     {
         await invocation.OnOutput(
             $"Scanner resource request: memory={invocation.Scanner.Memory}, cpus={invocation.Scanner.Cpus}; " +
-            "candidate budget=6.5GiB/7CPU, at most one heavy scanner.",
+            "candidate budget=6.5 Go/7CPU, at most one heavy scanner.",
             TaskLogLevel.Info).ConfigureAwait(false);
         var timer = Stopwatch.StartNew();
         resources.ResourceReservation = await ScannerResourceBudget.Shared.AcquireAsync(
@@ -238,7 +238,8 @@ public sealed class ScannerOperationExecutor(
     {
         await LogStartedAsync(invocation, scannerVersion).ConfigureAwait(false);
         var run = await RunToReportAsync(
-            invocation, process, reportPath, cacheDirectory, effectiveEnvironment, string.Empty).ConfigureAwait(false);
+            invocation, process, sourceDirectory, reportPath, cacheDirectory, effectiveEnvironment, string.Empty)
+            .ConfigureAwait(false);
         return run.Failure ?? await PublishSuccessfulReportAsync(
             invocation, reportPath, rulesDirectory, scannerVersion, run.ExitCode).ConfigureAwait(false);
     }
@@ -251,6 +252,7 @@ public sealed class ScannerOperationExecutor(
     private async Task<(ExecutorResult? Failure, int ExitCode)> RunToReportAsync(
         ScanInvocation invocation,
         ProcessStartInfo process,
+        string sourceDirectory,
         string reportPath,
         string? cacheDirectory,
         IReadOnlyDictionary<string, string> effectiveEnvironment,
@@ -259,7 +261,8 @@ public sealed class ScannerOperationExecutor(
         var executionRunner = new ScannerProcessExecutionRunner(processRunner, timeProvider);
         var (result, outputQuotaExceeded) = await executionRunner.RunAsync(
             invocation.Scanner, process, reportPath, invocation.OutputDirectory, cacheDirectory,
-            invocation.TimeoutSeconds, invocation.OnOutput, invocation.CancellationToken).ConfigureAwait(false);
+            invocation.TimeoutSeconds, invocation.OnOutput, invocation.CancellationToken, sourceDirectory)
+            .ConfigureAwait(false);
         var status = AnalysisReportStatus.Error;
         string? error;
         if (outputQuotaExceeded)
@@ -293,8 +296,8 @@ public sealed class ScannerOperationExecutor(
                 return process.Failure is not null
                     ? (process.Failure, 0)
                     : await RunToReportAsync(
-                        partition, process.Process!, partitionReport, cacheDirectory, partitionEnvironment, scope)
-                        .ConfigureAwait(false);
+                        partition, process.Process!, sourceDirectory, partitionReport, cacheDirectory,
+                        partitionEnvironment, scope).ConfigureAwait(false);
             }).ConfigureAwait(false);
         if (outcome.Failure is not null) return outcome.Failure;
         var merged = new FileInfo(reportPath);
@@ -470,7 +473,7 @@ public sealed class ScannerOperationExecutor(
     {
         if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
             throw new PlatformNotSupportedException("This verified scanner binary is available only for Linux x64.");
-        RequireVerifiedDownload(scanner);
+        OpenGrepSandbox.RequireVerifiedDownload(scanner);
 
         var binaryPath = OpenGrepSandbox.BinaryPath(_options.WorkDirectory, scanner);
         await OpenGrepSandbox.EnsureBinaryAsync(scanner, binaryPath, DownloadScannerAsync, ct).ConfigureAwait(false);
@@ -486,15 +489,6 @@ public sealed class ScannerOperationExecutor(
             scanner, binaryPath, mounts,
             ScannerOperationValidator.ResolveArguments(scanner.Arguments, new Dictionary<string, string>(), "/src",
                 "/out/" + scanner.ReportPath, "/rules", "/out"));
-    }
-
-    /// <summary>The HTTPS download of a binary scanner, refused unless the manifest pins its SHA-256.</summary>
-    internal static Uri RequireVerifiedDownload(ScannerManifestEntry scanner)
-    {
-        if (!Uri.TryCreate(scanner.DownloadUriLinuxAmd64, UriKind.Absolute, out var downloadUri)
-            || downloadUri.Scheme != Uri.UriSchemeHttps || scanner.Sha256LinuxAmd64?.Length != 64)
-            throw new IOException("Binary scanner manifest entry is incomplete.");
-        return downloadUri;
     }
 
     /// <summary>The report directory, once the scanner has its rules (OpenGrep) and a runtime image

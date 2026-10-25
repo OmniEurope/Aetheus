@@ -241,8 +241,24 @@ internal static class ServerDataMapper
         RenewalCheckedAt = server.CertbotState?.RenewalCheckedAt,
         RenewalCheckSucceeded = server.CertbotState?.RenewalCheckSucceeded,
         HelperVersion = server.CertbotState?.HelperVersion ?? 0,
-        RenewalCheckFailures = ReadRenewalFailures(server.CertbotState?.RenewalCheckFailuresJson)
+        RenewalCheckFailures = ReadRenewalFailures(server.CertbotState?.RenewalCheckFailuresJson),
+        RenewalCheckOutputTail = ReadStringList(server.CertbotState?.RenewalCheckOutputTailJson),
+        AcmeProxyRules = ReadStringList(server.CertbotState?.AcmeProxyRulesJson)
     };
+
+    // Recettes R1-7 and R-2: an unreadable column reads as an empty list, never as a crash of the page.
+    private static List<string> ReadStringList(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
 
     // Recette R3-56: an unreadable column reads as no reported failure, never as a crash of the page.
     private static List<CertbotRenewalFailureDto> ReadRenewalFailures(string? json)

@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/run-affected-dotnet-format.sh</c>, run through the real executor
+/// The C# port of the former <c>run-affected-dotnet-format.sh</c> script, run through the real executor
 /// on a temp workspace unique to each test, with Git and dotnet answered by fakes: the fail-closed
 /// scope decision, the <c>dotnet restore</c> and <c>dotnet format</c> command lines, the published
 /// mode and status, and the refusals of missing or inconsistent evidence.

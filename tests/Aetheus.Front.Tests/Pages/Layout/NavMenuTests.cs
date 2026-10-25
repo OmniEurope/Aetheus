@@ -166,4 +166,51 @@ public class NavMenuTests : BunitContext
         Assert.DoesNotContain("servers/3/mail", cut.Markup);
         Assert.DoesNotContain("servers/3/docker", cut.Markup);
     }
+
+    // R1-28: the server's own mail entry, under Services, only once its mail stack is installed.
+    private async Task SeedOpenServerAsync(int id, bool mailInstalled)
+    {
+        var server = Servers.ServerTestData.MakeMailServer(installed: mailInstalled) with { Id = id };
+        _handler.SetJsonResponse($"api/servers/{id}", server);
+        _handler.SetJsonResponse($"api/monitoring/servers/{id}/metrics", new List<Aetheus.Shared.Components.Monitoring.ServerMetricDto>());
+        var loader = Services.GetRequiredService<Aetheus.Front.Components.Shared.ServerDetailLoader>();
+        await loader.EnsureLoadedAsync(id);
+    }
+
+    [Fact]
+    public async Task R1_28_ServerSubMenu_ListsTheMailEntryRightAfterServices_WhenTheMailStackIsInstalled()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers/7/overview");
+        await SeedOpenServerAsync(7, mailInstalled: true);
+
+        var cut = Render<NavMenu>();
+
+        var hrefs = cut.FindAll("a[href^='servers/7/']").Select(link => link.GetAttribute("href")).ToList();
+        var services = hrefs.IndexOf("servers/7/services");
+        Assert.True(services >= 0);
+        Assert.Equal("servers/7/mail", hrefs[services + 1]);
+        Assert.Contains("Mail", cut.Find("a[href='servers/7/mail']").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R1_28_ServerSubMenu_HidesTheMailEntry_WhenNoMailStackIsInstalled()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers/7/overview");
+        await SeedOpenServerAsync(7, mailInstalled: false);
+
+        var cut = Render<NavMenu>();
+
+        Assert.Empty(cut.FindAll("a[href='servers/7/mail']"));
+    }
+
+    [Fact]
+    public async Task R1_28_ServerSubMenu_HidesTheMailEntry_WhenTheLoadedServerIsAnotherOne()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("servers/7/overview");
+        await SeedOpenServerAsync(3, mailInstalled: true);
+
+        var cut = Render<NavMenu>();
+
+        Assert.Empty(cut.FindAll("a[href='servers/7/mail']"));
+    }
 }

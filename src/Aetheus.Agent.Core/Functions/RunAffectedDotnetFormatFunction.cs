@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>run-affected-dotnet-format</c> function, port of
-/// <c>deploy/scripts/run-affected-dotnet-format.sh</c> (the script no longer exists): checks formatting
+/// the former <c>run-affected-dotnet-format.sh</c> script (no longer in the repository): checks formatting
 /// only, running <c>dotnet format whitespace</c> then <c>dotnet format style</c> with
 /// <c>--verify-no-changes</c> on the files changed since the delivery baseline
 /// (<see cref="AffectedFormatScope"/>, whole solution whenever the narrowing is not provably safe). The
@@ -43,12 +43,6 @@ namespace Aetheus.Agent.Core.Functions;
 /// </summary>
 public sealed class RunAffectedDotnetFormatFunction : IPipelineFunction
 {
-    internal const string ReportDirectoryName = ".analysis-format";
-
-    /// <summary>The formatting checks, in run order. <c>dotnet format</c> without a subcommand adds an
-    /// analyzers pass (about three quarters of its time) that the Roslyn security report already covers.</summary>
-    private static readonly string[] Subcommands = ["whitespace", "style"];
-
     private readonly IPipelineFunctionTools _tools;
 
     public RunAffectedDotnetFormatFunction()
@@ -87,6 +81,12 @@ public sealed class RunAffectedDotnetFormatFunction : IPipelineFunction
     /// scope, then its evidence.</summary>
     private sealed class FormatRun(PipelineFunctionContext context, IPipelineFunctionTools tools, string solution, string dotnet, bool restore)
     {
+        private const string ReportDirectoryName = ".analysis-format";
+
+        /// <summary>The formatting checks, in run order. <c>dotnet format</c> without a subcommand adds an
+        /// analyzers pass (about three quarters of its time) that the Roslyn security report already covers.</summary>
+        private static readonly string[] Subcommands = ["whitespace", "style"];
+
         private readonly string _workspace = context.Workspace!;
         private string ReportDirectory => Path.Combine(_workspace, ReportDirectoryName);
         private string ReportJson => Path.Combine(ReportDirectory, "format-report.json");

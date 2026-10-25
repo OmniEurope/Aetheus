@@ -15,7 +15,7 @@ else
         VirtualData="@(() => new OmniDataGridResult<ServerTaskDto>(_result.Items, _result.TotalCount))">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ServerTaskDto" Property="Name" Title="@L["Task"]" Filterable="true" />
-            <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
             <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" ExportValue="@SourceExport" Width="210px" Sortable="false" Filterable="false" >
                 <Template Context="task">
                     @if (task.PipelineRunId is { } pipelineRunId)
@@ -31,10 +31,10 @@ else
             <OmniDataGridColumn TItem="ServerTaskDto" Property="Status" Title="@L["Status"]" Width="220px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="task">
                     @* Each status its colour, the one mapping of the server task pages. *@
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)">@L[task.Status.ToString()]</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)">@L[task.Status.ToString()]</OmniBadge>
                     @if (!string.IsNullOrWhiteSpace(task.FailureCode))
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetFailureBadge(task.FailureCode)" title="@task.FailureReason" Class="omni-u-ms-xs"><Icon><OmniIcon Name="@GetFailureIcon(task.FailureCode)" /></Icon><ChildContent>@L[task.FailureCode]</ChildContent></OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetFailureBadge(task.FailureCode)" title="@task.FailureReason" Class="omni-u-ms-xs"><Icon><OmniIcon Name="@GetFailureIcon(task.FailureCode)" /></Icon><ChildContent>@L[task.FailureCode]</ChildContent></OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>

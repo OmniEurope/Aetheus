@@ -48,8 +48,8 @@
                     <OmniFormField Label="@L["DkimSelector"]" Help="@L["MailDkimSelectorHelp"]" For="mail-setup-dkim">
                         <OmniTextBox Id="mail-setup-dkim" @bind-Value="_model.DkimSelector" Placeholder="default" />
                     </OmniFormField>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckMxAsync" Disabled="@(!CanCheckMx)" Busy="@_checkingMx"><OmniIcon Name="OmniIconName.Database" /> <span>@L["MailCheckCurrentRouting"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckMxAsync" Disabled="@(!CanCheckMx)" Busy="@_checkingMx"><Icon><OmniIcon Name="OmniIconName.Database" /></Icon><ChildContent><span>@L["MailCheckCurrentRouting"]</span></ChildContent></OmniButton>
                         @if (_mxCheckFailed || (PreviewMatchesDomain && _mxPreview!.Verdict == MailCheckVerdict.Unknown))
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["MailRoutingCheckFailed"]</OmniText>
@@ -76,8 +76,8 @@
                     <OmniCodeBlock Title="@($"A {Host}")" Code="@ServerIp" Inline="true" />
                     <MailCheckLine Label="@L["MailDiagHostnameDns"]" IsOk="@(ARecord is null ? null : ARecordOk)"
                                    Detail="@(ARecord is null ? null : MailUiText.Detail(L, ARecord.Detail))" Class="mail-prereq-a" />
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L["MailCheckPrerequisite"]</span></ChildContent></OmniButton>
                         @if (_dnsCheckFailed)
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@L["MailPrerequisiteCheckFailed"]</OmniText>
@@ -92,8 +92,8 @@
                     <OmniCodeBlock Title="@($"PTR {ServerIp}")" Code="@Host" Inline="true" />
                     <MailCheckLine Label="@L["MailDiagReverseDns"]" IsOk="@(ReverseDns is null ? null : ReverseDnsOk)"
                                    Detail="@(ReverseDns is null ? null : MailUiText.Detail(L, ReverseDns.Detail))" Class="mail-prereq-ptr" />
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckDnsAsync" Busy="@_checkingDns" Class="mail-prereq-check"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L["MailCheckPrerequisite"]</span></ChildContent></OmniButton>
                         @if (_dnsCheckFailed)
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@L["MailPrerequisiteCheckFailed"]</OmniText>
@@ -112,8 +112,8 @@
                     }
                     else
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ProbeOutboundAsync" Disabled="@AgentOffline" title="@ProbeTitle" Busy="@(_probeQueuing || _probeTaskId is not null)" Class="mail-prereq-check"><OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailCheckPrerequisite"]</span></OmniButton>
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ProbeOutboundAsync" Disabled="@AgentOffline" title="@ProbeTitle" Busy="@(_probeQueuing || _probeTaskId is not null)" Class="mail-prereq-check"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L["MailCheckPrerequisite"]</span></ChildContent></OmniButton>
                             @if (AgentOffline)
                             {
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mail-setup-agent-offline">@L["AgentOfflineActionBlocked"]</OmniText>
@@ -136,7 +136,7 @@
                     <OmniFormField Label="@L["AdminPassword"]" Help="@($"{L["MailAdminPasswordHelp"]} {string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)}")" For="mail-setup-password">
                         <OmniPassword Id="mail-setup-password" @bind-Value="_model.Password" Autocomplete="new-password" />
                     </OmniFormField>
-                    <OmniFormField Help="@L["MailQuotaHelp"]" For="mail-setup-quota"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent>
+                    <OmniFormField Help="@L["MailQuotaHelp"]" For="mail-setup-quota"><LabelContent>@($"{L["Quota"]} (Mo)")</LabelContent><ChildContent>
                         <OmniNumeric Id="mail-setup-quota" @bind-Value="_model.QuotaMb" Minimum="10" Maximum="102400" />
                     </ChildContent></OmniFormField>
                     <OmniFormField Label="@L["MailSpamFilter"]" Help="@L["MailSpamFilterHelp"]" For="mail-setup-spam">

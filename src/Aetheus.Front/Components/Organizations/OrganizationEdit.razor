@@ -28,9 +28,9 @@ else
                 <OmniTextArea @bind-Value="_model.Description" Rows="3" Id="oe-pages-organizations-organizationedit-3" />
             </ChildContent></OmniFormField>
             <ValidationSummary />
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo("/admin/organizations"))"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo("/admin/organizations"))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
             </OmniStack>
         </OmniStack>
     </OmniTemplateForm></div>

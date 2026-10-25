@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/list-failed-tests.mjs</c>, both halves: <c>record</c>, which the ported
+/// Port of the former <c>list-failed-tests.mjs</c> script, both halves: <c>record</c>, which the ported
 /// suite runners call (<see cref="RecordAsync"/>), and <c>publish</c>, which the
 /// <c>publish-failed-tests</c> function runs over TRX files and failed-tests lists
 /// (<see cref="Collect"/>). The failed, errored, timed-out and aborted tests of a TRX, each once and in

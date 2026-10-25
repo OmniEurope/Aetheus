@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+
 namespace Aetheus.Agent.Core.Operations;
 
 /// <summary>Run typed mail operations through root-owned mail-setup or mail-manage using the exact

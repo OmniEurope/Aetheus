@@ -37,15 +37,18 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
     }
 
     [Fact]
-    public void R2_138_EveryCountedRuleAlert_IsNamedUnderTheTiles()
+    public void R1_36_ARuleAlertIsNeitherATileNorAList_AThresholdIsAFinding()
     {
-        // Nightly 2653 counted 4 violations and named none: cycles, complex methods, a new medium finding.
+        // The API still carries the policy alerts. The tab does not show them: what a threshold detects is a
+        // finding (ADR-053), listed and counted with the others.
         var gate = new AnalysisRunGateDto
         {
             PipelineRunId = 2653,
+            FindingCount = 1,
+            Findings = [new AnalysisRunGateFindingDto { FindingId = 1, Title = "coverage.line.percent is below its threshold", Status = AnalysisFindingStatus.Open }],
             Violations =
             [
-                new AnalysisRunGateViolationDto { PolicyKey = "quality.architecture.cycles", Outcome = "Warn", TargetKind = "metric", TargetKey = "architecture.cycles.type", ObservedValue = "40", Operator = "GreaterThan", Threshold = "0" },
+                new AnalysisRunGateViolationDto { PolicyKey = "quality.coverage.line", Outcome = "Warn", TargetKind = "metric", TargetKey = "coverage.line.percent", ObservedValue = "70", Operator = "LessThan", Threshold = "80" },
                 new AnalysisRunGateViolationDto { PolicyKey = "system.quality.new-medium.code", Outcome = "Block", TargetKind = "finding", TargetKey = "no-control-regex:dfae5377", ObservedValue = "Medium", Operator = "GreaterThanOrEqual", Threshold = "Medium" }
             ]
         };
@@ -53,63 +56,11 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
 
-        var tile = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile")
-            .Single(item => item.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim() == "AnalysisGateViolations");
-        Assert.Equal("2", tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim());
-        var lines = cut.FindAll(".analysis-run-gate-violation").Select(line => line.TextContent.Trim()).ToList();
-        Assert.Equal(2, lines.Count);
-        // Recette R1-63: the alert in words, the measure named as the page names it.
-        Assert.Contains("AnalysisMetricTypeCycles : 40 (AnalysisThresholdWord 0)", lines[0], StringComparison.Ordinal);
-        Assert.Contains("AnalysisGateViolationWarn", lines[0], StringComparison.Ordinal);
-        Assert.Contains("system.quality.new-medium.code: no-control-regex = Medium (≥ Medium)", lines[1], StringComparison.Ordinal);
-        Assert.Contains("AnalysisGateViolationBlock", lines[1], StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("architecture.cycles.namespace", "3", "0", "AnalysisMetricNamespaceCycles : 3 (AnalysisThresholdWord 0)")]
-    [InlineData("complexity.methods.high", "12", "10", "AnalysisMetricComplexMethods : 12 (AnalysisThresholdWord 10)")]
-    [InlineData("complexity.cyclomatic.maximum", "41", "", "AnalysisMaximumComplexity : 41")]
-    [InlineData("complexity.cyclomatic.average", null, "4", "AnalysisMetricAverageComplexity : - (AnalysisThresholdWord 4)")]
-    [InlineData("coverage.line.percent", "71.5", "75", "AnalysisTestedLines : 71.5 (AnalysisThresholdWord 75)")]
-    [InlineData("duplication.percentage", "6", " ", "AnalysisDuplicatedCode : 6")]
-    [InlineData("security.secrets", "2", "0", "quality.metric: security.secrets = 2 (> 0)")]
-    public void R1_63_EachKnownMeasure_IsNamedAsThePageNamesIt_AndAnUnknownOneKeepsItsText(
-        string targetKey, string? observed, string threshold, string expected)
-    {
-        var gate = new AnalysisRunGateDto
-        {
-            PipelineRunId = 2654,
-            Violations =
-            [
-                new AnalysisRunGateViolationDto { PolicyKey = "quality.metric", Outcome = "Warn", TargetKind = "metric", TargetKey = targetKey, ObservedValue = observed, Operator = "GreaterThan", Threshold = threshold }
-            ]
-        };
-        ServeFindings(gate);
-
-        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
-
-        var line = Assert.Single(cut.FindAll(".analysis-run-gate-violation")).TextContent;
-        Assert.Contains(expected, line, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ADegradedMeasure_ShowsThePreviousValueNotAThreshold()
-    {
-        var gate = new AnalysisRunGateDto
-        {
-            PipelineRunId = 2654,
-            Violations =
-            [
-                new AnalysisRunGateViolationDto { PolicyKey = "quality.complexity.high-methods", Outcome = "Warn", TargetKind = "metric", TargetKey = "complexity.methods.high", ObservedValue = "319", Operator = "Degraded", Threshold = "318" }
-            ]
-        };
-        ServeFindings(gate);
-
-        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
-
-        var line = Assert.Single(cut.FindAll(".analysis-run-gate-violation")).TextContent;
-        Assert.Contains("AnalysisMetricComplexMethods : 319 (AnalysisPreviousWord 318)", line, StringComparison.Ordinal);
-        Assert.DoesNotContain("AnalysisThresholdWord", line, StringComparison.Ordinal);
+        var labels = cut.FindAll(".analysis-run-gate-metrics .omni-stat-tile__label").Select(label => label.TextContent.Trim()).ToList();
+        Assert.Equal(["AnalysisGateFindings", "AnalysisGateNewFindings"], labels);
+        Assert.Empty(cut.FindAll(".analysis-run-gate-violation"));
+        Assert.DoesNotContain("quality.coverage.line", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("coverage.line.percent is below its threshold", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -144,7 +95,7 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         // No "limiting domain" sentence; the domain that sets the B has a bold title.
         Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
         Assert.Equal("AnalysisCodeQualityAndTests", cut.Find(".analysis-grade-domain-limiting").TextContent.Trim());
-        var measure = Assert.Single(cut.FindAll(".analysis-grade-measure"));
+        var measure = Assert.Single(cut.FindAll("[data-testid='grade-row-measure']"));
         Assert.Contains("AnalysisTestedLines", measure.TextContent, StringComparison.Ordinal);
         Assert.Contains("72.4 %", measure.TextContent.Replace(',', '.'), StringComparison.Ordinal);
         Assert.Contains("grade-badge--b", measure.InnerHtml, StringComparison.Ordinal);
@@ -479,5 +430,118 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
 
         // The identifier link, the title link and the open button.
         Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 3);
+    }
+
+    [Fact]
+    public void R1_38_TheGateGrade_IsTheFirstRowOfTheSingleGradeBlock_ThenCodeAndTests_Security_Architecture()
+    {
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2819,
+            Grade = new AnalysisGradeSummaryDto
+            {
+                OverallGrade = AnalysisGrade.B,
+                Completeness = AnalysisGradeCompleteness.Complete,
+                LimitingDomain = AnalysisGradeDomain.CodeQuality,
+                Domains =
+                [
+                    new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Grade = AnalysisGrade.A, Completeness = AnalysisGradeCompleteness.Complete },
+                    new AnalysisGradeDomainDto
+                    {
+                        Domain = AnalysisGradeDomain.CodeQuality, Grade = AnalysisGrade.B, Required = true, Completeness = AnalysisGradeCompleteness.Complete,
+                        Measures =
+                        [
+                            new AnalysisGradeMeasureDto { Key = "grade.coverage.line", Grade = AnalysisGrade.B, ObservedValue = 88.64, Unit = "percent" },
+                            new AnalysisGradeMeasureDto { Key = "grade.complexity.maximum", Grade = AnalysisGrade.A, ObservedValue = 12 }
+                        ]
+                    },
+                    new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Architecture, Grade = AnalysisGrade.A, Completeness = AnalysisGradeCompleteness.Complete }
+                ]
+            }
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        // One block, no separate wide frame for the grade.
+        Assert.Single(cut.FindAll("[data-testid='analysis-grade-block']"));
+        Assert.Empty(cut.FindAll(".analysis-run-gate-headline"));
+        var rows = cut.FindAll("[data-testid='analysis-grade-block'] .analysis-grade-measure-label").Select(label => label.TextContent.Trim()).ToList();
+        Assert.Equal(
+            ["GateGrade", "AnalysisCodeQualityAndTests", "AnalysisTestedLines", "AnalysisMaximumComplexity", "AnalysisApplicationSecurity", "AnalysisCodeArchitecture"],
+            rows);
+        // Coverage carries its percent; the first row names the measure that sets the B.
+        var coverage = cut.Find("[data-testid='grade-row-measure']");
+        Assert.Contains("88.64 %", coverage.TextContent.Replace(',', '.'), StringComparison.Ordinal);
+        Assert.Contains("AnalysisTestedLines", cut.Find("[data-testid='grade-row-gate']").TextContent, StringComparison.Ordinal);
+        // R1-37: the cause reads as a muted second line under the label, not in the value column.
+        var cause = cut.Find("[data-testid='grade-row-gate'] .analysis-grade-row-title [data-testid='grade-row-gate-cause']");
+        Assert.Contains("GateGradeSetBy", cause.TextContent, StringComparison.Ordinal);
+        Assert.Contains("AnalysisTestedLines", cause.TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.Find("[data-testid='grade-row-gate'] .analysis-grade-value").TextContent.Trim());
+    }
+
+    [Fact]
+    public void R1_37_TheGateTab_PutsTheGradeBlockBesideTheTwoTiles_ThenTheFindingsSectionWithItsCountAndSwitch()
+    {
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2814,
+            FindingCount = 1,
+            DecidedFindingCount = 1,
+            Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.A, Completeness = AnalysisGradeCompleteness.Complete },
+            Findings =
+            [
+                new AnalysisRunGateFindingDto { FindingId = 1, Title = "Open finding", Status = AnalysisFindingStatus.Open },
+                new AnalysisRunGateFindingDto { FindingId = 2, Title = "Decided finding", Status = AnalysisFindingStatus.Accepted }
+            ]
+        };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        // The grade block and the tile column share one layout row; the tiles are OE tiles in an OmniTileGrid.
+        var layout = cut.Find(".analysis-run-gate-layout");
+        Assert.NotNull(layout.QuerySelector("[data-testid='analysis-grade-block']"));
+        Assert.Equal(2, layout.QuerySelectorAll(".analysis-run-gate-metrics > .omni-stat-tile").Length);
+        Assert.NotNull(layout.QuerySelector(".omni-tile-grid.analysis-run-gate-metrics"));
+        // The findings section: its title, the count of the list, and the decided switch on the same line.
+        var head = cut.Find("[data-testid='gate-findings-head']");
+        Assert.Contains("AnalysisGateFindings", head.QuerySelector("h6")!.TextContent, StringComparison.Ordinal);
+        Assert.Equal("1", head.QuerySelector("[data-testid='gate-findings-count']")!.TextContent.Trim());
+        Assert.Contains("AnalysisGateShowDecided", head.QuerySelector("button.omni-switch")!.TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".analysis-run-gate-empty"));
+
+        head.QuerySelector("button.omni-switch")!.Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("2", cut.Find("[data-testid='gate-findings-count']").TextContent.Trim()));
+    }
+
+    [Fact]
+    public void R1_37_WithoutFindings_TheSectionShowsTheEmptyStateInItsDashedFrame_AndNoSwitch()
+    {
+        var gate = new AnalysisRunGateDto { PipelineRunId = 2815 };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        Assert.Equal("0", cut.Find("[data-testid='gate-findings-count']").TextContent.Trim());
+        Assert.Contains("AnalysisNoFindings", cut.Find(".analysis-run-gate-empty").TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='gate-findings-head'] button.omni-switch"));
+    }
+
+    [Fact]
+    public void R1_37_WithoutAGrade_TheTwoTilesSitInARowAtTileSize_NotAStretchedColumn()
+    {
+        var gate = new AnalysisRunGateDto { PipelineRunId = 2815 };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        Assert.Empty(cut.FindAll("[data-testid='analysis-grade-block']"));
+        Assert.NotNull(cut.Find(".analysis-run-gate-layout.analysis-run-gate-layout--figures-only"));
+        var tiles = cut.Find(".analysis-run-gate-metrics");
+        Assert.Contains("omni-tile-grid--columns-4", tiles.ClassName, StringComparison.Ordinal);
+        Assert.Equal(2, tiles.QuerySelectorAll(".omni-stat-tile").Length);
     }
 }

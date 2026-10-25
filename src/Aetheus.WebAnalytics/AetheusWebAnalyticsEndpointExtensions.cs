@@ -11,7 +11,6 @@ namespace Aetheus.WebAnalytics;
 
 public static class AetheusWebAnalyticsEndpointExtensions
 {
-    internal const string OptOutCookieName = "aetheus_analytics_optout";
     private const int MaxEventBodyBytes = 4096;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -21,10 +20,13 @@ public static class AetheusWebAnalyticsEndpointExtensions
         if (!options.Enabled)
             return endpoints;
 
+        // nosemgrep: aetheus.csharp.antiforgery-disabled - anonymous analytics beacon, carries no session or cookie-authenticated action.
         endpoints.MapPost("/aetheus-analytics/v1/events", CollectAsync)
             .DisableAntiforgery();
+        // nosemgrep: aetheus.csharp.antiforgery-disabled - anonymous analytics beacon, carries no session or cookie-authenticated action.
         endpoints.MapPost("/aetheus-analytics/v1/opt-out", OptOut)
             .DisableAntiforgery();
+        // nosemgrep: aetheus.csharp.antiforgery-disabled - anonymous analytics beacon, carries no session or cookie-authenticated action.
         endpoints.MapPost("/aetheus-analytics/v1/opt-in", OptIn)
             .DisableAntiforgery();
 
@@ -122,7 +124,7 @@ public static class AetheusWebAnalyticsEndpointExtensions
         if (authenticatedResult is not null) return authenticatedResult;
         if (context.User.Identity?.IsAuthenticated != true)
         {
-            context.Response.Cookies.Append(OptOutCookieName, "1", PreferenceCookieOptions());
+            context.Response.Cookies.Append(AnalyticsPrivacyPolicy.OptOutCookieName, "1", PreferenceCookieOptions());
         }
         return Results.NoContent();
     }
@@ -135,7 +137,7 @@ public static class AetheusWebAnalyticsEndpointExtensions
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         var authenticatedResult = await WriteAuthenticatedPreferenceAsync(context, options, optedOut: false).ConfigureAwait(false);
         if (authenticatedResult is not null) return authenticatedResult;
-        context.Response.Cookies.Delete(OptOutCookieName, new CookieOptions
+        context.Response.Cookies.Delete(AnalyticsPrivacyPolicy.OptOutCookieName, new CookieOptions
         {
             HttpOnly = true,
             Secure = true,

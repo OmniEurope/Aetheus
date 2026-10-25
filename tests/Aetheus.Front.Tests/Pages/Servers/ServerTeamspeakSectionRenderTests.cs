@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -118,6 +119,15 @@ public class ServerTeamspeakSectionRenderTests : BunitContext
             .Add(x => x.ServerId, serverId));
     }
 
+    // Recette R-29: Setup and Restart sit in the page header, rendered here with the section.
+    private IRenderedComponent<PageHeaderOutletHost> RenderSectionWithHeader(ServerDetailDto server, int serverId = 5)
+    {
+        StubTeamspeakApi(server);
+        return this.RenderWithPageHeader<ServerTeamspeakSection>(p => p
+            .Add(x => x.Server, server)
+            .Add(x => x.ServerId, serverId));
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -151,7 +161,7 @@ public class ServerTeamspeakSectionRenderTests : BunitContext
     public void Renders_NotInstalled_ShowsSetupAndHidesClientTabs()
     {
         var server = MakeTsServer(installed: false, running: false);
-        var cut = RenderSection(server);
+        var cut = RenderSectionWithHeader(server);
 
         // Not-installed branch: the "NotInstalled" badge + a Setup button, and the
         // installed-only Clients/Channels tabs and Running badge are absent.

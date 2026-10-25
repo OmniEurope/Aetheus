@@ -29,15 +29,15 @@ public abstract class BaseMetricsCollector : IMetricsCollector
 
     protected List<DiskInfoDto> GetDisks()
     {
-        var disks = new List<DiskInfoDto>();
         DriveInfo[] drives;
         try
         {
             drives = DriveInfo.GetDrives();
         }
-        catch (IOException) { return disks; }
-        catch (UnauthorizedAccessException) { return disks; }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
 
+        var candidates = new List<DiskCandidate>();
         foreach (var drive in drives)
         {
             try
@@ -50,22 +50,34 @@ public abstract class BaseMetricsCollector : IMetricsCollector
                     continue;
 
                 var inodes = GetInodeUsage(drive.Name);
-                disks.Add(new DiskInfoDto
-                {
-                    MountPoint = drive.Name,
-                    UsedGb = Math.Round((drive.TotalSize - drive.AvailableFreeSpace) / 1073741824.0, 1),
-                    TotalGb = totalGb,
-                    InodesTotal = inodes?.Total,
-                    InodesUsed = inodes?.Used
-                });
+                var deviceKey = GetDeviceKey(drive.Name);
+                candidates.Add(new DiskCandidate(
+                    new DiskInfoDto
+                    {
+                        MountPoint = drive.Name,
+                        UsedGb = Math.Round((drive.TotalSize - drive.AvailableFreeSpace) / 1073741824.0, 1),
+                        TotalGb = totalGb,
+                        InodesTotal = inodes?.Total,
+                        InodesUsed = inodes?.Used,
+                        DeviceId = deviceKey
+                    },
+                    drive.DriveFormat));
             }
             catch (IOException) { /* drive disconnected/locked - skip */ }
             catch (UnauthorizedAccessException) { /* permission denied - skip */ }
         }
-        return disks;
+        // One entry per device and no pseudo filesystem: the sum of the report is then the real capacity.
+        return DiskSelector.Select(candidates);
     }
 
     protected virtual bool ShouldIncludeDrive(DriveInfo drive) => true;
+
+    /// <summary>
+    /// Identity of the device behind the filesystem mounted at <paramref name="mountPoint"/>: two
+    /// mounts with the same key are the same storage seen twice (bind mount, subvolume) and count once.
+    /// Null when the platform cannot tell (the default): the mount then counts on its own.
+    /// </summary>
+    protected virtual string? GetDeviceKey(string mountPoint) => null;
 
     /// <summary>
     /// Inode counts of the filesystem mounted at <paramref name="mountPoint"/>, or null when the

@@ -35,4 +35,35 @@ internal static class PageHeaderHost
             builder.CloseComponent();
         });
     }
+
+    /// <summary>
+    /// Recette R-29: renders a server section the way <c>ServerDetailLayout</c> does, with the page header's
+    /// actions outlet before it, so its main action and its menu (sent to the header) are found and clicked
+    /// through the returned host. The section itself is <c>host.FindComponent&lt;TComponent&gt;()</c>.
+    /// </summary>
+    public static IRenderedComponent<PageHeaderOutletHost> RenderWithPageHeader<TComponent>(
+        this BunitContext context, Action<ComponentParameterCollectionBuilder<TComponent>> parameters)
+        where TComponent : IComponent
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return context.Render<PageHeaderOutletHost>(host => host.AddChildContent(parameters));
+    }
+}
+
+/// <summary>The page header's actions outlet, then the page: what <c>ServerDetailLayout</c> gives a section.</summary>
+internal sealed class PageHeaderOutletHost : ComponentBase
+{
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void BuildRenderTree(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder builder)
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "test-outlet");
+        builder.AddAttribute(2, "data-outlet", Aetheus.Front.Components.Shared.PageHeaderActions.SectionName);
+        builder.OpenComponent<SectionOutlet>(3);
+        builder.AddAttribute(4, nameof(SectionOutlet.SectionName), Aetheus.Front.Components.Shared.PageHeaderActions.SectionName);
+        builder.CloseComponent();
+        builder.CloseElement();
+        builder.AddContent(5, ChildContent);
+    }
 }

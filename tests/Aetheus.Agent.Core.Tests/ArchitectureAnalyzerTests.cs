@@ -18,7 +18,12 @@ public sealed class ArchitectureAnalyzerTests
 
         Assert.Equal(2, report.Edges.Count);
         Assert.Single(report.Cycles);
-        Assert.DoesNotContain(report.Violations, violation => violation.RuleId == "architecture-cycle");
+        // R1-36 / ADR-056: a group of cycles is a finding, whatever the graph, naming its members.
+        var violation = Assert.Single(report.Violations, item => item.RuleId == "architecture-cycle");
+        Assert.Equal("namespace:Product.A", violation.Identity);
+        Assert.Contains("Product.A, Product.B", violation.Message, StringComparison.Ordinal);
+        Assert.Equal(["Product.A", "Product.B"], report.Graphs["namespace"].CycleGroups.Single());
+        Assert.Single(report.Violations, item => item.RuleId == "architecture-cycle-type");
         Assert.All(report.Instability.Values, value => Assert.Equal(0.5, value));
         Assert.Equal(4, report.Graphs.Count);
         Assert.All(new[] { "type", "namespace", "assembly", "project" },
@@ -27,6 +32,112 @@ public sealed class ArchitectureAnalyzerTests
         Assert.Equal(2, report.Graphs["namespace"].Edges.Count);
         Assert.Empty(report.Graphs["assembly"].Edges);
         Assert.Empty(report.Graphs["project"].Edges);
+    }
+
+    private const string EfEntities = """
+        namespace Product.Servers { public sealed class Server { public Guid Id { get; set; } public ICollection<Product.Pipelines.Pipeline> Pipelines { get; set; } = []; } }
+        namespace Product.Pipelines { public sealed class Pipeline { public Guid ServerId { get; set; } public Product.Servers.Server Server { get; set; } = null!; } }
+        """;
+
+    private static IEnumerable<ArchitectureViolation> Cycles(ArchitectureReport report) =>
+        report.Violations.Where(item => item.RuleId.StartsWith("architecture-cycle", StringComparison.Ordinal));
+
+    [Fact]
+    public void Analyze_IgnoresTheBidirectionalNavigationOfTwoDbSetEntities()
+    {
+        var sources = new[]
+        {
+            ("entities.cs", "using System; using System.Collections.Generic;\n" + EfEntities),
+            ("context.cs", "namespace Product.Data; public class AppDbContext { public DbSet<Product.Servers.Server> Servers => null!; public DbSet<Product.Pipelines.Pipeline> Pipelines => null!; }")
+        };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        Assert.Empty(Cycles(report));
+        Assert.Empty(report.Cycles);
+        // The dependency itself is still in the graph: only the cycle it forms is not a finding.
+        Assert.Contains(report.Graphs["type"].Edges, edge => edge.Source == "Product.Servers.Server" && edge.Target == "Product.Pipelines.Pipeline");
+        Assert.Contains(report.Graphs["type"].Edges, edge => edge.Source == "Product.Pipelines.Pipeline" && edge.Target == "Product.Servers.Server");
+    }
+
+    [Fact]
+    public void Analyze_RecognisesEntitiesDeclaredByAConfigurationOrTheModelBuilder()
+    {
+        var sources = new[]
+        {
+            ("entities.cs", "using System; using System.Collections.Generic;\n" + EfEntities),
+            ("configuration.cs", "namespace Product.Data; public sealed class ServerConfiguration : IEntityTypeConfiguration<Product.Servers.Server> { }"),
+            ("model.cs", "namespace Product.Data; public sealed class Model { void Build(ModelBuilder modelBuilder) { modelBuilder.Entity<Product.Pipelines.Pipeline>(); } }")
+        };
+
+        Assert.Empty(Cycles(ArchitectureAnalyzer.Analyze(sources)));
+    }
+
+    [Fact]
+    public void Analyze_StillReportsTheSameMutualReferenceWhenTheTypesAreNotEntities()
+    {
+        var sources = new[] { ("entities.cs", "using System; using System.Collections.Generic;\n" + EfEntities) };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-type");
+        Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle");
+    }
+
+    [Fact]
+    public void Analyze_StillReportsACycleBetweenAnEntityAndAService()
+    {
+        var sources = new[]
+        {
+            ("entities.cs", """
+                using System; using System.Collections.Generic;
+                namespace Product.Servers { public sealed class Server { public ICollection<Product.Pipelines.Pipeline> Pipelines { get; set; } = []; } }
+                namespace Product.Pipelines { public sealed class Pipeline { public Product.Servers.Server Server { get; set; } = null!; public Product.Services.PipelineService Starter { get; set; } = null!; } }
+                """),
+            ("context.cs", "namespace Product.Data; public class AppDbContext { public DbSet<Product.Servers.Server> Servers => null!; public DbSet<Product.Pipelines.Pipeline> Pipelines => null!; }"),
+            ("service.cs", "namespace Product.Services; public sealed class PipelineService { public void Start(Product.Pipelines.Pipeline pipeline) { } }")
+        };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        var violation = Assert.Single(report.Violations, item => item.RuleId == "architecture-cycle-type");
+        Assert.Contains("PipelineService", violation.Message, StringComparison.Ordinal);
+        Assert.Contains("Product.Pipelines.Pipeline", violation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Analyze_StillReportsTwoEntitiesThatReferenceEachOtherOutsideTheirNavigations()
+    {
+        var sources = new[]
+        {
+            ("entities.cs", """
+                using System; using System.Collections.Generic;
+                namespace Product.Servers { public sealed class Server { public ICollection<Product.Pipelines.Pipeline> Pipelines { get; set; } = []; public void Attach(Product.Pipelines.Pipeline pipeline) { } } }
+                namespace Product.Pipelines { public sealed class Pipeline { public Product.Servers.Server Server { get; set; } = null!; } }
+                """),
+            ("context.cs", "namespace Product.Data; public class AppDbContext { public DbSet<Product.Servers.Server> Servers => null!; public DbSet<Product.Pipelines.Pipeline> Pipelines => null!; }")
+        };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-type");
+    }
+
+    [Fact]
+    public void Analyze_StillReportsACycleBetweenAnEntityAndANonEntityType()
+    {
+        var sources = new[]
+        {
+            ("entities.cs", """
+                namespace Product.Servers { public sealed class Server { public Product.Values.Settings Settings { get; set; } = null!; } }
+                namespace Product.Values { public sealed class Settings { public Product.Servers.Server Owner { get; set; } = null!; } }
+                """),
+            ("context.cs", "namespace Product.Data; public class AppDbContext { public DbSet<Product.Servers.Server> Servers => null!; }")
+        };
+
+        var report = ArchitectureAnalyzer.Analyze(sources);
+
+        Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-type");
     }
 
     [Fact]
@@ -109,10 +220,16 @@ public sealed class ArchitectureAnalyzerTests
 
             Assert.All(new[] { "type", "namespace", "assembly", "project" },
                 level => Assert.Single(report.Graphs[level].Cycles));
-            Assert.DoesNotContain(report.Violations, item => item.RuleId == "architecture-cycle");
-            Assert.DoesNotContain(report.Violations, item => item.RuleId == "architecture-cycle-type");
+            Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle");
+            Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-type");
             Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-assembly");
             Assert.Contains(report.Violations, item => item.RuleId == "architecture-cycle-project");
+            // The assembly and project findings keep the identity they always had (their message); the type
+            // and namespace ones are identified by their group.
+            Assert.All(report.Violations.Where(item => item.RuleId is "architecture-cycle-assembly" or "architecture-cycle-project"),
+                item => Assert.Null(item.Identity));
+            Assert.All(report.Violations.Where(item => item.RuleId is "architecture-cycle" or "architecture-cycle-type"),
+                item => Assert.NotNull(item.Identity));
         }
         finally
         {

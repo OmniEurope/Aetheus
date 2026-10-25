@@ -10,7 +10,7 @@
 <AetheusDataGrid @ref="_grid" TItem="TaskLogDto" Data="@_logs" Count="@_totalCount" IsLoading="@_loading"
     LoadData="@LoadLogsAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_logs, _totalCount))"
-    FullHeight="true" RowClick="@OpenEntryAsync" class="aetheus-grid-fullheight">
+    FullHeight="true" ShowFooterBar="true" RowClick="@OpenEntryAsync" class="aetheus-grid-fullheight">
     <EmptyTemplate>
         <EmptyState Icon="article" Title="@L["NoLogs"]" />
     </EmptyTemplate>
@@ -23,6 +23,10 @@
                 <OmniBadge Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L.Localize(log.Level)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Title="@L["Message"]" Filterable="true" />
+        <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Truncate="true" Title="@L["Message"]" Filterable="true">
+            <Template Context="log">
+                <OmniAnsiText Text="@log.Message" />
+            </Template>
+        </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>

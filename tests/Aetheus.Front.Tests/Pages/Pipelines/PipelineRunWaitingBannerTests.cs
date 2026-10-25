@@ -82,6 +82,11 @@ public class PipelineRunWaitingBannerTests : BunitContext
         cut.WaitForAssertion(() => Assert.Contains("run-preflight-check", cut.Markup));
         Assert.Contains("aetheus-ci", cut.Markup);
         Assert.Contains("qa", cut.Markup);
+        // R1-33: an OE collapsible, folded by default (a native details without the open attribute).
+        var record = cut.Find("[data-testid='preflight-record']");
+        var details = record.TagName.Equals("DETAILS", StringComparison.OrdinalIgnoreCase) ? record : record.QuerySelector("details")!;
+        Assert.False(details.HasAttribute("open"));
+        Assert.Contains("PreflightRecordTitle", record.TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -163,21 +168,22 @@ public class PipelineRunWaitingBannerTests : BunitContext
     }
 
     [Fact]
-    public void R2_025_TheVerdict_SitsUnderTheStatusBadge_InAVerticalStack()
+    public void R2_025_TheVerdict_SitsUnderTheStatusBadge_InTheNextRowOfTheStatusTile()
     {
-        ServeSealedRun(88, "true", null);
+        ServeSealedRun(88, "false", "agentCompatibility");
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 88));
 
         cut.WaitForAssertion(() => cut.Find(".run-overview-tiles .run-candidate-verdict-badge"));
-        var stack = cut.Find(".run-overview-tiles .run-status-badges");
-        Assert.Contains("omni-stack--vertical", stack.ClassName, StringComparison.Ordinal);
-        Assert.DoesNotContain("omni-stack--horizontal", stack.ClassName, StringComparison.Ordinal);
-        var badges = stack.Children.Where(child => child.ClassList.Contains("omni-badge")).ToList();
-        Assert.Equal(2, badges.Count);
-        // The run status first, the candidate verdict under it.
-        Assert.Contains("run-candidate-verdict-badge", badges[1].ClassName, StringComparison.Ordinal);
-        Assert.Contains("CandidateDeployableShort", badges[1].TextContent, StringComparison.Ordinal);
+        // R-28: the status tile is an OmniFactTile; each fact is one of its rows, so the verdict is the
+        // row under the one of the run status (it was the second badge of a vertical stack).
+        var rows = cut.FindAll(".run-overview-tiles .run-status-tile .omni-fact-tile__row").ToList();
+        var statusRow = rows.FindIndex(row => row.QuerySelector(".omni-badge") is not null);
+        var verdictRow = rows.FindIndex(row => row.QuerySelector(".run-candidate-verdict-badge") is not null);
+        Assert.Equal(0, statusRow);
+        Assert.Equal(statusRow + 1, verdictRow);
+        Assert.Null(rows[statusRow].QuerySelector(".run-candidate-verdict-badge"));
+        Assert.Contains("CandidateNotDeployableShort", rows[verdictRow].TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -194,13 +200,16 @@ public class PipelineRunWaitingBannerTests : BunitContext
     }
 
     [Fact]
-    public void ADeployableCandidate_ShowsItsSealedGrade()
+    public void R1_33_ADeployableCandidate_ShowsNoSuccessAlertNorBadge()
     {
         ServeSealedRun(86, "true");
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 86));
 
-        cut.WaitForAssertion(() => Assert.Contains("CandidateDeployableTitle", cut.Markup));
+        cut.WaitForAssertion(() => Assert.Contains("aetheus-candidate", cut.Markup));
+        Assert.DoesNotContain("CandidateDeployableTitle", cut.Markup);
+        Assert.DoesNotContain("CandidateDeployableShort", cut.Markup);
+        Assert.Empty(cut.FindAll(".run-candidate-verdict-badge"));
         Assert.DoesNotContain("CandidateNotDeployableTitle", cut.Markup);
     }
 

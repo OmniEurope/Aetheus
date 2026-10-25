@@ -37,6 +37,11 @@ internal static class JsJson
     /// <summary><c>JSON.stringify(value, null, 2)</c>, without the trailing newline the callers add.</summary>
     public static string? StringifyIndented(object? value) => Write(value, indent: "  ");
 
+    /// <summary><c>JSON.stringify(value, null, spaces)</c>: <paramref name="spaces"/> clamped to 10 as
+    /// JavaScript clamps it, compact below 1. Without the trailing newline the callers add.</summary>
+    public static string? StringifyIndented(object? value, int spaces) =>
+        Write(value, indent: spaces < 1 ? null : new string(' ', Math.Min(spaces, 10)));
+
     private static string? Write(object? value, string? indent)
     {
         if (value is JsUndefined)

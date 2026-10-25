@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>run-qa-e2e-suite</c> function, port of the immutable-image path of
-/// <c>deploy/scripts/run-qa-e2e-suite.sh</c>: the browser suite runs from an image whose
+/// the former <c>run-qa-e2e-suite.sh</c> script: the browser suite runs from an image whose
 /// <c>org.opencontainers.image.revision</c> label must be the expected commit, on the QA stack's
 /// network (the front container's network that is not <c>*_backend</c>), once a readiness container has
 /// reached the front. The suite container runs <c>dotnet test</c> inside the image with the script's
@@ -24,25 +24,6 @@ namespace Aetheus.Agent.Core.Functions;
 /// </summary>
 public sealed partial class RunQaE2eSuiteFunction : IPipelineFunction
 {
-    /// <summary>The suite container's script, verbatim from the script's <c>sh -c</c>. A raw string keeps the
-    /// source file's line endings, CRLF in a Windows checkout, and <c>sh</c> reads the carriage return after
-    /// <c>set -u</c> as an illegal option (QA run 1278, agent built from a Windows tree): the text is
-    /// normalized to LF.</summary>
-    internal static readonly string RunnerScript = """
-        set -u
-            RESULTS=/tmp/aetheus-e2e-results
-            rm -rf "$RESULTS"
-            mkdir -p "$RESULTS"
-            TRX="$RESULTS/e2e.trx"
-            RAW_EXIT=0
-            if [ -n "$E2E_TEST_FILTER" ]; then set -- --filter "$E2E_TEST_FILTER"; else set --; fi
-            dotnet test "$E2E_TEST_PROJECT" -c Release --no-build --no-restore "$@" \
-              --logger "console;verbosity=minimal" --logger "trx;LogFileName=e2e.trx" \
-              --results-directory "$RESULTS" --nologo \
-              -- NUnit.NumberOfTestWorkers="$E2E_WORKERS" || RAW_EXIT=$?
-            printf "%s\n" "$RAW_EXIT" > "$RESULTS/raw-exit-code"
-        """.ReplaceLineEndings("\n");
-
     private readonly IPipelineFunctionTools _tools;
 
     public RunQaE2eSuiteFunction()

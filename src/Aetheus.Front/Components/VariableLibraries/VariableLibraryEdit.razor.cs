@@ -23,6 +23,13 @@ public partial class VariableLibraryEdit
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
 
+    /// <summary>The name a new library starts with, when a page links here for one in particular.</summary>
+    [SupplyParameterFromQuery] public string? Name { get; set; }
+
+    /// <summary>The entry a link points at (R-10): the Key column of the grid starts filtered on it, a
+    /// filter the reader sees and can remove.</summary>
+    [SupplyParameterFromQuery(Name = "key")] public string? FilterKey { get; set; }
+
     /// <summary>The page that sent the user here to check what it created (the pipeline setup
     /// wizard's summary); Back returns to it when it is local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
@@ -61,11 +68,31 @@ public partial class VariableLibraryEdit
         var isNew = key.Id is null or 0;
         ResetLoadState();
         await LoadLibraryAsync(key, generation, isNew);
+        if (!isNew && _detail is not null) await LoadUsageAsync(key.Id!.Value, generation);
 
         // Publish the parent project so the NavMenu keeps the project's submenu open
         // while we're editing one of its variable libraries.
         ProjectNav.Set(_model.ProjectId);
         ReassertBreadcrumb(isNew);
+    }
+
+    private IReadOnlyList<ResourceUsageUserDto>? _usage;
+    private bool _usageLoaded;
+
+    /// <summary>Who reads this library (R-65), asked after the page is shown. A failed call leaves the line
+    /// empty rather than saying "Unused".</summary>
+    private async Task LoadUsageAsync(int libraryId, int generation)
+    {
+        _usage = null;
+        _usageLoaded = false;
+        try
+        {
+            var usage = await Api.Variables.GetResourceUsageAsync();
+            if (generation != _loadGeneration) return;
+            _usage = usage.Libraries.GetValueOrDefault(libraryId);
+            _usageLoaded = true;
+        }
+        catch (HttpRequestException) { } // the page stays usable without the usage line
     }
 
     private void ReassertBreadcrumb(bool isNew)
@@ -146,6 +173,8 @@ public partial class VariableLibraryEdit
         else if (isNew)
         {
             SelectInitialScope(key, projects);
+            // The readiness findings link here with the name of the missing library (R2-22).
+            if (!string.IsNullOrWhiteSpace(Name)) _model.Name = Name;
         }
     }
 
@@ -250,7 +279,8 @@ public partial class VariableLibraryEdit
         }
         Cache.InvalidatePrefix("variable-libraries:"); // S-TECH-SWIV
         Toast.Success("Deleted", "Deleted");
-        Nav.NavigateTo("/variable-libraries");
+        // R-70: back to the list the user came from (a project's libraries, a server's), else the global list.
+        Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/variable-libraries");
     }
 
     private async Task AddEntry(NewEntryModel model)
@@ -277,18 +307,15 @@ public partial class VariableLibraryEdit
         }
     }
 
-    private void EditEntry(VariableEntryDto entry)
+    // The edit button asks the grid; a click or key in a cell does it by itself (EditTrigger Cell, R-75).
+    // Either way the grid reports the row through OnEntryEdit before its editors render.
+    private void EditEntry(VariableEntryDto entry) => _entriesGrid?.EditRow(entry);
+
+    private void OnEntryEdit(VariableEntryDto entry)
     {
         _editingEntry = entry;
         _editEntryKey = entry.Key;
         _editEntryValue = entry.Value;
-        _entriesGrid?.EditRow(entry);
-    }
-
-    private void OnEditableCellKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, VariableEntryDto entry)
-    {
-        if (e.Key is "Enter" or " " or "Spacebar")
-            EditEntry(entry);
     }
 
     private void OnEntryKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e, VariableEntryDto entry)

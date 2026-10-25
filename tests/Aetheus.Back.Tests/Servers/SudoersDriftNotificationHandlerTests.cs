@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.Alerts;
 using Aetheus.Back.Components.Notifications;
+using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Servers.Events;
-using Aetheus.Back.Components.Servers.Handlers;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;
@@ -45,7 +46,8 @@ public sealed class SudoersDriftNotificationHandlerTests : IDisposable
         _sut = new SudoersDriftNotificationHandler(
             new UserNotificationService(
                 new UserNotificationRepository(_db), Substitute.For<IResourceAuthorizationService>(), _time),
-            _notifications);
+            _notifications,
+            new AlertOccurrenceService(new AlertOccurrenceRepository(_db), Microsoft.Extensions.Logging.Abstractions.NullLogger<AlertOccurrenceService>.Instance));
     }
 
     public void Dispose() => _db.Dispose();
@@ -73,6 +75,33 @@ public sealed class SudoersDriftNotificationHandlerTests : IDisposable
             Assert.Equal("aetheus-agent", payload.RootElement.GetProperty("Files").GetString());
         });
         await _notifications.Received(1).SendEventAsync("alert.triggered", Arg.Any<object>(), ct);
+    }
+
+    [Fact]
+    public async Task Drift_IsStoredAsAnAlert_WhoseIdentifierTravelsInTheEventAndTheAdministratorsPayload()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        await _sut.HandleAsync(
+            new SudoersDriftDetectedEvent(7, "web-1", "aetheus-agent", "Sudoers drop-in changed out-of-band", false, Now),
+            ct);
+
+        var stored = Assert.Single(await _db.AlertOccurrences.ToListAsync(ct));
+        Assert.Equal(7, stored.ServerId);
+        Assert.Equal("web-1", stored.ServerName);
+        Assert.Equal("SudoersDrift", stored.Metric);
+        Assert.Equal(AlertSeverity.Critical, stored.Severity);
+        Assert.Equal(Now, stored.TriggeredAt);
+        Assert.Equal("Sudoers drop-in changed out-of-band", stored.Message);
+        Assert.All(await _db.NotificationDeliveries.ToListAsync(ct), delivery =>
+        {
+            using var payload = JsonDocument.Parse(delivery.PayloadJson);
+            Assert.Equal(stored.Id, payload.RootElement.GetProperty("AlertId").GetInt64());
+        });
+        await _notifications.Received(1).SendEventAsync(
+            "alert.triggered",
+            Arg.Is<object>(sent => JsonSerializer.Serialize(sent).Contains($"\"AlertId\":{stored.Id}", StringComparison.Ordinal)),
+            ct);
     }
 
     [Fact]

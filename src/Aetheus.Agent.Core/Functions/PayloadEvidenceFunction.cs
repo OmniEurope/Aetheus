@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>payload-evidence</c> function, port of <c>deploy/scripts/nightly-evidence.mjs</c>: describes
+/// The <c>payload-evidence</c> function, port of the former <c>nightly-evidence.mjs</c> script: describes
 /// each artifact as <c>{ name, bytes, sha256 }</c> (the name is the path's last segment, unique, the
 /// file regular and not empty, checked in argument order), sorted by name with
 /// <see cref="JsLocaleCompare"/>. <c>create</c> writes

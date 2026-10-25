@@ -6,7 +6,7 @@ using Aetheus.Agent.Core.Operations;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/run-with-progress.sh</c> for the functions that run a long command: a
+/// Port of the former <c>run-with-progress.sh</c> script for the functions that run a long command: a
 /// <c>==&gt; LABEL started</c> line, a <c>still running (Ns elapsed)</c> line every
 /// <c>AETHEUS_PROGRESS_INTERVAL_SECONDS</c> (default 30, a positive integer), then
 /// <c>finished in Ns (exit N)</c>. The command's output reaches the step log; cancelling the

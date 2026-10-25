@@ -40,7 +40,9 @@ public sealed class MailTemplateRenderingTests
         Assert.Contains("Voir l'exécution et ses journaux", mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains(FailedBadge, mail.HtmlBody, StringComparison.Ordinal);
         Assert.Contains("Numéro de build\t11", mail.TextBody, StringComparison.Ordinal);
-        Assert.Contains("Événement source\tpipeline.failed", mail.TextBody, StringComparison.Ordinal);
+        // The banner states the event: the raw event key is never shown.
+        Assert.DoesNotContain("Événement source", mail.TextBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("pipeline.failed", mail.TextBody, StringComparison.Ordinal);
     }
 
     /// <summary>Golden structure of a notification: the banner takes the colours of the status, payload first, else the event's.</summary>
@@ -145,12 +147,12 @@ public sealed class MailTemplateRenderingTests
 
         Assert.Equal(document.Subject, mail.Subject);
         Assert.Empty(mail.MissingVariables);
-        // Tiles: one cell per figure, in the colour of its tone, before the first section.
-        var tiles = mail.Html.IndexOf("background-color: #e3f4e8; color: #17643a\"><span style=\"font-size: 24px", StringComparison.Ordinal);
-        var failedTile = mail.Html.IndexOf("background-color: #fde8e6; color: #a3231a\"><span style=\"font-size: 24px", StringComparison.Ordinal);
+        // Tiles: one stacked table per figure, in the colour of its tone, before the first section.
+        var tiles = mail.Html.IndexOf("background-color: #e3f4e8; color: #17643a\"><span style=\"font-size: 22px", StringComparison.Ordinal);
+        var failedTile = mail.Html.IndexOf("background-color: #fde8e6; color: #a3231a\"><span style=\"font-size: 22px", StringComparison.Ordinal);
         var firstSection = mail.Html.IndexOf(">Pipelines</h2>", StringComparison.Ordinal);
         Assert.True(tiles >= 0 && failedTile > tiles && firstSection > failedTile, $"tiles {tiles}, failed {failedTile}, section {firstSection}");
-        Assert.Contains("font-weight: 600; background-color: #fde8e6; color: #a3231a\">Échec</span> <strong>exemple-release-candidate</strong>",
+        Assert.Contains("font-weight: 600; background-color: #fde8e6; color: #a3231a\">Échec</span> <a href=\"https://aetheus.example.org/pipelines/runs/4821\"",
             mail.Html, StringComparison.Ordinal);
     }
 
@@ -182,7 +184,7 @@ public sealed class MailTemplateRenderingTests
     {
         var preset = OmniThemePresets.All[^1];
         var palette = OmniThemePalettes.All.First(item => OmniMailTheme.From(preset.With(item)).Link != OmniMailTheme.Default.Link);
-        var appearance = $$"""{"theme":"dark","preset":"{{preset.Name}}","palette":"{{palette.Name}}","font":""}""";
+        var appearance = $$"""{"version":1,"appearance":"Light","preset":"{{preset.Name}}","palette":"{{palette.Name}}","font":""}""";
         var sender = Substitute.For<IEmailSender>();
         sender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent("no-reply@x.org"));
         var configuration = new ConfigurationBuilder()

@@ -13,7 +13,7 @@
                 <Template Context="v"><span class="text-mono">@v.Version</span></Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="SizeBytes" Title="@L["Size"]" Width="6.25rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
-                <Template Context="v">@DisplayFormatting.BinarySize(v.SizeBytes)</Template>
+                <Template Context="v">@DisplayFormatting.Size(v.SizeBytes)</Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="PublishedBy" Title="@L["PublishedBy"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="CreatedAt" Title="@L["PublishedAt"]" Width="9.375rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
@@ -22,7 +22,19 @@
             @* The listed state is this column's value, so it filters on listed / unlisted. *@
             <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="IsListed" Title="@L["Status"]" Width="8.125rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@ListedText">
                 <Template Context="v">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ToggleListedAsync(v))" title="@(v.IsListed ? L["Unlist"] : L["Relist"])" Label="@(v.IsListed ? L["Unlist"] : L["Relist"])"><OmniIcon Name="@MaterialIconMap.Resolve((v.IsListed ? "visibility_off" : "visibility"))" /></OmniButton>
+                    @* Warning orange: exception chosen by the user (R1-18), recorded in ButtonRoleColourGuardTests. *@
+                    <OmniButton Variant="OmniButtonVariant.Warning" OnClick="@(() => ToggleListedAsync(v))" title="@(v.IsListed ? L["Unlist"] : L["Relist"])" Label="@(v.IsListed ? L["Unlist"] : L["Relist"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((v.IsListed ? "visibility_off" : "visibility"))" /></Icon></OmniButton>
+                </Template>
+            </OmniDataGridColumn>
+            @* Deprecation is per version; the registry keeps serving it and flags it in the npm and NuGet feeds. *@
+            <OmniDataGridColumn TItem="PackageRegistryVersionDto" Property="IsDeprecated" Title="@L["Deprecation"]" Width="9.375rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@DeprecatedText">
+                <Template Context="v">
+                    @if (v.IsDeprecated)
+                    {
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["PackageVersionDeprecated"]</OmniBadge>
+                    }
+                    @* Warning orange: exception chosen by the user (R1-18), recorded in ButtonRoleColourGuardTests. *@
+                    <OmniButton Variant="OmniButtonVariant.Warning" OnClick="@(() => ToggleDeprecatedAsync(v))" title="@(v.IsDeprecated ? L["Undeprecate"] : L["Deprecate"])" Label="@(v.IsDeprecated ? L["Undeprecate"] : L["Deprecate"])"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon></OmniButton>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

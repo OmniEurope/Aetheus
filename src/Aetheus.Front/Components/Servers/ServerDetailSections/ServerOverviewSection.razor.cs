@@ -41,6 +41,9 @@ public partial class ServerOverviewSection : IDisposable
         _ => OmniTone.Success
     };
 
+    // R1-32: the tabs of the page, the essentials first; the slug is the ?tab= value.
+    internal static readonly string[] TabSlugs = ["essential", "storage", "runner", "ssh", "tasks"];
+
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -277,18 +280,13 @@ public partial class ServerOverviewSection : IDisposable
             : installed;
     }
 
-    private static string FormatBytes(long bytes)
-    {
-        const double gib = 1024d * 1024d * 1024d;
-        const double mib = 1024d * 1024d;
-        return bytes >= gib ? $"{bytes / gib:F1} GiB" : $"{bytes / mib:F0} MiB";
-    }
+    private static string FormatBytes(long bytes) => DisplayFormatting.Size(bytes);
 
     private static string FormatTrend(long? bytes) => bytes switch
     {
         null => "-",
         > 0 => $"+{FormatBytes(bytes.Value)}",
         < 0 => $"-{FormatBytes(Math.Abs(bytes.Value))}",
-        _ => "0 MiB"
+        _ => DisplayFormatting.Size(0)
     };
 }

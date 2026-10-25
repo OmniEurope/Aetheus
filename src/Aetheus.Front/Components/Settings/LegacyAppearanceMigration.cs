@@ -13,6 +13,9 @@ namespace Aetheus.Front.Components.Settings;
 /// </summary>
 public sealed class LegacyAppearanceMigration(OmniPreferences omni, IUserPreferences preferences, OmniAppearanceState appearance, IJSRuntime js)
 {
+    /// <summary>The member of OE's stored appearance that holds the content width (camel case).</summary>
+    private const string FullWidthMember = "fullWidth";
+
     private static readonly string[] BrowserKeys =
     [
         StorageKeys.Theme, StorageKeys.ThemePreset, StorageKeys.ThemePalette, StorageKeys.ThemeFont,
@@ -22,8 +25,14 @@ public sealed class LegacyAppearanceMigration(OmniPreferences omni, IUserPrefere
     /// <summary>Writes the former appearance when the user has none in OE; returns false when there was nothing to do.</summary>
     public async Task<bool> RunAsync(CancellationToken ct = default)
     {
-        if (await omni.GetAsync<JsonElement?>(OmniAppearanceState.PreferenceKey, ct) is not null)
+        if (await omni.GetAsync<JsonElement?>(OmniAppearanceState.PreferenceKey, ct) is { } stored)
+        {
+            // R1-25: OE draws the centred column by default, Aetheus is full width; an appearance saved
+            // before the content width could be chosen has no such member and keeps the full width.
+            if (stored.ValueKind == JsonValueKind.Object && !stored.TryGetProperty(FullWidthMember, out _))
+                await appearance.SetFullWidthAsync(true);
             return false;
+        }
 
         var former = await preferences.GetAsync<AppearancePreference>(PreferenceKeys.Appearance, ct)
             ?? await ReadBrowserAsync(ct);
@@ -35,11 +44,16 @@ public sealed class LegacyAppearanceMigration(OmniPreferences omni, IUserPrefere
     }
 
     /// <summary>The Aetheus default before any choice: dark, the rest as OE draws it.</summary>
-    public Task ApplyDefaultAsync() => appearance.SetAppearanceAsync(OmniAppearance.Dark);
+    public async Task ApplyDefaultAsync()
+    {
+        await appearance.SetAppearanceAsync(OmniAppearance.Dark);
+        await appearance.SetFullWidthAsync(true);
+    }
 
     private async Task ApplyAsync(AppearancePreference? former)
     {
         await appearance.SetAppearanceAsync(SiteAppearance.ParseAppearance(former?.Theme));
+        await appearance.SetFullWidthAsync(true);
         if (former is null)
             return;
         // The theme first: a new theme drops the palette and the font picked for the previous one.

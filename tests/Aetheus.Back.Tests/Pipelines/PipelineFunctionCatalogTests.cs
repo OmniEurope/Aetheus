@@ -184,6 +184,13 @@ public sealed partial class PipelineFunctionCatalogTests
     [InlineData("settle-fast-release-transaction", new[] { "env_file" }, new string[0])]
     [InlineData("verify-production-state", new[] { "env_file", "state_dir", "legacy_env_file", "compose_project" }, new string[0])]
     [InlineData("verify-production-secrets", new[] { "keys", "env_file" }, new[] { "keys" })]
+    [InlineData("backfill-env-secret", new[] { "key", "env_file" }, new[] { "key" })]
+    [InlineData("reconcile-env-urls", new[] { "urls", "env_file" }, new[] { "urls" })]
+    [InlineData("render-env-sample", new[] { "sample", "env_file", "public_api_url", "public_app_url", "app_version" }, new[] { "sample" })]
+    [InlineData("render-apache-upstream",
+        new[] { "template", "output", "define_only", "front_port", "back_port", "active_color", "define", "upstream_conf" },
+        new[] { "template", "output" })]
+    [InlineData("publish-vitrine", new[] { "domain", "web_root", "placeholder", "source_dir" }, new[] { "domain", "web_root", "placeholder" })]
     public void ProductionDeployChecks_AreDeploymentFunctionsThatPublishNothing(string name, string[] parameters, string[] required)
     {
         var function = PipelineFunctionCatalog.Find(name);
@@ -215,6 +222,21 @@ public sealed partial class PipelineFunctionCatalogTests
         Assert.Equal(parameters, function.Parameters.Select(parameter => parameter.Name));
         Assert.Equal(required, function.Parameters.Where(parameter => parameter.Required).Select(parameter => parameter.Name));
         Assert.Empty(function.Outputs);
+    }
+
+    [Fact]
+    public void VerifyPublicDistribution_TakesTheCheckoutBranchAndDepthOfTheVerifyModeAndPublishesItsVerdict()
+    {
+        var function = PipelineFunctionCatalog.Find("verify-public-distribution");
+
+        Assert.NotNull(function);
+        Assert.Same(PipelineFunctionCatalog.VerifyPublicDistribution, function);
+        Assert.Contains(function, PipelineFunctionCatalog.All);
+        Assert.Equal(PipelineFunctionAccess.Build, function.Access);
+        Assert.Equal(OperationKind.PipelineFunction, function.Operation);
+        Assert.Equal(["public_checkout", "branch", "depth"], function.Parameters.Select(parameter => parameter.Name));
+        Assert.Equal(["public_checkout"], function.Parameters.Where(parameter => parameter.Required).Select(parameter => parameter.Name));
+        Assert.Equal(["PUBLIC_VERIFIED", "PUBLIC_MATCHED_COMMIT"], function.Outputs);
     }
 
     [Fact]
@@ -292,13 +314,16 @@ public sealed partial class PipelineFunctionCatalogTests
     }
 
     [Fact]
-    public void OperationFor_MapsEachAccessToItsOwnKind()
+    public void Operation_MapsEachAccessToItsOwnKind()
     {
-        Assert.Equal(OperationKind.PipelineFunction, PipelineFunctionCatalog.OperationFor(PipelineFunctionAccess.Build));
+        var descriptor = PipelineFunctionCatalog.All[0];
+
+        Assert.Equal(OperationKind.PipelineFunction, (descriptor with { Access = PipelineFunctionAccess.Build }).Operation);
         Assert.Equal(
             OperationKind.PipelineDeploymentFunction,
-            PipelineFunctionCatalog.OperationFor(PipelineFunctionAccess.Deployment));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PipelineFunctionCatalog.OperationFor((PipelineFunctionAccess)99));
+            (descriptor with { Access = PipelineFunctionAccess.Deployment }).Operation);
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => (descriptor with { Access = (PipelineFunctionAccess)99 }).Operation);
     }
 
     [Fact]

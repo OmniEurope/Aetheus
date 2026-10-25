@@ -6,7 +6,7 @@
         @if (CanManage)
         {
             <div>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@InstallAsync" Disabled="@_busy"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["MailInstallSpamFilter"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@InstallAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Monitor" /></Icon><ChildContent><span>@L["MailInstallSpamFilter"]</span></ChildContent></OmniButton>
             </div>
         }
     }
@@ -18,7 +18,7 @@
             @if (CanManage)
             {
                 @* STD-BTN detection 11: Start visible, the other actions in the menu. *@
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunAsync(MailAction.StartSpamFilter))" Disabled="@_busy"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunAsync(MailAction.StartSpamFilter))" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Start"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@(() => RunAsync(MailAction.RestartSpamFilter))" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Restart"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => RunAsync(MailAction.StopSpamFilter))" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
@@ -36,7 +36,7 @@
         {
             <OmniRow Gap="OmniSpacing.Small">
                 @* STD-BTN detection 11: Learn visible, the other actions in the menu. *@
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LearnAsync" Disabled="@_busy"><OmniIcon Name="OmniIconName.Flask" /> <span>@L["MailLearn"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LearnAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Flask" /></Icon><ChildContent><span>@L["MailLearn"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@EditThresholdsAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon><ChildContent>@L["MailSpamThresholds"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>

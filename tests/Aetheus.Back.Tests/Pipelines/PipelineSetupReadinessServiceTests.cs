@@ -401,6 +401,196 @@ public sealed class PipelineSetupReadinessServiceTests
         await _git.DidNotReceive().GetRepositoriesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
+    private const string CopiedPipelineYaml = """
+        name: ats-deploy
+        variable_libraries:
+          - ats-prod-host
+        vaults:
+          - ats-deploy
+        stages:
+          - name: Deploy
+            steps:
+              - name: render
+                shell: echo $(API_HOST) $(MAYBE:-) $(UNUSED_ELSEWHERE:-)
+        """;
+
+    [Fact]
+    public async Task ProjectReadiness_NamesTheEmptyValuesACopiedLibraryAndVaultLeft()
+    {
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>())
+            .Returns([(21, "ats-deploy", CopiedPipelineYaml)]);
+        _requirements.FindEmptyValuesAsync(
+                Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue>
+            {
+                new(PipelineRequirementsChecker.LibraryKind, "API_HOST", 12),
+                new(PipelineRequirementsChecker.LibraryKind, "MAYBE", 12),
+                new(PipelineRequirementsChecker.LibraryKind, "NEVER_USED", 12),
+                new(PipelineRequirementsChecker.VaultKind, "DB_PASSWORD", 9)
+            });
+        Runners(11);
+        Repository();
+
+        var readiness = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        var library = Assert.Single(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+        // Only the variable the pipeline uses without a default: an optional or unused one is no problem.
+        Assert.Equal(["API_HOST"], library.Items);
+        Assert.Equal(PipelineSetupReadinessSeverity.Blocking, library.Severity);
+        // R2-27: each item names the library or vault holding it, so the summary links straight to it.
+        var libraryItem = Assert.Single(library.ItemIds);
+        Assert.Equal(("API_HOST", 12), (libraryItem.Key, libraryItem.Value));
+        var vault = Assert.Single(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyVaultSecrets);
+        Assert.Equal(["DB_PASSWORD"], vault.Items);
+        Assert.Equal(9, vault.ItemIds["DB_PASSWORD"]);
+    }
+
+    private const string PrefixPipelineYaml = """
+        name: {0}
+        variable_libraries:
+          - aetheus.prod
+        vaults:
+          - aetheus-deploy
+        stages:
+          - name: Deploy
+            steps:
+              - name: render
+                shell: echo {1}
+        """;
+
+    /// <summary>R-10: the finding is a table of one row per empty value and pipeline reading it, each
+    /// row naming the library or vault, the key and the pipeline (ids for the links). A key two
+    /// pipelines read gives two rows; a pipeline reading it with a default (R-7) gives none.</summary>
+    [Fact]
+    public async Task ProjectReadiness_ListsOneRowPerEmptyKeyAndPipelineThatReadsIt()
+    {
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>()).Returns(
+        [
+            (21, "deploy-prod", string.Format(System.Globalization.CultureInfo.InvariantCulture, PrefixPipelineYaml, "deploy-prod", "$(HOST_PREFIX:-)api")),
+            (22, "release-strict", string.Format(System.Globalization.CultureInfo.InvariantCulture, PrefixPipelineYaml, "release-strict", "$(HOST_PREFIX)api")),
+            (23, "revert-strict", string.Format(System.Globalization.CultureInfo.InvariantCulture, PrefixPipelineYaml, "revert-strict", "$(HOST_PREFIX)api"))
+        ]);
+        _requirements.FindEmptyValuesAsync(
+                Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue>
+            {
+                new(PipelineRequirementsChecker.LibraryKind, "HOST_PREFIX", 12, "aetheus.prod"),
+                new(PipelineRequirementsChecker.VaultKind, "DB_PASSWORD", 9, "aetheus-deploy")
+            });
+        Runners(11);
+        Repository();
+
+        var readiness = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        var library = Assert.Single(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+        Assert.Equal(["HOST_PREFIX"], library.Items);
+        Assert.Collection(library.EmptyValues,
+            row => Assert.Equal(("aetheus.prod", 12, "HOST_PREFIX", 22, "release-strict"),
+                (row.OwnerName, row.OwnerId, row.Key, row.PipelineId, row.PipelineName)),
+            row => Assert.Equal(("aetheus.prod", 12, "HOST_PREFIX", 23, "revert-strict"),
+                (row.OwnerName, row.OwnerId, row.Key, row.PipelineId, row.PipelineName)));
+        // A vault secret is never optional: every pipeline reading the vault gets its row.
+        var vault = Assert.Single(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyVaultSecrets);
+        Assert.Equal([21, 22, 23], vault.EmptyValues.Select(row => row.PipelineId).Order().Select(id => id!.Value));
+        Assert.All(vault.EmptyValues, row => Assert.Equal(("aetheus-deploy", 9, "DB_PASSWORD"), (row.OwnerName, row.OwnerId, row.Key)));
+    }
+
+    /// <summary>R-7: an empty entry that every reader takes with a default is optional, so nothing is reported.</summary>
+    [Fact]
+    public async Task ProjectReadiness_NeverReportsAnEmptyEntryEveryPipelineReadsWithADefault()
+    {
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>()).Returns(
+        [
+            (21, "deploy-prod", string.Format(System.Globalization.CultureInfo.InvariantCulture, PrefixPipelineYaml, "deploy-prod", "$(HOST_PREFIX:-)api"))
+        ]);
+        _requirements.FindEmptyValuesAsync(
+                Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue> { new(PipelineRequirementsChecker.LibraryKind, "HOST_PREFIX", 12, "aetheus.prod") });
+        Runners(11);
+        Repository();
+
+        var readiness = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        Assert.DoesNotContain(readiness.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+    }
+
+    private const string DemoPipelineYaml = """
+        name: demo
+        variable_libraries:
+          - lib.share
+          - lib.demo
+        stages:
+          - name: Deploy
+            steps:
+              - name: render
+                shell: echo $(API_HOST_ALIAS)
+        """;
+
+    private const string NightlyPipelineYaml = """
+        name: nightly
+        variable_libraries:
+          - lib.share
+          - lib.qa
+        stages:
+          - name: Deploy
+            steps:
+              - name: render
+                shell: echo $(API_HOST_ALIAS:-)
+        """;
+
+    /// <summary>R-71 and R-74: a key left empty in a library only the nightly reads (where it is
+    /// optional) must not be reported against the demo, which reads it from its own, filled, library.
+    /// Resolving every pipeline's libraries together let the QA library's empty value override the
+    /// demo's and name <c>lib.qa</c> on the demo's page.</summary>
+    [Fact]
+    public async Task ProjectReadiness_JudgesEachPipelineOnTheLibrariesItReadsOnly()
+    {
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>())
+            .Returns([(21, "demo", DemoPipelineYaml), (22, "nightly", NightlyPipelineYaml)]);
+        _requirements.FindEmptyValuesAsync(
+                Arg.Is<IReadOnlyCollection<string>>(names => names.Contains("lib.qa")),
+                Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue> { new(PipelineRequirementsChecker.LibraryKind, "API_HOST_ALIAS", 40) });
+        _requirements.FindEmptyValuesAsync(
+                Arg.Is<IReadOnlyCollection<string>>(names => !names.Contains("lib.qa")),
+                Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue>());
+        Runners(11);
+        Repository();
+
+        var project = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        Assert.DoesNotContain(project.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+    }
+
+    /// <summary>The same two libraries, but the pipeline that reads the empty one uses the key without a
+    /// default: that pipeline is the one reported, with the library it reads.</summary>
+    [Fact]
+    public async Task ProjectReadiness_ReportsAnEmptyKeyAgainstTheLibraryOfThePipelineThatNeedsIt()
+    {
+        var strictNightly = NightlyPipelineYaml.Replace("$(API_HOST_ALIAS:-)", "$(API_HOST_ALIAS)", StringComparison.Ordinal);
+        _repo.GetPipelineDefinitionsForProjectAsync(7, Arg.Any<CancellationToken>())
+            .Returns([(21, "demo", DemoPipelineYaml), (22, "nightly", strictNightly)]);
+        _requirements.FindEmptyValuesAsync(
+                Arg.Is<IReadOnlyCollection<string>>(names => names.Contains("lib.qa")),
+                Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue> { new(PipelineRequirementsChecker.LibraryKind, "API_HOST_ALIAS", 40) });
+        _requirements.FindEmptyValuesAsync(
+                Arg.Is<IReadOnlyCollection<string>>(names => !names.Contains("lib.qa")),
+                Arg.Any<IReadOnlyCollection<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new List<PipelineEmptyValue>());
+        Runners(11);
+        Repository();
+
+        var demoOnly = await BuildSut().CheckProjectAsync(7, pipelineId: 21, organizationId: 3, CancellationToken.None);
+        var project = await BuildSut().CheckProjectAsync(7, pipelineId: null, organizationId: 3, CancellationToken.None);
+
+        Assert.DoesNotContain(demoOnly.Checks, check => check.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+        var check = Assert.Single(project.Checks, item => item.Kind == PipelineSetupReadinessKind.EmptyLibraryValues);
+        Assert.Equal(["API_HOST_ALIAS"], check.Items);
+        Assert.Equal(40, check.ItemIds["API_HOST_ALIAS"]);
+    }
+
     private static PipelineTemplateResolution Resolution(string yaml) => new(
         YamlParsingHelper.ParseAndValidate(yaml, Substitute.For<ILogger>())!, yaml, null, null, null, false);
 }

@@ -113,7 +113,7 @@ public sealed class AiRunOperationExecutor(
         if (remaining < TimeSpan.FromSeconds(1)) remaining = TimeSpan.FromSeconds(1);
         await run.Output(
             $"AI request: {configuration.Provider} model {configuration.Model}, prompt {Encoding.UTF8.GetByteCount(userPrompt)} bytes, " +
-            $"max {configuration.MaxOutputTokens} output tokens, effort {AiProviderCatalog.EffortToken(configuration.Effort) ?? "provider default"}.",
+            $"max {configuration.MaxOutputTokens} output tokens, effort {AiEffortTokens.Of(configuration.Effort) ?? "provider default"}.",
             TaskLogLevel.Info).ConfigureAwait(false);
         var client = new AiProviderClient(httpClientFactory.CreateClient(HttpClientName));
         var outcome = await client.CompleteAsync(

@@ -14,17 +14,17 @@
                     <span title="@log.Timestamp.ToString("F")">@RelativeTime.FormatAgo(L, log.Timestamp)</span>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Width="150px" Filterable="true" />
+            <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Filterable="true" />
             <OmniDataGridColumn TItem="AuditLogDto" Property="Action" Title="@L["Action"]" Width="220px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_actionOptions" FormatFilterValue="@ActionFilterText" FilterSearchable="true" >
                 <Template Context="log">
                     <OmniBadge Fill="OmniFill.Solid" Tone="@GetActionBadge(log.Action)">@ActionText(log.Action)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Title="@L["Details"]" Filterable="true" />
+            <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Truncate="true" Title="@L["Details"]" Filterable="true" />
             <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" Width="150px" Sortable="false" Filterable="false">
                 <Template Context="log">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>

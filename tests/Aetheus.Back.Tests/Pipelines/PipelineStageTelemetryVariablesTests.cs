@@ -26,7 +26,7 @@ public sealed class PipelineStageTelemetryVariablesTests
 
     private PipelineStepTaskDispatcher Dispatcher() =>
         new(_repo, Substitute.For<IPipelineDispatchServerResolver>(), Substitute.For<IPipelineStepTaskBuilder>(),
-            Substitute.For<IPipelineRunFinalizer>(), Substitute.For<IPipelineTriggerStepCoordinator>(),
+            Substitute.For<IPipelineTriggerStepCoordinator>(),
             Substitute.For<IPipelineBranchAdvanceStep>(), Substitute.For<IPipelineAnalysisTaskFactory>(),
             Substitute.For<IPipelineDotnetTestTaskFactory>(), Substitute.For<IPipelineFunctionTaskFactory>(),
             Substitute.For<IPipelineGateStatusTaskFactory>(), Substitute.For<IPipelineDeploymentTaskFactory>(),
@@ -51,8 +51,8 @@ public sealed class PipelineStageTelemetryVariablesTests
 
     private Task AddFor(bool hostOperation, Dictionary<string, string> variables) =>
         hostOperation
-            ? HostFactory().AddTelemetryEnvironmentAsync(RunId, variables, TestContext.Current.CancellationToken)
-            : Dispatcher().AddDeployObservabilityVariablesAsync(RunId, variables, TestContext.Current.CancellationToken);
+            ? HostFactory().AddTelemetryEnvironmentAsync(RunId, null, variables, TestContext.Current.CancellationToken)
+            : Dispatcher().AddDeployObservabilityVariablesAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
     [Theory]
     [InlineData(false)]
@@ -97,6 +97,28 @@ public sealed class PipelineStageTelemetryVariablesTests
         await _repo.DidNotReceiveWithAnyArgs().GetPipelineProjectIdAsync(default!, TestContext.Current.CancellationToken);
     }
 
+    // deploy-prod #132 (2026-10-22): the project monitors one application per environment (prod and
+    // demo), so only the stage's environment says which one the deploy feeds.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AStageEnvironment_TargetsThatEnvironmentsApplication(bool hostOperation)
+    {
+        RunOfProject(11);
+        _repo.FindEnvironmentByNameForProjectAsync("prod", 11, Arg.Any<CancellationToken>())
+            .Returns(new Data.Entities.Environment { Id = 7, Name = "prod", ProjectId = 11 });
+        _deployEnv.GetDeployEnvAsync(11, 7, RunId, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, string> { ["OTEL_SERVICE_NAME"] = "shop-prod" });
+        var variables = new Dictionary<string, string>();
+
+        await (hostOperation
+            ? HostFactory().AddTelemetryEnvironmentAsync(RunId, " prod ", variables, TestContext.Current.CancellationToken)
+            : Dispatcher().AddDeployObservabilityVariablesAsync(RunId, " prod ", variables, TestContext.Current.CancellationToken));
+
+        Assert.Equal(new Dictionary<string, string> { ["OTEL_SERVICE_NAME"] = "shop-prod" }, variables);
+        await _deployEnv.DidNotReceive().GetDeployEnvAsync(11, null, RunId, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AColourWhoseTelemetryCannotBeBuilt_IsLoggedAndStartsWithoutIt()
     {
@@ -106,7 +128,7 @@ public sealed class PipelineStageTelemetryVariablesTests
         var logger = Substitute.For<ILogger<PipelineHostOperationTaskFactory>>();
         var variables = new Dictionary<string, string> { ["KEEP"] = "1" };
 
-        await HostFactory(logger).AddTelemetryEnvironmentAsync(RunId, variables, TestContext.Current.CancellationToken);
+        await HostFactory(logger).AddTelemetryEnvironmentAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
         Assert.Equal(new Dictionary<string, string> { ["KEEP"] = "1" }, variables);
         logger.ReceivedWithAnyArgs(1).Log(LogLevel.Warning, default, default(object)!, default, default!);

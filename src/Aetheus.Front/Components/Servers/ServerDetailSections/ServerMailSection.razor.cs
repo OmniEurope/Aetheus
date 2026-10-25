@@ -68,6 +68,16 @@ public partial class ServerMailSection
 
     private MailDataDto Mail => Server.Mail;
 
+    // R1-29: accounts first (the page's daily work), then domains, then the state of the stack.
+    internal static readonly string[] TabSlugs = ["accounts", "domains", MailComplianceBanner.StateTabSlug, "aliases", "spam", "queue", "logs", "relations"];
+
+    private static readonly int StateTabIndex = Array.IndexOf(TabSlugs, MailComplianceBanner.StateTabSlug);
+
+    // The selected tab, told by the URL-synced tabs; the banner steps aside while the State tab shows the same lines.
+    private int _tabIndex;
+
+    private void OnTabChanged(int index) => _tabIndex = index;
+
     // SITE-OFFLINE-001: every write of this section queues a mail-manage task the agent alone can claim;
     // while it is offline the actions are disabled (the child tabs hide theirs) and the handlers stop here.
     private bool AgentOffline => AgentOfflineGuard.IsOffline(Server);
@@ -279,8 +289,8 @@ public partial class ServerMailSection
 
     // Quota 0 = adopted mailbox whose quota Aetheus does not manage: show the measured size only.
     internal string QuotaText(MailAccountDto account) => account.QuotaMb > 0
-        ? $"{account.UsedMb} / {account.QuotaMb} MB ({UsagePercent(account)}%)"
-        : $"{account.UsedMb} MB ({L["MailQuotaUnmanaged"]})";
+        ? $"{account.UsedMb} / {account.QuotaMb} Mo ({UsagePercent(account)}%)"
+        : $"{account.UsedMb} Mo ({L["MailQuotaUnmanaged"]})";
 
     internal static double UsagePercent(MailAccountDto account) =>
         account.QuotaMb > 0 ? Math.Round(account.UsedMb * 100.0 / account.QuotaMb, 1) : 0;

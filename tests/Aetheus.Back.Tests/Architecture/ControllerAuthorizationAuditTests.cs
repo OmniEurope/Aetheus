@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Back.Components.AppMonitoring;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -36,7 +37,7 @@ public class ControllerAuthorizationAuditTests
         // OTLP ingestion (ADR-021 phase 2): authenticated by a per-app ingestion key in the
         // x-aetheus-ingest-key header (resolved to a MonitoredApp), not by a JWT - so a monitored
         // app can push telemetry without a user token. Rate-limited per key + tight body cap.
-        "Aetheus.Back.Components.AppMonitoring.Ingest.IngestController",
+        "Aetheus.Back.Components.AppMonitoring.IngestController",
         // Browser analytics ingestion is intentionally anonymous. The public site id selects the
         // application, declared origins are checked, identifiers are HMAC-derived server-side, and
         // the route is protected by a dedicated per-site/per-address limiter and a 4 KiB body cap.

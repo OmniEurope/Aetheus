@@ -7,14 +7,52 @@
 # grade reads all four and sits in the stage after them (ADR-012: the steps of a stage run together).
 # Image scanning needs images this template cannot know how to build: a project that ships containers
 # adds its own stage in its pipeline.
+# Its stages follow the platform's own security pipeline (ADR-054): checkout, proof that the checkout is
+# the requested immutable revision, the CI manifest restored (which makes the restore refuse a payload
+# built from another commit), the scans, the grade.
 name: application-security-template
 trigger: manual
+variables:
+  APPLICATION_CI_PIPELINE: application-ci
 
 stages:
+  - name: Checkout
+    group: Security
+    execution_role: build
+    os: linux
+    steps:
+      - name: Check out the exact source
+        checkout: true
+
+  # After the checkout, in its own stage: the steps of one stage are concurrent.
+  - name: Verify source
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
+    steps:
+      - name: Verify immutable source
+        type: aetheus
+        function: verify-immutable-source
+        timeout_seconds: 600
+
+  - name: Restore CI manifest
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Verify source]
+    steps:
+      - name: Restore exact CI artifact manifest
+        type: restore-artifacts
+        artifact: ArtifactManifest-artifacts
+        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
+        timeout_seconds: 300
+
   - name: Scan source
     group: Security
     execution_role: build
     os: linux
+    depends_on: [Restore CI manifest]
     steps:
       - name: Scan secrets
         type: scanner

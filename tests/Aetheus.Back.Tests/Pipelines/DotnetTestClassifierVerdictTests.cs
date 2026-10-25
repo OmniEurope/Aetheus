@@ -6,7 +6,7 @@ namespace Aetheus.Back.Tests.Pipelines;
 
 /// <summary>The verdict of the test-result classifier on a fixed corpus: whether a suite ran clean,
 /// ran and failed, or produced no evidence that can be graded, and for a refusal which rule refused.
-/// Each expected verdict is the one <c>deploy/scripts/classify-dotnet-test-result.mjs</c> gave for the
+/// Each expected verdict is the one the former <c>classify-dotnet-test-result.mjs</c> script gave for the
 /// same case on 2026-10-16, when the C# classifier was still checked against it; the script was then
 /// deleted (PLAN-002 lot 1.10, B2) and this corpus keeps the two from having diverged.</summary>
 public sealed class DotnetTestClassifierVerdictTests : IDisposable

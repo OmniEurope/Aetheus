@@ -117,7 +117,7 @@ services:
         timeout: 5s
         retries: 3
         start_period: 120s
-      mem_limit: ${BACK_MEM_LIMIT:-1g}
+      mem_limit: ${BACK_MEM_LIMIT:-2g}
       networks:
         - default
         - backend

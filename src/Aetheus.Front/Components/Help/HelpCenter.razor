@@ -7,7 +7,7 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("help")" /></Icon>
 </OmniPageHeader>
 
-<OmniStack Gap="OmniSpacing.XLarge">
+<OmniStack Gap="OmniSpacing.ExtraLarge">
     <OmniTextBox aria-label="@L["SearchHelp"]" Placeholder="@L["SearchHelp"]" Value="@_search" ValueChanged="OnSearchInputAsync"
         Class="help-search-box"  ValueExpression="@(() => _search)"/>
 
@@ -17,24 +17,21 @@
     }
     else
     {
-        <OmniRow Gap="OmniSpacing.Large">
+        @* R-3: the help cards are OE tiles of one OmniTileGrid (same width, same height). *@
+        <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
             @foreach (var article in _filtered)
             {
-                <OmniColumn Span="12" MediumSpan="6">
-                    <div role="button" tabindex="0"
-                         @onclick="@(() => Nav.NavigateTo($"/help/{article.Key}"))"
-                         @onkeydown="@(e => OnCardKeyDown(e, article.Key))">
-                    <OmniCard Class="help-card omni-u-pointer">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Class="omni-u-mb-sm">
+                    @* The card is itself the link to the article (OmniCard.Href): a real link, focusable and
+                       opened by Enter, not a div acting as a button. *@
+                    <OmniCard Class="help-card" Href="@($"/help/{article.Key}")">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Class="omni-u-mb-sm">
                             <OmniIcon Name="@MaterialIconMap.Resolve(article.Icon)" Class="help-card-icon" />
                             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@article.Title</OmniHeading>
                         </OmniStack>
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@article.Description</OmniText>
                     </OmniCard>
-                    </div>
-                </OmniColumn>
             }
-        </OmniRow>
+        </OmniTileGrid>
 
         @if (_filtered.Count == 0)
         {

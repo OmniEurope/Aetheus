@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>ensure-dotnet-sdk</c> function, port of <c>deploy/scripts/ensure-dotnet-sdk.sh</c> (see
+/// The <c>ensure-dotnet-sdk</c> function, port of <c>scripts/ensure-dotnet-sdk.sh</c> (see
 /// <see cref="PinnedDotnetSdk"/> for the resolution rules). The script printed the executable path on
 /// stdout for <c>DOTNET="$(sh ensure-dotnet-sdk.sh)"</c>; the function publishes it as <c>DOTNET</c>.
 /// Its optional argument, the manifest path relative to the working directory, is the

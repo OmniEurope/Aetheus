@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The verification <c>deploy/scripts/extract-agent-release-from-image.sh</c> ran as inline Node.js on
+/// The verification that the former <c>extract-agent-release-from-image.sh</c> script ran as inline Node.js on
 /// an extracted agent release: the manifest names the expected commit, speaks protocol 2 within the
 /// range the policy requires, publishes the <c>ai.run</c> capability, and every archive it declares
 /// has exactly the declared size and SHA-256. Each refusal carries the script's message.
@@ -16,7 +16,7 @@ internal static class AgentReleaseManifestCheck
     public static async Task<string?> VerifyAsync(
         string directory, string expectedCommit, string protocolPolicy, CancellationToken cancellationToken)
     {
-        var manifestPath = Path.Combine(directory, ExtractAgentReleaseFunction.ManifestName);
+        var manifestPath = Path.Combine(directory, AgentReleaseManifest.FileName);
         if (!File.Exists(manifestPath))
             return $"Agent manifest {manifestPath} was not found in the image downloads.";
 

@@ -7,6 +7,8 @@ internal sealed class AgentReleaseArchiveResolver(
     IHttpClientFactory httpClientFactory,
     AetheusAgentOptions options)
 {
+    internal const long MaxArchiveBytes = 256L * 1024 * 1024;
+
     public async Task<ResolvedAgentReleaseArchive?> ResolveAsync(
         IReadOnlyDictionary<string, string>? envVars,
         bool isWindows,
@@ -72,7 +74,7 @@ internal sealed class AgentReleaseArchiveResolver(
         archive is not null
         && Path.GetFileName(archive.FileName) == archive.FileName
         && archive.SizeBytes > 0
-        && archive.SizeBytes <= AgentSelfUpdateOperationExecutor.MaxArchiveBytes
+        && archive.SizeBytes <= MaxArchiveBytes
         && archive.Sha256.Length == 64
         && archive.Sha256.All(Uri.IsHexDigit);
 }

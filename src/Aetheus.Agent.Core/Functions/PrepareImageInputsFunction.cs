@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>prepare-image-inputs</c> function, port of
-/// <c>deploy/scripts/security/prepare-image-inputs.sh</c>: before the image scanners run, the restored
+/// the former <c>prepare-image-inputs.sh</c> script: before the image scanners run, the restored
 /// archives must come from the pipeline's revision (<c>source-commit</c>), their delivery contract must
 /// describe that same revision (<c>schema</c> 2, <c>sourceSha</c>) and give each archive a SHA-256 they
 /// match; only then is each <c>&lt;name&gt;.tar.gz</c> unpacked to <c>.analysis-image/&lt;name&gt;.tar</c>,

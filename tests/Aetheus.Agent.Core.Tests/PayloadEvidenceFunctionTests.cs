@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/nightly-evidence.mjs</c>, run through the real executor on every
+/// The C# port of the former <c>nightly-evidence.mjs</c> script, run through the real executor on every
 /// sequence of runs the script itself performed (<c>TestData/payload-evidence-cases.json</c>,
 /// <see cref="ScriptReferenceData"/>): the case of <c>nightly-evidence.test.mjs</c>, the collation of
 /// names, duplicate, empty, directory and missing artifacts, the usage refusals and evidence of every

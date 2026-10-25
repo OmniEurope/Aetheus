@@ -219,7 +219,10 @@ internal static class AnalysisGradeEngine
                 : first.Direction == AnalysisMetricDirection.HigherIsBetter
                     ? values.Min()
                     : values.Max();
-        return BuildMeasure(first, value);
+        // Every report of the run evaluates every rule, so the first measure of the group may come from a
+        // report that holds no such metric (no value, no unit). The unit is the observed measure's own.
+        var unit = observed.Select(measure => measure.Unit).FirstOrDefault(item => !string.IsNullOrWhiteSpace(item)) ?? first.Unit;
+        return BuildMeasure(first with { Unit = unit }, value);
     }
 
     private static AnalysisGradeMeasureDto BuildMeasure(

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/retain-docker-images.sh</c>, run through the real executor as a
+/// The C# port of the former <c>retain-docker-images.sh</c> script, run through the real executor as a
 /// deployment function against an in-memory Docker daemon: protected and recent tags kept, the rest
 /// removed (or listed in dry run), the re-checks right before a removal, the container that vanished or
 /// cannot be inspected, the refusals, and the host-wide lock.

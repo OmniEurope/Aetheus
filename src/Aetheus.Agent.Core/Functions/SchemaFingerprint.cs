@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/schema-fingerprint.mjs</c>: the fingerprint of a database schema state,
+/// Port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/schema-fingerprint.mjs</c>: the fingerprint of a database schema state,
 /// the ordered list of applied EF migration ids and the SHA-256 of that list joined with <c>\n</c>.
 /// The source tree and a live database (<c>__EFMigrationsHistory</c>) yield the same list, which is
 /// what lets QA verify the state a delivery contract declares.

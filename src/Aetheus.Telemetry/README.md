@@ -89,6 +89,15 @@ données » setting: 15, 5 or 1 minute by profile). At startup, then every 15 mi
 answers 404, a network failure), it keeps the OpenTelemetry default: 60 s, or `OTEL_METRIC_EXPORT_INTERVAL`
 in milliseconds. A version of the package that predates this keeps its own interval; Aetheus accepts both.
 
+## Refused ingest key
+
+When Aetheus answers an export or the configuration read with 401 or 403, the ingest key is no longer
+valid for the application (rotated, expired, or from another environment). That answer is permanent: the
+package stops sending with that key, logs one warning naming the endpoint (never the key), and tries once
+more after one hour. A different key resumes sending at once; 429 and 5xx answers are transient and keep
+the usual retry. Every request carries a `User-Agent` token naming the package, the service and the
+application id, so a stale emitter can be found in Aetheus' refusal log.
+
 The package composes with additional official instrumentations configured by the host. Both registration
 paths use the same `OpenTelemetryBuilder`, so an application may call `AddOpenTelemetry()` before or after
 the Aetheus helper without creating a proprietary provider. Calling `AddAetheusTelemetry` more than once

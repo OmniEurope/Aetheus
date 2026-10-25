@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: EUPL-1.2
+# v3 (recette R2-1), for projects onboarded through the setup wizard. Against v2, its stages and their order
+# are the platform's own candidate (ADR-054):
+# - the deployed baseline is the one in service (current-deployed), restored before anything is built, and
+#   a bootstrap, the first release of a project, is accepted unless the run says otherwise (parameter
+#   allowBootstrap);
+# - Security follows Quality instead of running beside it, and QA starts as soon as the CI has finished
+#   (it needs only the payload); the candidate waits for the three;
+# - the baseline identity is exported by the restore itself (DELIVERY_BASELINE_*), so no step of this
+#   template needs Node or a project script.
+# Quality, Security and QA run only for the pipelines the project has (APPLICATION_*_ENABLED, written by the
+# wizard); a stage skipped that way counts as done for the next one. The wizard turns QA off when the project
+# declares no QA command, because the QA pipeline refuses to run without one (recette R2-7 and R2-8).
+# Left out on purpose: the assurance seal. Its contract grades test gates the platform's own CI records in
+# run variables, which a generic project does not publish; here a failing gate fails its stage, and the
+# candidate is published only when every stage that ran has passed.
+# v1 and v2 are unchanged: the pipelines pinned to them keep running as they did.
+name: application-candidate-template
+trigger: manual
+parameters:
+  - name: performance
+    display_name: Run the optional performance smoke
+    type: boolean
+    default: "false"
+  - name: allowBootstrap
+    display_name: Accept this release as the first one when no deployed baseline exists
+    type: boolean
+    default: "true"
+variables:
+  APPLICATION_CI_PIPELINE: application-ci
+  APPLICATION_QUALITY_PIPELINE: application-quality
+  APPLICATION_SECURITY_PIPELINE: application-security
+  APPLICATION_QA_PIPELINE: application-qa
+  APPLICATION_ARTIFACT_NAME: ApplicationPayload-artifacts
+  APPLICATION_QUALITY_ENABLED: "true"
+  APPLICATION_SECURITY_ENABLED: "true"
+  APPLICATION_QA_ENABLED: "true"
+  CANDIDATE_VERSION: "c-$(BUILD_SOURCEVERSION)"
+  DELIVERY_BASELINE_BOOTSTRAP: "true"
+  DELIVERY_BASELINE_CANDIDATE_VERSION: ""
+  DELIVERY_BASELINE_SOURCE_SHA: ""
+  DELIVERY_BASELINE_CONTRACT_SHA256: ""
+
+stages:
+  - name: Baseline
+    group: Source
+    execution_role: build
+    os: linux
+    steps:
+      - name: Restore factually deployed baseline contract
+        type: restore-artifacts
+        release: current-deployed
+        artifact: "$(APPLICATION_ARTIFACT_NAME)"
+        target_directory: .delivery-baseline
+        allow_missing: true
+        timeout_seconds: 1200
+
+  - name: Check bootstrap allowed
+    group: Source
+    execution_role: build
+    os: linux
+    depends_on: [Baseline]
+    steps:
+      - name: Refuse unauthorized bootstrap before CI
+        # bootstrap defaults to the DELIVERY_BASELINE_BOOTSTRAP the restore above published.
+        type: aetheus
+        function: authorize-baseline-bootstrap
+        with:
+          allow_bootstrap: "${{ parameters.allowBootstrap }}"
+        timeout_seconds: 60
+
+  - name: CI
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Check bootstrap allowed]
+    steps:
+      - name: Build, test and package exact source
+        type: trigger
+        pipeline: "$(APPLICATION_CI_PIPELINE)"
+        variables:
+          DELIVERY_BASELINE_BOOTSTRAP: "$(DELIVERY_BASELINE_BOOTSTRAP)"
+          DELIVERY_BASELINE_CANDIDATE_VERSION: "$(DELIVERY_BASELINE_CANDIDATE_VERSION)"
+          DELIVERY_BASELINE_SOURCE_SHA: "$(DELIVERY_BASELINE_SOURCE_SHA)"
+          DELIVERY_BASELINE_CONTRACT_SHA256: "$(DELIVERY_BASELINE_CONTRACT_SHA256)"
+        timeout_seconds: 7200
+
+  - name: Quality
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [CI]
+    condition: "eq(variables['APPLICATION_QUALITY_ENABLED'], 'true')"
+    steps:
+      - name: Produce quality evidence and evaluate its gate
+        type: trigger
+        pipeline: "$(APPLICATION_QUALITY_PIPELINE)"
+        timeout_seconds: 7200
+
+  # Serialize scanner-heavy Security after Quality to respect the runner's resource limits.
+  - name: Security
+    group: Security
+    execution_role: build
+    os: linux
+    depends_on: [Quality]
+    condition: "eq(variables['APPLICATION_SECURITY_ENABLED'], 'true')"
+    steps:
+      - name: Produce security evidence and evaluate its gate
+        type: trigger
+        pipeline: "$(APPLICATION_SECURITY_PIPELINE)"
+        timeout_seconds: 7200
+
+  # QA needs only the CI payload, so it starts as soon as the CI has succeeded; the candidate below still
+  # joins every gate.
+  - name: QA
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [CI]
+    condition: "eq(variables['APPLICATION_QA_ENABLED'], 'true')"
+    steps:
+      - name: Validate V, rollback V-1 and teardown
+        type: trigger
+        pipeline: "$(APPLICATION_QA_PIPELINE)"
+        variables:
+          APPLICATION_PERFORMANCE_ENABLED: "${{ parameters.performance }}"
+        timeout_seconds: 18000
+
+  - name: Candidate
+    group: Release
+    execution_role: build
+    os: linux
+    depends_on: [QA, Quality, Security]
+    steps:
+      - name: Publish immutable undeployed candidate
+        type: release
+        version: "$(CANDIDATE_VERSION)"
+        changelog: true
+        deployed: false
+        artifact: "$(APPLICATION_ARTIFACT_NAME)"
+        artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
+        timeout_seconds: 300

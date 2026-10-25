@@ -41,6 +41,36 @@ public class PipelineParameterResolverTests
         Assert.False(effective.ContainsKey("ENV"));
     }
 
+    /// <summary>R-25: <c>advanced: true</c> reads from the pipeline YAML, and absent means a main field.</summary>
+    [Fact]
+    public void ParameterYaml_ReadsTheAdvancedFlag()
+    {
+        var definition = Aetheus.Back.Services.YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>("""
+            name: p
+            parameters:
+              - name: imageRetentionDryRun
+                type: boolean
+                advanced: true
+              - name: candidateVersion
+                required: true
+            """);
+
+        Assert.True(definition.Parameters.Single(p => p.Name == "imageRetentionDryRun").Advanced);
+        Assert.False(definition.Parameters.Single(p => p.Name == "candidateVersion").Advanced);
+    }
+
+    /// <summary>R-26: a preview that runs before the user answered does not complain about the field.</summary>
+    [Fact]
+    public void TryResolve_RequiredMissing_IsNotAnError_WhenRequiredIsNotEnforced()
+    {
+        var ok = PipelineParameterResolver.TryResolve(
+            [Param("ENV", required: true)], null, out var effective, out var errors, enforceRequired: false);
+
+        Assert.True(ok);
+        Assert.Empty(errors);
+        Assert.False(effective.ContainsKey("ENV"));
+    }
+
     /// <summary>
     /// Saving a pipeline and launching one ask different questions, and only one of them is about
     /// values. A required parameter with no default is a perfectly storable declaration - it is what

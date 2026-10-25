@@ -11,13 +11,13 @@ else if (_repo is not null)
     @* Attached: show mirror status + actions. *@
     <OmniCard>
         <OmniStack Gap="OmniSpacing.Small">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
                     @_repo.ProviderType / @_repo.OwnerOrGroup / @_repo.RepositoryName
                 </OmniText>
                 <OmniBadge Fill="OmniFill.Solid" Tone="@MirrorBadge(_repo.MirrorStatus)">@L.Localize(_repo.MirrorStatus)</OmniBadge>
             </OmniStack>
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["LastFetched"]</OmniText>
                 <OmniText Element="OmniTextElement.Paragraph">@(_repo.LastFetchedAt?.ToString("g") ?? "-")</OmniText>
             </OmniStack>
@@ -27,12 +27,12 @@ else if (_repo is not null)
             }
             @if (!string.IsNullOrEmpty(_repo.CloneUrl))
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Url"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph" Class="text-mono">@_repo.CloneUrl</OmniText>
                 </OmniStack>
             }
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["ExternalRepoRole"]</OmniText>
                 <OmniText Element="OmniTextElement.Paragraph">@L[_repo.IsProjectSource ? "ExternalRepoRoleProjectSource" : "ExternalRepoRoleAdditionalSource"]</OmniText>
             </OmniStack>
@@ -48,8 +48,8 @@ else if (_repo is not null)
             }
             @if (_canWrite)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-sm">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncNowAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><OmniIcon Name="OmniIconName.Sync" /> <span>@L["SyncNow"]</span></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-sm">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncNowAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><span>@L["SyncNow"]</span></ChildContent></OmniButton>
                     @* STD-BTN detection 11: Sync now visible, the other actions in the menu. *@
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem Tone="OmniTone.Danger" OnClick="@DetachAsync"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon><ChildContent>@L["Detach"]</ChildContent></OmniMenuItem>
@@ -141,7 +141,7 @@ else if (_canWrite)
             </OmniRow>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-mt-sm">@L["ExternalRepoCloneHint"]</OmniText>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["ExternalRepoAttachBesideHint"]</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@("omni-u-mt-md" + (_busy ? " btn-busy" : null))" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Link" /> <span>@L["Attach"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@("omni-u-mt-md" + (_busy ? " btn-busy" : null))" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Link" /></Icon><ChildContent><span>@L["Attach"]</span></ChildContent></OmniButton>
         </OmniTemplateForm>
     </OmniCard>
 }

@@ -21,6 +21,8 @@ public static class NotificationTargets
                 return Id(root, "ProjectId") is { } project && Id(root, "AiTaskDefinitionId") is { } task
                     ? $"/projects/{project}/ai-tasks/{task}" + (Id(root, "AiRunResultId") is { } run ? $"?result={run}" : string.Empty)
                     : null;
+            if (eventType == "alert.triggered" && AlertId(root) is { } alert)
+                return $"/alerts/{alert}";
             if (eventType == NotificationEventTypes.ReleaseDeployed && Id(root, "ReleaseId") is { } release)
                 return $"/releases/{release}";
             return eventType.StartsWith("pipeline.", StringComparison.Ordinal) && Id(root, "PipelineRunId") is { } pipelineRun
@@ -32,6 +34,10 @@ public static class NotificationTargets
             return null;
         }
     }
+
+    private static long? AlertId(JsonElement root) =>
+        root.TryGetProperty("AlertId", out var value) && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var id) && id > 0 ? id : null;
 
     private static int? Id(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number

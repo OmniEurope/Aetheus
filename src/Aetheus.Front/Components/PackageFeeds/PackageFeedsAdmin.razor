@@ -6,9 +6,9 @@
 
 <OmniPageHeader Title="@L["PackageFeeds"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("inventory")" /></Icon>
-    <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
     <Filters>
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search"
             @bind-Value:after="ResetSearchAsync" Class="pipeline-list-search" />
@@ -35,8 +35,8 @@
         <OmniDataGridColumn TItem="PackageFeedDto" Title="@L["Actions"]" Width="200px" Sortable="false" Filterable="false" >
             <Template Context="f">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ManagePackagesAsync(f))" title="@L["ManagePackages"]" Label="@L["ManagePackages"]"><OmniIcon Name="OmniIconName.Archive" /></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(f))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ManagePackagesAsync(f))" title="@L["ManagePackages"]" Label="@L["ManagePackages"]"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(f))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 </span>
             </Template>
         </OmniDataGridColumn>

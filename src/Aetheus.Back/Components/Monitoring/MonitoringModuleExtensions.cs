@@ -8,7 +8,6 @@ public static class MonitoringModuleExtensions
     {
         services.AddScoped<IMonitoringRepository, MonitoringRepository>();
         services.AddScoped<IMonitoringService, MonitoringService>();
-        services.AddHostedService<MetricsCleanupService>();
         return services;
     }
 }

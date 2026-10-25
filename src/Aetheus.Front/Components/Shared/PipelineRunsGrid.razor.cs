@@ -145,6 +145,6 @@ public partial class PipelineRunsGrid
     }
 
     /// <summary>The export writes the duration the cell shows, a running run's up to now.</summary>
-    private Func<PipelineRunTableItem, object?> DurationExport => _durationExport ??= run => PipelineRunTablePresentation.FormatDuration(run, L);
+    private Func<PipelineRunTableItem, object?> DurationExport => _durationExport ??= run => PipelineRunTablePresentation.FormatDuration(run);
     private Func<PipelineRunTableItem, object?>? _durationExport;
 }

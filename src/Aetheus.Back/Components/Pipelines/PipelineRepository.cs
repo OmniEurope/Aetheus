@@ -38,6 +38,8 @@ public sealed class PipelineRepository(
     private readonly PipelineEnvironmentRepository _environments = new(db);
     private readonly PipelineRunRetentionRepository _retention = new(db);
     private readonly PipelineProjectOwnerRepository _projectOwners = new(db);
+    private readonly PipelineUnsavedInsertsRepository _unsavedInserts = new(db);
+    private readonly PipelineResumeWaitRepository _resumeWaits = new(db);
 
     // --- Core: pipelines, runs, steps, templates, artifacts, approvals ---
     public Task<(List<Pipeline> Items, int TotalCount)> GetPipelinesPagedAsync(string? search, PipelineTriggerType? triggerType, int page, int pageSize, List<int>? accessibleIds = null, CancellationToken ct = default)
@@ -110,6 +112,12 @@ public sealed class PipelineRepository(
     public void TrackDastExecutionLease(DastExecutionLease lease)
         => _core.TrackDastExecutionLease(lease);
 
+    public UnsavedInsertsMark MarkUnsavedInserts()
+        => _unsavedInserts.Mark();
+
+    public void DiscardUnsavedInsertsSince(UnsavedInsertsMark mark)
+        => _unsavedInserts.DiscardSince(mark);
+
     public Task<List<PipelineRun>> GetRunsAsync(int pipelineId, int count, CancellationToken ct = default)
         => _core.GetRunsAsync(pipelineId, count, ct);
 
@@ -150,6 +158,9 @@ public sealed class PipelineRepository(
     public Task<List<PipelineRunQueueReference>> GetRunQueueReferencesAsync(
         int runId, CancellationToken ct = default)
         => _taskQueue.GetRunReferencesAsync(runId, ct);
+
+    public Task<List<StepFailureProjection>> GetFailedStepsAsync(int runId, int max, CancellationToken ct = default)
+        => _core.GetFailedStepsAsync(runId, max, ct);
 
     public Task<List<StepOutputProjection>> GetSuccessfulStepOutputsAsync(int runId, CancellationToken ct = default)
         => _core.GetSuccessfulStepOutputsAsync(runId, ct);
@@ -266,6 +277,10 @@ public sealed class PipelineRepository(
 
     public Task CancelActiveStepRunsAndTasksAsync(int runId, CancellationToken ct = default)
         => _core.CancelActiveStepRunsAndTasksAsync(runId, ct);
+
+    public Task CancelActiveTasksOfStepRunsAsync(
+        int runId, IReadOnlyCollection<int> stepRunIds, CancellationToken ct = default)
+        => _core.CancelActiveTasksOfStepRunsAsync(runId, stepRunIds, ct);
 
     public Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default)
         => _core.CancelPendingStepRunsAsync(runId, ct);
@@ -551,4 +566,21 @@ public sealed class PipelineRepository(
 
     public Task<HashSet<int>> GetPipelineIdsWithActiveRunsAsync(CancellationToken ct = default)
         => _autoTriggers.GetPipelineIdsWithActiveRunsAsync(ct);
+
+    // --- R-39: the wait for a resume after a missed deployment confirmation ---
+    public Task<bool> TryParkRunAwaitingResumeAsync(int runId, DateTime deadline, CancellationToken ct = default)
+        => _resumeWaits.TryParkRunAwaitingResumeAsync(runId, deadline, ct);
+
+    public Task<ResumeReopenOutcome> ReopenAwaitingRunAsync(
+        int runId, IReadOnlyCollection<string> stageNames, DateTime now, CancellationToken ct = default)
+        => _resumeWaits.ReopenAwaitingRunAsync(runId, stageNames, now, ct);
+
+    public Task<List<int>> GetExpiredResumeWaitRunIdsAsync(DateTime now, CancellationToken ct = default)
+        => _resumeWaits.GetExpiredResumeWaitRunIdsAsync(now, ct);
+
+    public Task<bool> TryCloseExpiredResumeWaitAsync(int runId, DateTime now, CancellationToken ct = default)
+        => _resumeWaits.TryCloseExpiredResumeWaitAsync(runId, now, ct);
+
+    public Task<List<string>> GetBlockingFailedStageNamesAsync(int runId, CancellationToken ct = default)
+        => _resumeWaits.GetBlockingFailedStageNamesAsync(runId, ct);
 }

@@ -39,30 +39,6 @@ internal static class CliRuntime
         return token;
     }
 
-    internal static int ClampPage(int requested)
-    {
-        var clamped = Math.Clamp(requested, 1, CliInvocation.MaximumPage);
-        if (clamped != requested)
-        {
-            Console.Error.WriteLine(
-                $"Warning: --page must be between 1 and {CliInvocation.MaximumPage} "
-                + $"(got {requested}); using {clamped}.");
-        }
-        return clamped;
-    }
-
-    internal static int ClampPageSize(int requested)
-    {
-        var clamped = Math.Clamp(requested, 1, PaginationRequest.MaxPageSize);
-        if (clamped != requested)
-        {
-            Console.Error.WriteLine(
-                $"Warning: --page-size must be between 1 and {PaginationRequest.MaxPageSize} "
-                + $"(got {requested}); using {clamped}.");
-        }
-        return clamped;
-    }
-
     internal static async Task<int> ExecuteAsync(
         Func<CancellationToken, Task<int>> action,
         CancellationToken ct)

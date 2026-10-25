@@ -6,11 +6,11 @@
 
 <OmniPageHeader Title="@(_task?.Name ?? L["AiTasks"])" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("psychology")" /></Icon>
-    <Actions>
+    <ActionsContent>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@RunAsync" Busy="@(_starting || _runningServerTaskId is not null)"
-                    Disabled="@(!CanWrite)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Run"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo(ListUrl))"><OmniIcon Name="OmniIconName.ArrowLeft" /> <span>@L["GoBack"]</span></OmniButton>
-    </Actions>
+                    Disabled="@(!CanWrite)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Run"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo(ListUrl))"><Icon><OmniIcon Name="OmniIconName.ArrowLeft" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
+    </ActionsContent>
     @* STD-BTN detection 11: Run visible, the other actions in the menu. *@
     <MenuContent>
         <OmniMenuItem OnClick="@EditAsync" Disabled="@(!CanWrite)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
@@ -21,24 +21,24 @@
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync(_selected?.Id))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync(_selected?.Id))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 
-<div class="ai-results-tiles">
-    <OmniStatTile Value="@_totalCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Label="@L["AiTaskRuns"]">
+<OmniTileGrid Columns="4" Class="ai-results-tiles omni-u-mb-lg">
+    <OmniStatTile Value="@_totalCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["AiTaskRuns"]">
         <Icon><OmniIcon Name="OmniIconName.ListBullets" /></Icon>
     </OmniStatTile>
-    <OmniStatTile Value="@SuccessRateText" Label="@L["SuccessRate"]" Detail="@L["AiTaskOnThisPage"]">
+    <OmniStatTile Value="@SuccessRateText" Title="@L["SuccessRate"]" Detail="@L["AiTaskOnThisPage"]">
         <Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon>
     </OmniStatTile>
-    <OmniStatTile Value="@AverageDurationText" Label="@L["AverageDuration"]" Detail="@L["AiTaskOnThisPage"]">
+    <OmniStatTile Value="@AverageDurationText" Title="@L["AverageDuration"]" Detail="@L["AiTaskOnThisPage"]">
         <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
     </OmniStatTile>
-    <OmniStatTile Value="@LastRunText" Label="@L["LastRun"]" Detail="@_task?.ProfileName">
+    <OmniStatTile Value="@LastRunText" Title="@L["LastRun"]" Detail="@_task?.ProfileName">
         <Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon>
     </OmniStatTile>
-</div>
+</OmniTileGrid>
 
 @if (_loading && _runs.Count == 0)
 {
@@ -96,6 +96,7 @@ else
                 </dl>
                 @if (string.IsNullOrWhiteSpace(run.DiffPatch))
                 {
+                    @* nosemgrep: aetheus.razor.markupstring-dynamic - Markdig pipeline with DisableHtml, raw HTML is dropped *@
                     <div class="markdown-content ai-results-report">@((MarkupString)_reportHtml)</div>
                 }
                 else
@@ -103,10 +104,11 @@ else
                     <UrlSyncedTabs Slugs="@(new[] { "report", "diff" })">
                         <Tabs>
                         <OmniTabsItem Key="report" Title="@L["Report"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("description")" /></Icon><ChildContent>
+                            @* nosemgrep: aetheus.razor.markupstring-dynamic - Markdig pipeline with DisableHtml, raw HTML is dropped *@
                             <div class="markdown-content ai-results-report">@((MarkupString)_reportHtml)</div>
                         </ChildContent></OmniTabsItem>
                         <OmniTabsItem Key="diff" Title="@L["Diff"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("difference")" /></Icon><ChildContent>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><OmniIcon Name="OmniIconName.Download" /> <span>@L["DownloadPatch"]</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton>
                             @if (!string.IsNullOrWhiteSpace(run.ProposedBranchName))
                             {
                                 <OmniAlert Severity="OmniSeverity.Success" Class="omni-u-mb-sm">

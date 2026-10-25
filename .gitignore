@@ -425,7 +425,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 .idea/
-deploy/scripts/.jwt-key-local
 .jwt-key-dev
 
 # SSH target for remote agent tunnel (machine-specific)

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of the required-secret check of <c>deploy/scripts/prod-deploy-prepare.sh</c>, the one
+/// The C# port of the required-secret check of the former <c>prod-deploy-prepare.sh</c> script, the one
 /// <c>DeploymentSafetyAuditTests.ProductionSecretZero_SurvivesAgentReinstall_AndMissingStateFailsClosed</c>
 /// and <c>TheDeploymentBootstrapIdentityKey_IsProvisioned_NotJustRequired</c> pin in the script, run
 /// through the real executor on a real environment file with the Aetheus key list.

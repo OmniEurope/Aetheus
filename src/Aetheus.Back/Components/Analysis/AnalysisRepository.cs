@@ -535,6 +535,13 @@ public sealed class AnalysisRepository(AppDbContext db) : IAnalysisRepository
         => await _insights.MarkMissingFindingsFixedAsync(
             projectId, scannerKey, category, branchName, observedFingerprints, now, ct).ConfigureAwait(false);
 
+    public async Task MarkFindingsFixedAsync(
+        int projectId,
+        IReadOnlyCollection<string> fingerprints,
+        DateTime now,
+        CancellationToken ct = default)
+        => await _insights.MarkFindingsFixedAsync(projectId, fingerprints, now, ct).ConfigureAwait(false);
+
     public async Task<Dictionary<string, double>> GetBaselineMetricValuesAsync(
         int projectId,
         string baselineBranch,

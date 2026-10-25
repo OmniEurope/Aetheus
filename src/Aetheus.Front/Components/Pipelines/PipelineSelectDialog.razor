@@ -3,6 +3,6 @@
     <OmniDropDown aria-label="@L["SelectPipeline"]" TValue="int?" Options="@(Pipelines.ToOptions(item => (int?)item.Id, item => item.Name))"
         @bind-Value="_selectedId" Placeholder="@L["SelectPipeline"]" AllowEmpty="true" Class="omni-u-w-100" />
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(_selectedId))" Disabled="@(!_selectedId.HasValue)"><OmniIcon Name="OmniIconName.Check" /> <span>@L["Confirm"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(_selectedId))" Disabled="@(!_selectedId.HasValue)"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["Confirm"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

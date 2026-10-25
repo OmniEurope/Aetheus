@@ -81,6 +81,20 @@ public sealed class FrontHostSetupTests
         Assert.NotNull(provider.GetRequiredService<ApplicationVersionState>());
     }
 
+    // R1-41: GET api/users/me/preferences made 45 % of the measured requests; the OE default (one minute)
+    // is relaxed to the Aetheus period, and polling is never switched off (a tab shown again still syncs).
+    [Fact]
+    public void ThePreferencesSynchronization_UsesTheLongerAetheusPeriod()
+    {
+        using var provider = Configure("Development").BuildServiceProvider();
+
+        var interval = provider.GetRequiredService<IOptions<OmniPreferencesOptions>>().Value.SyncInterval;
+
+        Assert.Equal(FrontHostSetup.PreferencesSyncInterval, interval);
+        Assert.True(interval > TimeSpan.FromMinutes(1));
+        Assert.NotEqual(Timeout.InfiniteTimeSpan, interval);
+    }
+
     private static ServiceLifetime Lifetime<TService>(IServiceCollection services) =>
         services.Last(descriptor => descriptor.ServiceType == typeof(TService)).Lifetime;
 

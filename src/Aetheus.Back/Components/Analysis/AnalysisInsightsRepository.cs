@@ -153,6 +153,28 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task MarkFindingsFixedAsync(
+        int projectId,
+        IReadOnlyCollection<string> fingerprints,
+        DateTime now,
+        CancellationToken ct)
+    {
+        if (fingerprints.Count == 0) return;
+        var findings = await db.AnalysisFindings
+            .Where(finding => finding.ProjectId == projectId
+                && finding.Status != AnalysisFindingStatus.Fixed
+                && fingerprints.Contains(finding.Fingerprint))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var finding in findings)
+        {
+            finding.Status = AnalysisFindingStatus.Fixed;
+            finding.ResolvedAt = now;
+            finding.UpdatedAt = now;
+        }
+        if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task<Dictionary<string, double>> GetBaselineMetricValuesAsync(
         int projectId,
         string baselineBranch,
@@ -313,7 +335,9 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             .ToListAsync(ct).ConfigureAwait(false);
 
         var findingQuery = db.AnalysisFindingOccurrences.AsNoTracking()
-            .Where(occurrence => occurrence.AnalysisReport.PipelineRunId == runId);
+            .Where(occurrence => occurrence.AnalysisReport.PipelineRunId == runId
+                // A fixed finding is no decision and nothing left to do: it is neither listed nor counted (recette R1-35).
+                && occurrence.AnalysisFinding.Status != AnalysisFindingStatus.Fixed);
         if (categoryFilter is not null)
             findingQuery = findingQuery.Where(occurrence =>
                 categoryFilter.Contains(occurrence.AnalysisReport.Category));
@@ -325,7 +349,7 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         var findingCounts = findingLimit is null
             ? (Open: findings.Count(finding => finding.Status == AnalysisFindingStatus.Open),
                 NewOpen: findings.Count(finding => finding.IsNew && finding.Status == AnalysisFindingStatus.Open),
-                Decided: findings.Count(finding => finding.Status != AnalysisFindingStatus.Open))
+                Decided: findings.Count(finding => finding.Status.IsDecision()))
             : await AnalysisRunResultRepository.CountFindingsAsync(findingQuery, ct).ConfigureAwait(false);
         var evaluationQuery = db.AnalysisEvaluations.AsNoTracking()
             .Where(evaluation => evaluation.PipelineRunId == runId);
@@ -340,7 +364,8 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
                  evaluation.GradeSnapshotJson))
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var violations = AnalysisGateViolationParser.Parse(evaluationSnapshots);
+        var violations = await NameViolationsAsync(
+            AnalysisGateViolationParser.Parse(evaluationSnapshots), evaluationQuery, ct).ConfigureAwait(false);
         var grade = AnalysisGradeEngine.Aggregate(
             evaluationSnapshots.Select(snapshot => snapshot.GradeSnapshotJson),
             pipelineRunId: runId);
@@ -367,6 +392,28 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             Findings = findings,
             Violations = violations
         };
+    }
+
+    /// <summary>R-17: the violations with the human name of the policy each came from. Only the policies of the
+    /// run's own organization and project (and the global ones) are read, so a name never crosses a tenant.</summary>
+    private async Task<IReadOnlyList<AnalysisRunGateViolationDto>> NameViolationsAsync(
+        IReadOnlyList<AnalysisRunGateViolationDto> violations,
+        IQueryable<AnalysisEvaluation> evaluationQuery,
+        CancellationToken ct)
+    {
+        if (violations.Count == 0) return violations;
+        var owner = await evaluationQuery
+            .Select(evaluation => new { evaluation.OrganizationId, evaluation.ProjectId })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var keys = AnalysisGatePolicyNames.KeysOf(violations);
+        List<AnalysisPolicy> stored = owner is null
+            ? []
+            : await db.AnalysisPolicies.AsNoTracking()
+                .Where(policy => keys.Contains(policy.PolicyKey)
+                    && (policy.OrganizationId == null || policy.OrganizationId == owner.OrganizationId)
+                    && (policy.ProjectId == null || policy.ProjectId == owner.ProjectId))
+                .ToListAsync(ct).ConfigureAwait(false);
+        return AnalysisGatePolicyNames.Apply(violations, [.. stored, .. AnalysisDefaultPolicyCatalog.Policies]);
     }
 
     /// <summary>The run's gate verdict: an operational error (no report, a missing or failed producer,

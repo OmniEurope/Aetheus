@@ -84,10 +84,10 @@ public sealed class RunGanttProgressTests : BunitContext
 
         Assert.Equal(["Duration", "Average", "Last", "Cpu", "Io"], Headers(cut));
         var cells = cut.FindAll(".run-gantt-row:not(.run-gantt-head) .run-gantt-col").Select(cell => cell.TextContent).ToList();
-        Assert.Equal("1m40", cells[0]);
-        Assert.Equal("2m05", cells[1]);
-        Assert.Equal("1m30", cells[2]);
-        Assert.Equal("1m00", cells[3]); // 30 s + 30 s of CPU across the stage's two steps
+        Assert.Equal("1min40s", cells[0]); // the stage's own duration reads in the same precision (R-23)
+        Assert.Equal("2min05s", cells[1]); // the measurement columns keep their seconds
+        Assert.Equal("1min30s", cells[2]);
+        Assert.Equal("1min00s", cells[3]); // 30 s + 30 s of CPU across the stage's two steps
     }
 
     [Fact]

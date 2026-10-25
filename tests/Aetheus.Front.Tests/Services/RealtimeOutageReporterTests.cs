@@ -97,6 +97,81 @@ public sealed class RealtimeOutageReporterTests
         Assert.DoesNotContain("'servers'", second.Message, StringComparison.Ordinal);
     }
 
+    // R1-42: the report tells how much of the outage the page was hidden, so a sleeping machine or a
+    // parked tab reads differently from an outage seen on screen.
+    [Fact]
+    public async Task OneHub_NamesTheHiddenAndVisibleParts_OfTheOutage()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(300));
+        visibility.Visible();
+        clock.Advance(TimeSpan.FromSeconds(104));
+
+        reporter.Restored("pipelines", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.Equal(
+            "The 'pipelines' realtime connection was lost at 2026-10-12 08:06:45Z and came back after 404 s. The page was hidden for 300 s and visible for 104 s during the outage.",
+            report.Message);
+    }
+
+    [Fact]
+    public async Task AnOutageSeenOnScreen_SaysThePageWasNeverHidden()
+    {
+        var (reporter, clock, sink, _) = CreateWithVisibility();
+        clock.Advance(TimeSpan.FromSeconds(90));
+
+        reporter.Restored("servers", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.EndsWith("The page was hidden for 0 s and visible for 90 s during the outage.", report.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task APageStillHiddenWhenTheConnectionIsBack_CountsTheOpenStretch()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        clock.Advance(TimeSpan.FromSeconds(20));
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(100));
+
+        reporter.Restored("servers", LostAt);
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.EndsWith("The page was hidden for 100 s and visible for 20 s during the outage.", report.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SeveralHubs_EachKeepTheirOwnHiddenPart_InTheOneReport()
+    {
+        var (reporter, clock, sink, visibility) = CreateWithVisibility();
+        clock.Advance(TimeSpan.FromSeconds(100));
+        visibility.Hidden();
+        clock.Advance(TimeSpan.FromSeconds(304));
+
+        reporter.Restored("pipelines", LostAt);
+        reporter.Restored("user", LostAt.AddSeconds(100));
+        clock.Advance(RealtimeOutageReporter.GroupingWindow);
+
+        var report = await sink.NextAsync();
+        Assert.Equal(
+            "2 realtime connections came back after one outage: 'pipelines' lost at 2026-10-12 08:06:45Z, back after 404 s (page hidden 304 s, visible 100 s); 'user' lost at 2026-10-12 08:08:25Z, back after 304 s (page hidden 304 s, visible 0 s).",
+            report.Message);
+    }
+
+    private static (RealtimeOutageReporter Reporter, ObservedFakeClock Clock, ReportSink Sink, PageVisibilityTimeline Visibility) CreateWithVisibility()
+    {
+        var clock = new ObservedFakeClock(LostAt);
+        var sink = new ReportSink();
+        var visibility = new PageVisibilityTimeline(clock);
+        var errors = new ClientErrorReporter(new HttpClient(sink) { BaseAddress = new Uri("http://localhost/") }, new TestNavigation());
+        return (new RealtimeOutageReporter(errors, clock, visibility), clock, sink, visibility);
+    }
+
     private static (RealtimeOutageReporter Reporter, ObservedFakeClock Clock, ReportSink Sink) Create()
     {
         var clock = new ObservedFakeClock(LostAt);

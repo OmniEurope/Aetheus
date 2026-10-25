@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>prune-stale-qa-compose</c> function, port of <c>deploy/scripts/prune-stale-qa-compose.sh</c>:
+/// The <c>prune-stale-qa-compose</c> function, port of the former <c>prune-stale-qa-compose.sh</c> script:
 /// lists the Compose projects that label a container, a network or a volume, keeps those named
 /// <c>&lt;prefix&gt;-&lt;run&gt;</c> or <c>&lt;prefix&gt;-rollback-&lt;run&gt;</c>, protects the current
 /// and newer runs and removes the containers, networks and volumes of every older one, then requires

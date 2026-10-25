@@ -33,7 +33,7 @@ public class PipelineEditTests : BunitContext
 
     private readonly BunitTestHelper.TestHandler _handler;
 
-    private const string RunButton = ".omni-page-header__actions .omni-split-button button";
+    private const string RunButton = ".omni-page-header__pinned button.omni-button";
 
     private void OpenTab(string tab, int id = 5) =>
         Services.GetRequiredService<NavigationManager>().NavigateTo($"/pipelines/{id}?tab={tab}");
@@ -133,20 +133,23 @@ public class PipelineEditTests : BunitContext
     [Fact]
     public void Header_ShowsRunAlone_AndEditIsTheFirstEntryOfTheMoreActionsMenu()
     {
-        // Run is directly visible and Edit belongs to the header menu.
+        // Run is directly visible (pinned, no chevron: R-40) and Edit belongs to the header menu.
         SetupNewPipelineMocks(); // the edit tab the menu entry opens loads the editor's name lists
         SetupEditPipelineMocks();
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
         var trigger = cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger");
 
-        var headerButtons = cut.FindAll(".omni-page-header__actions > .omni-button");
+        var headerButtons = cut.FindAll(".omni-page-header__pinned > .omni-button");
         Assert.DoesNotContain(headerButtons, button => button.TextContent.Contains("Edit", StringComparison.Ordinal));
-        Assert.Single(cut.FindAll(".omni-page-header__actions .omni-split-button"));
+        Assert.Single(headerButtons);
+        Assert.Empty(cut.FindAll(".omni-page-header .omni-split-button"));
         Assert.Empty(cut.FindComponents<MonacoEditor>());
 
         trigger.Click();
         var items = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
         Assert.Contains("Edit", items[0].TextContent, StringComparison.Ordinal);
+        // The variant of Run that the split button carried is an entry of the menu.
+        Assert.Contains(items, item => item.TextContent.Contains("RunWithOptions", StringComparison.Ordinal));
 
         items[0].Click();
         // The Edit tab is now the one shown: its editor is on the page.
@@ -188,11 +191,13 @@ public class PipelineEditTests : BunitContext
             TotalCount = 2
         });
         var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
-        cut.WaitForState(() => cut.FindAll("a.tile-link").Count == 2);
+        // The tile is itself the link (OmniCard.Href), a direct child of the OE tile grid: no wrapper.
+        cut.WaitForState(() => cut.FindAll("a.pipeline-runs-summary-card").Count == 2);
 
-        var links = cut.FindAll("a.tile-link").Select(link => link.GetAttribute("href")).ToList();
+        var links = cut.FindAll("a.pipeline-runs-summary-card").Select(link => link.GetAttribute("href")).ToList();
         Assert.Equal(["/pipelines/runs/31?tab=gate", "/pipelines/runs/21"], links);
-        Assert.Equal(2, cut.FindAll(".pipeline-runs-summary-card.tile-clickable").Count);
+        Assert.All(cut.FindAll("a.pipeline-runs-summary-card"), link => Assert.Contains("omni-card--action", link.ClassName, StringComparison.Ordinal));
+        Assert.Equal(4, cut.FindAll(".omni-tile-grid.pipeline-runs-summary > .pipeline-runs-summary-card").Count);
         Assert.Equal(4, cut.FindAll(".pipeline-runs-summary-card").Count);
     }
 
@@ -783,7 +788,7 @@ public class PipelineEditTests : BunitContext
         var started = DateTime.UtcNow;
         var completed = started.AddMinutes(3).AddSeconds(15);
         var result = PipelineRunPresentation.FormatDuration(started, completed);
-        Assert.Equal("3m 15s", result);
+        Assert.Equal("3min", result);
     }
 
     [Theory]
@@ -791,7 +796,7 @@ public class PipelineEditTests : BunitContext
     [InlineData(PipelineStatus.Failed, OmniTone.Danger)]
     [InlineData(PipelineStatus.Running, OmniTone.Accent)]
     // Partial runs use amber and cancelled runs use neutral grey.
-    [InlineData(PipelineStatus.Cancelled, OmniTone.Info)]
+    [InlineData(PipelineStatus.Cancelled, OmniTone.Warning)]
     [InlineData(PipelineStatus.Partial, OmniTone.Warning)]
     public void GetRunBadge_ReturnsValue(PipelineStatus status, OmniTone expected)
     {
@@ -1019,6 +1024,94 @@ public class PipelineEditTests : BunitContext
 
         Assert.Contains(_handler.Requests, r => r.Method == "DELETE" && r.Url.EndsWith("api/pipelines/5"));
         Assert.EndsWith("/pipelines", nav.Uri);
+    }
+
+    /// <summary>R-34: after the confirmed deletion the page goes back to the list with a success toast,
+    /// and a change event raised for the deleted pipeline is not answered by reloading it.</summary>
+    [Fact]
+    public async Task R34_OnDelete_GoesBackToTheListWithASuccessToast_AndNeverReloadsTheDeletedPipeline()
+    {
+        SetupEditPipelineMocks();
+        _handler.SetResponse(HttpMethod.Delete, "api/pipelines/5", System.Net.HttpStatusCode.OK);
+        var hubs = CaptureHubs();
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+
+        await ClickAsync(cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger"));
+        var task = ClickAsync(cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Single(item => item.TextContent.Trim() == "Delete"));
+        await cut.InvokeAsync(() => dialog.Close(true));
+        await task;
+
+        Assert.EndsWith("/pipelines", nav.Uri);
+        Assert.Contains(Services.Toasts(), notification => notification.Severity == OmniSeverity.Success);
+        // The pipeline is gone: the hub's update event for it finds nothing to reload.
+        _handler.SetResponse("api/pipelines/5", System.Net.HttpStatusCode.NotFound);
+        var readsBefore = _handler.Requests.Count(request => request.Method == "GET" && request.Url.Contains("api/pipelines/5", StringComparison.Ordinal));
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
+        Assert.Equal(readsBefore, _handler.Requests.Count(request => request.Method == "GET" && request.Url.Contains("api/pipelines/5", StringComparison.Ordinal)));
+        Assert.Empty(cut.FindAll("[data-testid='pipeline-not-found']"));
+    }
+
+    /// <summary>R-34: a failed deletion keeps the page, says so, and keeps the live updates running.</summary>
+    [Fact]
+    public async Task R34_OnDelete_WhenTheServerRefuses_StaysOnThePageWithAnErrorToast()
+    {
+        SetupEditPipelineMocks();
+        _handler.SetResponse(HttpMethod.Delete, "api/pipelines/5", System.Net.HttpStatusCode.Conflict);
+        var hubs = CaptureHubs();
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        var uriBefore = nav.Uri;
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+
+        await ClickAsync(cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger"));
+        var task = ClickAsync(cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Single(item => item.TextContent.Trim() == "Delete"));
+        await cut.InvokeAsync(() => dialog.Close(true));
+        await task;
+
+        Assert.Equal(uriBefore, nav.Uri);
+        Assert.Contains(Services.Toasts(), notification => notification.Severity == OmniSeverity.Danger);
+        Assert.Contains("Deploy Prod", cut.Markup, StringComparison.Ordinal);
+        // The connections were restarted: the page keeps following the pipeline.
+        Assert.True(hubs["entities"].Starts >= 1);
+    }
+
+    /// <summary>R-34: the page of a pipeline that does not exist says so and leads back to the list,
+    /// instead of "an error occurred".</summary>
+    [Fact]
+    public void R34_AnUnknownPipeline_ShowsNotFoundWithALinkToTheList()
+    {
+        _handler.SetResponse("api/pipelines/43", System.Net.HttpStatusCode.NotFound);
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto> { Items = [], TotalCount = 0 });
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 43));
+
+        cut.WaitForElement("[data-testid='pipeline-not-found']");
+        Assert.Contains("PipelineNotFound", cut.Markup, StringComparison.Ordinal);
+        Assert.Equal("/pipelines", cut.Find("[data-testid='pipeline-not-found-back']").GetAttribute("href"));
+        Assert.Empty(cut.FindAll(".omni-page-header__menu"));
+    }
+
+    /// <summary>R-34: a pipeline deleted from another session while its page is open ends on the same state.</summary>
+    [Fact]
+    public async Task R34_APipelineDeletedElsewhere_ShowsNotFoundOnTheNextUpdate()
+    {
+        SetupEditPipelineMocks();
+        var hubs = CaptureHubs();
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        _handler.SetResponse("api/pipelines/5", System.Net.HttpStatusCode.NotFound);
+
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
+
+        cut.WaitForElement("[data-testid='pipeline-not-found']");
     }
 
     [Fact]

@@ -188,6 +188,17 @@ public sealed class PipelineProjectCopyService(
                 item.Status = PipelineCopyStatus.NotCopied;
                 item.Issues = [new PipelineCopyIssueDto { Kind = PipelineCopyIssueKind.NameTaken, Detail = newName }];
             }
+            else if (PipelineCopyTriggers.IsActive(yaml))
+            {
+                // Fail closed: a trigger written in a shape the rewrite does not recognise would leave
+                // the copy running on its own in the new project.
+                item.Status = PipelineCopyStatus.NotCopied;
+                item.Issues = [.. issues, new PipelineCopyIssueDto
+                {
+                    Kind = PipelineCopyIssueKind.InvalidDefinition,
+                    Detail = "The webhook or schedule trigger could not be disabled safely; copy this pipeline by hand."
+                }];
+            }
             else
             {
                 var validation = await pipelineService.ValidateYamlStrictAsync(
@@ -203,7 +214,9 @@ public sealed class PipelineProjectCopyService(
                 }
                 else
                 {
-                    item.Status = issues.Count == 0 ? PipelineCopyStatus.Ready : PipelineCopyStatus.ToReview;
+                    item.Status = issues.TrueForAll(issue => PipelineCopyAdapter.IsInformational(issue.Kind))
+                        ? PipelineCopyStatus.Ready
+                        : PipelineCopyStatus.ToReview;
                 }
             }
             plan.Pipelines.Add(item);

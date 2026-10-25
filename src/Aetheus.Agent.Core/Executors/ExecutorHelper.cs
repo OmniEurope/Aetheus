@@ -9,6 +9,8 @@ public static class ExecutorHelper
     // a line per dropped output line (a wedged backend would otherwise flood the agent log).
     private static int _forwardFailureLogged;
 
+    internal const string StderrPrefix = "[stderr] ";
+
     /// <summary>
     /// Streams process output line-by-line to the callback. Log-forwarding failures are
     /// swallowed so a transient backend outage cannot kill the process or mask its exit code;
@@ -27,7 +29,11 @@ public static class ExecutorHelper
             if (line is null) break;
             try
             {
-                await onOutput(line, ClassifyLine(line, level)).ConfigureAwait(false);
+                var classified = ClassifyLine(line, level);
+                // A standard-error line no longer logged as an Error keeps the mark of its channel in its
+                // text (the "[stderr]" convention of ProcessRunner): lowering its level loses no information.
+                var text = level == TaskLogLevel.Error && classified != TaskLogLevel.Error ? StderrPrefix + line : line;
+                await onOutput(text, classified).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -42,13 +48,15 @@ public static class ExecutorHelper
     }
 
     /// <summary>
-    /// Chantier D: stderr is streamed at <see cref="TaskLogLevel.Error"/> wholesale, but tools like
-    /// journalctl print benign status notices on stderr. Those must not show up red in the run log.
-    /// Only Error-level lines are reconsidered (stdout/Info and genuine errors are never touched), and
-    /// only the known-benign journalctl notice patterns are downgraded to <see cref="TaskLogLevel.Info"/>.
+    /// The level a line is logged at. Standard error is handed over as <see cref="TaskLogLevel.Error"/> (the
+    /// channel, not a verdict) and reconsidered here (R-36): the journalctl status notices are Info, a line
+    /// that states its own severity gets it, every other line is a Warning (see
+    /// <see cref="StderrLineClassifier"/>). Standard output and any other level are never touched.
     /// </summary>
     internal static TaskLogLevel ClassifyLine(string line, TaskLogLevel level) =>
-        level == TaskLogLevel.Error && IsBenignNotice(line) ? TaskLogLevel.Info : level;
+        level != TaskLogLevel.Error ? level
+        : IsBenignNotice(line) ? TaskLogLevel.Info
+        : StderrLineClassifier.Classify(line);
 
     private static bool IsBenignNotice(string line) =>
         // journalctl prints a "Hint:" status line on stderr when it has nothing more to show.

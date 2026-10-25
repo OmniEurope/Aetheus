@@ -10,4 +10,8 @@ internal static class AgentHelperPaths
     /// <summary>The Linux installer's directory (<c>install-agent-linux.sh</c>, AETHEUS_HELPER_DIR).
     /// There is no equivalent on Windows, where nothing is published.</summary>
     internal const string LinuxDirectory = "/usr/local/lib/aetheus";
+
+    /// <summary>The root-owned firewall helper the sudoers grant names. The firewall collector reads the
+    /// status through it and the firewall executor changes rules through it.</summary>
+    internal const string FirewallHelper = LinuxDirectory + "/aetheus-firewall";
 }

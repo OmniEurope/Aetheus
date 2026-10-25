@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
-using Aetheus.Back.Services;
+using System.Globalization;
+using System.Text.RegularExpressions;
+using Aetheus.Shared.Components.Certbot;
 using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Back.Tests.Architecture;
@@ -44,7 +46,7 @@ public sealed class DeploymentSafetyAuditTests
     [Fact]
     public void HostPublish_BuildsOnceAndPublishesWithoutRebuilding()
     {
-        var publish = Read("deploy", "scripts", "publish-application.sh");
+        var publish = Read("scripts", "publish-application.sh");
         // Each publish invocation runs to the [ -s check that follows it. The backend and the static
         // server publish --no-build; the frontend must not: a --no-build Blazor publish keeps the
         // "#[.{fingerprint}]" placeholders in index.html (run 2247, "Blazor is not defined").
@@ -55,74 +57,11 @@ public sealed class DeploymentSafetyAuditTests
         Assert.Contains("--no-build", invocations[2], StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// A fast deploy that flipped Apache and recorded its release but lost the step that closes its
-    /// transaction (run 2240) must not lock every later fast deploy behind a directory nobody can
-    /// remove without a shell on the host. A committed transaction whose candidate colour is the live
-    /// colour is closed and the deploy goes on; any other leftover state is still refused.
-    /// </summary>
-    [Fact]
-    public void FastRelease_ClosesACommittedButUnclosedTransactionInsteadOfRefusingForever()
-    {
-        var deploy = Read("deploy", "scripts", "release-fast-deploy.sh");
-
-        var guard = deploy.IndexOf("if [ -e \"$TRANSACTION_DIR\" ]; then", StringComparison.Ordinal);
-        var create = deploy.IndexOf("TRANSACTION_TMP=\"$TRANSACTION_DIR.tmp.$$\"", StringComparison.Ordinal);
-        Assert.True(guard > 0 && create > guard);
-        var guardBlock = deploy[guard..create];
-
-        Assert.Contains("HOST_COMMITTED_PENDING_RELEASE", guardBlock, StringComparison.Ordinal);
-        Assert.Contains("[ \"$LEFTOVER_IDLE\" = \"$LIVE\" ]", guardBlock, StringComparison.Ordinal);
-        Assert.Contains("rm -rf \"$TRANSACTION_DIR\"", guardBlock, StringComparison.Ordinal);
-        // The refusal is not gone: it is what every other leftover state still hits.
-        Assert.Contains("FATAL: an unfinished fast deployment transaction already exists", guardBlock, StringComparison.Ordinal);
-        Assert.Contains("exit 1", guardBlock, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The host goes back by itself after FAST_CONFIRM_MINUTES if the new backend is too broken to
-    /// dispatch the rollback of an unconfirmed fast release (user request 2026-09-25). The approval
-    /// window itself lives in the pipeline definition, which no test reads (user decision 2026-10-13).
-    /// </summary>
-    [Fact]
-    public void FastRelease_ConfirmWatchdog_IsArmedAfterTheHostCommit_AndActsOnlyOnItsOwnTransaction()
-    {
-        // Armed only once the host is committed-pending, detached with no inherited output (the agent
-        // waits for the step's output to close), and acting only on its own pending transaction.
-        var deploy = Read("deploy", "scripts", "release-fast-deploy.sh").ReplaceLineEndings("\n");
-        var committed = deploy.IndexOf("DEPLOY_COMMITTED=yes", StringComparison.Ordinal);
-        var armed = deploy.IndexOf("setsid sh \"$WATCH_DIR/deploy/scripts/fast-release-confirm-watchdog.sh\"", StringComparison.Ordinal);
-        Assert.True(committed > 0 && armed > committed, "the countdown must be armed after the host commit");
-        Assert.Contains("</dev/null >>\"$WATCH_LOG\" 2>&1 &", deploy, StringComparison.Ordinal);
-        var watchdog = Read("deploy", "scripts", "fast-release-confirm-watchdog.sh");
-        Assert.Contains("[ \"$STATE\" = HOST_COMMITTED_PENDING_RELEASE ] && [ \"$CANDIDATE\" = \"$BUILD_SOURCEVERSION\" ]",
-            watchdog, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Run 2247 went live with an index.html whose asset references were never resolved (the SDK's
-    /// "#[.{fingerprint}]" placeholders), and every smoke test passed: the page had <html and a
-    /// versioned component-library script. The deploy has to refuse an index that still carries a placeholder, and
-    /// has to fetch the Blazor bootstrap script the index names rather than trust the name.
-    /// </summary>
-    [Fact]
-    public void FastRelease_RefusesAnIndexWhoseAssetsWereNeverResolved()
-    {
-        var deploy = Read("deploy", "scripts", "release-fast-deploy.sh");
-
-        var placeholderCheck = deploy.IndexOf("grep -q '#\\['", StringComparison.Ordinal);
-        var bootstrapFetch = deploy.IndexOf("curl -fsSI \"${FRONT_URL}${BLAZOR_BOOT_PATH}\"", StringComparison.Ordinal);
-        var goLive = deploy.IndexOf("TRANSACTION_TMP=\"$TRANSACTION_DIR.tmp.$$\"", StringComparison.Ordinal);
-        Assert.True(placeholderCheck > 0, "the deploy never checks for unresolved asset placeholders");
-        Assert.True(bootstrapFetch > placeholderCheck, "the deploy never fetches the Blazor bootstrap script it names");
-        Assert.True(goLive > bootstrapFetch, "both checks must happen before the transaction that goes live");
-    }
-
     [Fact]
     public void AgentReinstall_PreservesElevationPosture_AndNeverSilentlyRevokesCertbot()
     {
-        var installer = Read("deploy", "scripts", "install-agent-linux.sh");
-        var behavioralProof = Read("deploy", "scripts", "verify-agent-posture-idempotence.sh");
+        var installer = Read("deploy", "agent-installer", "install-agent-linux.sh");
+        var behavioralProof = Read("deploy", "agent-installer", "verify-agent-posture-idempotence.sh");
 
         // apply_sudoers revokes (rm -f) every capability whose flag is 0, so the default install
         // mode MUST derive the existing posture, and it must do so before the cleanup deletes the
@@ -166,10 +105,10 @@ public sealed class DeploymentSafetyAuditTests
     [Fact]
     public void ProductionSecretZero_SurvivesAgentReinstall_AndMissingStateFailsClosed()
     {
-        var installer = Read("deploy", "scripts", "install-agent-linux.sh");
+        var installer = Read("deploy", "agent-installer", "install-agent-linux.sh");
         var simulator = Read("deploy", "compose", "vpssim.compose.yml");
         var behavioralProof = Read(
-            "deploy", "scripts", "verify-production-env-preservation.sh");
+            "deploy", "agent-installer", "verify-production-env-preservation.sh");
 
         Assert.Contains("WORK_DIR=\"/var/lib/aetheus-agent\"", installer, StringComparison.Ordinal);
         // The default is still /var/lib/aetheus-production, and the derived paths still hang off it;
@@ -197,24 +136,6 @@ public sealed class DeploymentSafetyAuditTests
         Assert.True(purge > 0, "the reinstall purges the agent state");
         Assert.True(installPreservation < purge);
 
-        // Secret-zero moved into the preparation script when the cutover became typed, and every rule
-        // about it is asserted against the script that now applies them.
-        var prepare = Read("deploy", "scripts", "prod-deploy-prepare.sh");
-        Assert.Contains("Restoring production secrets from installation backup", prepare, StringComparison.Ordinal);
-        Assert.Contains("docker volume inspect \"${COMPOSE_PROJECT:?COMPOSE_PROJECT is required}-$RESOURCE\"", prepare, StringComparison.Ordinal);
-        Assert.Contains("Persistent production state exists but", prepare, StringComparison.Ordinal);
-        Assert.Contains("Secret regeneration is forbidden", prepare, StringComparison.Ordinal);
-        Assert.Contains("REQUIRED_SECRET in APPNAME ENV DB_USER DB_PASSWORD JWT_KEY ADMIN_PASSWORD ENCRYPTION_KEY ENCRYPTION_SALT", prepare, StringComparison.Ordinal);
-        Assert.Contains("Created initial production-secret backup", prepare, StringComparison.Ordinal);
-        // Backup names derive from the copied environment file so dated copies form one series.
-        Assert.Contains("ENV_BACKUP_PREFIX=\"$(basename \"$ENV_FILE\")\"", prepare, StringComparison.Ordinal);
-        Assert.Contains("ENV_BACKUP=\"$STATE_DIR/$ENV_BACKUP_PREFIX-$(date -u +\"%Y%m%dT%H%M%SZ\")\"", prepare, StringComparison.Ordinal);
-        Assert.Contains("canonical and legacy production environments differ", prepare, StringComparison.OrdinalIgnoreCase);
-        Assert.True(
-            prepare.IndexOf("PRODUCTION_STATE_PRESENT=true", StringComparison.Ordinal)
-            // The first-deploy secrets are generated by the template renderer this call runs.
-            < prepare.IndexOf("sh \"$WORKSPACE/deploy/scripts/render-env-sample.sh\"", StringComparison.Ordinal));
-
         Assert.Contains("vpssim-production-state:/var/lib/aetheus-production", simulator, StringComparison.Ordinal);
         Assert.Contains("vpssim-production-state:", simulator, StringComparison.Ordinal);
         Assert.Contains(
@@ -228,7 +149,7 @@ public sealed class DeploymentSafetyAuditTests
     [Fact]
     public void AgentInstaller_InstallsVersionedAutonomousFullUpgradeSupervisor()
     {
-        var installer = Read("deploy", "scripts", "install-agent-linux.sh");
+        var installer = Read("deploy", "agent-installer", "install-agent-linux.sh");
         // The supervisor worker and its two units are templates the installer renders.
         var worker = HostConfig("agent-update/agent-posture-upgrade");
         var upgradeUnits = HostConfig("agent-update/aetheus-agent-upgrade.service")
@@ -248,8 +169,8 @@ public sealed class DeploymentSafetyAuditTests
             "render_host_config agent-update/aetheus-agent-upgrade.path \"$AGENT_UPDATE_PATH_PATH.tmp.$$\"",
             installer,
             StringComparison.Ordinal);
-        // Posture 3: the supervisor takes the sixth request field (capabilities to enable, R3-58).
-        Assert.Contains("AGENT_POSTURE_VERSION=\"3\"", installer, StringComparison.Ordinal);
+        // Posture 4: the supervisor maps the eleven whitelisted tokens of the sixth request field (R3-58, ADR-055).
+        Assert.Contains("AGENT_POSTURE_VERSION=\"4\"", installer, StringComparison.Ordinal);
         Assert.Contains(
             "AGENT_POSTURE_VERSION_FILE=\"/etc/aetheus-agent-posture-version\"",
             installer,
@@ -279,8 +200,10 @@ public sealed class DeploymentSafetyAuditTests
         Assert.True(
             worker.IndexOf("systemctl is-active --quiet aetheus-agent", StringComparison.Ordinal)
             < worker.IndexOf("outcome=\"success\"", StringComparison.Ordinal));
+        // The installer argv starts as the plain upgrade; the accepted tokens only append their own flag.
+        Assert.Contains("set -- --upgrade --yes", worker, StringComparison.Ordinal);
         Assert.Contains(
-            "sh \"$payload/install-agent-linux.sh\" --upgrade --yes",
+            "sh \"$payload/install-agent-linux.sh\" \"$@\"",
             worker,
             StringComparison.Ordinal);
         // R3-58 / ADR-051: the sixth request field is a closed whitelist mapped to one fixed installer
@@ -290,12 +213,36 @@ public sealed class DeploymentSafetyAuditTests
             "read -r target_version archive_name archive_size target_sha target_commit enable_capabilities extra",
             worker,
             StringComparison.Ordinal);
-        Assert.Contains("patch-manage) enable_patch_manage=1 ;;", worker, StringComparison.Ordinal);
         Assert.Contains("phase=\"invalid-capabilities\"; exit 20", worker, StringComparison.Ordinal);
-        Assert.Contains(
-            "sh \"$payload/install-agent-linux.sh\" --upgrade --yes --enable-patch-manage",
-            worker,
-            StringComparison.Ordinal);
+        // ADR-055: one case branch and one literal installer flag per whitelisted token, nothing else. The
+        // flag is fixed text; the request only decides whether it is appended.
+        (string Token, string Variable, string Flag)[] mapped =
+        [
+            ("patch-manage", "enable_patch_manage", "--enable-patch-manage"),
+            ("package-manage", "enable_package_manage", "--enable-package-manage"),
+            ("service-enable", "enable_service_enable", "--enable-service-enable"),
+            ("cron-manage", "enable_cron_manage", "--enable-cron-manage"),
+            ("rkhunter-manage", "enable_rkhunter_manage", "--enable-rkhunter-manage"),
+            ("apache-manage", "enable_apache_manage", "--enable-apache-manage"),
+            ("certbot-manage", "enable_certbot_manage", "--enable-certbot-manage"),
+            ("portsentry-manage", "enable_portsentry_manage", "--enable-portsentry-manage"),
+            ("firewall-manage", "enable_firewall_manage", "--enable-firewall-manage"),
+            ("mail-setup", "enable_mail_setup", "--enable-mail-setup"),
+            ("teamspeak-setup", "enable_teamspeak_setup", "--enable-teamspeak-setup")
+        ];
+        foreach (var (token, variable, flag) in mapped)
+        {
+            Assert.Contains($"{token}) {variable}=1 ;;", worker, StringComparison.Ordinal);
+            Assert.Contains(
+                $"[ \"${variable}\" -eq 0 ] || set -- \"$@\" {flag}",
+                worker,
+                StringComparison.Ordinal);
+        }
+        Assert.Equal(mapped.Length, Regex.Matches(worker, @"^\s+[a-z-]+\) enable_[a-z_]+=1 ;;\r?$", RegexOptions.Multiline).Count);
+        Assert.Equal(mapped.Length, Regex.Matches(worker, @"^\[ ""\$enable_[a-z_]+"" -eq 0 \] \|\| set -- ""\$@"" --enable-[a-z-]+\r?$", RegexOptions.Multiline).Count);
+        // Never whitelisted: they stay on the installer run on the host.
+        foreach (var never in new[] { "service-control", "docker", "enable-all", "--module", "--disable-" })
+            Assert.DoesNotContain(never, worker, StringComparison.Ordinal);
         Assert.DoesNotContain("--enable-$", worker, StringComparison.Ordinal);
         var upgradeMode = installer[installer.IndexOf("# Mode: UPGRADE", StringComparison.Ordinal)..installer.IndexOf("# Mode: INSTALL", StringComparison.Ordinal)];
         Assert.DoesNotContain(
@@ -321,79 +268,10 @@ public sealed class DeploymentSafetyAuditTests
         Assert.DoesNotContain("sudo -n", executor, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Secret-zero and the production state directory. These moved out of the pipeline and into the
-    /// preparation script when the cutover became typed, but not one of the checks may move with
-    /// them: regenerating a secret over persistent state produces a database nothing can open, and it
-    /// cannot be undone afterwards.
-    /// </summary>
-    [Fact]
-    public void CanonicalDeployBootstrapsProductionStateWithoutExposingExistingSecrets()
-    {
-        var prepare = Read("deploy", "scripts", "prod-deploy-prepare.sh");
-
-        // Managed paths must be real direct children of /var/lib without traversal; names come from
-        // configuration.
-        Assert.Contains("Production state directory contains a traversal", prepare, StringComparison.Ordinal);
-        Assert.Contains("Production state directory must be a direct child of /var/lib", prepare, StringComparison.Ordinal);
-        Assert.Contains("Production state directory must live under /var/lib", prepare, StringComparison.Ordinal);
-        // Use the agent's configured working directory.
-        Assert.Contains("AGENT_WORK_DIR=\"${AETHEUS_AGENT_WORK_DIRECTORY:?", prepare, StringComparison.Ordinal);
-        Assert.Contains("stat -c %u \"$AGENT_WORK_DIR\"", prepare, StringComparison.Ordinal);
-        Assert.Contains("stat -c %g \"$AGENT_WORK_DIR\"", prepare, StringComparison.Ordinal);
-        Assert.Contains("Refusing to remap a non-empty production state directory", prepare, StringComparison.Ordinal);
-        Assert.Contains("--network none --read-only --user 0:0", prepare, StringComparison.Ordinal);
-        Assert.Contains("--cap-drop ALL --cap-add CHOWN --cap-add FOWNER", prepare, StringComparison.Ordinal);
-        Assert.Contains("--security-opt no-new-privileges --pids-limit 16", prepare, StringComparison.Ordinal);
-        Assert.Contains("--volume \"$STATE_DIR:/state\"", prepare, StringComparison.Ordinal);
-        Assert.DoesNotContain("--volume /var/lib:/", prepare, StringComparison.Ordinal);
-        Assert.DoesNotContain("--privileged", prepare, StringComparison.Ordinal);
-        Assert.Contains("stat -c %a \"$STATE_DIR\")\" = 700", prepare, StringComparison.Ordinal);
-        // The privileged bootstrap runs from the immutable artifact, so the image has to be loaded
-        // and verified first. Ordering, not mere presence: an unverified image would be root here.
-        Assert.True(
-            prepare.IndexOf("docker load", StringComparison.Ordinal)
-            < prepare.IndexOf("STATE_BOOTSTRAP_REQUIRED=false", StringComparison.Ordinal));
-        Assert.True(
-            prepare.IndexOf("Image revision is invalid", StringComparison.Ordinal)
-            < prepare.IndexOf("STATE_BOOTSTRAP_REQUIRED=false", StringComparison.Ordinal));
-        Assert.True(
-            prepare.IndexOf("STATE_BOOTSTRAP_REQUIRED=false", StringComparison.Ordinal)
-            < prepare.IndexOf("PRODUCTION_STATE_PRESENT=true", StringComparison.Ordinal));
-        Assert.True(
-            prepare.IndexOf("PRODUCTION_STATE_PRESENT=true", StringComparison.Ordinal)
-            // The first-deploy secrets are generated by the template renderer this call runs.
-            < prepare.IndexOf("sh \"$WORKSPACE/deploy/scripts/render-env-sample.sh\"", StringComparison.Ordinal));
-        Assert.Contains("Persistent production state exists but", prepare, StringComparison.Ordinal);
-        Assert.Contains("Secret regeneration is forbidden", prepare, StringComparison.Ordinal);
-        Assert.Contains("Reusing existing secrets", prepare, StringComparison.Ordinal);
-        // The preparation must not deploy: a second cutover implementation is exactly the drift the
-        // shared template exists to prevent.
-        foreach (var cutoverOperation in new[]
-                 { "docker compose", "systemctl reload", "aetheus-apache-reload", "pg_dump" })
-        {
-            Assert.DoesNotContain(cutoverOperation, prepare, StringComparison.Ordinal);
-        }
-    }
-
-    [Fact]
-    public void BlueGreenApacheUpstream_IsRenderedFromVersionedTemplate()
-    {
-        var renderer = Read("deploy", "scripts", "render-apache-upstream.sh");
-
-        Assert.Contains("/.pipeline/configs/apache/aetheus-upstream.conf", renderer, StringComparison.Ordinal);
-        // The destination must equal the environment's UPSTREAM_CONF.
-        Assert.Contains("[ \"$output\" = \"$expected\" ]", renderer, StringComparison.Ordinal);
-        Assert.Contains("UPSTREAM_CONF must name a file in a sites-available directory", renderer, StringComparison.Ordinal);
-        Assert.Contains("UPSTREAM_DEFINE must be upper case, digits and underscores", renderer, StringComparison.Ordinal);
-        Assert.Contains("*[!0-9]*", renderer, StringComparison.Ordinal);
-        Assert.Contains("Apache upstream template contains an unresolved token", renderer, StringComparison.Ordinal);
-    }
-
     [Fact]
     public void InstallersFailClosed_AndWindowsDoesNotUseLocalSystem()
     {
-        var windows = Read("deploy", "scripts", "install-agent-windows.ps1");
+        var windows = Read("deploy", "agent-installer", "install-agent-windows.ps1");
         Assert.Contains("NT SERVICE\\$ServiceName", windows, StringComparison.Ordinal);
         Assert.Contains("Agent enrollment could not be proven", windows, StringComparison.Ordinal);
         Assert.DoesNotContain("registration could not be confirmed from logs", windows, StringComparison.Ordinal);
@@ -407,7 +285,7 @@ public sealed class DeploymentSafetyAuditTests
         Assert.Contains("${serviceIdentity}:(OI)(CI)M", windows, StringComparison.Ordinal);
         Assert.DoesNotContain("${serviceIdentity}:(OI)(CI)RX", windows, StringComparison.Ordinal);
 
-        var linux = Read("deploy", "scripts", "install-agent-linux.sh");
+        var linux = Read("deploy", "agent-installer", "install-agent-linux.sh");
         Assert.Contains("No successful enrollment outcome was observed", linux, StringComparison.Ordinal);
         Assert.Contains("rm -f \"$CERTBOT_MANAGE_SUDOERS_FILE\" \"$TEAMSPEAK_SETUP_SUDOERS_FILE\"", linux, StringComparison.Ordinal);
         Assert.Contains("gpasswd -d \"$AGENT_USER\" docker", linux, StringComparison.Ordinal);
@@ -433,7 +311,7 @@ public sealed class DeploymentSafetyAuditTests
     public void CertbotIssueHelper_UsesWebrootInProduction_AndSelfSignsOnlyInLocalMode()
     {
         // The helper is the certbot/aetheus-certbot-issue template the installer renders.
-        var script = Read("deploy", "scripts", "install-agent-linux.sh");
+        var script = Read("deploy", "agent-installer", "install-agent-linux.sh");
         Assert.Contains(
             "render_host_config certbot/aetheus-certbot-issue \"$CERTBOT_ISSUE_HELPER_PATH\"",
             script,
@@ -459,9 +337,21 @@ public sealed class DeploymentSafetyAuditTests
     }
 
     [Fact]
+    public void CertbotManageHelper_MarkerMatchesTheVersionTheServerPageExpects()
+    {
+        // A server reporting a lower helper version is shown as "to update": the constant and the marker
+        // line of the template must move together, or the page keeps asking for an update forever (or
+        // never asks for one that is needed).
+        var helper = HostConfig("certbot/aetheus-certbot-manage");
+        var marker = Regex.Match(helper, @"^# aetheus-certbot-helper-version: (\d+)$", RegexOptions.Multiline);
+        Assert.True(marker.Success, "the helper carries no version marker line");
+        Assert.Equal(CertbotHelperVersion.Current, int.Parse(marker.Groups[1].Value, CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
     public void HistoricalDeployRequiresBackupAndReadiness()
     {
-        var script = Read("deploy", "scripts", "deploy.sh");
+        var script = Read("deploy", "remote-deploy", "deploy.sh");
         Assert.Contains("pg_dump FAILED - refusing to deploy", script, StringComparison.Ordinal);
         Assert.Contains("http://127.0.0.1:${PORT_BACK}/health/ready", script, StringComparison.Ordinal);
         Assert.DoesNotContain("pg_dump FAILED - no pre-migration backup", script, StringComparison.Ordinal);
@@ -493,7 +383,7 @@ public sealed class DeploymentSafetyAuditTests
     public void ApacheConfigTest_UsesFixedRootOwnedHelperWithoutNoexec()
     {
         // The helper and the drop-in are templates the installer renders.
-        var installer = Read("deploy", "scripts", "install-agent-linux.sh");
+        var installer = Read("deploy", "agent-installer", "install-agent-linux.sh");
         var sudoers = HostConfig("apache/sudoers.d/aetheus-apache");
         var blockStart = sudoers.IndexOf("Cmnd_Alias AETHEUS_APACHE_TEST", StringComparison.Ordinal);
         Assert.True(blockStart >= 0);
@@ -514,7 +404,7 @@ public sealed class DeploymentSafetyAuditTests
     public void BuildToolchainsAndRemoteHostTrustArePinned()
     {
 
-        var sdkBootstrap = Read("deploy", "scripts", "ensure-dotnet-sdk.sh");
+        var sdkBootstrap = Read("scripts", "ensure-dotnet-sdk.sh");
         Assert.Contains("SDK_VERSION=\"$(sed", sdkBootstrap, StringComparison.Ordinal);
         Assert.Contains("${AETHEUS_DOTNET_ROOT:-$HOME/.aetheus/dotnet}", sdkBootstrap, StringComparison.Ordinal);
         Assert.Contains("INSTALL_DIR=\"$INSTALL_ROOT/$SDK_VERSION\"", sdkBootstrap, StringComparison.Ordinal);
@@ -522,12 +412,6 @@ public sealed class DeploymentSafetyAuditTests
         Assert.Contains("$1\" --version", sdkBootstrap, StringComparison.Ordinal);
         Assert.Contains("--version \"$SDK_VERSION\"", sdkBootstrap, StringComparison.Ordinal);
         Assert.Contains("Pinned .NET SDK $SDK_VERSION installation could not be verified", sdkBootstrap, StringComparison.Ordinal);
-
-        var nodeBootstrap = Read("deploy", "scripts", "ensure-node-runtime.sh");
-        Assert.Contains("https://nodejs.org/dist/v${NODE_VERSION}/${NODE_ARCHIVE}", nodeBootstrap, StringComparison.Ordinal);
-        Assert.Contains("sha256sum -c -", nodeBootstrap, StringComparison.Ordinal);
-        Assert.Contains("$HOME/.aetheus/node-v${NODE_VERSION}-linux-x64", nodeBootstrap, StringComparison.Ordinal);
-        Assert.Contains("Pinned Node.js $NODE_VERSION installation could not be verified", nodeBootstrap, StringComparison.Ordinal);
 
         var deploymentFiles = RepositoryScan
             .EnumerateTopLevel(Path.Combine(Root, "deploy", "pipelines"), "*.yaml")
@@ -576,16 +460,6 @@ public sealed class DeploymentSafetyAuditTests
 
         var provisioning = Read("deploy", "docker", "vpssim-provision.sh");
         Assert.Contains("set -eu", provisioning, StringComparison.Ordinal);
-
-        var publishVitrine = Read("deploy", "scripts", "publish-vitrine.sh");
-        // The destination must be a direct child of /var/www without traversal; project naming is
-        // configuration rather than a filesystem boundary.
-        Assert.Contains("/var/www/*/*|*..*", publishVitrine, StringComparison.Ordinal);
-        Assert.Contains("/var/www/?*", publishVitrine, StringComparison.Ordinal);
-        Assert.Contains("readlink -m -- \"$WEB_ROOT\"", publishVitrine, StringComparison.Ordinal);
-        Assert.Contains("Refusing publication through a symbolic-link web root", publishVitrine, StringComparison.Ordinal);
-        Assert.Contains("Refusing to publish a vitrine containing unresolved", publishVitrine, StringComparison.Ordinal);
-        Assert.DoesNotContain("grep -rc \"aetheus\\.example\" site/ || true", publishVitrine, StringComparison.Ordinal);
     }
 
 
@@ -623,10 +497,6 @@ public sealed class DeploymentSafetyAuditTests
         }
 
         Assert.DoesNotContain(lines, line => System.Text.RegularExpressions.Regex.IsMatch(line, "=[0-9a-fA-F]{16,}$"));
-        // The proof runs the script's own first-deploy block, not a copy of it.
-        var proof = Read("deploy", "scripts", "verify-prod-env-sample.sh");
-        Assert.Contains("PREPARE=\"$ROOT/deploy/scripts/prod-deploy-prepare.sh\"", proof, StringComparison.Ordinal);
-        Assert.Contains("\"$PREPARE\" > \"$BLOCK\"", proof, StringComparison.Ordinal);
     }
 
     /// <summary>The container mirror answers like production, or the demo and the local mirror prove

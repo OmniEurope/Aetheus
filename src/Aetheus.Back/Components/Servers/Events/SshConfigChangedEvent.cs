@@ -11,4 +11,9 @@ public sealed record SshConfigChangedEvent(
     string ServerName,
     string Severity,
     string Message,
-    DateTime DetectedAt) : IDomainEvent;
+    DateTime DetectedAt,
+    IReadOnlyList<SshChangeNotice>? Changes = null) : IDomainEvent;
+
+/// <summary>One alerted SSH change in language-neutral form: a code and its arguments, worded by the mail in the
+/// recipient's language (the English <c>Message</c> stays for the live toast and the logs).</summary>
+public sealed record SshChangeNotice(string Code, IReadOnlyList<string> Args);

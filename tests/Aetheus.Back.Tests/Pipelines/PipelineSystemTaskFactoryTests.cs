@@ -42,7 +42,7 @@ public sealed class PipelineSystemTaskFactoryTests
     {
         _repo.GetRunAffinityServerIdAsync(RunId, Arg.Any<CancellationToken>()).Returns(5);
 
-        var dispatched = await CreateAsync(Step(PipelineRunService.SystemCleanupStage), []);
+        var dispatched = await CreateAsync(Step(PipelineRunHelpers.SystemCleanupStage), []);
 
         Assert.False(dispatched);
         await _repo.Received(1).FindServerByIdAsync(5, Arg.Any<CancellationToken>());
@@ -53,7 +53,7 @@ public sealed class PipelineSystemTaskFactoryTests
     public async Task RunnerRefusedByTheLocalDeploymentTarget_FailsTheRunWithTheReason()
     {
         GivenAnyOnlineRunner(new Server { Id = 3, Name = "build-1", Hostname = "build-1" });
-        var steps = Step(PipelineRunService.SystemPrepareStage);
+        var steps = Step(PipelineRunHelpers.SystemPrepareStage);
 
         var dispatched = await CreateAsync(steps, new()
         {
@@ -74,7 +74,7 @@ public sealed class PipelineSystemTaskFactoryTests
     public async Task ContainersOnlyRunnerForAProcessRun_FailsTheRunWithTheReason()
     {
         GivenAnyOnlineRunner(new Server { Id = 4, Name = "locked", Hostname = "locked", RequireContainerIsolation = true });
-        var steps = Step(PipelineRunService.SystemPrepareStage);
+        var steps = Step(PipelineRunHelpers.SystemPrepareStage);
 
         var dispatched = await CreateAsync(steps, []);
 

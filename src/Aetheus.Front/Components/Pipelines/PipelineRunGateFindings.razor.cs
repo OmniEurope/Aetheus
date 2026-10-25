@@ -57,51 +57,11 @@ public partial class PipelineRunGateFindings : IDisposable
     /// <summary>How many findings the list holds with the decided ones shown or not, from the gate's counts.</summary>
     private int ListedCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
 
+    /// <summary>Whether the grade block draws anything (it needs a grade or a headline grade). Without it the
+    /// two key-figure tiles sit in a row at tile size instead of a column stretched over the whole width.</summary>
+    private bool HasGradeBlock => Gate.Grade is not null || PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is not null;
+
     private IReadOnlyList<int> EffectiveRunIds => RunIds.Count > 0 ? RunIds : [Gate.PipelineRunId];
-
-    /// <summary>Recette R1-63: the alert in words ("Cycles entre types : 46, seuil 0"), the measure named as
-    /// the rest of the page names it; a target this page does not know keeps the technical text.</summary>
-    private string ViolationLabel(AnalysisRunGateViolationDto violation)
-    {
-        var key = violation.TargetKey switch
-        {
-            "architecture.cycles.namespace" => "AnalysisMetricNamespaceCycles",
-            "architecture.cycles.type" => "AnalysisMetricTypeCycles",
-            "complexity.methods.high" => "AnalysisMetricComplexMethods",
-            "complexity.cyclomatic.maximum" => "AnalysisMaximumComplexity",
-            "complexity.cyclomatic.average" => "AnalysisMetricAverageComplexity",
-            "coverage.line.percent" => "AnalysisTestedLines",
-            "duplication.percentage" => "AnalysisDuplicatedCode",
-            _ => null
-        };
-        if (key is null) return ViolationText(violation);
-        var text = $"{L[key]} : {violation.ObservedValue ?? "-"}";
-        if (string.IsNullOrWhiteSpace(violation.Threshold)) return text;
-        // A degradation is held against the previous analysis, whose value the evidence carries as its threshold.
-        var word = string.Equals(violation.Operator, "Degraded", StringComparison.Ordinal) ? "AnalysisPreviousWord" : "AnalysisThresholdWord";
-        return $"{text} ({L[word]} {violation.Threshold})";
-    }
-
-    /// <summary>Recette R2-138: "quality.architecture.cycles: architecture.cycles.type = 40 (> 0)". A
-    /// finding target reads as its rule; the fingerprint after the colon says nothing to a reader.</summary>
-    internal static string ViolationText(AnalysisRunGateViolationDto violation)
-    {
-        var target = violation.TargetKey ?? violation.TargetKind;
-        if (string.Equals(violation.TargetKind, "finding", StringComparison.OrdinalIgnoreCase)
-            && target.IndexOf(':', StringComparison.Ordinal) is > 0 and var colon)
-            target = target[..colon];
-        var symbol = violation.Operator switch
-        {
-            "GreaterThan" => ">",
-            "GreaterThanOrEqual" => "≥",
-            "LessThan" => "<",
-            "LessThanOrEqual" => "≤",
-            "Equal" or "Equals" => "=",
-            _ => violation.Operator
-        };
-        var threshold = string.IsNullOrWhiteSpace(violation.Threshold) ? string.Empty : $" ({symbol} {violation.Threshold})";
-        return $"{violation.PolicyKey}: {target} = {violation.ObservedValue ?? "-"}{threshold}";
-    }
 
     private async Task ShowDecidedChangedAsync()
     {
@@ -147,7 +107,7 @@ public partial class PipelineRunGateFindings : IDisposable
             Categories = NullIfEmpty(args.ColumnFilterValues<AnalysisCategory>(nameof(AnalysisFindingDto.Category))),
             Severities = NullIfEmpty(args.ColumnFilterValues<AnalysisSeverity>(nameof(AnalysisFindingDto.Severity))),
             Statuses = NullIfEmpty(args.ColumnFilterValues<AnalysisFindingStatus>(nameof(AnalysisFindingDto.Status))),
-            IsNew = bool.TryParse(args.ColumnFilter(Projects.ProjectDetailSections.FindingColumnDefaults.IsNewColumn), out var isNew) ? isNew : null,
+            IsNew = bool.TryParse(args.ColumnFilter(FindingColumnDefaults.IsNewColumn), out var isNew) ? isNew : null,
             IdFrom = idFrom,
             IdTo = idTo,
             IdNot = idNot,

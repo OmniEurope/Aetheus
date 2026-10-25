@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-production-secrets</c> function, port of the required-secret check of
-/// <c>deploy/scripts/prod-deploy-prepare.sh</c>, run after the preparation: every listed key has a
+/// the former <c>prod-deploy-prepare.sh</c> script, run after the preparation: every listed key has a
 /// non-empty line (<c>grep -q "^KEY=.\+"</c>) in the environment file, with the script's message for
 /// the first one that does not. It also requires what the preparation guarantees just after that check:
 /// a dated recovery copy <c>&lt;file&gt;-YYYYMMDDTHHMMSSZ</c> next to the environment file, which the

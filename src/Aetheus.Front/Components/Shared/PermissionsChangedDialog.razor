@@ -1,11 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-<OmniStack Gap="OmniSpacing.XLarge" Class="omni-u-p-sm">
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+<OmniStack Gap="OmniSpacing.ExtraLarge" Class="omni-u-p-sm">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
         <OmniIcon Name="OmniIconName.Warning" Class="omni-u-text-warning" />
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["PermissionsChangedBody"]</OmniText>
     </OmniStack>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Large">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Refresh"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["RefreshNow"]</span></OmniButton>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Large">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Refresh"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["RefreshNow"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>

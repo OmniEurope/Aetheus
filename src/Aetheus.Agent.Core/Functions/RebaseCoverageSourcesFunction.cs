@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>rebase-coverage-sources</c> function, port of
-/// <c>deploy/scripts/rebase-quality-coverage-sources.mjs</c>. The Cobertura reports restored from CI
+/// the former <c>rebase-quality-coverage-sources.mjs</c> script. The Cobertura reports restored from CI
 /// name CI's own workspace in their <c>&lt;source&gt;</c> roots; every root must be an absolute path
 /// below a <c>src</c> directory (Coverlet picks a different common root for single- and multi-project
 /// suites), and is rebased onto this workspace's <c>src</c> in a copy under the output directory, the

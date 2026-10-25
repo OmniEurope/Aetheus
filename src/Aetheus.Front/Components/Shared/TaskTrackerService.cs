@@ -127,7 +127,7 @@ public sealed class TaskTrackerService : IAsyncDisposable
         if (_hub is not null) return;
         if (!_auth.IsAuthenticated) return;
 
-        _hub = _hubFactory.Create("servers", new NotifyingRetryPolicy(this));
+        _hub = _hubFactory.Create("servers", new NotifyingRetryPolicy(RetryDelays, seconds => OnReconnectAttempt?.Invoke(seconds)));
         _hub.On<ServerTaskDto>("TaskQueued", task => Upsert(task));
         _hub.On<TaskStartedEvent>("TaskStarted", evt => MarkRunning(evt.TaskId, evt.StartedAt));
         _hub.On<TaskCompletedNotification>("TaskCompleted", HandleTerminal);
@@ -402,13 +402,13 @@ public sealed class TaskTrackerService : IAsyncDisposable
     /// backend that is down for a while is auto-rejoined the moment it returns - the connection-lost
     /// dialog then closes on its own (matches the Astraia behaviour).
     /// </summary>
-    private sealed class NotifyingRetryPolicy(TaskTrackerService owner) : IRetryPolicy
+    private sealed class NotifyingRetryPolicy(IReadOnlyList<TimeSpan> retryDelays, Action<int> onAttempt) : IRetryPolicy
     {
         public TimeSpan? NextRetryDelay(RetryContext retryContext)
         {
-            var index = (int)Math.Min(retryContext.PreviousRetryCount, RetryDelays.Count - 1);
-            var delay = RetryDelays[index];
-            owner.OnReconnectAttempt?.Invoke((int)delay.TotalSeconds);
+            var index = (int)Math.Min(retryContext.PreviousRetryCount, retryDelays.Count - 1);
+            var delay = retryDelays[index];
+            onAttempt((int)delay.TotalSeconds);
             return delay;
         }
     }

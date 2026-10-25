@@ -109,6 +109,20 @@ public sealed class NpmRegistryServiceReadTests
     }
 
     [Fact]
+    public async Task GetPackumentAsync_FlagsOnlyTheDeprecatedVersionWithTheDeprecatedField()
+    {
+        var deprecated = Version(1, "1.0.0");
+        deprecated.IsDeprecated = true;
+        HavePackage(Package(distTags: "{\"latest\":\"2.0.0\"}", versions: [deprecated, Version(2, "2.0.0")]));
+
+        var packument = await _service.GetPackumentAsync("left-pad", RegistryBaseUrl, Ct);
+
+        var versions = packument!["versions"]!.AsObject();
+        Assert.Equal(Aetheus.Back.Components.PackageRegistry.PackageRegistryDefaults.DeprecationMessage, versions["1.0.0"]!["deprecated"]!.GetValue<string>());
+        Assert.Null(versions["2.0.0"]!["deprecated"]);
+    }
+
+    [Fact]
     public async Task GetPackumentAsync_DropsADistTagPointingAtAnUnlistedVersion()
     {
         HavePackage(Package(

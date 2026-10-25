@@ -2,6 +2,7 @@
 using System.Net;
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,6 +74,19 @@ public class ServerTeamspeakSectionTests : BunitContext
             .Add(x => x.ServerId, s.Id));
     }
 
+    // Recette R-29: Setup and Restart sit in the page header, rendered here with the section.
+    private IRenderedComponent<PageHeaderOutletHost> RenderSectionWithHeader(ServerDetailDto server)
+    {
+        _handler.SetJsonResponse($"api/servers/{server.Id}/teamspeak",
+            server.Teamspeak with { Clients = [], Channels = [], Bans = [] });
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/clients", Array.Empty<TeamspeakClientDto>());
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/channels", Array.Empty<TeamspeakChannelDto>());
+        _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/bans", Array.Empty<TeamspeakBanDto>());
+        return this.RenderWithPageHeader<ServerTeamspeakSection>(p => p
+            .Add(x => x.Server, server)
+            .Add(x => x.ServerId, server.Id));
+    }
+
     // --- Rendering ---
 
     [Fact]
@@ -89,7 +103,7 @@ public class ServerTeamspeakSectionTests : BunitContext
     [Fact]
     public void Renders_NotInstalled_ShowsSetupButton()
     {
-        var cut = RenderSection(MakeTsServer(installed: false));
+        var cut = RenderSectionWithHeader(MakeTsServer(installed: false));
         var markup = cut.Markup;
 
         Assert.Contains("TeamspeakSetup", markup);

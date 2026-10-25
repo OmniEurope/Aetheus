@@ -100,9 +100,9 @@ internal sealed class PipelineTemplateRepository(AppDbContext db) : IPipelineTem
     public async Task<PipelineTemplate?> FindSharedTemplateByNameAsync(string name, CancellationToken ct = default)
     {
         var normalizedName = name.Trim().ToLowerInvariant();
-        if (!DeliveryPipelineTemplateSeeder.Definitions.ContainsKey(normalizedName)) return null;
+        if (!DeliveryTemplateCatalog.Definitions.ContainsKey(normalizedName)) return null;
         return await db.PipelineTemplates.AsNoTracking()
-            .Where(template => template.Organization.Slug == DeliveryPipelineTemplateSeeder.PlatformOrganizationSlug)
+            .Where(template => template.Organization.Slug == DeliveryTemplateCatalog.PlatformOrganizationSlug)
             .FirstOrDefaultAsync(template => template.Name.ToLower() == normalizedName, ct)
             .ConfigureAwait(false);
     }

@@ -13,11 +13,11 @@ public sealed partial class HostLiteralAuditTests
     /// <summary>Files that legitimately carry such literals, each for a stated reason.</summary>
     private static readonly Dictionary<string, string> Exempt = new(StringComparer.Ordinal)
     {
-        ["deploy/scripts/install-agent-linux.sh"] =
+        ["deploy/agent-installer/install-agent-linux.sh"] =
             "the installer: its defaults and usage examples are the host layout it creates",
-        ["deploy/scripts/verify-production-env-preservation.sh"] =
+        ["deploy/agent-installer/verify-production-env-preservation.sh"] =
             "an installer test harness that reproduces the installer's layout in a temporary root",
-        ["deploy/scripts/deploy.sh"] =
+        ["deploy/remote-deploy/deploy.sh"] =
             "the manual deployment outside any pipeline (README), whose base ports are its documented defaults",
     };
 
@@ -43,10 +43,24 @@ public sealed partial class HostLiteralAuditTests
     public void TheLiteralPattern_LeavesDerivedNamesAlone(string line) =>
         Assert.DoesNotMatch(HostLiteral(), line);
 
-    /// <summary>Shell and Node scripts under deploy/scripts except the tests, and every pipeline definition and configuration template under .pipeline.</summary>
+    /// <summary>The directories that hold the repository's shell and Node scripts (the former deploy/scripts
+    /// directory was split by role: agent installer, remote deployment, developer tools, the CI workflow
+    /// helper, the agent's embedded harnesses and the Toto fixture's own scripts).</summary>
+    private static readonly string[][] ScriptDirectories =
+    [
+        ["deploy", "agent-installer"],
+        ["deploy", "remote-deploy"],
+        ["scripts"],
+        [".github", "scripts"],
+        ["src", "Aetheus.Agent.Core", "Harnesses"],
+        ["deploy", "pipelines", "toto-conformance-fixture", "common", "deploy", "scripts"],
+    ];
+
+    /// <summary>Shell and Node scripts of <see cref="ScriptDirectories"/> except the tests, and every pipeline definition and configuration template under .pipeline.</summary>
     private static IEnumerable<string> Candidates()
     {
-        var scripts = RepositoryScan.Enumerate(Path.Combine(Root, "deploy", "scripts"), "*")
+        var scripts = ScriptDirectories
+            .SelectMany(parts => RepositoryScan.Enumerate(Path.Combine([Root, .. parts]), "*"))
             .Where(path => path.EndsWith(".sh", StringComparison.Ordinal)
                 || (path.EndsWith(".mjs", StringComparison.Ordinal) && !path.EndsWith(".test.mjs", StringComparison.Ordinal)));
         var pipelines = RepositoryScan.Enumerate(Path.Combine(Root, ".pipeline"), "*")

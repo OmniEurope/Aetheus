@@ -113,27 +113,108 @@ internal static partial class PipelineUnresolvedVariableGuard
         // Steps too, not only variables: aetheus-release-fast exports the blue-green ports straight
         // into its shell (`export PORT_FRONT_BLUE="$(PORT_FRONT_BLUE)"`) without any variable of its
         // own referencing them, so a missing library entry would otherwise reach the host unnoticed.
+        foreach (var (text, origin) in StepTexts(definition))
+            Collect(text, origin, resolved, deferred, failures);
+
+        return failures;
+    }
+
+    /// <summary>Every text of a step the control plane substitutes at dispatch, with the step it
+    /// belongs to.</summary>
+    private static IEnumerable<(string? Text, string Origin)> StepTexts(PipelineYamlDefinition definition)
+    {
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
             foreach (var step in stage.Steps)
             {
-                Collect(step.Shell, $"step '{step.Name}'", resolved, deferred, failures);
-                Collect(step.WorkingDirectory, $"step '{step.Name}'", resolved, deferred, failures);
+                var origin = $"step '{step.Name}'";
+                yield return (step.Shell, origin);
+                yield return (step.WorkingDirectory, origin);
+                yield return (step.EnvTemplate, origin);
                 // The rendered vhost CONTENT is already fail-closed (RenderStrict throws on an
                 // undefined #{TOKEN}#), but the destination file name is not: a missing DOCS_DOMAIN
                 // would install a vhost literally called "$(DOCS_DOMAIN).conf".
                 foreach (var (target, source) in step.ConfigFiles)
                 {
-                    Collect(target, $"step '{step.Name}'", resolved, deferred, failures);
-                    Collect(source, $"step '{step.Name}'", resolved, deferred, failures);
+                    yield return (target, origin);
+                    yield return (source, origin);
                 }
                 // The pipeline a step triggers or restores from is substituted at dispatch too. The
                 // launch preflight judges the expanded name's existence and leaves a reference only
                 // known later to the step; a reference nothing can provide is refused here instead.
-                Collect(step.Pipeline, $"step '{step.Name}'", resolved, deferred, failures);
-                Collect(step.ArtifactSourcePipeline, $"step '{step.Name}'", resolved, deferred, failures);
+                yield return (step.Pipeline, origin);
+                yield return (step.ArtifactSourcePipeline, origin);
             }
+    }
 
-        return failures;
+    /// <summary>
+    /// Refuses a run whose library or vault supplies an EMPTY value it needs. A copied library or vault
+    /// is created with every value empty, and an empty string is a resolved value, so nothing else
+    /// stops the run: it would build with <c>""</c> where a host name or a password belongs.
+    /// <list type="bullet">
+    /// <item>A vault secret is never legitimately empty (the API refuses one), so any empty secret of a
+    /// vault the pipeline reads stops the run.</item>
+    /// <item>A library entry may be empty on purpose, so it stops the run only when the pipeline uses it
+    /// as <c>$(NAME)</c> without a default. <c>$(NAME:-)</c> states that empty is acceptable.</item>
+    /// </list>
+    /// </summary>
+    internal static void ValidateNoEmptyValues(
+        PipelineYamlDefinition definition,
+        IReadOnlyDictionary<string, string> resolved,
+        IReadOnlySet<string> secretKeys,
+        IReadOnlySet<string> emptyLibraryKeys)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        // Still empty in the variables of the run: a value supplied for this run replaces the entry.
+        var stillEmpty = emptyLibraryKeys
+            .Where(key => resolved.TryGetValue(key, out var value) && value.Length == 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var emptyLibrary = FindConsumedEmptyLibraryKeys(definition, stillEmpty);
+        var emptySecrets = secretKeys
+            .Where(key => resolved.TryGetValue(key, out var value) && value.Length == 0)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (emptyLibrary.Count == 0 && emptySecrets.Count == 0) return;
+
+        var parts = new List<string>();
+        if (emptyLibrary.Count > 0)
+            parts.Add("variable library entries " + string.Join(", ", emptyLibrary.Select(entry =>
+                $"'{entry.Key}' (used by {string.Join(", ", entry.Value)})")));
+        if (emptySecrets.Count > 0)
+            parts.Add("vault secrets " + string.Join(", ", emptySecrets.Select(key => $"'{key}'")));
+        throw new BadRequestException(
+            "Empty value(s) must be filled in before this pipeline can run: " + string.Join("; ", parts)
+            + ". A copied library or vault is created with empty values: enter them in the Variable Library "
+            + "or the Vault (an entry that may stay empty is used as $(NAME:-) in the pipeline).");
+    }
+
+    /// <summary>The library entries among <paramref name="emptyLibraryKeys"/> that the pipeline uses as
+    /// <c>$(NAME)</c> without a default and that are still empty in the variables of the run, mapped to
+    /// what uses them: the pipeline's own variables, its stages' variables and its steps.</summary>
+    internal static SortedDictionary<string, SortedSet<string>> FindConsumedEmptyLibraryKeys(
+        PipelineYamlDefinition definition,
+        IReadOnlySet<string> emptyLibraryKeys)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        var consumed = new SortedDictionary<string, SortedSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (emptyLibraryKeys.Count == 0) return consumed;
+
+        var texts = definition.Variables.Select(pair => ((string?)pair.Value, $"variable {pair.Key}"))
+            .Concat(YamlParsingHelper.FlattenJobs(definition).SelectMany(stage => stage.Variables)
+                .Select(pair => ((string?)pair.Value, $"variable {pair.Key}")))
+            .Concat(StepTexts(definition));
+        foreach (var (text, origin) in texts)
+        {
+            if (string.IsNullOrEmpty(text) || !text.Contains("$(", StringComparison.Ordinal)) continue;
+            foreach (Match match in VariableReference().Matches(text))
+            {
+                var name = match.Groups[1].Value;
+                if (match.Groups[2].Success || !emptyLibraryKeys.Contains(name)) continue;
+                if (!consumed.TryGetValue(name, out var usedBy))
+                    consumed[name] = usedBy = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                usedBy.Add(origin);
+            }
+        }
+        return consumed;
     }
 
     /// <summary>True when <paramref name="value"/> still references a name absent from

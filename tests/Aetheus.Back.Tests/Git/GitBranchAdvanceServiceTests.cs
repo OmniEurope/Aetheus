@@ -22,6 +22,7 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
     private readonly string _bare;
     private readonly string _work;
     private readonly IGitLightRepository _repos = Substitute.For<IGitLightRepository>();
+    private readonly IGitBranchMovedAnnouncer _announcer = Substitute.For<IGitBranchMovedAnnouncer>();
     private readonly GitBranchAdvanceService _sut;
 
     public GitBranchAdvanceServiceTests()
@@ -44,6 +45,7 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
         _sut = new GitBranchAdvanceService(
             _repos,
             new GitProcessRunner(NullLogger<GitProcessRunner>.Instance),
+            _announcer,
             Options.Create(new GitLightOptions { RepositoriesPath = _root }),
             NullLogger<GitBranchAdvanceService>.Instance);
     }
@@ -62,6 +64,22 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
         Assert.Equal(first, result.PreviousSha);
         Assert.Equal(Slug, result.RepositorySlug);
         Assert.Equal(second, ReadBareRef("refs/heads/main"));
+        // The move is announced once, with the tips git actually saw, so the pipeline definitions
+        // of the branch can follow it (a push is not involved, so nothing else announces it).
+        await _announcer.Received(1).AnnounceAsync(
+            Arg.Is<GitInternalRepo>(repo => repo.Id == 1 && repo.Slug == Slug),
+            _bare, "main", first, second, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Announces_A_Created_Branch_Without_A_Previous_Tip()
+    {
+        var only = Commit("one");
+
+        await _sut.TryFastForwardAsync(ProjectId, "production", only, TestContext.Current.CancellationToken);
+
+        await _announcer.Received(1).AnnounceAsync(
+            Arg.Any<GitInternalRepo>(), _bare, "production", null, only, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -79,6 +97,7 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
         Assert.Equal(GitBranchAdvanceOutcome.AlreadyContains, result.Outcome);
         Assert.Equal(second, result.PreviousSha);
         Assert.Equal(second, ReadBareRef("refs/heads/main"));
+        await _announcer.DidNotReceiveWithAnyArgs().AnnounceAsync(default!, default!, default!, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -95,6 +114,7 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
 
         Assert.Equal(GitBranchAdvanceOutcome.NotFastForward, result.Outcome);
         Assert.Equal(onMain, ReadBareRef("refs/heads/main"));
+        await _announcer.DidNotReceiveWithAnyArgs().AnnounceAsync(default!, default!, default!, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -108,6 +128,7 @@ public sealed class GitBranchAdvanceServiceTests : IDisposable
 
         Assert.Equal(GitBranchAdvanceOutcome.AlreadyUpToDate, result.Outcome);
         Assert.Equal(only, ReadBareRef("refs/heads/main"));
+        await _announcer.DidNotReceiveWithAnyArgs().AnnounceAsync(default!, default!, default!, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

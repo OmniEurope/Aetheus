@@ -26,7 +26,7 @@ public sealed class PipelineSetupControllerCopyAuthorizationTests
         _owner.CanOwnAsync(Arg.Any<ClaimsPrincipal>(), 2, null, null, Arg.Any<CancellationToken>()).Returns(true);
         _sut = new PipelineSetupController(
             Substitute.For<IPipelineSetupReadinessService>(), Substitute.For<IPipelineRequirementsProvisioner>(),
-            _copy, _owner, _authz)
+            Substitute.For<IPipelineProductionSetupService>(), _copy, _owner, _authz)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity("test")) } },
         };

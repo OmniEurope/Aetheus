@@ -150,9 +150,23 @@ internal sealed class DailyRecapService(
     private async Task<(DailyRecapSendStatus Status, int Delivered, string Message)> SendAsync(
         DailyRecapSettings settings, TimeZoneInfo timeZone, DateOnly day, List<string> recipients, CancellationToken ct)
     {
-        var recap = await BuildAsync(settings, timeZone, day, ct).ConfigureAwait(false);
-        var results = await sender.SendBatchAsync(
-            recipients.Select(address => new EmailMessage(address, recap.Subject, recap.Text, recap.Html)).ToList(), ct).ConfigureAwait(false);
+        var report = await collector.CollectAsync(day, timeZone, settings.Sections, Now, ct).ConfigureAwait(false);
+        // Recette R1-8: each recipient reads the recap in their own language and colours; an address with no
+        // account or no language preference gets the language the recap is configured in. The recap is
+        // composed once per language, rendered once per recipient.
+        var fallbackLanguage = MailTemplateLanguages.Normalize(settings.Culture.Name);
+        var documents = new Dictionary<string, RecapDocument>(StringComparer.Ordinal);
+        var messages = new List<EmailMessage>(recipients.Count);
+        foreach (var address in recipients)
+        {
+            var style = await templates.ResolveRecipientAsync(address, fallbackLanguage, ct).ConfigureAwait(false);
+            if (!documents.TryGetValue(style.Language, out var document))
+                documents[style.Language] = document = DailyRecapComposer.Compose(report, new DailyRecapText(CultureOf(style.Language)), FrontOrigin);
+            var mail = await templates.RenderAsync(MailTemplateKind.DailyRecap,
+                DailyRecapHtmlRenderer.Data(document, style.BlockColours), style, ct).ConfigureAwait(false);
+            messages.Add(new EmailMessage(address, mail.Subject, mail.Text, mail.Html));
+        }
+        var results = await sender.SendBatchAsync(messages, ct).ConfigureAwait(false);
         var delivered = results.Count(result => result.Status == EmailSendStatus.Sent);
         var refusal = results
             .Select((result, index) => (result, address: recipients[index]))
@@ -170,12 +184,16 @@ internal sealed class DailyRecapService(
     {
         var report = await collector.CollectAsync(day, timeZone, settings.Sections, Now, ct).ConfigureAwait(false);
         var document = DailyRecapComposer.Compose(report, new DailyRecapText(settings.Culture), FrontOrigin);
-        // One mail for every recipient: the recap's own language, the platform's default colours.
+        // The preview is read by the administrator, not by a recipient: the recap's configured language, the
+        // platform's default colours. The sent recap follows each recipient (see SendAsync, recette R1-8).
         var style = new MailRecipientStyle(MailTemplateLanguages.Normalize(settings.Culture.Name), OmniMailTheme.Default);
         var mail = await templates.RenderAsync(MailTemplateKind.DailyRecap,
             DailyRecapHtmlRenderer.Data(document), style, ct).ConfigureAwait(false);
         return (mail.Subject, mail.Html, mail.Text);
     }
+
+    private static CultureInfo CultureOf(string templateLanguage) =>
+        CultureInfo.GetCultureInfo(templateLanguage == MailTemplateLanguages.French ? "fr-FR" : "en");
 
     /// <summary>The settings page refuses an unknown zone; a host without timezone data falls back to UTC, and says so.</summary>
     private TimeZoneInfo ResolveTimeZone(DailyRecapSettings settings)

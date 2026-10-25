@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/rebase-quality-coverage-sources.mjs</c>, with the two cases of its
+/// The C# port of the former <c>rebase-quality-coverage-sources.mjs</c> script, with the two cases of its
 /// <c>.test.mjs</c> (a <c>src</c> root and a single-project root rebased, a root outside any
 /// <c>src</c> refused) and the script's other refusals and output.
 /// </summary>

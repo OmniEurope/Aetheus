@@ -301,8 +301,8 @@ public class ApacheOperationExecutorTests
             { "json null", Raw(Convert.ToBase64String("null"u8.ToArray())), "between 1 and 32 files" },
             { "empty manifest", Manifest([]), "between 1 and 32 files" },
             { "too many files", Manifest(tooMany), "between 1 and 32 files" },
-            { "empty file", Manifest(new() { ["site.conf"] = string.Empty }), "exceeds the 1 MiB safety limit" },
-            { "oversized file", Manifest(new() { ["site.conf"] = oversized }), "exceeds the 1 MiB safety limit" },
+            { "empty file", Manifest(new() { ["site.conf"] = string.Empty }), "exceeds the 1 Mo safety limit" },
+            { "oversized file", Manifest(new() { ["site.conf"] = oversized }), "exceeds the 1 Mo safety limit" },
             { "content not base64", Manifest(new() { ["site.conf"] = "%%%" }), "Invalid Apache configuration-set payload" },
         };
     }

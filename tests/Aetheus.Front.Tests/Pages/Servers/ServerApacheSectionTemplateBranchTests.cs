@@ -67,6 +67,15 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
         });
     }
 
+    // Recette R-13: the row's "Blocks" cell holds the VirtualHost count, and no "× n" badge is left.
+    private static void AssertBlockCount(IRenderedComponent<ServerApacheSection> cut, string serverName, int expected)
+    {
+        Assert.Contains(cut.FindAll("th"), header => header.TextContent.Contains("ApacheBlocks", StringComparison.Ordinal));
+        var row = cut.FindAll("tbody tr").Single(tr => tr.TextContent.Contains(serverName, StringComparison.Ordinal));
+        Assert.Contains(row.QuerySelectorAll("td"), cell => cell.TextContent.Trim() == expected.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Assert.DoesNotContain("×", row.TextContent, StringComparison.Ordinal);
+    }
+
     // ── TEST 1: Apache running → shows version and PID (lines 8-15) ──────────
 
     [Fact]
@@ -188,8 +197,8 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
             new() { ServerName = "multi.example.com", Port = 443, DocumentRoot = "/var/www/multi", ConfigFile = "/etc/apache2/sites-enabled/multi-ssl.conf", IsEnabled = true }
         };
         var cut = RenderApache(BuildServer(vhosts: vhosts));
-        // Should show "× 2" badge for the grouped multi-port entry
-        Assert.Contains("multi.example.com", cut.Markup);
+        // Recette R-13: the VirtualHost count has its own "Blocks" column; the name carries no "× n" badge.
+        AssertBlockCount(cut, "multi.example.com", 2);
     }
 
     // ── TEST 10: Enabled vhost on port 443 → Success badge colour (line 89) ───
@@ -216,7 +225,7 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
             new() { ServerName = "old.example.com", Port = 8080, DocumentRoot = "/var/www/old", ConfigFile = "/etc/apache2/sites-available/old-alt.conf", IsEnabled = false }
         };
         var cut = RenderApache(BuildServer(vhosts: vhosts));
-        Assert.Contains("old.example.com", cut.Markup);
+        AssertBlockCount(cut, "old.example.com", 2);
     }
 
     // ── TEST 12: Log content present → <pre> block rendered (line 221-223) ────

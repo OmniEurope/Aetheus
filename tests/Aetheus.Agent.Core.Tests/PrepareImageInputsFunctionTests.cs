@@ -9,7 +9,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/security/prepare-image-inputs.sh</c>, run through the real executor
+/// The C# port of the former <c>prepare-image-inputs.sh</c> script, run through the real executor
 /// on real gzip archives in a temp workspace: the revision, delivery-contract and digest checks with
 /// the script's messages, and the unpacked <c>.analysis-image/</c> the image scanners read.
 /// </summary>

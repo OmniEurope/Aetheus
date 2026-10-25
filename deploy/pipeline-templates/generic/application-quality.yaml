@@ -6,10 +6,19 @@
 # own linter) and may leave two files for the platform to publish:
 #   .pipeline-quality/coverage.cobertura.xml   line coverage, Cobertura format
 #   .pipeline-quality/lint.sarif               lint findings, SARIF format
-# Nothing is required in the repository (ADR-050, recette R3-64): without commands the step says so and
-# neither report is published (their stages are skipped), and the grade shows them absent.
+# Nothing is required in the repository (ADR-050, recette R3-64). The template carries a default for a .NET
+# repository (recette R2-1, R2-25): it runs the tests of every solution under Microsoft's dotnet-coverage,
+# which needs nothing in the test projects, and publishes the merged line coverage of the solution's own non-test
+# assemblies as the Cobertura report above; no lint report comes from it. A value the project sets replaces
+# it whole. Without commands (the project sets it empty) the step says so and neither report is published
+# (their stages are skipped), and the grade shows them absent.
 # The platform adds what needs no project knowledge: C# complexity, Python (Ruff) and Java (PMD) lint,
-# each one reporting "not applicable" on a repository without that language.
+# each one run only for a language the source holds.
+#
+# Its stages follow the platform's own quality pipeline (ADR-054): checkout, the languages found in the
+# source, the restored CI evidence, the project's commands, then the evidence published one producer at a
+# time and the grade. Without commands the step says so on the error stream: the grade then rests on the
+# platform's scanners alone, which the log must not let pass for a full analysis (recette R2-10).
 #
 # The steps of one stage run concurrently (ADR-012): every step reading another's output sits in a
 # later stage, and the producers are chained so a small runner never holds more than two of them.
@@ -19,14 +28,176 @@ variables:
   APPLICATION_CI_PIPELINE: application-ci
   APPLICATION_QUALITY_COVERAGE_REPORT: "false"
   APPLICATION_QUALITY_LINT_REPORT: "false"
-  APPLICATION_SOURCE_CSHARP: "false"
-  APPLICATION_QUALITY_COMMANDS: ""
+  # Published by the Find pinned SDK stage.
+  APPLICATION_DOTNET_PINNED: "false"
+  APPLICATION_QUALITY_COMMANDS: |
+    # Default quality of a .NET repository: the tests of every solution it holds, run once more with line
+    # coverage collected by Microsoft's dotnet-coverage (it needs nothing in the test projects), merged into the
+    # Cobertura report the grade reads. Only the solution's own non-test assemblies count. A project with its own
+    # quality commands sets APPLICATION_QUALITY_COMMANDS.
+    set -eu
+    DOTNET="${DOTNET:-dotnet}"
+    if ! command -v "$DOTNET" >/dev/null 2>&1; then
+      echo "The .NET SDK is not available on this agent: install it, or set APPLICATION_QUALITY_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_COVERAGE_TELEMETRY_OPTOUT=1 DOTNET_COVERAGE_NOLOGO=1
+    # The tool's launcher finds the runtime through DOTNET_ROOT when the SDK is not at a standard location.
+    if test -z "${DOTNET_ROOT:-}"; then
+      DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v "$DOTNET")")")"
+      export DOTNET_ROOT
+    fi
+    SOLUTIONS="$(find . -maxdepth 1 \( -name '*.sln' -o -name '*.slnx' \) | sort)"
+    if test -z "$SOLUTIONS"; then
+      SOLUTIONS="$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.slnx' \) -not -path './.pipeline-artifacts/*' -not -path '*/node_modules/*' | sort)"
+    fi
+    if test -z "$SOLUTIONS"; then
+      echo "No solution (*.sln or *.slnx) within three levels of the repository: set APPLICATION_QUALITY_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    RAW=.pipeline-quality/raw
+    TOOLS="$PWD/.pipeline-quality/tools"
+    rm -rf "$RAW" "$TOOLS"
+    mkdir -p "$RAW"
+    "$DOTNET" tool install dotnet-coverage --version 18.12.0 --tool-path "$TOOLS"
+    TEST_RUNNER=vstest
+    if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
+      echo ">>> $SOLUTION"
+      "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
+      "$DOTNET" build "$SOLUTION" --configuration Release --no-restore
+      # A repository with no test project has nothing to run (the test command would fail on it): say so.
+      if ! grep -rlqE 'Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject' \
+        --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")"; then
+        echo "WARNING: $SOLUTION holds no test project: it was built and nothing was tested." >&2
+        continue
+      fi
+      # Only the assemblies of this solution's own non-test projects are measured (recette R-18): the test
+      # assemblies would count their own lines as covered, and the NuGet and third-party assemblies the test
+      # process loads (Docker.DotNet, Testcontainers, bunit...) would drown the project's figure.
+      SETTINGS="$RAW/settings.xml"
+      MODULES="$RAW/modules.xml"
+      SOLUTION_DIRECTORY="$(dirname "$SOLUTION")"
+      "$DOTNET" sln "$SOLUTION" list | tail -n +3 | tr '\\' '/' | while IFS= read -r PROJECT; do
+        PROPERTIES="$("$DOTNET" msbuild "$SOLUTION_DIRECTORY/$PROJECT" -nologo -p:Configuration=Release \
+          -getProperty:IsTestProject -getProperty:IsTestingPlatformApplication -getProperty:AssemblyName | tr -d ' \n')"
+        case "$PROPERTIES" in
+          *'"IsTestProject":"true"'*|*'"IsTestingPlatformApplication":"true"'*) ;;
+          *)
+            ASSEMBLY="$(printf '%s' "$PROPERTIES" | sed 's/.*"AssemblyName":"\([^"]*\)".*/\1/' | sed 's/\./\\./g')"
+            printf '<ModulePath>.*[\\\\/]%s\\.dll$</ModulePath>\n' "$ASSEMBLY" ;;
+        esac
+      done > "$MODULES"
+      if ! test -s "$MODULES"; then
+        echo "WARNING: $SOLUTION holds no non-test project to measure: its coverage is not collected." >&2
+        continue
+      fi
+      echo ">>> Coverage measured on: $(sed 's/.*\]\(.*\)\\\.dll.*/\1/' "$MODULES" | tr -d '\\' | tr '\n' ' ')"
+      {
+        echo '<Configuration><CodeCoverage><ModulePaths><Include>'
+        cat "$MODULES"
+        echo '</Include></ModulePaths></CodeCoverage></Configuration>'
+      } > "$SETTINGS"
+      # Browser end-to-end projects (Playwright, Selenium) drive a running application, which this default does
+      # not start: they are built, named here and not run, so their lines are not in the figure either.
+      TEST_PROJECTS="$(grep -rlE 'Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject' \
+        --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")" | sort || true)"
+      TESTED=0
+      for PROJECT in $TEST_PROJECTS; do
+        if grep -qE 'Microsoft\.Playwright|Selenium\.WebDriver' "$PROJECT"; then
+          echo "WARNING: $PROJECT is a browser end-to-end test project: it needs a running application, so it was built and not run." >&2
+          continue
+        fi
+        TESTED=1
+        REPORT="$RAW/coverage-$(printf '%s' "$PROJECT" | tr -c 'A-Za-z0-9' '_').cobertura.xml"
+        TEST_STATUS=0
+        if test "$TEST_RUNNER" = mtp; then
+          "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
+            "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
+        else
+          "$TOOLS/dotnet-coverage" collect --nologo --output-format cobertura --settings "$SETTINGS" --output "$REPORT" \
+            "$DOTNET" test "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
+        fi
+        # Exit code 8 of Microsoft.Testing.Platform: the project holds no test. Said, never reported as a pass.
+        if test "$TEST_RUNNER" = mtp && test "$TEST_STATUS" -eq 8; then
+          echo "WARNING: $PROJECT ran no test." >&2
+        elif test "$TEST_STATUS" -ne 0; then
+          exit "$TEST_STATUS"
+        fi
+      done
+      if test "$TESTED" -eq 0; then
+        echo "WARNING: $SOLUTION holds only browser end-to-end test projects: it was built and nothing was tested." >&2
+      fi
+    done
+    if find "$RAW" -name '*.cobertura.xml' | grep -q .; then
+      "$TOOLS/dotnet-coverage" merge --nologo --output-format cobertura --output .pipeline-quality/coverage.cobertura.xml "$RAW"/*.cobertura.xml
+    else
+      echo "WARNING: no coverage report was produced; the grade shows the coverage as absent." >&2
+    fi
+    rm -rf "$RAW" "$TOOLS"
 
 stages:
-  - name: Restore CI payload
+  - name: Checkout
     group: Quality
     execution_role: build
     os: linux
+    steps:
+      - name: Check out the source
+        checkout: true
+
+  # Functions run after the checkout, in their own stage: the steps of one stage are concurrent. The
+  # languages found publish HAS_DOTNET, HAS_JAVASCRIPT, HAS_PYTHON and HAS_JAVA, which condition the
+  # producers below.
+  - name: Toolchain
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
+    steps:
+      - name: Resolve source languages
+        type: aetheus
+        function: detect-project-languages
+        with:
+          root: "."
+
+  # The SDK global.json pins, resolved as the platform's own quality pipeline does (ensure-dotnet-sdk): a
+  # runner without .NET installs it under the agent's home. Without global.json, the dotnet of the PATH.
+  - name: Find pinned SDK
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
+    steps:
+      - name: Look for the SDK manifest
+        working_directory: "$(WORKSPACE)"
+        outputs: [APPLICATION_DOTNET_PINNED]
+        shell: |
+          set -eu
+          if test -s global.json && grep -q '"version"' global.json; then
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+          else
+            echo "No global.json pins an SDK: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+          fi
+        timeout_seconds: 60
+
+  - name: Pinned SDK
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Find pinned SDK]
+    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    steps:
+      - name: Resolve the pinned .NET SDK
+        type: aetheus
+        function: ensure-dotnet-sdk
+        timeout_seconds: 900
+
+  - name: Restore CI evidence
+    group: Quality
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
     steps:
       - name: Restore immutable CI payload
         type: restore-artifacts
@@ -38,31 +209,25 @@ stages:
     group: Quality
     execution_role: build
     os: linux
-    depends_on: [Restore CI payload]
+    depends_on: [Toolchain, Pinned SDK, Restore CI evidence]
     steps:
       - name: Run project quality commands
         working_directory: "$(WORKSPACE)"
         outputs:
           - APPLICATION_QUALITY_COVERAGE_REPORT
           - APPLICATION_QUALITY_LINT_REPORT
-          - APPLICATION_SOURCE_CSHARP
         shell: |
           set -eu
           mkdir -p .pipeline-quality
           if test -n "${APPLICATION_QUALITY_COMMANDS:-}"; then
             sh -eu -c "$APPLICATION_QUALITY_COMMANDS"
           else
-            echo "No quality command declared (APPLICATION_QUALITY_COMMANDS is empty): no coverage or lint report from the project; the platform's scanners still run."
+            echo "WARNING: no quality command is declared (APPLICATION_QUALITY_COMMANDS is empty)." >&2
+            echo "WARNING: no coverage or lint report comes from the project; only the platform's scanners analyse it." >&2
           fi
           present() { if test -s "$1"; then echo true; else echo false; fi; }
           echo "##aetheus[setvariable name=APPLICATION_QUALITY_COVERAGE_REPORT]$(present .pipeline-quality/coverage.cobertura.xml)"
           echo "##aetheus[setvariable name=APPLICATION_QUALITY_LINT_REPORT]$(present .pipeline-quality/lint.sarif)"
-          if find . \( -name .git -o -name node_modules -o -name bin -o -name obj -o -name .pipeline-artifacts \) -prune \
-              -o -type f -name '*.cs' -print | grep -q .; then
-            echo "##aetheus[setvariable name=APPLICATION_SOURCE_CSHARP]true"
-          else
-            echo "##aetheus[setvariable name=APPLICATION_SOURCE_CSHARP]false"
-          fi
         timeout_seconds: 7200
 
   - name: Publish coverage
@@ -97,12 +262,14 @@ stages:
     execution_role: build
     os: linux
     depends_on: [Publish lint]
-    condition: "eq(variables['APPLICATION_SOURCE_CSHARP'], 'true')"
+    condition: "eq(variables['HAS_DOTNET'], 'true')"
     steps:
       - name: Publish complexity and architecture evidence
         type: complexity
         timeout_seconds: 900
 
+  # Run producers only for detected languages; a skipped dependency still permits unrelated language
+  # producers to proceed.
   - name: Lint source
     group: Quality
     execution_role: build
@@ -110,10 +277,12 @@ stages:
     depends_on: [Measure complexity]
     steps:
       - name: Lint Python
+        condition: "eq(variables['HAS_PYTHON'], 'true')"
         type: scanner
         scanner: ruff
         timeout_seconds: 1200
       - name: Check Java quality
+        condition: "eq(variables['HAS_JAVA'], 'true')"
         type: scanner
         scanner: pmd-java
         timeout_seconds: 1200

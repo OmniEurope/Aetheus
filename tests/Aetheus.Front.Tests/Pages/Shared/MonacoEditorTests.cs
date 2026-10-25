@@ -242,4 +242,35 @@ public class MonacoEditorTests : BunitContext
 
         Assert.Null(error);
     }
+
+    // Candidate #2898: leaving the pipeline page while the debounced YAML validation awaited the API made
+    // the validation clear the markers of a frame already removed ("Monaco editor is not ready").
+    [Fact]
+    public async Task DisposeAsync_DuringADebouncedValidation_LeavesTheRemovedEditorAlone()
+    {
+        JSInterop.SetupVoid("monacoInterop.clearValidationErrors", _ => true)
+            .SetException(new Microsoft.JSInterop.JSException("Monaco editor is not ready"));
+        var validationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var apiAnswered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        IRenderedComponent<MonacoEditor>? cut = null;
+        cut = Render<MonacoEditor>(p => p
+            .Add(x => x.Value, string.Empty)
+            .Add(x => x.DebounceDelay, 200)
+            .Add(x => x.DebouncedValueChanged, async (string _) =>
+            {
+                validationStarted.TrySetResult();
+                await apiAnswered.Task;
+                await cut!.Instance.ClearValidationErrorsAsync();
+            }));
+        await cut.Instance.OnYamlChanged("pipeline: x");
+        _clock.Advance(TimeSpan.FromMilliseconds(200));
+        await HangGuard.AwaitAsync(validationStarted.Task, "the debounced validation");
+
+        var disposal = cut.Instance.DisposeAsync().AsTask();
+        apiAnswered.TrySetResult();
+        var error = await Record.ExceptionAsync(() => HangGuard.AwaitAsync(disposal, "the editor disposal"));
+
+        Assert.Null(error);
+        Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "monacoInterop.clearValidationErrors");
+    }
 }

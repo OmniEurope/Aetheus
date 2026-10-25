@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
         <OmniTextBox aria-label="@L["PackageName"]" @bind-Value="_newPackage" Placeholder="@L["PackageName"]" Class="omni-u-grow" />
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
         @* STD-BTN detection 11: Add visible, the other actions in the menu. *@
         <OmniOverflowMenu Label="@L["MoreActions"]">
             <OmniMenuItem OnClick="@SyncAsync" Disabled="@(_syncing)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["SyncNow"]</ChildContent></OmniMenuItem>
@@ -38,9 +38,9 @@
             <OmniDataGridColumn TItem="PackageEntryDto" Property="LastSyncedAt" Title="@L["LastFetched"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
                 <Template Context="p">@(p.LastSyncedAt.Year < 2000 ? "-" : p.LastSyncedAt.ToString("g"))</Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PackageEntryDto" Title="" Width="3.5rem" Sortable="false" TextAlign="OmniDataGridTextAlign.Center">
+            <OmniDataGridColumn TItem="PackageEntryDto" Title="" Width="3.5rem" Sortable="false" TextAlign="OmniAlignment.Center">
                 <Template Context="p">
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RemoveAsync(p))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RemoveAsync(p))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 </Template>
             </OmniDataGridColumn>
         </Columns>

@@ -6,6 +6,8 @@ namespace Aetheus.WebAnalytics;
 
 internal static class AnalyticsPrivacyPolicy
 {
+    internal const string OptOutCookieName = "aetheus_analytics_optout";
+
     private static readonly string[] BotMarkers =
     [
         "bot", "crawler", "spider", "headless", "lighthouse", "monitoring", "uptime"
@@ -17,7 +19,7 @@ internal static class AnalyticsPrivacyPolicy
             return true;
         if (options.HonorDoNotTrack && context.Request.Headers["DNT"] == "1")
             return true;
-        return context.Request.Cookies.TryGetValue(AetheusWebAnalyticsEndpointExtensions.OptOutCookieName, out var value)
+        return context.Request.Cookies.TryGetValue(OptOutCookieName, out var value)
                && value == "1";
     }
 

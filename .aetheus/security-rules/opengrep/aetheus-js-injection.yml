@@ -1,0 +1,498 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# JavaScript and TypeScript injection rules: code evaluation, HTML sinks, operating-system commands,
+# regular expressions, dynamic module paths, prototype pollution, and the Node.js web handler flows
+# (Express style request objects) that reach a redirect, a file, an outbound request, a query or a
+# response. Tests: tests/security-rules/aetheus-js-injection.js and aetheus-js-injection.ts.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP cheat sheets, the Node.js security
+# best practices and the MDN security documentation), not from any third-party rule set. The
+# existing aetheus-javascript.yml rules (dom-xss taint flow, eval, new Function) are not repeated.
+rules:
+  - id: aetheus.javascript.timer-string-code
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      setTimeout, setInterval and setImmediate given a string evaluate it as code, exactly as eval
+      does. Pass a function.
+    metadata:
+      cwe: CWE-95
+      owasp: A03:2021 Injection
+      category: security
+    pattern-either:
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+      - pattern: setTimeout(`...`, ...)
+      - pattern: setInterval(`...`, ...)
+      - pattern: setTimeout($A + $B, ...)
+      - pattern: setInterval($A + $B, ...)
+      - pattern: $W.setTimeout("...", ...)
+      - pattern: $W.setInterval("...", ...)
+      - pattern: execScript(...)
+
+  - id: aetheus.javascript.eval-indirect
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      eval reached through window, globalThis or self, or Function called without new, evaluates a
+      string as code. aetheus.javascript.dynamic-eval reports the direct forms.
+    metadata:
+      cwe: CWE-95
+      owasp: A03:2021 Injection
+      category: security
+    pattern-either:
+      - pattern: window.eval(...)
+      - pattern: globalThis.eval(...)
+      - pattern: self.eval(...)
+      - pattern: (0, eval)(...)
+      - pattern: Function(...)
+
+  - id: aetheus.javascript.vm-dynamic-code
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The vm module is not a security boundary, and a script built from data runs with the rights of
+      the process. Do not run strings that are not constants.
+    metadata:
+      cwe: CWE-94
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $VM.runInContext($CODE, ...)
+          - pattern: $VM.runInNewContext($CODE, ...)
+          - pattern: $VM.runInThisContext($CODE, ...)
+          - pattern: new $VM.Script($CODE, ...)
+      - metavariable-regex:
+          metavariable: $VM
+          regex: ^(?:vm|node:vm)$
+      - pattern-not: $VM.runInContext("...", ...)
+      - pattern-not: $VM.runInNewContext("...", ...)
+      - pattern-not: $VM.runInThisContext("...", ...)
+      - pattern-not: new $VM.Script("...", ...)
+
+  - id: aetheus.javascript.html-sink-non-literal
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A value that is not a literal is parsed as HTML (innerHTML, outerHTML, insertAdjacentHTML,
+      document.write, createContextualFragment, jQuery html, dangerouslySetInnerHTML). If any part of
+      it comes from a user, script runs in the page. Use textContent, or sanitize the value first.
+    metadata:
+      cwe: CWE-79
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.innerHTML += $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML($POSITION, $X)
+          - pattern: document.write($X)
+          - pattern: document.writeln($X)
+          - pattern: $RANGE.createContextualFragment($X)
+          - pattern: $EL.setHTMLUnsafe($X)
+          - pattern: $JQ.html($X)
+          - pattern: '<$TAG ... dangerouslySetInnerHTML={{ __html: $X }} ... />'
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.innerHTML += "..."
+      - pattern-not: $EL.outerHTML = "..."
+      - pattern-not: $EL.insertAdjacentHTML($POSITION, "...")
+      - pattern-not: document.write("...")
+      - pattern-not: document.writeln("...")
+      - pattern-not: $RANGE.createContextualFragment("...")
+      - pattern-not: $JQ.html("...")
+      # A sanitizer or an escaping helper around the value is the fix, not the bug.
+      - pattern-not: $EL.innerHTML = DOMPurify.sanitize(...)
+      - pattern-not: $EL.innerHTML += DOMPurify.sanitize(...)
+      - pattern-not: $EL.outerHTML = DOMPurify.sanitize(...)
+      - pattern-not: $EL.insertAdjacentHTML($POSITION, DOMPurify.sanitize(...))
+      - pattern-not: document.write(DOMPurify.sanitize(...))
+      - pattern-not: $JQ.html(DOMPurify.sanitize(...))
+      - pattern-not: $EL.innerHTML = escapeHtml(...)
+      - pattern-not: $EL.innerHTML = $LIB.escape(...)
+
+  - id: aetheus.javascript.child-process-dynamic-command
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      exec and execSync run their argument through a shell, and this one is built from a template
+      literal or a concatenation, so any shell metacharacter in the data becomes a command. Use
+      execFile or spawn with an argument array and no shell.
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              require("child_process");
+              ...
+          - pattern-inside: |
+              require("node:child_process");
+              ...
+          - pattern-inside: |
+              import $X from "child_process";
+              ...
+          - pattern-inside: |
+              import * as $X from "child_process";
+              ...
+          - pattern-inside: |
+              import { ... } from "child_process";
+              ...
+          - pattern-inside: |
+              import $X from "node:child_process";
+              ...
+          - pattern-inside: |
+              import * as $X from "node:child_process";
+              ...
+          - pattern-inside: |
+              import { ... } from "node:child_process";
+              ...
+      - pattern-either:
+          - pattern: exec(`...${$X}...`, ...)
+          - pattern: execSync(`...${$X}...`, ...)
+          - pattern: $CP.exec(`...${$X}...`, ...)
+          - pattern: $CP.execSync(`...${$X}...`, ...)
+          - pattern: exec($A + $B, ...)
+          - pattern: execSync($A + $B, ...)
+          - pattern: $CP.exec($A + $B, ...)
+          - pattern: $CP.execSync($A + $B, ...)
+      - pattern-not: exec("..." + "...", ...)
+      - pattern-not: execSync("..." + "...", ...)
+
+  - id: aetheus.javascript.child-process-shell-option
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      spawn, spawnSync, execFile and execFileSync with the shell option hand the command line to a
+      shell, which brings back every injection that argument arrays are meant to prevent. Drop the
+      option.
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021 Injection
+      category: security
+    pattern-either:
+      - pattern: 'spawn($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: 'spawnSync($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: 'execFile($CMD, $ARGS, { ..., shell: true, ... }, ...)'
+      - pattern: 'execFileSync($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: '$CP.spawn($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: '$CP.spawnSync($CMD, $ARGS, { ..., shell: true, ... })'
+      - pattern: '$CP.execFile($CMD, $ARGS, { ..., shell: true, ... }, ...)'
+      - pattern: '$CP.execFileSync($CMD, $ARGS, { ..., shell: true, ... })'
+
+  - id: aetheus.javascript.regexp-from-input
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A regular expression is compiled from data the page or the request controls. A crafted pattern
+      can backtrack for minutes (ReDoS) or match what it should not. Escape the data so it is literal
+      text, or match with includes or indexOf.
+    metadata:
+      cwe: CWE-1333
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: window.location.hash
+          - pattern: window.location.search
+          - pattern: document.URL
+          - pattern: $URLPARAMS.get(...)
+          - patterns:
+              - pattern: $REQ.$PART
+              - metavariable-regex:
+                  metavariable: $REQ
+                  regex: ^(?:req|request)$
+              - metavariable-regex:
+                  metavariable: $PART
+                  regex: ^(?:query|body|params|headers|cookies)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new RegExp($X, ...)
+              - pattern: RegExp($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: escapeRegExp(...)
+      - pattern: $LODASH.escapeRegExp(...)
+      - pattern: escapeStringRegexp(...)
+
+  - id: aetheus.javascript.dynamic-require
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A module is loaded from a path that is computed. If the path contains data, the caller chooses
+      which file runs. Load modules by a constant name, or map a key to a fixed list.
+    metadata:
+      cwe: CWE-829
+      owasp: A08:2021 Software and Data Integrity Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: require($PATH)
+          - pattern: import($PATH)
+      - pattern-not: require("...")
+      - pattern-not: import("...")
+
+  - id: aetheus.javascript.prototype-chain-write
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A property is written through __proto__, constructor.prototype or Object.prototype, which
+      changes every object in the process (prototype pollution). If the key comes from data, any
+      object suddenly has an attacker-chosen property such as isAdmin.
+    metadata:
+      cwe: CWE-1321
+      owasp: A08:2021 Software and Data Integrity Failures
+      category: security
+    pattern-either:
+      - pattern: $O.__proto__.$P = $V
+      - pattern: $O.__proto__[$P] = $V
+      - pattern: $O["__proto__"][$P] = $V
+      - pattern: $O.constructor.prototype.$P = $V
+      - pattern: $O.constructor.prototype[$P] = $V
+      - pattern: $O["constructor"]["prototype"][$P] = $V
+      - pattern: Object.prototype.$P = $V
+      - pattern: Object.prototype[$P] = $V
+
+  - id: aetheus.javascript.prototype-pollution-merge
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A loop copies keys from one object into another without refusing __proto__, constructor and
+      prototype. With JSON.parse input a "__proto__" key makes the copy write into Object.prototype.
+      Skip those keys, copy into Object.create(null), or use a Map.
+    metadata:
+      cwe: CWE-1321
+      owasp: A08:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: |
+              for ($KEY in $SOURCE) {
+                ...
+                $TARGET[$KEY] = $VALUE;
+                ...
+              }
+          - pattern: |
+              for (const $KEY in $SOURCE) {
+                ...
+                $TARGET[$KEY] = $VALUE;
+                ...
+              }
+      - pattern-not: |
+          for ($KEY in $SOURCE) {
+            ...
+            if (<... "__proto__" ...>) { ... }
+            ...
+          }
+      - pattern-not: |
+          for (const $KEY in $SOURCE) {
+            ...
+            if (<... "__proto__" ...>) { ... }
+            ...
+          }
+      - pattern-not: |
+          for ($KEY in $SOURCE) {
+            ...
+            if (<... hasOwnProperty(...) ...>) { ... }
+            ...
+          }
+      - pattern-not: |
+          for (const $KEY in $SOURCE) {
+            ...
+            if (<... hasOwnProperty(...) ...>) { ... }
+            ...
+          }
+
+  - id: aetheus.javascript.request-open-redirect
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A redirect target taken from the request lets an attacker send a signed-in user to another
+      site through a link that starts on yours. Redirect only to paths on this site, or to hosts on an
+      allow-list.
+    metadata:
+      cwe: CWE-601
+      owasp: A01:2021 Broken Access Control
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(?:req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(?:query|body|params|headers|cookies)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.redirect($X)
+              - pattern: $RES.redirect($STATUS, $X)
+              - pattern: $RES.location($X)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: isSafeRedirect(...)
+      - pattern: new URL(..., ...)
+
+  - id: aetheus.javascript.request-path-traversal
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A path taken from the request reaches the file system. "../" sequences or an absolute path let
+      the caller read or write outside the directory you meant. Reduce it with path.basename, or
+      resolve it and check that it stays under the allowed root.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021 Broken Access Control
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(?:req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(?:query|body|params|headers|cookies)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $FS.readFile($X, ...)
+              - pattern: $FS.readFileSync($X, ...)
+              - pattern: $FS.createReadStream($X, ...)
+              - pattern: $FS.writeFile($X, ...)
+              - pattern: $FS.writeFileSync($X, ...)
+              - pattern: $FS.createWriteStream($X, ...)
+              - pattern: $FS.unlink($X, ...)
+              - pattern: $FS.unlinkSync($X)
+              - pattern: $FS.rm($X, ...)
+              - pattern: $FS.rmSync($X, ...)
+              - pattern: $FS.readdir($X, ...)
+              - pattern: $FS.readdirSync($X, ...)
+              - pattern: $FS.promises.readFile($X, ...)
+              - pattern: $FS.promises.writeFile($X, ...)
+              - pattern: $RES.sendFile($X, ...)
+              - pattern: $RES.download($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: path.basename(...)
+      - pattern: $PATH.basename(...)
+
+  - id: aetheus.javascript.request-ssrf
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A URL taken from the request is fetched by the server, so the caller can aim it at internal
+      services, a loopback port or the cloud metadata address. Check the host against an allow-list
+      before making the request.
+    metadata:
+      cwe: CWE-918
+      owasp: A10:2021 Server-Side Request Forgery
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(?:req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(?:query|body|params|headers)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($X, ...)
+              - pattern: axios($X, ...)
+              - pattern: axios.get($X, ...)
+              - pattern: axios.post($X, ...)
+              - pattern: 'axios.request({ ..., url: $X, ... })'
+              - pattern: got($X, ...)
+              - pattern: got.get($X, ...)
+              - pattern: $HTTP.get($X, ...)
+              - pattern: $HTTP.request($X, ...)
+              - pattern: request($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: isAllowedHost(...)
+      - pattern: $ALLOWED.includes(...)
+
+  - id: aetheus.javascript.request-sql-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A value taken from the request becomes part of the SQL text. Pass it as a bound parameter
+      ($1, ? or a named placeholder) so it can never be parsed as SQL.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021 Injection
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(?:req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(?:query|body|params|headers|cookies)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($X)
+              - pattern: $DB.query($X, ...)
+              - pattern: $DB.execute($X)
+              - pattern: $DB.execute($X, ...)
+              - pattern: $DB.raw($X)
+              - pattern: $DB.queryRawUnsafe($X, ...)
+              - pattern: $DB.executeRawUnsafe($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: Number(...)
+      - pattern: parseInt(...)
+      - pattern: $DB.escape(...)
+
+  - id: aetheus.javascript.request-reflected-xss
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A value taken from the request is written back into the HTML response without encoding, so a
+      crafted link runs script in the visitor's page. Encode the value for HTML, or return JSON.
+    metadata:
+      cwe: CWE-79
+      owasp: A03:2021 Injection
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$PART
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: ^(?:req|request)$
+          - metavariable-regex:
+              metavariable: $PART
+              regex: ^(?:query|body|params|headers|cookies)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send($X)
+              - pattern: $RES.write($X)
+              - pattern: $RES.end($X)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: escapeHtml(...)
+      - pattern: encodeURIComponent(...)
+      - pattern: $LIB.escape(...)
+      - pattern: $LIB.encode(...)
+      - pattern: JSON.stringify(...)
+      - pattern: Number(...)
+      - pattern: parseInt(...)

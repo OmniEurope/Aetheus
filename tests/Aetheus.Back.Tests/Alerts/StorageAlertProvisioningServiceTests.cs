@@ -72,6 +72,10 @@ public sealed class StorageAlertProvisioningServiceTests
         Assert.Contains(rules, rule => rule.Metric == MetricType.Inodes && rule.Threshold == 95 && rule.Severity == AlertSeverity.Critical
             && rule.ProvisioningKey!.StartsWith("storage-inodes-critical:", StringComparison.Ordinal));
         Assert.All(rules, rule => Assert.False(string.IsNullOrWhiteSpace(rule.ProvisioningKey)));
+        // R-47: the rule name is shown to French users in Go, never in the binary unit Gio.
+        var freeRule = Assert.Single(rules, rule => rule.Metric == MetricType.DiskFree);
+        Assert.Contains("20 Go", freeRule.Name, StringComparison.Ordinal);
+        Assert.DoesNotContain("Gio", freeRule.Name, StringComparison.Ordinal);
     }
 
     [Fact]

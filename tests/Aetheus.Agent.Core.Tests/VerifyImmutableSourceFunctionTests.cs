@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/security/verify-immutable-source.sh</c>, run through the real
+/// The C# port of the former <c>verify-immutable-source.sh</c> script, run through the real
 /// executor with Git answered by a fake: the HEAD check, the unshallow in full mode and the refusal of
 /// a history that stays shallow, with the Git commands in the script's order.
 /// </summary>

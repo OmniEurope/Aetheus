@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Configuration;
+using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Options;
 
 namespace Aetheus.Back.Components.Git;
@@ -95,13 +96,16 @@ public interface IGitBranchAdvanceService
 /// has to provision, rotate, and store on the deployment host. Writing the ref in place removes the
 /// credential entirely. It also means the update does not run the receive-pack path, so no
 /// <c>GitPushProcessedEvent</c> is raised - moving the branch onto an already-built, already-deployed
-/// commit must not re-trigger the pipelines that watch it.
+/// commit must not re-trigger the pipelines that watch it. A real move is announced with
+/// <c>GitBranchMovedEvent</c> instead, which keeps the state derived from the branch (the pipeline
+/// definitions of <c>.pipeline/</c>) in step without triggering anything.
 ///
 /// The release tag of a deploy (<see cref="TryCreateTagAsync"/>) is written the same way, create-only.
 /// </summary>
 public sealed class GitBranchAdvanceService(
     IGitLightRepository lightRepo,
     GitProcessRunner git,
+    IGitBranchMovedAnnouncer announcer,
     IOptions<GitLightOptions> options,
     ILogger<GitBranchAdvanceService> logger) : IGitBranchAdvanceService
 {
@@ -134,15 +138,16 @@ public sealed class GitBranchAdvanceService(
             if (refusal is not null)
                 return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.Protected, repo.Slug, Detail: refusal);
 
-            return await AdvanceInRepositoryAsync(diskPath, repo.Slug, branch, targetSha, ct).ConfigureAwait(false);
+            return await AdvanceInRepositoryAsync(diskPath, repo, branch, targetSha, ct).ConfigureAwait(false);
         }
 
         return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.CommitNotFound);
     }
 
     private async Task<GitBranchAdvanceResult> AdvanceInRepositoryAsync(
-        string diskPath, string slug, string branch, string targetSha, CancellationToken ct)
+        string diskPath, GitInternalRepo repo, string branch, string targetSha, CancellationToken ct)
     {
+        var slug = repo.Slug;
         var reference = $"refs/heads/{branch}";
         var (revCode, revOut, _) = await git.RunGitAsync(
             diskPath, ["rev-parse", "--verify", "--quiet", reference], ct, ignoreExitCode: true).ConfigureAwait(false);
@@ -193,6 +198,8 @@ public sealed class GitBranchAdvanceService(
         logger.LogInformation(
             "Branch {Branch} of {Slug} advanced from {Previous} to {Target}.",
             branch, slug, previousSha ?? "(new)", targetSha);
+        // Only a real move is announced: the other outcomes left the branch where it was.
+        await announcer.AnnounceAsync(repo, diskPath, branch, previousSha, targetSha, ct).ConfigureAwait(false);
         return new GitBranchAdvanceResult(GitBranchAdvanceOutcome.Advanced, slug, previousSha);
     }
 

@@ -12,7 +12,11 @@ public partial class ServerPatchSection
 
     [Parameter] public EventCallback OnRefreshRequested { get; set; }
 
+    /// <summary>The server, so the page can open the same component dialog as the server menu (R1-5).</summary>
+    [Parameter] public ServerDetailDto? Server { get; set; }
+
     [Inject] private ApiClient Api { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -21,7 +25,16 @@ public partial class ServerPatchSection
     private bool _loading = true;
     private bool _busy;
 
-    protected override async Task OnParametersSetAsync() => await LoadAsync();
+    private int? _loadedServerId;
+
+    // R-43: the hosting page re-renders on every heartbeat and every click, which sets these parameters again;
+    // reloading then swapped the whole page for the loader. Only a different server reads the list again.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedServerId == ServerId) return;
+        _loadedServerId = ServerId;
+        await LoadAsync();
+    }
 
     private OmniDataGrid<PendingUpdateDto>? _grid;
 
@@ -91,6 +104,21 @@ public partial class ServerPatchSection
 
     // Only the agent with the apt patch-manage grant can apply; unknown (null) is treated as not-yet-capable.
     private bool CanApply => PatchManagementAvailable == true;
+
+    // The dialog's request needs Server.Admin and a Linux host (the installer flags exist there only).
+    private bool CanEnableComponent =>
+        Server is { } server
+        && AgentCapabilitiesDialog.IsAvailableFor(server)
+        && Permissions.CanAdmin(ResourceType.Server, ServerId);
+
+    private Task OpenCapabilitiesAsync() =>
+        Server is null ? Task.CompletedTask : AgentCapabilitiesDialog.OpenAsync(Dialog, L, Server);
+
+    private static readonly string[] s_dockerRestartPackages = ["docker-ce", "containerd.io"];
+
+    // Upgrading these packages restarts the Docker daemon, and with it every container of the host.
+    private bool RestartsDocker =>
+        _status?.Updates.Any(update => s_dockerRestartPackages.Contains(update.Package, StringComparer.Ordinal)) == true;
 
     private OmniTone SecurityBadgeStyle => (_status?.PendingSecurity ?? 0) > 0 ? OmniTone.Danger : OmniTone.Neutral;
 }

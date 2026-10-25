@@ -8,7 +8,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/record-storage-evidence.sh</c>, run through the real executor with
+/// The C# port of the former <c>record-storage-evidence.sh</c> script, run through the real executor with
 /// docker and df answered by <see cref="FakeFunctionTools"/> and a fixed clock: the ledger it keeps,
 /// the residual QA stacks it refuses, the plateau it verifies, and the script's refusals with its
 /// messages.

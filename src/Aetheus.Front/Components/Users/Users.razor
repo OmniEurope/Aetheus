@@ -11,9 +11,9 @@
         <Badges>
         <HelpLink PageKey="users" />
         </Badges>
-        <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewUser"]"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["Create"]</span></OmniButton>
-        </Actions>
+        <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewUser"]"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        </ActionsContent>
     </OmniPageHeader>
 
     <AdminIdentityNav ActiveSection="users" />
@@ -22,7 +22,7 @@
     {
         <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
             @L["LoadFailed"]
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryLoadAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryLoadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
         </OmniAlert>
     }
 
@@ -33,14 +33,14 @@
             VirtualData="@(() => new OmniDataGridResult<UserDto>(_users, _totalCount))"
             FullHeight="true" RowClick="@(user => Nav.NavigateTo($"/users/{user.Id}"))">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="UserDto" Property="Username" Title="@L["Username"]" MinWidth="170px" Filterable="true" >
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="UserDto" Property="Username" Title="@L["Username"]" Filterable="true" >
                     <Template Context="user">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XLarge" Align="OmniAlignment.Center">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.ExtraLarge" Align="OmniAlignment.Center">
                             <a href="/users/@user.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@user.Username</a>
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="UserDto" Property="Email" Title="@L["Email"]" MinWidth="180px" Filterable="true" />
+                <OmniDataGridColumn TItem="UserDto" Property="Email" Title="@L["Email"]" Filterable="true" />
                 <OmniDataGridColumn TItem="UserDto" Key="Roles" ExportValue="@RolesExport" Title="@L["Roles"]" Width="220px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_roleNames" FilterSearchable="true" >
                     <Template Context="user">
                         <OmniRow Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
@@ -54,7 +54,7 @@
                                     title="@string.Join(", ", user.Roles.Skip(3))">@($"+{user.Roles.Count - 3}")</OmniBadge>
                             }
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                             </span>
                         </OmniRow>
                     </Template>

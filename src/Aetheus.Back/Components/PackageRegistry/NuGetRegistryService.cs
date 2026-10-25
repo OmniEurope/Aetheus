@@ -123,7 +123,8 @@ internal sealed class NuGetRegistryService(
                     version.Version,
                     version.IsListed,
                     version.CreatedAt,
-                    stored.DependencyGroups);
+                    stored.DependencyGroups,
+                    version.IsDeprecated);
             })
             .ToList();
         var latestMetadata = package.Versions
@@ -166,7 +167,8 @@ internal sealed class NuGetRegistryService(
                     selected.Version,
                     selected.IsListed,
                     selected.CreatedAt,
-                    stored.DependencyGroups)
+                    stored.DependencyGroups,
+                    selected.IsDeprecated)
             ]);
     }
 

@@ -12,6 +12,7 @@
     <Aetheus.Front.Components.Servers.ServerDetailSections.ServerPatchSection
         @ref="_section"
         ServerId="@Id"
+        Server="@Loader.Server"
         PatchManagementAvailable="@Loader.Server.PatchManagementAvailable"
         OnRefreshRequested="StateHasChanged" />
 }

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/deploy-prod/grant-acme-challenge-traversal.sh</c>, run through the
+/// The C# port of the former <c>grant-acme-challenge-traversal.sh</c> script, run through the
 /// real executor as a deployment function with chmod answered by a fake: the traversal bit only when the
 /// web root lives under the agent work directory, and a best-effort pass on the web root itself.
 /// </summary>

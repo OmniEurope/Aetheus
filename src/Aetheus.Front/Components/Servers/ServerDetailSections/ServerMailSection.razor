@@ -22,7 +22,7 @@ else if (_countsFailed)
     @* SITE-FUNC-METRICS-001: a failed read is said, not shown as a load that never ends. *@
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-lg mail-counts-failed">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReadCountsAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReadCountsAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 else if (!_countsRead)
@@ -35,74 +35,21 @@ else if (_domainCount == 0 && _accountCount == 0)
 }
 else
 {
-    @* The page opens on the state of the stack, the work tabs below. *@
-    <ServerMailStatusList @ref="_statusList" ServerId="@ServerId" Mail="@Mail" CanManage="@CanManageTasks"
-        DefaultSender="@DefaultSender" OnUsageMeasured="@ReloadDataAsync" />
+    @* R1-29: the state of the stack has its own tab; a stack that is not compliant also shows its failing lines up here. *@
+    <MailComplianceBanner ServerId="@ServerId" Visible="@(_tabIndex != StateTabIndex)" />
 }
 
 @if (Mail.IsInstalled)
 {
-    <UrlSyncedTabs Slugs="@(new[] { "domains", "accounts", "aliases", "spam", "queue", "logs", "relations" })">
+    <UrlSyncedTabs Slugs="@TabSlugs" Change="@OnTabChanged">
         <Tabs>
-            @* --- Domains tab --- *@
-            <OmniTabsItem Key="domains" Title="@L["MailDomains"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dns"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
-                    <CountBadge Value="@_domainCount" Variant="OmniTone.Accent" />
-                    <div class="blade-content-spacer"></div>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDomainDialogAsync" Disabled="@AgentOffline" title="@L["AddDomain"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
-                </OmniStack>
-                <AetheusDataGrid FullHeight="true" @ref="_domainsGrid" Data="@_domains" Count="@_domainCount"
-                    TItem="MailDomainDto" RowClick="@ShowDnsRecordsAsync" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync" ExportRead="@ReadDomainsExportAsync" ExportName="@L["MailDomains"]"
-                    PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoMailDomains"]"
-                    Virtualize="@AetheusGrid.RemoteVirtualization"
-                    VirtualData="@(() => new OmniDataGridResult<MailDomainDto>(_domains, _domainCount))">
-                    <Columns>
-                        <OmniDataGridColumn Frozen="true" TItem="MailDomainDto" Property="Name" Title="@L["DomainName"]" Width="250px" Filterable="true" />
-                        <OmniDataGridColumn TItem="MailDomainDto" Property="DkimSelector" Title="DKIM" Width="120px" Filterable="true" >
-                            <Template Context="d">
-                                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@d.DkimSelector</OmniText>
-                            </Template>
-                        </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="MailDomainDto" Title="DNS" ExportValue="@DnsExport" Width="180px" Filterable="false" >
-                            <Template Context="d">
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="@(d.HasSpf ? OmniTone.Success : OmniTone.Neutral)">SPF</OmniBadge>
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="@(d.HasDkim ? OmniTone.Success : OmniTone.Neutral)">DKIM</OmniBadge>
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="@(d.HasDmarc ? OmniTone.Success : OmniTone.Neutral)">DMARC</OmniBadge>
-                                </OmniStack>
-                            </Template>
-                        </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="MailDomainDto" Title="@L["Status"]" Width="200px" Sortable="false">
-                            <Template Context="d">
-                                <MailRecordBadges IsActive="@d.IsActive" Source="@d.Source" MissingSince="@d.MissingSince" />
-                            </Template>
-                        </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="MailDomainDto" Title="@L["Actions"]" Width="200px" Sortable="false">
-                            <Template Context="d">
-                                @* One visible action per row (the DNS records, also run by a click on the row), the others
-                                   behind "…", the destructive one in Danger. *@
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="mail-domain-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDnsRecordsAsync(d))" title="@L["DnsRecords"]" Label="@L["DnsRecords"]"><OmniIcon Name="OmniIconName.Database" /></OmniButton>
-                                    <OmniOverflowMenu Label="@L["MoreActions"]">
-                                        <OmniMenuItem OnClick="@(() => VerifyDnsAsync(d))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["MailVerifyDns"]</ChildContent></OmniMenuItem>
-                                        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ShowDkimRotation(d))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["RotateDkimKey"]</ChildContent></OmniMenuItem>
-                                        <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteDomain"], string.Format(L["ConfirmDeleteMailDomain"], d.Name),
-                                                () => DeleteDomainAsync(d.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
-                                    </OmniOverflowMenu>
-                                </OmniStack>
-                            </Template>
-                        </OmniDataGridColumn>
-                    </Columns>
-                </AetheusDataGrid>
-            </ChildContent></OmniTabsItem>
-
             @* --- Accounts tab --- *@
             <OmniTabsItem Key="accounts" Title="@L["MailAccounts"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("people"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <CountBadge Value="@_accountCount" Variant="OmniTone.Accent" />
                     <div class="blade-content-spacer"></div>
                     @* Recette R3-49: Add is the one visible action; "Client mail" (R1-17), "Purger" and, for an administrator, the administrator access (R1-41) sit in the menu next to it. *@
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAccountDialogAsync" Disabled="@AgentOffline" title="@L["AddAccount"]"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAccountDialogAsync" Disabled="@AgentOffline" title="@L["AddAccount"]"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                     <ServerMailAccountsMenu ServerId="@ServerId" CanManage="@CanManageTasks" OnAccountsChanged="@ReloadDataAsync" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_accountsGrid" Data="@_accounts" Count="@_accountCount"
@@ -111,7 +58,7 @@ else
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailAccountDto>(_accounts, _accountCount))">
                     <Columns>
-                        <OmniDataGridColumn Frozen="true" TItem="MailAccountDto" Property="Email" Title="@L["Email"]" Width="300px" Filterable="true" />
+                        <OmniDataGridColumn Frozen="true" TItem="MailAccountDto" Property="Email" Title="@L["Email"]" Filterable="true" />
                         <OmniDataGridColumn TItem="MailAccountDto" Title="@L["Quota"]" Width="200px" Filterable="false" >
                             <Template Context="a">
                                 <OmniStack Gap="OmniSpacing.XSmall">
@@ -138,8 +85,8 @@ else
                             <Template Context="a">
                                 @* Recette R1-17: the integrated mailbox of the account. *@
                                 @* Recette R3-51: the mailbox is the main action of the row (blue, user-chosen exception), a click on the row opens it. *@
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenMailbox(a))" Disabled="@(!a.IsActive || a.MissingSince is not null)" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></OmniButton>
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenMailbox(a))" Disabled="@(!a.IsActive || a.MissingSince is not null)" title="@L["MailboxOpen"]" Label="@L["MailboxOpen"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></Icon></OmniButton>
                                     <OmniOverflowMenu Label="@L["MoreActions"]">
                                         <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAccount"], string.Format(L["ConfirmDeleteMailAccount"], a.Email),
                                                 () => DeleteAccountAsync(a.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
@@ -151,12 +98,70 @@ else
                 </AetheusDataGrid>
             </ChildContent></OmniTabsItem>
 
+            @* --- Domains tab --- *@
+            <OmniTabsItem Key="domains" Title="@L["MailDomains"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dns"))" /></Icon><ChildContent>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                    <CountBadge Value="@_domainCount" Variant="OmniTone.Accent" />
+                    <div class="blade-content-spacer"></div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDomainDialogAsync" Disabled="@AgentOffline" title="@L["AddDomain"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+                </OmniStack>
+                <AetheusDataGrid FullHeight="true" @ref="_domainsGrid" Data="@_domains" Count="@_domainCount"
+                    TItem="MailDomainDto" RowClick="@ShowDnsRecordsAsync" IsLoading="@_domainsLoading" LoadData="@LoadDomainsAsync" ExportRead="@ReadDomainsExportAsync" ExportName="@L["MailDomains"]"
+                    PageSize="25" Density="OmniDensity.Compact" AllowSorting="true" EmptyText="@L["NoMailDomains"]"
+                    Virtualize="@AetheusGrid.RemoteVirtualization"
+                    VirtualData="@(() => new OmniDataGridResult<MailDomainDto>(_domains, _domainCount))">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="MailDomainDto" Property="Name" Title="@L["DomainName"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="MailDomainDto" Property="DkimSelector" Title="DKIM" Width="120px" Filterable="true" >
+                            <Template Context="d">
+                                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@d.DkimSelector</OmniText>
+                            </Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="MailDomainDto" Title="DNS" ExportValue="@DnsExport" Width="17rem" Filterable="false" >
+                            <Template Context="d">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasSpf ? OmniTone.Success : OmniTone.Neutral)">SPF</OmniBadge>
+                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasDkim ? OmniTone.Success : OmniTone.Neutral)">DKIM</OmniBadge>
+                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasDmarc ? OmniTone.Success : OmniTone.Neutral)">DMARC</OmniBadge>
+                                </OmniStack>
+                            </Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="MailDomainDto" Title="@L["Status"]" Width="200px" Sortable="false">
+                            <Template Context="d">
+                                <MailRecordBadges IsActive="@d.IsActive" Source="@d.Source" MissingSince="@d.MissingSince" />
+                            </Template>
+                        </OmniDataGridColumn>
+                        <OmniDataGridColumn TItem="MailDomainDto" Title="@L["Actions"]" Width="200px" Sortable="false">
+                            <Template Context="d">
+                                @* One visible action per row (the DNS records, also run by a click on the row), the others
+                                   behind "…", the destructive one in Danger. *@
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="mail-domain-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDnsRecordsAsync(d))" title="@L["DnsRecords"]" Label="@L["DnsRecords"]"><Icon><OmniIcon Name="OmniIconName.Database" /></Icon></OmniButton>
+                                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                                        <OmniMenuItem OnClick="@(() => VerifyDnsAsync(d))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["MailVerifyDns"]</ChildContent></OmniMenuItem>
+                                        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ShowDkimRotation(d))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["RotateDkimKey"]</ChildContent></OmniMenuItem>
+                                        <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteDomain"], string.Format(L["ConfirmDeleteMailDomain"], d.Name),
+                                                () => DeleteDomainAsync(d.Id)))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                                    </OmniOverflowMenu>
+                                </OmniStack>
+                            </Template>
+                        </OmniDataGridColumn>
+                    </Columns>
+                </AetheusDataGrid>
+            </ChildContent></OmniTabsItem>
+
+            @* --- State tab (R1-29) --- *@
+            <OmniTabsItem Key="status" Title="@L["MailStatusTab"]"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent>
+                <ServerMailStatusList @ref="_statusList" ServerId="@ServerId" Mail="@Mail" CanManage="@CanManageTasks"
+                    DefaultSender="@DefaultSender" OnUsageMeasured="@ReloadDataAsync" />
+            </ChildContent></OmniTabsItem>
+
             @* --- Aliases tab --- *@
             <OmniTabsItem Key="aliases" Title="@L["Aliases"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("alternate_email"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <CountBadge Value="@_aliasCount" Variant="OmniTone.Accent" />
                     <div class="blade-content-spacer"></div>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAliasDialogAsync" Disabled="@AgentOffline" title="@L["AddAlias"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAliasDialogAsync" Disabled="@AgentOffline" title="@L["AddAlias"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_aliasesGrid" Data="@_aliases" Count="@_aliasCount"
                     TItem="MailAliasDto" IsLoading="@_aliasesLoading" LoadData="@LoadAliasesAsync" ExportRead="@ReadAliasesExportAsync" ExportName="@L["Aliases"]"
@@ -176,10 +181,10 @@ else
                                     <MailRecordBadges IsActive="@a.IsActive" Source="@a.Source" MissingSince="@a.MissingSince" />
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="MailAliasDto" Title="" Width="80px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
+                            <OmniDataGridColumn TItem="MailAliasDto" Title="" Width="80px" TextAlign="OmniAlignment.End" Filterable="false" >
                                 <Template Context="a">
                                     <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowConfirm(L["DeleteAlias"], L["ConfirmDeleteAlias"],
-                                            () => DeleteAliasAsync(a.Id)))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                            () => DeleteAliasAsync(a.Id)))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                         </Columns>

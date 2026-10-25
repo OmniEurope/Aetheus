@@ -23,6 +23,9 @@ public interface IVariableLibraryService
     Task<Dictionary<string, string>> ResolveLibrariesWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
     Task<(Dictionary<string, string> Vars, HashSet<string> FoundNames)> ResolveLibrariesWithNamesAsync(List<string> names, int? projectId, CancellationToken ct = default);
     Task<(Dictionary<string, string> Vars, HashSet<string> FoundNames)> ResolveLibrariesWithCrossAccessAndNamesAsync(List<string> names, int projectId, CancellationToken ct = default);
+    /// <summary>For each entry key of the named libraries, the id of the library whose value a run of the project
+    /// would read (same precedence and cross-project access as <see cref="ResolveLibrariesWithCrossAccessAndNamesAsync"/>).</summary>
+    Task<Dictionary<string, int>> ResolveEntryOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
     Task<List<VariableEntryDto>> ExportEntriesAsync(int libraryId, CancellationToken ct = default);
     Task<int> ImportEntriesAsync(int libraryId, List<CreateVariableEntryRequest> entries, CancellationToken ct = default);
 }

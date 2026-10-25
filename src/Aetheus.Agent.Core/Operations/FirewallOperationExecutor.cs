@@ -13,7 +13,7 @@ namespace Aetheus.Agent.Core.Operations;
 /// </summary>
 public sealed class FirewallOperationExecutor(ILogger<FirewallOperationExecutor> logger) : EnvironmentOperationExecutor
 {
-    public const string HelperPath = "/usr/local/lib/aetheus/aetheus-firewall";
+    public const string HelperPath = AgentHelperPaths.FirewallHelper;
 
     public override bool CanHandle(OperationKind kind) => kind is
         OperationKind.FirewallAllow or

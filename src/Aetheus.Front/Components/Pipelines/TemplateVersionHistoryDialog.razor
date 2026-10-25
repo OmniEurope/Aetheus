@@ -1,13 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits PipelineTemplateVersionHistoryBase
 
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
     @if (_versionsLoadFailed)
     {
         <OmniAlert Severity="OmniSeverity.Danger">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryVersionsAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryVersionsAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
             </OmniStack>
         </OmniAlert>
     }
@@ -22,7 +22,7 @@
                 <Template Context="version">v@(version.Version)</Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="ChangelogEntry" Title="@L["Changelog"]" Filterable="true" />
-            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Width="12rem" Filterable="true" />
+            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" />
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
         </Columns>
     </AetheusDataGrid>
@@ -39,9 +39,9 @@
         @if (_yamlLoadFailed)
         {
             <OmniAlert Severity="OmniSeverity.Danger">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadSelectedYamlAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadSelectedYamlAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
                 </OmniStack>
             </OmniAlert>
         }

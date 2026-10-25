@@ -6,7 +6,7 @@
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadGridAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadGridAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 
@@ -22,10 +22,10 @@
                     @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@task.Id</a>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServerTaskDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" />
+        <OmniDataGridColumn TItem="ServerTaskDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         @if (ServerId is null)
         {
-            <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="ServerTaskDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ServerNames" FilterSearchable="true" />
         }
         <OmniDataGridColumn TItem="ServerTaskDto" Title="@L["Source"]" ExportValue="@SourceExport" Width="210px" Sortable="false" Filterable="false" >
             <Template Context="task">
@@ -42,14 +42,14 @@
         <OmniDataGridColumn TItem="ServerTaskDto" Property="Executor" Title="@L["Executor"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ExecutorText"><Template Context="task">@L.Localize(task.Executor)</Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerTaskDto" Property="Status" Title="@L["Status"]" Width="270px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
             <Template Context="task">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@GetTaskBadge(task.Status)">@L.Localize(task.Status)</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetTaskBadge(task.Status)">@L.Localize(task.Status)</OmniBadge>
                 @if (!string.IsNullOrWhiteSpace(task.FailureCode))
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetFailureBadge(task.FailureCode)" title="@task.FailureReason" Class="omni-u-ms-xs"><Icon><OmniIcon Name="@GetFailureIcon(task.FailureCode)" /></Icon><ChildContent>@L[task.FailureCode]</ChildContent></OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetFailureBadge(task.FailureCode)" title="@task.FailureReason" Class="omni-u-ms-xs"><Icon><OmniIcon Name="@GetFailureIcon(task.FailureCode)" /></Icon><ChildContent>@L[task.FailureCode]</ChildContent></OmniBadge>
                 }
                 @if (IsStalledOnOfflineAgent(task))
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning"
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Warning"
                         title="@L["TaskAgentOfflineHint"]" Class="omni-u-ms-xs"><Icon><OmniIcon Name="OmniIconName.WifiSlash" /></Icon><ChildContent>@L["TaskAgentOffline"]</ChildContent></OmniBadge>
                 }
             </Template>

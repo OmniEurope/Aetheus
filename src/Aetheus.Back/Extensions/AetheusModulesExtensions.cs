@@ -51,6 +51,7 @@ using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Components.Vaults;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Components.WorkItems;
+using Aetheus.Back.Seeding;
 
 namespace Aetheus.Back.Extensions;
 
@@ -119,7 +120,8 @@ internal static class AetheusModulesExtensions
             .AddModuleLinksModule()
             .AddPortRegistryModule()
             .AddPortAllocationModule()
-            .AddDailyRecapModule();
+            .AddDailyRecapModule()
+            .AddSeedingModule();
 
         return services;
     }

@@ -1,38 +1,25 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Repository / branch / commit are one answer - "which source did this run build?" - so they share a
    single tile with one link per line instead of three tiles. Extracted from PipelineRun.razor, which
-   had outgrown its line budget. *@
+   had outgrown its line budget. R-28: an OmniFactTile (OE), each value a link through the row's Href. *@
 @if (HasSourceFacts)
 {
-    <OmniCard Class="run-overview-card run-source-tile">
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.FolderOpen" Class="run-tile-icon" /> @L["SourceRepository"]</OmniText>
-        @* Repository and branch fill the value slot, the commit the footer, all with the same
-           label-left, value-right sub-row. *@
-        <div class="run-tile-main run-tile-main-rows">
+    <OmniFactTile Title="@L["SourceRepository"]" Class="run-source-tile">
+        <Icon><OmniIcon Name="OmniIconName.FolderOpen" /></Icon>
+        <ChildContent>
             @if (RepositoryHref is not null)
             {
-                <span class="run-tile-subrow">
-                    <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.Database" Class="run-tile-icon" /> @L["Repository"]</span>
-                    <a href="@RepositoryHref" class="pipeline-name-link run-tile-value" title="@(Run.ProjectName ?? L["Repository"].Value)">@(Run.ProjectName ?? L["Repository"].Value)</a>
-                </span>
+                <OmniFactTileRow Term="@L["Repository"]" Href="@RepositoryHref"><Icon><OmniIcon Name="OmniIconName.Database" /></Icon><ChildContent>@(Run.ProjectName ?? L["Repository"].Value)</ChildContent></OmniFactTileRow>
             }
             @foreach (var branch in BranchLinks)
             {
-                <span class="run-tile-subrow">
-                    <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.Graph" Class="run-tile-icon" /> @L["Branch"]</span>
-                    <a href="@branch.Href" class="pipeline-name-link run-tile-value" title="@branch.Name">@branch.Name</a>
-                </span>
+                <OmniFactTileRow Term="@L["Branch"]" Href="@branch.Href"><Icon><OmniIcon Name="OmniIconName.Graph" /></Icon><ChildContent>@branch.Name</ChildContent></OmniFactTileRow>
             }
-        </div>
-        <div class="run-tile-foot">
             @if (!string.IsNullOrEmpty(CommitSha))
             {
-                <span class="run-tile-subrow">
-                    <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.GitCommit" Class="run-tile-icon" /> @L["Commit"]</span>
-                    @* CommitHref is null only for a run with neither repository nor project. *@
-                    <ShortId Value="@CommitSha" Href="@CommitHref" Copyable="false" Class="cross-link-sha run-tile-value" />
-                </span>
+                @* CommitHref is null only for a run with neither repository nor project. *@
+                <OmniFactTileRow Term="@L["Commit"]"><Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon><ChildContent><ShortId Value="@CommitSha" Href="@CommitHref" Copyable="false" Class="cross-link-sha" /></ChildContent></OmniFactTileRow>
             }
-        </div>
-    </OmniCard>
+        </ChildContent>
+    </OmniFactTile>
 }

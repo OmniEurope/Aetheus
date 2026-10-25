@@ -151,7 +151,7 @@ public sealed class OpenGrepRuleTestsFunction : IPipelineFunction
             return new Setup("OpenGrep is absent from the scanner manifest of this agent.");
         try
         {
-            ScannerOperationExecutor.RequireVerifiedDownload(scanner);
+            OpenGrepSandbox.RequireVerifiedDownload(scanner);
             OpenGrepSandbox.RequirePinnedRuntime(scanner);
         }
         catch (IOException ex)

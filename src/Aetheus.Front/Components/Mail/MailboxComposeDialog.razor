@@ -43,6 +43,6 @@
         }
     </OmniStack>
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("send")" /> <span>@L["MailboxSend"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("send")" /></Icon><ChildContent><span>@L["MailboxSend"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniTemplateForm>

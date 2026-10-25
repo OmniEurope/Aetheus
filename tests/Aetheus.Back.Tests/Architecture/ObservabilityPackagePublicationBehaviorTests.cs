@@ -105,7 +105,7 @@ public sealed class ObservabilityPackagePublicationBehaviorTests
                 RedirectStandardError = true
             };
             startInfo.ArgumentList.Add(ToShellPath(
-                Path.Combine(Root, "deploy", "scripts", "publish-observability-package.sh")));
+                Path.Combine(Root, "src", "Aetheus.Agent.Core", "Harnesses", "publish-observability-package.sh")));
             startInfo.ArgumentList.Add("web-analytics-browser");
             startInfo.Environment["WORKSPACE"] = ToShellPath(root);
             startInfo.Environment["PACKAGE_VERSION"] = packageVersion;
@@ -246,7 +246,7 @@ public sealed class ObservabilityPackagePublicationBehaviorTests
             startInfo.ArgumentList.Add("--default-signal=INT");
             startInfo.ArgumentList.Add("--default-signal=TERM");
             startInfo.ArgumentList.Add("/bin/sh");
-            startInfo.ArgumentList.Add(Path.Combine(Root, "deploy", "scripts", "publish-observability-package.sh"));
+            startInfo.ArgumentList.Add(Path.Combine(Root, "src", "Aetheus.Agent.Core", "Harnesses", "publish-observability-package.sh"));
             startInfo.ArgumentList.Add(kind);
             startInfo.Environment["WORKSPACE"] = root;
             startInfo.Environment["PACKAGE_VERSION"] = version;

@@ -1,10 +1,31 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @inject GridExportContext ExportContext
 
 @if (AgentServer is { } agentServer)
 {
     <AgentOfflineNotice Server="@agentServer" />
 }
+
+@* Recette R-29: the page's main action sits in the page header, on the title line, with its menu beside it. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    @if (!Rk.IsInstalled)
+    {
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["RkhunterSetup"]</span></ChildContent></OmniButton>
+    }
+    else
+    {
+        @* Recette R3-38: Scan is the main action of the zone (blue). R3-42: Logs joined the menu, so the zone has one
+           button. R3-39: every
+           entry of its menu carries its icon. *@
+        <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["RunScan"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateDatabase"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["UpdateProperties"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
+        </ChildContent></OmniSplitButton>
+    }
+</SectionContent>
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -25,24 +46,6 @@
         {
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Rk.LastScanTime.ToString("g")</OmniText>
         }
-    }
-    <div class="blade-content-spacer"></div>
-
-    @if (!Rk.IsInstalled)
-    {
-        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["RkhunterSetup"]</span></OmniButton>
-    }
-    else
-    {
-        @* Recette R3-38: Scan is the main action of the zone (blue). R3-42: Logs joined the menu, so the zone has one
-           button. R3-39: every
-           entry of its menu carries its icon. *@
-        <OmniSplitButton Variant="OmniButtonVariant.Primary" Text="@L["Scan"]" title="@L["RunScan"]" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.RunScan))"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["RunScan"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateDatabase))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateDatabase"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem OnClick="@(() => ExecuteActionAsync(RkhunterAction.UpdateProperties))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["UpdateProperties"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
-        </ChildContent></OmniSplitButton>
     }
 </OmniRow>
 
@@ -67,7 +70,7 @@
                     </OmniColumn>
                     <OmniColumn Span="12" MediumSpan="4">
                         <OmniFieldset><Legend>@L["LastScanStatus"]</Legend><ChildContent>
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                 <OmniIcon Name="@MaterialIconMap.Resolve(GetScanStatusIcon(Rk.LastScanStatus))" Class="@GetScanStatusColor(Rk.LastScanStatus)" />
                                 <OmniText Element="OmniTextElement.Paragraph">@LocalizeScanStatus(Rk.LastScanStatus) (@Rk.WarningCount @L["Warnings"])</OmniText>
                             </OmniStack>
@@ -80,7 +83,7 @@
                     <OmniLabel For="CronExpr">@L["CronExpression"]</OmniLabel>
                             <OmniTextBox Value="@_scheduleCron" ValueChanged="@OnScheduleChanged" Id="CronExpr" Placeholder="0 3 * * 0" Class="w-rem-12-5"  ValueExpression="@(() => _scheduleCron)"/>
                         </div>
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveScheduleAsync" Class="@(_savingSchedule ? "btn-busy" : null)" Busy="@(_savingSchedule)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveScheduleAsync" Class="@(_savingSchedule ? "btn-busy" : null)" Busy="@(_savingSchedule)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                     </OmniRow>
                 </ChildContent></OmniFieldset>
             </ChildContent></OmniTabsItem>
@@ -89,20 +92,20 @@
             <OmniTabsItem Key="warnings" Title="@L["Warnings"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("warning"))" /></Icon><ChildContent>
                 @if (_warnings.Count == 0)
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Center" Class="omni-u-py-2xl">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Center" Class="omni-u-py-2xl">
                         <OmniIcon Name="OmniIconName.CheckCircle" Class="icon-3xl-success" />
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoWarnings"]</OmniText>
                     </OmniStack>
                 }
                 else
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                         <CountBadge Value="@_warnings.Count" Variant="OmniTone.Warning" />
                     </OmniStack>
                     <OmniDataGrid @ref="_warningsGrid" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@_warnings" TItem="RkhunterWarningDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="RkhunterWarningDto" Property="Category" Title="@L["Category"]" Width="9.375rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
-                            <OmniDataGridColumn TItem="RkhunterWarningDto" Property="Detail" Title="@L["Detail"]"  Filterable="true"/>
+                            <OmniDataGridColumn TItem="RkhunterWarningDto" Property="Detail" Truncate="true" Title="@L["Detail"]"  Filterable="true"/>
                             <OmniDataGridColumn TItem="RkhunterWarningDto" Property="Severity" Title="@L["Severity"]" Width="6.25rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                             <OmniDataGridColumn TItem="RkhunterWarningDto" Property="FoundAt" Title="@L["FoundAt"]" Width="9.375rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
                                 <Template Context="w">
@@ -120,7 +123,7 @@
                    completions. *@
                 @if (_scanHistory.Count == 0)
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Center" Class="omni-u-py-2xl">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Center" Class="omni-u-py-2xl">
                         <OmniIcon Name="OmniIconName.Reset" Class="icon-3xl-secondary" />
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoScanHistory"]</OmniText>
                     </OmniStack>
@@ -131,7 +134,7 @@
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="RkhunterScanResultDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ScanStatusText">
                                 <Template Context="r">
-                                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                         <OmniIcon Name="@MaterialIconMap.Resolve(GetScanStatusIcon(r.Status))" Class="@GetScanStatusColor(r.Status)" />
                                         <OmniText Element="OmniTextElement.Paragraph">@LocalizeScanStatus(r.Status)</OmniText>
                                     </OmniStack>
@@ -143,7 +146,7 @@
                                 </Template>
                             </OmniDataGridColumn>
                             <OmniDataGridColumn TItem="RkhunterScanResultDto" Property="WarningCount" Title="@L["Warnings"]" Width="6.25rem"  Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators"/>
-                            <OmniDataGridColumn TItem="RkhunterScanResultDto" Property="Summary" Title="@L["Summary"]"  Filterable="true"/>
+                            <OmniDataGridColumn TItem="RkhunterScanResultDto" Property="Summary" Truncate="true" Title="@L["Summary"]"  Filterable="true"/>
                         </Columns>
                     </OmniDataGrid>
                 }

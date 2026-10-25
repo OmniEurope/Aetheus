@@ -274,54 +274,54 @@ public class SharedDtoMailTeamspeakCronTests
     [Fact]
     public void OperationTargetValidator_DockerOps_Valid()
     {
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.DockerRestartContainer, "nginx"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.DockerStartContainer, "app:v1"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.DockerStopContainer, "web"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.DockerPullImage, "registry.io/org/img:tag"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.DockerRestartContainer, "nginx"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.DockerStartContainer, "app:v1"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.DockerStopContainer, "web"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.DockerPullImage, "registry.io/org/img:tag"));
     }
 
     [Fact]
     public void OperationTargetValidator_ServiceOps_Valid()
     {
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ServiceStart, "nginx"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ServiceStop, "apache2"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ServiceRestart, "sshd"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ServiceStatus, "postfix"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ServiceStart, "nginx"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ServiceStop, "apache2"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ServiceRestart, "sshd"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ServiceStatus, "postfix"));
     }
 
     [Fact]
     public void OperationTargetValidator_ApacheOps_Valid()
     {
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ApacheReload, "-"));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ApacheTestConfig, "apache2"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ApacheReload, "-"));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ApacheTestConfig, "apache2"));
         // empty string is caught by the IsNullOrWhiteSpace guard, so it returns false
-        Assert.False(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ApacheReload, ""));
+        Assert.False(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ApacheReload, ""));
     }
 
     [Fact]
     public void OperationTargetValidator_AgentSelfUpdate_AlwaysValid()
     {
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.AgentSelfUpdate, null));
-        Assert.True(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.AgentSelfUpdate, ""));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.AgentSelfUpdate, null));
+        Assert.True(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.AgentSelfUpdate, ""));
     }
 
     [Fact]
     public void OperationTargetValidator_None_Invalid()
     {
-        Assert.False(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.None, "target"));
+        Assert.False(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.None, "target"));
     }
 
     [Fact]
     public void OperationTargetValidator_NullTarget_Invalid()
     {
-        Assert.False(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.DockerRestartContainer, null));
-        Assert.False(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid(OperationKind.ServiceStart, "  "));
+        Assert.False(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.DockerRestartContainer, null));
+        Assert.False(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid(OperationKind.ServiceStart, "  "));
     }
 
     [Fact]
     public void OperationTargetValidator_Unknown_Invalid()
     {
-        Assert.False(Aetheus.Shared.Components.Shared.OperationTargetValidator.IsValid((OperationKind)999, "target"));
+        Assert.False(Aetheus.Shared.Components.Pipelines.OperationTargetValidator.IsValid((OperationKind)999, "target"));
     }
 
     // --- BoundedDictionary (backend side) ---

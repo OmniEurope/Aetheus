@@ -28,6 +28,13 @@ public partial class VaultEdit
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
 
+    /// <summary>The name a new vault starts with, when a page links here for one in particular.</summary>
+    [SupplyParameterFromQuery] public string? Name { get; set; }
+
+    /// <summary>The secret a link points at (R-10): the Key column of the grid starts filtered on it, a
+    /// filter the reader sees and can remove.</summary>
+    [SupplyParameterFromQuery(Name = "key")] public string? FilterKey { get; set; }
+
     /// <summary>The page that sent the user here to check what it created (the pipeline setup
     /// wizard's summary); Back returns to it when it is local.</summary>
     [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
@@ -63,6 +70,25 @@ public partial class VaultEdit
         if (!IsCurrentLoad(generation, key)) return;
 
         ApplyLoadedVault(key, isNew, projects, detail);
+        if (!isNew) await LoadUsageAsync(key.Id!.Value, generation, key);
+    }
+
+    private IReadOnlyList<ResourceUsageUserDto>? _usage;
+    private bool _usageLoaded;
+
+    /// <summary>Who reads this vault (R-66). A failed call leaves the line empty rather than saying "Unused".</summary>
+    private async Task LoadUsageAsync(int vaultId, int generation, (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) key)
+    {
+        _usage = null;
+        _usageLoaded = false;
+        try
+        {
+            var usage = await Api.Variables.GetResourceUsageAsync();
+            if (!IsCurrentLoad(generation, key)) return;
+            _usage = usage.Vaults.GetValueOrDefault(vaultId);
+            _usageLoaded = true;
+        }
+        catch (HttpRequestException) { } // the page stays usable without the usage line
     }
 
     private (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) CurrentKey() =>
@@ -83,7 +109,11 @@ public partial class VaultEdit
         if (detail is not null)
             _model = ModelFromDetail(detail);
         else if (isNew)
+        {
             ApplyNewVaultOwner(_model, key, projects);
+            // The readiness findings link here with the name of the missing vault (R2-22).
+            if (!string.IsNullOrWhiteSpace(Name)) _model.Name = Name;
+        }
 
         // Publish the parent project so the NavMenu keeps the project's submenu open
         // while we're editing one of its vaults.
@@ -180,7 +210,8 @@ public partial class VaultEdit
         // S-TECH-SWIV: drop cached vault pages so the list doesn't briefly re-seed the deleted row.
         Cache.InvalidatePrefix("vaults:");
         Toast.Success("Deleted", "Deleted");
-        Nav.NavigateTo("/vaults");
+        // R-70: back to the list the user came from (a project's vaults, a server's), else the global list.
+        Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/vaults");
     }
 
     /// <summary>

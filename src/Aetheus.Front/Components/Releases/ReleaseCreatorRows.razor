@@ -4,27 +4,27 @@
    passed off as the creator. *@
 @if (Provenance?.CreatedBy is { } creator)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Path" Class="run-tile-icon" /> @L["ReleaseCreatedByPipeline"]</OmniText>
         <a href="/pipelines/@creator.PipelineId" class="detail-value-link">@creator.PipelineName</a>
     </OmniStack>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["ReleaseCreatedByRun"]</OmniText>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
             <a href="/pipelines/runs/@creator.RunId" class="detail-value-link">#@creator.RunId</a>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(creator.Status)">@L.Localize(creator.Status)</OmniBadge>
+            <PipelineRunStatusBadge Status="creator.Status" />
         </OmniStack>
     </OmniStack>
 }
 else
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Path" Class="run-tile-icon" /> @L["ReleaseCreatedBy"]</OmniText>
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted" title="@L["ReleaseCreatorNotRecordedHelp"]">@L["ReleaseCreatorNotRecorded"]</OmniText>
     </OmniStack>
     @if (LastRecordedRunId is { } lastRunId)
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted" title="@L["ReleaseLastRecordedByHelp"]"><OmniIcon Name="OmniIconName.Play" Class="run-tile-icon" /> @L["ReleaseLastRecordedBy"]</OmniText>
             <a href="/pipelines/runs/@lastRunId" class="detail-value-link">#@lastRunId</a>
         </OmniStack>
@@ -34,9 +34,9 @@ else
 {
     @foreach (var run in Provenance.BuildRuns)
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted" title="@L["ReleaseDeliverablesBuiltByHelp"]"><OmniIcon Name="OmniIconName.Wrench" Class="run-tile-icon" /> @L["ReleaseDeliverablesBuiltBy"]</OmniText>
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 <a href="/pipelines/@run.PipelineId" class="detail-value-link">@run.PipelineName</a>
                 <a href="/pipelines/runs/@run.RunId" class="detail-value-link">#@run.RunId</a>
             </OmniStack>

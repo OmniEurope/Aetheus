@@ -8,7 +8,7 @@ namespace Aetheus.Back.Components.Monitoring;
 /// <list type="number">
 /// <item>the run's own sealed assurance letter (a candidate run delegates every analysis to a child
 /// pipeline and publishes its verdict via the <c>CANDIDATE_ASSURANCE_GRADE</c> output variable, see
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c>);</item>
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c>);</item>
 /// <item>the worst grade among the runs this run's own <c>type: trigger</c> steps launched (e.g. the
 /// nightly orchestration pipeline has no <c>analysis_grading</c> block of its own);</item>
 /// <item>for a deploy run, the grade of the candidate release it restores, matched by the

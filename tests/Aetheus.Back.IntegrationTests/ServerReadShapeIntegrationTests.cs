@@ -165,6 +165,67 @@ public sealed class ServerReadShapeIntegrationTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task R135_AFixedFinding_IsNeitherCountedNorListedAsDecided()
+    {
+        await fixture.ResetAsync();
+        var seeded = await SeedAsync();
+        await using (var seed = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString).Options))
+        {
+            var now = DateTime.UtcNow;
+            var project = await seed.Projects.SingleAsync(item => item.Id == seeded.ProjectId, Ct);
+            var report = await seed.AnalysisReports.FirstAsync(item => item.PipelineRunId == seeded.RootRunId, Ct);
+            var fixedFinding = new AnalysisFinding
+            {
+                OrganizationId = project.OrganizationId,
+                ProjectId = project.Id,
+                Fingerprint = new string('f', 64),
+                RuleId = "rule.f",
+                Category = AnalysisCategory.Sast,
+                Severity = AnalysisSeverity.Medium,
+                Confidence = AnalysisConfidence.High,
+                Title = "Finding",
+                Message = "Finding",
+                Status = AnalysisFindingStatus.Fixed,
+                FirstSeenAt = now,
+                LastSeenAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            seed.AnalysisFindingOccurrences.Add(new AnalysisFindingOccurrence
+            {
+                AnalysisReportId = report.Id,
+                AnalysisFinding = fixedFinding,
+                LocationHash = new string('f', 64),
+                ToolName = "OpenGrep",
+                ScannerKey = "opengrep",
+                BranchName = "main",
+                RuleId = fixedFinding.RuleId,
+                Message = fixedFinding.Message,
+                IsNew = false,
+                CreatedAt = now
+            });
+            await seed.SaveChangesAsync(Ct);
+        }
+
+        await using var db = Measured(new CommandRecorder());
+        int[] runIds = [seeded.RootRunId, seeded.ChildRunId];
+        var repository = new AnalysisRunResultRepository(db);
+        // Same counts as without the fixed finding: two open, one accepted; and it is in no list.
+        var page = await repository.GetFindingsPageAsync(
+            runIds, new AnalysisRunFindingsRequest { RunIds = [.. runIds], IncludeDecided = true }, 1, 50, Ct);
+        Assert.Equal((2, 1, 1, 3), (page.OpenCount, page.NewOpenCount, page.DecidedCount, page.TotalCount));
+        Assert.DoesNotContain(page.Items, finding => finding.Status == AnalysisFindingStatus.Fixed);
+
+        var full = await new AnalysisRepository(db).GetRunGateAsync(seeded.RootRunId, null, Ct);
+        Assert.Equal((1, 1), (full.FindingCount, full.DecidedFindingCount));
+        Assert.DoesNotContain(full.Findings, finding => finding.Status == AnalysisFindingStatus.Fixed);
+        var summary = await new AnalysisRepository(db).GetRunResultSummaryAsync(seeded.RootRunId, 10, Ct);
+        Assert.Equal((1, 1), (summary.FindingCount, summary.DecidedFindingCount));
+        Assert.DoesNotContain(summary.Findings, finding => finding.Status == AnalysisFindingStatus.Fixed);
+    }
+
+    [Fact]
     public async Task R485_RunResultSummary_ListsTheMostSevereFindings_AndCountsThemAll()
     {
         await fixture.ResetAsync();

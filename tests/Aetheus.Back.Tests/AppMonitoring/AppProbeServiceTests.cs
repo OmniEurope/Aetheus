@@ -39,7 +39,7 @@ public sealed class AppProbeServiceTests
             new MonitoredApp { Id = 3, ProbeUrl = null, ExpectedStatusCode = 200, ProbeTimeoutSeconds = 5, ProbeIntervalSeconds = 30 },
             new MonitoredApp { Id = 4, ProbeUrl = "https://public.example/not-due", ExpectedStatusCode = 200, ProbeTimeoutSeconds = 5, ProbeIntervalSeconds = 300, LastCheckedAt = now }
         ]);
-        _http.CreateClient(AppMonitoringModuleExtensions.ProbeHttpClientName)
+        _http.CreateClient(AppProbeService.ProbeHttpClientName)
             .Returns(_ => new HttpClient(new RouteStatusHandler()));
 
         await Build().ProbeDueAppsAsync(TestContext.Current.CancellationToken);
@@ -51,7 +51,7 @@ public sealed class AppProbeServiceTests
                 && results.Any(x => x.MonitoredAppId == 2 && !x.IsUp && x.StatusCode == 503
                     && x.Error != null && x.Error.Contains("expected 200", StringComparison.Ordinal))),
             Arg.Any<CancellationToken>());
-        _http.Received(2).CreateClient(AppMonitoringModuleExtensions.ProbeHttpClientName);
+        _http.Received(2).CreateClient(AppProbeService.ProbeHttpClientName);
     }
 
     [Fact]

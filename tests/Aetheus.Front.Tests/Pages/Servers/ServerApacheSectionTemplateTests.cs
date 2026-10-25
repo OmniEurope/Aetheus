@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -52,7 +53,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
     public void Renders_ApacheRunning_WithVersionAndPid()
     {
         var server = BuildServer(isRunning: true, version: "2.4.51", pid: 1234);
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
@@ -65,7 +66,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
     public void Renders_ApacheStopped_NoPid()
     {
         var server = BuildServer(isRunning: false, version: "2.4.51", pid: null);
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
@@ -79,7 +80,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
     public void Renders_CollectionDegraded_ShowsWarning()
     {
         var server = BuildServer(degraded: true, diagnostics: "apache2ctl failed with exit code 1");
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
@@ -91,7 +92,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
     public void Renders_CollectionDegraded_NoDiagnostics_HidesDiagText()
     {
         var server = BuildServer(degraded: true, diagnostics: "");
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
@@ -112,14 +113,14 @@ public class ServerApacheSectionTemplateTests : BunitContext
             new() { ServerName = "api.example.com", Port = 443, DocumentRoot = "/var/www/api", ConfigFile = "/etc/apache2/sites/api.conf", IsEnabled = true }
         };
         var server = BuildServer(vhosts: vhosts);
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
         var groups = (List<ServerApacheSection.ApacheVirtualHostGroup>)
             SectionType.GetProperty("EnabledVirtualHostGroups", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerApacheSection>().Instance)!;
         Assert.Equal(2, groups.Count);
         var exampleGroup = groups.First(g => g.ServerName == "example.com");
         Assert.Equal(2, exampleGroup.Members.Count);
@@ -134,14 +135,14 @@ public class ServerApacheSectionTemplateTests : BunitContext
             new() { ServerName = "new.example.com", Port = 80, DocumentRoot = "/var/www/new", ConfigFile = "/etc/apache2/sites-enabled/new.conf", IsEnabled = true }
         };
         var server = BuildServer(vhosts: vhosts);
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
         var disabled = (List<ServerApacheSection.ApacheVirtualHostGroup>)
             SectionType.GetProperty("DisabledVirtualHostGroups", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerApacheSection>().Instance)!;
         Assert.Single(disabled);
         Assert.Equal("old.example.com", disabled[0].ServerName);
     }
@@ -156,14 +157,14 @@ public class ServerApacheSectionTemplateTests : BunitContext
             new() { Name = "core_module", Type = "static", IsEnabled = true }
         };
         var server = BuildServer(modules: modules);
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
-        SectionType.GetField("_moduleSearch", Priv)!.SetValue(cut.Instance, "ssl");
+        SectionType.GetField("_moduleSearch", Priv)!.SetValue(cut.FindComponent<ServerApacheSection>().Instance, "ssl");
         var filtered = (List<ApacheModuleDto>)
-            SectionType.GetProperty("FilteredModules", Priv)!.GetValue(cut.Instance)!;
+            SectionType.GetProperty("FilteredModules", Priv)!.GetValue(cut.FindComponent<ServerApacheSection>().Instance)!;
         Assert.Single(filtered);
         Assert.Equal("ssl_module", filtered[0].Name);
     }
@@ -191,7 +192,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
             await release.Task.WaitAsync(ct);
             return new { };
         });
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, BuildServer(isRunning: true));
             p.Add(x => x.ServerId, 1);
@@ -220,17 +221,19 @@ public class ServerApacheSectionTemplateTests : BunitContext
     {
         // Recette R3-41/R3-42 (Apache: Restart is the main action, decided by the user).
         _handler.SetJsonResponse(HttpMethod.Post, "api/servers/1/apache/action", new { });
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, BuildServer(isRunning: true));
             p.Add(x => x.ServerId, 1);
         });
 
-        var restart = Assert.Single(cut.FindAll(".omni-row > .omni-button"));
+        // Recette R-29: the bar is the page header now; the status row keeps only the badges.
+        Assert.Empty(cut.Find(".omni-row").QuerySelectorAll("button"));
+        var restart = Assert.Single(cut.FindAll(".test-outlet > .omni-button"));
         Assert.Contains("Restart", restart.TextContent, StringComparison.Ordinal);
         Assert.Contains("omni-button--primary", restart.ClassName, StringComparison.Ordinal);
 
-        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        cut.Find(".test-outlet > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
         var entries = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
         Assert.Equal(["Start", "Stop", "Reload", "Test"], entries.Select(e => e.TextContent.Trim()).ToArray());
         Assert.True(entries[0].HasAttribute("disabled"), "Start stays disabled while Apache runs.");
@@ -245,11 +248,11 @@ public class ServerApacheSectionTemplateTests : BunitContext
     public void Dispose_StopsFollowTimer()
     {
         var server = BuildServer();
-        var cut = Render<ServerApacheSection>(p =>
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
         {
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
-        cut.Instance.Dispose();
+        cut.FindComponent<ServerApacheSection>().Instance.Dispose();
     }
 }

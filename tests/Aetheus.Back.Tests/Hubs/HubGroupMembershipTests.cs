@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Claims;
-using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Hubs;
 using Aetheus.Back.Services;
 using Microsoft.AspNetCore.SignalR;

@@ -2,6 +2,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Aetheus.Back.Components.Security;
@@ -13,7 +14,7 @@ namespace Aetheus.Back.Components.Security;
 [AllowAnonymous]
 [EnableRateLimiting("csp-report")]
 [RequestSizeLimit(MaxBodyBytes)]
-public sealed class CspReportController(ILogger<CspReportController> logger) : ControllerBase
+public sealed partial class CspReportController(ILogger<CspReportController> logger) : ControllerBase
 {
     private const int MaxBodyBytes = 8192;
 
@@ -80,7 +81,21 @@ public sealed class CspReportController(ILogger<CspReportController> logger) : C
     }
 
     internal static bool FromBrowserExtension(CspReportBody report) =>
-        IsExtension(report.SourceFile) || IsExtension(report.BlockedUri);
+        IsExtension(report.SourceFile) || IsExtension(report.BlockedUri) || FromExtensionSandbox(report);
+
+    /// <summary>
+    /// Firefox names the code an extension evaluates in its content-script sandbox "sandbox eval code";
+    /// the same extension, injecting through a blob, leaves its marker as the sample: a random flag set
+    /// on <c>self</c> before its own function runs. Production reports of 2026-10-19 and 2026-10-21 (R1-10)
+    /// carried exactly these two shapes; neither Aetheus nor OE evaluates code or builds a script blob.
+    /// </summary>
+    private static bool FromExtensionSandbox(CspReportBody report) =>
+        string.Equals(report.SourceFile, "sandbox eval code", StringComparison.Ordinal)
+        || (report.SourceFile?.StartsWith("blob", StringComparison.Ordinal) == true
+            && report.ScriptSample is { } sample && ExtensionMarkerSample().IsMatch(sample));
+
+    [GeneratedRegex(@"^self\['[a-z0-9]+'\] = true;", RegexOptions.CultureInvariant)]
+    private static partial Regex ExtensionMarkerSample();
 
     private static bool IsExtension(string? value) =>
         value is not null && ExtensionSchemes.Any(scheme => value.StartsWith(scheme, StringComparison.OrdinalIgnoreCase));

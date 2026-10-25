@@ -16,6 +16,10 @@ public interface IGitLightService
 
     Task<GitLightRepoDto?> GetRepositoryAsync(int id, CancellationToken ct = default);
     Task<GitLightRepoDto> CreateRepositoryAsync(CreateGitLightRepoRequest request, CancellationToken ct = default);
+
+    /// <summary>Creates the repository of a project's system configuration files (ADR-057), flagged so that no
+    /// pipeline definition, workspace or push trigger takes it for the project's source.</summary>
+    Task<GitLightRepoDto> CreateConfigurationRepositoryAsync(CreateGitLightRepoRequest request, CancellationToken ct = default);
     Task EnsureRepositoryInitializedAsync(int id, CancellationToken ct = default);
     Task<GitLightRepoDto?> UpdateRepositoryAsync(int id, UpdateGitLightRepoRequest request, CancellationToken ct = default);
     Task<bool> DeleteRepositoryAsync(int id, CancellationToken ct = default);

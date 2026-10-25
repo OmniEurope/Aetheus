@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Notifications;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Services.Email;
 using NSubstitute;
 
@@ -54,7 +55,7 @@ public sealed class NotificationEmailerTests
             new NotificationEmail("alice@x.org", "release <b>1.0</b> deployed", "release.deployed", "{\"Version\":\"<1.0>\"}"));
 
         Assert.Equal("[Aetheus] Release deployed: release <b>1.0</b> deployed", message.Subject);
-        Assert.Contains("Source event\trelease.deployed", message.TextBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("Source event", message.TextBody, StringComparison.Ordinal);
         Assert.Contains("Version\t<1.0>", message.TextBody, StringComparison.Ordinal);
         Assert.NotNull(message.HtmlBody);
         Assert.Contains("release &lt;b&gt;1.0&lt;/b&gt; deployed", message.HtmlBody, StringComparison.Ordinal);

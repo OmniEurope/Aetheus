@@ -39,7 +39,7 @@ public sealed class PageHeaderActionsSectionTests : BunitContext
         var cut = Render(builder =>
         {
             builder.OpenComponent<OmniPageHeader>(0);
-            builder.AddAttribute(1, nameof(OmniPageHeader.Actions), actions);
+            builder.AddAttribute(1, nameof(OmniPageHeader.ActionsContent), actions);
             builder.CloseComponent();
             builder.OpenComponent<SectionContent>(2);
             builder.AddAttribute(3, nameof(SectionContent.SectionName), "test-actions");

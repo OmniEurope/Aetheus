@@ -8,38 +8,37 @@
 {
 <OmniPageHeader Title="@L["PackageRegistry"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("deployed_code")" /></Icon>
-    <Actions>
-    </Actions>
-    <Filters>
-        <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search"
-            @bind-Value:after="ResetSearchAsync" Class="pipeline-list-search" />
-    </Filters>
+    <ActionsContent>
+    </ActionsContent>
 </OmniPageHeader>
 
-<OmniRow Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
-    <OmniColumn Span="12" MediumSpan="4">
-        <OmniCard>
-            <OmniHeading Level="OmniHeadingLevel.H5">NuGet</OmniHeading>
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNuGetHelp"]</OmniText>
-            <code class="text-mono">/api/packages/nuget/v3/index.json</code>
-        </OmniCard>
-    </OmniColumn>
-    <OmniColumn Span="12" MediumSpan="4">
-        <OmniCard>
-            <OmniHeading Level="OmniHeadingLevel.H5">npm</OmniHeading>
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNpmHelp"]</OmniText>
-            <code class="text-mono">/api/packages/npm/</code>
-        </OmniCard>
-    </OmniColumn>
-    <OmniColumn Span="12" MediumSpan="4">
-        <OmniCard>
-            <OmniHeading Level="OmniHeadingLevel.H5">Maven</OmniHeading>
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryMavenHelp"]</OmniText>
-            <code class="text-mono">/api/packages/maven/</code>
-        </OmniCard>
-    </OmniColumn>
-</OmniRow>
+@* Tabs choose what the grid lists (all packages, or one type); the last tab shows the source addresses. *@
+<UrlSyncedTabs Slugs="@TabSlugs" SelectedIndex="@_tab" SelectedIndexChanged="@OnTabChangedAsync">
+    <Tabs>
+        <OmniTabsItem Key="all" Title="@L["All"]" />
+        <OmniTabsItem Key="nuget" Title="NuGet" />
+        <OmniTabsItem Key="npm" Title="npm" />
+        <OmniTabsItem Key="maven" Title="Maven" />
+        <OmniTabsItem Key="addresses" Title="@L["PackageRegistryAddresses"]" />
+    </Tabs>
+</UrlSyncedTabs>
 
+@if (ShowsAddresses)
+{
+    <div class="package-registry-addresses">
+        <OmniHeading Level="OmniHeadingLevel.H5">NuGet</OmniHeading>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNuGetHelp"]</OmniText>
+        <code class="text-mono">/api/packages/nuget/v3/index.json</code>
+        <OmniHeading Level="OmniHeadingLevel.H5">npm</OmniHeading>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryNpmHelp"]</OmniText>
+        <code class="text-mono">/api/packages/npm/</code>
+        <OmniHeading Level="OmniHeadingLevel.H5">Maven</OmniHeading>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-sm">@L["RegistryMavenHelp"]</OmniText>
+        <code class="text-mono">/api/packages/maven/</code>
+    </div>
+}
+else
+{
 <AetheusDataGrid @ref="_grid" Data="@_packages" TItem="PackageRegistryPackageDto" RowClick="@(p => OpenPackageAsync(p))"
     Count="@_totalCount" IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -50,29 +49,30 @@
             Description="@L["NoRegistryPackagesDescription"]" />
     </EmptyTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="PackageRegistryPackageDto" Property="Kind" Title="@L["Type"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@KindText" >
-            <Template Context="p"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(p.Kind)</OmniBadge></Template>
+        @* The type column is useless once the tab fixes the type. *@
+        <OmniDataGridColumn Frozen="true" TItem="PackageRegistryPackageDto" Property="Kind" Title="@L["Type"]" Width="120px" Visible="@(_kind is null)" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@KindText" >
+            <Template Context="p"><PackageRegistryKindBadge Kind="@p.Kind" /></Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="Name" Title="@L["PackageName"]" Filterable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PackageRegistryPackageDto" Property="Name" Title="@L["Name"]" Filterable="true" >
             <Template Context="p"><span class="text-mono">@p.Name</span></Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="LatestVersion" Title="@L["LatestVersion"]" Width="140px" Filterable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PackageRegistryPackageDto" Property="LatestVersion" Title="@L["Version"]" Filterable="true" >
             <Template Context="p"><span class="text-mono">@(p.LatestVersion ?? "-")</span></Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="VersionCount" Title="@L["Versions"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="TotalSizeBytes" Title="@L["Size"]" Width="110px" Filterable="false" >
-            <Template Context="p">@DisplayFormatting.BinarySize(p.TotalSizeBytes)</Template>
+            <Template Context="p">@DisplayFormatting.Size(p.TotalSizeBytes)</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="UpdatedAt" Title="@L["UpdatedAt"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
-            <Template Context="p">@p.UpdatedAt.ToString("g")</Template>
+            <Template Context="p">@p.UpdatedAt.ToString("d")</Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Title="@L["Actions"]" Width="90px" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Title="@L["Actions"]" Width="90px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
             <Template Context="p">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenPackageAsync(p))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenPackageAsync(p))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
                 </span>
             </Template>
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+}
 }

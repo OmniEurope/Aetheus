@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Collections.Concurrent;
 using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Caching.Memory;
@@ -10,7 +9,11 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
 {
     private const string LibNamesCachePrefix = "varlibs:names:";
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
-    private readonly ConcurrentDictionary<string, byte> _activeNameKeys = new();
+
+    /// <summary>Shared by every instance of this scoped service: a name list cached while serving one
+    /// request must be invalidated by another request that creates, renames or deletes a library. Bumping
+    /// it changes every cache key, so the stale lists are never read again and simply expire.</summary>
+    private static long s_namesGeneration;
 
     /// <summary>The project names the variable libraries list's checkable filter offers.</summary>
     public Task<VariableLibraryFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default) =>
@@ -83,8 +86,6 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         return await cache.GetOrCreateAsync(key, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            _activeNameKeys.TryAdd(key, 0);
-            entry.RegisterPostEvictionCallback((k, _, _, _) => _activeNameKeys.TryRemove((string)k, out _));
             return await repo.GetLibraryNamesAsync(projectId, accessibleIds, ct).ConfigureAwait(false);
         }).ConfigureAwait(false) ?? [];
     }
@@ -272,14 +273,27 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
         return MergeWithPrecedence(libraries);
     }
 
-    private static Dictionary<string, string> MergeWithPrecedence(List<Data.Entities.VariableLibrary> libraries)
+    private static readonly Func<Data.Entities.VariableLibrary, bool>[] CrossAccessScopes =
+    [
+        library => library.ProjectId is null && library.EnvironmentId is null && library.ProjectServerId is null,
+        library => library.ProjectId is not null,
+        library => library.EnvironmentId is not null,
+        library => library.ProjectServerId is not null
+    ];
+
+    private static Dictionary<string, string> MergeWithPrecedence(List<Data.Entities.VariableLibrary> libraries) =>
+        MergeByPrecedence(libraries, CrossAccessScopes);
+
+    public async Task<Dictionary<string, int>> ResolveEntryOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
     {
-        return MergeByPrecedence(
-            libraries,
-            library => library.ProjectId is null && library.EnvironmentId is null && library.ProjectServerId is null,
-            library => library.ProjectId is not null,
-            library => library.EnvironmentId is not null,
-            library => library.ProjectServerId is not null);
+        var libraries = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
+        var owners = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Same walk as the merge, so the last library to set a key (the one whose value wins) owns it.
+        foreach (var scope in CrossAccessScopes)
+            foreach (var library in libraries.Where(scope))
+                foreach (var entry in library.Entries)
+                    owners[entry.Key] = library.Id;
+        return owners;
     }
 
     public async Task<(Dictionary<string, string> Vars, HashSet<string> FoundNames)> ResolveLibrariesWithNamesAsync(List<string> names, int? projectId, CancellationToken ct = default)
@@ -377,16 +391,13 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
     private static string BuildNamesCacheKey(int? projectId, List<int>? accessibleIds)
     {
         var pid = projectId?.ToString() ?? "all";
+        var generation = Volatile.Read(ref s_namesGeneration);
         if (accessibleIds is null or [])
-            return $"{LibNamesCachePrefix}{pid}";
-        return $"{LibNamesCachePrefix}{pid}:{string.Join(',', accessibleIds.Order())}";
+            return $"{LibNamesCachePrefix}{generation}:{pid}";
+        return $"{LibNamesCachePrefix}{generation}:{pid}:{string.Join(',', accessibleIds.Order())}";
     }
 
-    private void InvalidateNamesCache()
-    {
-        foreach (var key in _activeNameKeys.Keys)
-            cache.Remove(key);
-    }
+    private static void InvalidateNamesCache() => Interlocked.Increment(ref s_namesGeneration);
 
     private static VariableLibraryDto MapToDto(VariableLibrary vl) => new()
     {

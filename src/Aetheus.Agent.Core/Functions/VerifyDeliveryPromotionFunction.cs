@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-delivery-promotion</c> function, port of
-/// <c>deploy/scripts/verify-delivery-promotion.mjs</c> (with <c>schema-fingerprint.mjs</c>), the
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-delivery-promotion.mjs</c> (with <c>schema-fingerprint.mjs</c>), the
 /// production deployment gate: the candidate delivery contract must be a schema 2 contract whose sealed
 /// identity (<see cref="DeliveryContractIdentity"/>) and release version hold, whose artifacts match
 /// their digests byte for byte, and whose proven schema states include the live production schema

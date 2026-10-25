@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/verify-schema-contract.mjs</c>, with the five cases of
+/// The C# port of the former <c>verify-schema-contract.mjs</c> script, with the five cases of
 /// <c>tests/js/verify-schema-contract.test.mjs</c> and the two checks the calling step made itself (a
 /// missing contract, an empty V-1 reading). Fingerprints are computed here as
 /// <c>schema-fingerprint.mjs</c> computes them, independently of the function.

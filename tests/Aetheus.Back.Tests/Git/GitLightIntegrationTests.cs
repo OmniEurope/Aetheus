@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Git;
-using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
@@ -52,6 +50,7 @@ public class GitLightIntegrationTests
             new Microsoft.Extensions.Caching.Memory.MemoryCache(
                 new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new GitBranchProtectionService(_lightRepoMock, _cliMock, _auditMock, options),
+            Substitute.For<IGitBranchMovedAnnouncer>(),
             Substitute.For<ILogger<GitLightService>>(),
             TimeProvider.System);
     }

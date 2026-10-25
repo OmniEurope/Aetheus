@@ -10,8 +10,6 @@ namespace Aetheus.Back.Components.Projects;
 /// statements do not grow with project history.</summary>
 internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDeletionRepository
 {
-    internal const int BatchSize = 5_000;
-
     public async Task<ProjectDeletionScope?> ResolveScopeAsync(int projectId, CancellationToken ct = default)
     {
         var project = await db.Projects.AsNoTracking()
@@ -106,7 +104,7 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
         await DeleteRunHistoryAsync(scope, ct).ConfigureAwait(false);
         await DeleteAllAsync(db.Pipelines.Where(item => scope.PipelineIds.Contains(item.Id)), ct).ConfigureAwait(false);
         await DeleteAnalysisLeavesAsync(scope.ProjectId, ct).ConfigureAwait(false);
-        await ProjectDeletionTelemetry.DeleteAsync(this, db, scope.MonitoredAppIds, ct).ConfigureAwait(false);
+        await ProjectDeletionTelemetry.DeleteAsync(db, scope.MonitoredAppIds, ct).ConfigureAwait(false);
         await DeleteAllAsync(db.MonitoredApps.Where(item => scope.MonitoredAppIds.Contains(item.Id)), ct).ConfigureAwait(false);
         await DeleteOwnedConfigurationAsync(scope, ct).ConfigureAwait(false);
         await DeleteProjectRowsAsync(scope, ct).ConfigureAwait(false);
@@ -258,45 +256,12 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
             && (item.ProjectId == scope.ProjectId || ownerKeys.Contains(item.OwnerKey)));
     }
 
-    internal async Task<int> DeleteAllAsync<T>(IQueryable<T> rows, CancellationToken ct) where T : class
-    {
-        if (db.Database.IsRelational())
-            return await rows.ExecuteDeleteAsync(ct).ConfigureAwait(false);
+    private Task<int> DeleteAllAsync<T>(IQueryable<T> rows, CancellationToken ct) where T : class =>
+        ProjectDeletionBatches.DeleteAllAsync(db, rows, ct);
 
-        // InMemory (unit tests) has no set-based delete.
-        var tracked = await rows.ToListAsync(ct).ConfigureAwait(false);
-        db.RemoveRange(tracked);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return tracked.Count;
-    }
-
-    /// <summary>Deletes <paramref name="rows"/> <see cref="BatchSize"/> keys at a time, so the size of
-    /// one statement is bounded whatever the history of the project.</summary>
-    internal async Task<int> DeleteInBatchesAsync<T, TKey>(
+    private Task<int> DeleteInBatchesAsync<T, TKey>(
         IQueryable<T> rows, Expression<Func<T, TKey>> key, CancellationToken ct)
         where T : class
-        where TKey : struct
-    {
-        var batch = new KeyBatch<TKey>();
-        // The keys are read through a member of a captured object, so EF sends them as one parameter
-        // and reuses the same statement for every batch.
-        var inBatch = Expression.Lambda<Func<T, bool>>(
-            Expression.Call(
-                typeof(Enumerable), nameof(Enumerable.Contains), [typeof(TKey)],
-                Expression.Property(Expression.Constant(batch), nameof(KeyBatch<TKey>.Keys)),
-                key.Body),
-            key.Parameters);
-        var total = 0;
-        while (true)
-        {
-            batch.Keys = await rows.OrderBy(key).Select(key).Take(BatchSize).ToListAsync(ct).ConfigureAwait(false);
-            if (batch.Keys.Count == 0) return total;
-            total += await DeleteAllAsync(rows.Where(inBatch), ct).ConfigureAwait(false);
-        }
-    }
-
-    private sealed class KeyBatch<TKey>
-    {
-        public List<TKey> Keys { get; set; } = [];
-    }
+        where TKey : struct =>
+        ProjectDeletionBatches.DeleteInBatchesAsync(db, rows, key, ct);
 }

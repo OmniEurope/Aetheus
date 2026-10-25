@@ -28,7 +28,7 @@
             </OmniColumn>
         </OmniRow>
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Register"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Register"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

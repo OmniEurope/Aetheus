@@ -20,15 +20,15 @@ else
             <OmniBadge Fill="OmniFill.Solid" Tone="@SeverityStyle(_finding.Severity)">@L[$"AnalysisSeverity{_finding.Severity}"]</OmniBadge>
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L[$"AnalysisFindingStatus{_finding.Status}"]</OmniBadge>
         </Badges>
-        <Actions>
+        <ActionsContent>
             @if (_canWrite)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CreateTicketAsync" Disabled="@(_creatingTicket || _createdTicketId.HasValue)"><OmniIcon Name="OmniIconName.Add" /> <span>@(_createdTicketId.HasValue ? $"{L["AnalysisTicket"]} #{_createdTicketId}" : L["AnalysisCreateTicket"])</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CreateTicketAsync" Disabled="@(_creatingTicket || _createdTicketId.HasValue)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@(_createdTicketId.HasValue ? $"{L["AnalysisTicket"]} #{_createdTicketId}" : L["AnalysisCreateTicket"])</span></ChildContent></OmniButton>
             }
-        </Actions>
+        </ActionsContent>
     </OmniPageHeader>
 
-    <UrlSyncedTabs Slugs="@(new[] { "overview", "prompt", "occurrences", "decisions" })" class="analysis-finding-tabs">
+    <UrlSyncedTabs Slugs="@TabSlugs" class="analysis-finding-tabs">
         <Tabs>
             <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dashboard"))" /></Icon><ChildContent>
                 <OmniCard Class="analysis-finding-summary-card">
@@ -36,7 +36,7 @@ else
                        title and the message together. *@
                     <div class="analysis-finding-problem">
                         <div>
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                                 <OmniIcon Name="OmniIconName.Error" />
                                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["AnalysisProblemSummary"]</OmniText>
                             </OmniStack>
@@ -66,7 +66,7 @@ else
                                     }
                                     @if (HasNavigableFile(source))
                                     {
-                                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenSourceFile(source))" Class="analysis-source-open"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["AnalysisOpenSourceFile"]</span></OmniButton>
+                                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenSourceFile(source))" Class="analysis-source-open"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["AnalysisOpenSourceFile"]</span></ChildContent></OmniButton>
                                     }
                                 </div>
                                 @if (_excerpt is { } excerpt)
@@ -123,7 +123,7 @@ else
                     </OmniRow>
                     @if (!string.IsNullOrWhiteSpace(_finding.HelpUri))
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OpenHelp" Class="omni-u-mt-md"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["Documentation"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OpenHelp" Class="omni-u-mt-md"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Documentation"]</span></ChildContent></OmniButton>
                     }
                 </OmniCard>
             </ChildContent></OmniTabsItem>
@@ -137,8 +137,8 @@ else
                         </div>
                         @* STD-BTN detection 11: CopyAiPrompt visible, the other actions in the menu; the preview is a pressed/unpressed toggle. *@
                         <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePromptPreview" aria-pressed="@(_showPromptPreview ? "true" : "false")"><OmniIcon Name="@MaterialIconMap.Resolve("visibility")" /> <span>@L["AnalysisPromptPreview"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyPromptAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["CopyAiPrompt"]</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePromptPreview" aria-pressed="@(_showPromptPreview ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("visibility")" /></Icon><ChildContent><span>@L["AnalysisPromptPreview"]</span></ChildContent></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyPromptAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["CopyAiPrompt"]</span></ChildContent></OmniButton>
                             <OmniOverflowMenu Label="@L["MoreActions"]">
                                 <OmniMenuItem OnClick="DownloadPromptAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["DownloadMarkdown"]</ChildContent></OmniMenuItem>
                             </OmniOverflowMenu>
@@ -146,6 +146,7 @@ else
                     </div>
                     @if (_showPromptPreview)
                     {
+                        @* nosemgrep: aetheus.razor.markupstring-dynamic - Markdig pipeline with DisableHtml, raw HTML is dropped *@
                         <div class="markdown-content analysis-finding-prompt-preview">@((MarkupString)PromptHtml)</div>
                     }
                     else
@@ -161,6 +162,8 @@ else
                 </OmniDataGrid>
             </ChildContent></OmniTabsItem>
 
+            @if (ShowsDecisionTab)
+            {
             <OmniTabsItem Key="decisions" Title="@L["AnalysisDecision"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("gavel"))" /></Icon><ChildContent>
                 @if (_canAdmin)
                 {
@@ -176,21 +179,24 @@ else
                                 <section class="analysis-decision-outcome">
                                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["AnalysisDecisionChooseOutcome"]</OmniText>
                                     <div class="analysis-decision-choices">
-                                        @foreach (var status in _decisionStatuses)
-                                        {
-                                            var selected = _decision.Status == status;
-                                            <div class="@($"analysis-decision-choice{(selected ? " is-selected" : string.Empty)}")">
-                                                <OmniButton Variant="@(selected ? DecisionStatusStyle(status) : OmniButtonVariant.Ghost)" OnClick="@(() => SelectDecisionStatus(status))" ButtonType="OmniButtonType.Button"><OmniIcon Name="@MaterialIconMap.Resolve(DecisionStatusIcon(status))" /> <span>@DecisionStatusText(status)</span></OmniButton>
-                                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@DecisionStatusDescription(status)</OmniText>
-                                            </div>
-                                        }
+                                        @* R1-34: one OE tile per outcome, the whole tile is the click target. *@
+                                        <OmniSelectableCardGroup TValue="AnalysisFindingStatus" TSelection="AnalysisFindingStatus?" Label="@L["AnalysisDecisionChooseOutcome"]"
+                                                                 @bind-Value="_decision.Status" Columns="1" Class="analysis-decision-tiles">
+                                            @foreach (var status in _decisionStatuses)
+                                            {
+                                                <OmniSelectableCard @key="status" Choice="@status" Title="@DecisionStatusText(status)" Description="@DecisionStatusDescription(status)"
+                                                                    data-testid="@($"analysis-decision-{status}")">
+                                                    <Icon><OmniIcon Name="@MaterialIconMap.Resolve(DecisionStatusIcon(status))" /></Icon>
+                                                </OmniSelectableCard>
+                                            }
+                                        </OmniSelectableCardGroup>
                                         @* Going back on a decision is one of the choices, a
                                            secondary action apart from saving; it reopens the
                                            finding at once, after confirmation. *@
                                         @if (HasRevertibleDecision)
                                         {
-                                            <div class="analysis-decision-choice analysis-decision-reopen">
-                                                <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@_reverting" OnClick="@RevertDecisionAsync" ButtonType="OmniButtonType.Button" Class="analysis-decision-revert" title="@L["AnalysisRevertDecision"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /> <span>@L["AnalysisReopenFindingButton"]</span></OmniButton>
+                                            <div class="analysis-decision-reopen">
+                                                <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@_reverting" OnClick="@RevertDecisionAsync" ButtonType="OmniButtonType.Button" Class="analysis-decision-revert" title="@L["AnalysisRevertDecision"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent><span>@L["AnalysisReopenFindingButton"]</span></ChildContent></OmniButton>
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["AnalysisDecisionReopenDescription"]</OmniText>
                                             </div>
                                         }
@@ -218,16 +224,17 @@ else
                                     <span>@L["AnalysisDecisionCurrentStatus"]</span>
                                     <strong>@(_finding is null ? string.Empty : DecisionStatusText(_finding.Status))</strong>
                                 </div>
-                                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Save" /> <span>@L["AnalysisSaveDecision"]</span></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["AnalysisSaveDecision"]</span></ChildContent></OmniButton>
                             </div>
                         </OmniTemplateForm></div>
                     </OmniCard>
                 }
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="@(_canAdmin ? "omni-u-mt-lg" : "omni-u-m-0 omni-u-mb-md")">@L["AnalysisDecisionHistory"]</OmniHeading>
                 <OmniDataGrid FillAvailableHeight="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" Items="@_decisions" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AnalysisFindingDecisionDto" EmptyText="@L["NoRecords"]" Class="analysis-table aetheus-grid-fullheight">
-                    <Columns><OmniDataGridColumn Frozen="true" TItem="AnalysisFindingDecisionDto" Property="Status" Title="@L["Status"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText"><Template Context="item"><OmniBadge Fill="OmniFill.Solid" Tone="@DecisionStatusBadgeStyle(item.Status)">@DecisionStatusText(item.Status)</OmniBadge></Template></OmniDataGridColumn><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="Reason" Title="@L["Reason"]" Filterable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" /></Columns>
+                    <Columns><OmniDataGridColumn Frozen="true" TItem="AnalysisFindingDecisionDto" Property="Status" Title="@L["Status"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText"><Template Context="item"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@DecisionStatusBadgeStyle(item.Status)">@DecisionStatusText(item.Status)</OmniBadge></Template></OmniDataGridColumn><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="Reason" Truncate="true" Title="@L["Reason"]" Filterable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" /></Columns>
                 </OmniDataGrid>
             </ChildContent></OmniTabsItem>
+            }
         </Tabs>
     </UrlSyncedTabs>
 }

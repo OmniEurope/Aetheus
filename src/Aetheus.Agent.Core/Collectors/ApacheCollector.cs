@@ -19,6 +19,29 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
 
     internal bool IsWindows { get; init; } = OperatingSystem.IsWindows();
     internal Func<string, bool> DirectoryExists { get; init; } = Directory.Exists;
+    internal string SitesEnabledDirectory { get; init; } = "/etc/apache2/sites-enabled";
+    internal string SitesAvailableDirectory { get; init; } = "/etc/apache2/sites-available";
+    internal Func<string, string?> ReadLinkTarget { get; init; } = static path => new FileInfo(path).LinkTarget;
+
+    /// <summary>
+    /// Recette R-12: <c>apache2ctl -S</c> lists only the loaded sites, so a site disabled from the page vanished
+    /// from it and could not be deleted. The sites-available files no sites-enabled entry names or links to are
+    /// read too, and reported disabled.
+    /// </summary>
+    private IReadOnlyList<ApacheVirtualHostDto> DisabledSites()
+    {
+        if (IsWindows || !DirectoryExists(SitesAvailableDirectory) || !DirectoryExists(SitesEnabledDirectory))
+            return [];
+        try
+        {
+            return ApacheDisabledSites.Read(SitesAvailableDirectory, SitesEnabledDirectory, ReadLinkTarget);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.LogDebug(ex, "Failed to read the disabled Apache sites");
+            return [];
+        }
+    }
 
     public async Task<ApacheDataDto> CollectAsync(CancellationToken ct = default)
     {
@@ -237,6 +260,7 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
 
             await EnrichWithDocumentRootsAsync(result, ct).ConfigureAwait(false);
             EnrichWithEnabledState(result);
+            result.AddRange(DisabledSites());
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -283,14 +307,13 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
 
         try
         {
-            const string enabledDir = "/etc/apache2/sites-enabled";
-            if (!DirectoryExists(enabledDir)) return;
+            if (!DirectoryExists(SitesEnabledDirectory)) return;
 
             HashSet<string> enabledSites;
             try
             {
                 enabledSites = new HashSet<string>(
-                    Directory.EnumerateFileSystemEntries(enabledDir).Select(Path.GetFileName)!,
+                    Directory.EnumerateFileSystemEntries(SitesEnabledDirectory).Select(Path.GetFileName)!,
                     StringComparer.OrdinalIgnoreCase);
             }
             catch (UnauthorizedAccessException)

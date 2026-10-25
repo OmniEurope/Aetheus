@@ -27,7 +27,7 @@ internal static class PipelineStepRunPlan
             stepRuns.Add(new PipelineStepRun
             {
                 PipelineRunId = run.Id,
-                StageName = PipelineRunService.SystemPrepareStage,
+                StageName = PipelineRunHelpers.SystemPrepareStage,
                 StepName = string.IsNullOrEmpty(preparation.RepositoryUrl) ? "Prepare Workspace" : "Clone Repository",
                 Order = stepRuns.Count,
                 IsSystem = true
@@ -46,7 +46,7 @@ internal static class PipelineStepRunPlan
             stepRuns.Add(new PipelineStepRun
             {
                 PipelineRunId = run.Id,
-                StageName = PipelineRunService.SystemCleanupStage,
+                StageName = PipelineRunHelpers.SystemCleanupStage,
                 StepName = "Cleanup",
                 Order = stepRuns.Count,
                 IsSystem = true,

@@ -5,9 +5,18 @@
 
 <PageTitle>@(_isNew ? L["NewVault"] : _detail?.Name ?? L["Vault"]) - Aetheus</PageTitle>
 
-@* Keep vault Edit and Delete in the menu and omit empty header content to avoid a useless mobile
-   toggle. *@
-<OmniPageHeader Title="@(_isNew ? L["NewVault"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()">
+@* The vault's tools are the header's "⋮" menu (R-67): it stays at the end of the title line at every
+   width, where it sat at the end of the add-secret row and wrapped under the fields on a narrow
+   screen. Header content stays empty to avoid a useless mobile toggle. *@
+@{
+    RenderFragment vaultMenu = @<text>
+        <OmniMenuItem OnClick="@EditProperties"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@ExportKeys"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["ExportKeys"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@ImportSecrets"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
+    </text>;
+}
+<OmniPageHeader Title="@(_isNew ? L["NewVault"] : _detail?.Name ?? "")" ShowBack="true" BackHref="@LocalReturnUrl.Validated(ReturnUrl)" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@(_isNew || _detail is null ? null : vaultMenu)">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon>
 </OmniPageHeader>
 
@@ -23,7 +32,7 @@ else
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                     <OmniFormField For="vault-name">
                         <LabelContent>@L["Name"]</LabelContent>
                         <ChildContent>
@@ -47,11 +56,11 @@ else
             </OmniColumn>
         </OmniRow>
 
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /> <span>@(_isNew ? L["Create"] : L["Save"])</span></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
             @if (!_isNew)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
     </OmniTemplateForm>
@@ -59,35 +68,37 @@ else
 
     @if (!_isNew && _detail is not null)
     {
-        <OmniHeading Level="OmniHeadingLevel.H5" Class="@(_editingProperties ? "omni-u-mt-2xl omni-u-mb-sm" : "omni-u-mb-sm")">@L["Secrets"]</OmniHeading>
+        @* Who reads this vault (R-66), above the secrets: a vault read by nothing is the one to delete. *@
+        <div class="@(_editingProperties ? "resource-usage-line omni-u-mt-2xl" : "resource-usage-line")">
+            <span class="resource-usage-line__label">@L["UsedBy"]</span>
+            <ResourceUsageSummary Users="@_usage" Loaded="@_usageLoaded" />
+        </div>
+        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["Secrets"]</OmniHeading>
 
         <OmniTemplateForm TModel="NewSecretModel" Model="@_newSecret" OnValidSubmit="@((EditContext context) => AddSecret((NewSecretModel)context.Model))">
         <OmniDataAnnotationsValidator Localizer="@L" />
         @* Align secret input controls on one row with validation below them. Use a masked text
            field that password managers do not treat as a login credential. *@
         <div class="vault-add-row">
-            <OmniTextBox @bind-Value="_newSecret.Key" Placeholder="@L["Key"]" Autocomplete="off"
-                         aria-label="@L["Key"]" Class="vault-add-row__key" />
-            <OmniPassword Id="vault-new-secret-value" @bind-Value="_newSecret.Value" Placeholder="@L["Value"]" IgnorePasswordManagers="true"
-                          RevealLabel="@L["ShowValue"]" HideLabel="@L["HideValue"]" aria-label="@L["Value"]" />
-            @* Generate uses the approved blue STD-BTN exception beside Add. Its main click uses
-               the key recipe and its menu offers alternative generators. *@
-            <OmniSplitButton Text="@L["Generate"]" Variant="OmniButtonVariant.Primary"
-                             OnClick="@GenerateNewSecretValue" MenuLabel="@L["SecretGenerateOptions"]" title="@GenerateHint(_newSecret.Key)"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>
-                @foreach (var choice in SecretGenerationChoices.All)
-                {
-                    <OmniMenuItem OnClick="@(() => GenerateNewSecretValueWith(choice))">@L[choice.LabelKey]</OmniMenuItem>
-                }
-            </ChildContent></OmniSplitButton>
-            <OmniDatePicker @bind-Value="NewSecretExpiryDate" aria-label="@L["ExpiresAt"]" Placeholder="@L["ExpiresAt"]" />
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
-            <div class="pipeline-list-spacer"></div>
-            <OmniOverflowMenu Label="@L["Tools"]">
-                <OmniMenuItem OnClick="@EditProperties"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
-                <OmniMenuItem OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
-                <OmniMenuItem OnClick="@ExportKeys"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["ExportKeys"]</ChildContent></OmniMenuItem>
-                <OmniMenuItem OnClick="@ImportSecrets"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
-            </OmniOverflowMenu>
+            <div class="vault-add-row__fields">
+                <OmniTextBox @bind-Value="_newSecret.Key" Placeholder="@L["Key"]" Autocomplete="off"
+                             aria-label="@L["Key"]" />
+                <OmniPassword Id="vault-new-secret-value" @bind-Value="_newSecret.Value" Placeholder="@L["Value"]" IgnorePasswordManagers="true"
+                              RevealLabel="@L["ShowValue"]" HideLabel="@L["HideValue"]" aria-label="@L["Value"]" />
+                <OmniDatePicker @bind-Value="NewSecretExpiryDate" aria-label="@L["ExpiresAt"]" Placeholder="@L["ExpiresAt"]" />
+            </div>
+            <div class="vault-add-row__actions">
+                @* Generate uses the approved blue STD-BTN exception beside Add. Its main click uses
+                   the key recipe and its menu offers alternative generators. *@
+                <OmniSplitButton Text="@L["Generate"]" Variant="OmniButtonVariant.Primary"
+                                 OnClick="@GenerateNewSecretValue" MenuLabel="@L["SecretGenerateOptions"]" title="@GenerateHint(_newSecret.Key)"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>
+                    @foreach (var choice in SecretGenerationChoices.All)
+                    {
+                        <OmniMenuItem OnClick="@(() => GenerateNewSecretValueWith(choice))">@L[choice.LabelKey]</OmniMenuItem>
+                    }
+                </ChildContent></OmniSplitButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
+            </div>
         </div>
         <div class="vault-add-row__messages omni-u-mb-md">
             <ValidationMessage For="@(() => _newSecret.Key)" />
@@ -95,14 +106,14 @@ else
         </div>
         </OmniTemplateForm>
 
-        <OmniDataGrid FillAvailableHeight="true" Items="@_detail.Secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="VaultSecretDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+        <OmniDataGrid FillAvailableHeight="true" AllowColumnAutoFit="true" Items="@_detail.Secrets" ExportTitle="@ExportContext.Title(L["Secrets"])" ExportFields="@ExportContext.Fields()" TItem="VaultSecretDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="VaultSecretDto" Property="Key" Title="@L["Key"]" Filterable="true">
+                <OmniDataGridColumn Frozen="true" TItem="VaultSecretDto" Property="Key" Title="@L["Key"]" Filterable="true" DefaultFilterValue="@FilterKey">
                     <Template Context="secret">
                         @* Use the approved blue STD-BTN exception for each key copy button. *@
                         <span class="library-cell">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyKey(secret.Key))" Class="library-copy-btn"
-                                        title="@L["CopyKey"]" Label="@L["CopyKey"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                                        title="@L["CopyKey"]" Label="@L["CopyKey"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             <span class="clickable-cell" role="button" tabindex="0"
                                   @onclick="@(() => UpdateSecret(secret))"
                                   @onkeydown="@(e => OnSecretCellKeyDown(e, secret))">@secret.Key</span>
@@ -115,7 +126,7 @@ else
                            approved blue copy action before the value for alignment. *@
                         <span class="library-cell">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopySecretValue(secret))" Class="library-copy-btn"
-                                        title="@L["CopyValue"]" Label="@L["CopyValue"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                                        title="@L["CopyValue"]" Label="@L["CopyValue"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             <span class="clickable-cell" role="button" tabindex="0"
                                   @onclick="@(() => UpdateSecret(secret))"
                                   @onkeydown="@(e => OnSecretCellKeyDown(e, secret))">••••••••</span>
@@ -132,20 +143,21 @@ else
                         }
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="VaultSecretDto" Title="@L["Versions"]" ExportValue="@VersionsExport" Width="5.625rem" TextAlign="OmniDataGridTextAlign.Center" Sortable="false">
+                <OmniDataGridColumn TItem="VaultSecretDto" Title="@L["Versions"]" ExportValue="@VersionsExport" Width="5.625rem" TextAlign="OmniAlignment.Center" Sortable="false">
                     <Template Context="secret">
                         <CountBadge Value="@secret.VersionCount" Variant="OmniTone.Neutral" />
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="VaultSecretDto" Title="" Width="15rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End">
+                <OmniDataGridColumn TItem="VaultSecretDto" Title="" Width="15rem" Sortable="false" TextAlign="OmniAlignment.End">
                     <Template Context="secret">
-                        @* Use filled actions: blue copy, secondary history and edit, and orange
-                           rotation under the approved STD-BTN exceptions. *@
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyKeyReference(secret.Key))" title="@L["CopyKeyReference"]" Label="@L["CopyKeyReference"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowVersions(secret))" title="@L["History"]" Label="@L["History"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UpdateSecret(secret))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Warning" OnClick="@(() => RotateSecret(secret))" title="@L["Rotate"]" Label="@L["Rotate"]"><OmniIcon Name="OmniIconName.Sync" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret.Id))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                        @* One main action (Edit), the others in the row menu (R1-4). *@
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => UpdateSecret(secret))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                            <OmniMenuItem OnClick="@(() => CopyKeyReference(secret.Key))"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["CopyKeyReference"]</ChildContent></OmniMenuItem>
+                            <OmniMenuItem OnClick="@(() => ShowVersions(secret))"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["History"]</ChildContent></OmniMenuItem>
+                            <OmniMenuItem OnClick="@(() => RotateSecret(secret))"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["Rotate"]</ChildContent></OmniMenuItem>
+                            <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeleteSecret(secret.Id))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                        </OmniOverflowMenu>
                     </Template>
                 </OmniDataGridColumn>
             </Columns>

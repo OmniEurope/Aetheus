@@ -4,7 +4,7 @@
    pipeline with eleven stages produced eleven copies of the same reason and nothing was readable.
    Stages are grouped by their reason here: the cause is stated once, the affected stages are listed
    compactly, and each cause carries the action that actually fixes it. *@
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large" Class="preflight-dialog">
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="preflight-dialog">
     <OmniAlert Severity="OmniSeverity.Warning">
         @string.Format(L["PreflightBlockedSummary"], Unresolved.Count)
     </OmniAlert>
@@ -12,29 +12,40 @@
     @foreach (var group in Groups)
     {
         <OmniCard Class="preflight-cause">
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@group.Reason</OmniText>
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm" data-testid="preflight-cause">@group.Reason</OmniText>
 
-            <OmniRow Gap="OmniSpacing.XLarge" Class="omni-u-mb-sm">
-                @foreach (var stage in group.Stages)
-                {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@stage</OmniBadge>
-                }
-            </OmniRow>
+            @if (group.Hint is { } hint)
+            {
+                <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm" data-testid="preflight-hint">@hint</OmniText>
+            }
+
+            @* The affected stages are the detail, not the message: folded under the cause (R-20). *@
+            <OmniFieldset Collapsible="true" Expanded="false" Class="omni-u-mb-sm" data-testid="preflight-stages">
+                <Legend>@string.Format(L["PreflightAffectedStages"], group.Stages.Count)</Legend>
+                <ChildContent>
+                    <OmniRow Gap="OmniSpacing.ExtraLarge">
+                        @foreach (var stage in group.Stages)
+                        {
+                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@stage</OmniBadge>
+                        }
+                    </OmniRow>
+                </ChildContent>
+            </OmniFieldset>
 
             @if (group.Remediation is { } fix)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniIcon Name="OmniIconName.Wrench" />
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@fix.Explanation</OmniText>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoAsync(fix.Href))"><OmniIcon Name="@MaterialIconMap.Resolve(fix.ActionIcon)" /> <span>@fix.ActionLabel</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoAsync(fix.Href))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(fix.ActionIcon)" /></Icon><ChildContent><span>@fix.ActionLabel</span></ChildContent></OmniButton>
                 </OmniStack>
             }
         </OmniCard>
     }
 
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @* Icon/style pairs are imposed by the shared semantic family (ButtonFamilyAndGridNavigationAuditTests). *@
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(true))" title="@L["RunAnyway"]"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Launch"]</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(false))"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(true))" title="@L["RunAnyway"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Launch"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(false))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>

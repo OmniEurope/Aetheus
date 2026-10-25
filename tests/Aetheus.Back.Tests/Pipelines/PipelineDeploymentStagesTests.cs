@@ -58,9 +58,9 @@ public sealed class PipelineDeploymentStagesTests
     {
         var definition = Parse(ScriptedYaml);
 
-        Assert.Equal(["Deploy blue-green"], PipelineRunScheduler.StartStageNames(definition));
+        Assert.Equal(["Deploy blue-green"], PipelineDeploymentStages.StartNames(definition));
         // The failure handler that only mails never makes a failed run a rolled-back one.
-        Assert.Equal(["Roll back on failure or missing confirmation"], PipelineRunScheduler.RollbackStageNames(definition));
+        Assert.Equal(["Roll back on failure or missing confirmation"], PipelineDeploymentStages.RollbackNames(definition));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public sealed class PipelineDeploymentStagesTests
             ]
         };
 
-        Assert.Equal(["deploy-job"], PipelineRunScheduler.StartStageNames(definition));
+        Assert.Equal(["deploy-job"], PipelineDeploymentStages.StartNames(definition));
     }
 
     [Theory]

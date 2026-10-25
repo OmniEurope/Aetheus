@@ -4,7 +4,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Aetheus.Back.Components.AppBackups;
 using Aetheus.Back.Components.Artifacts;
-using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
@@ -16,7 +15,7 @@ public interface IPipelineDeploymentTaskFactory
 {
     Task CreateDeployTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, CancellationToken ct);
+        Dictionary<string, string> legVars, string? stageEnvironment, CancellationToken ct);
 }
 
 /// <summary>
@@ -40,7 +39,7 @@ public sealed class PipelineDeploymentTaskFactory(
     // a run warning) - never dispatched as a fake green.
     public async Task CreateDeployTaskAsync(
         int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, CancellationToken ct)
+        Dictionary<string, string> legVars, string? stageEnvironment, CancellationToken ct)
     {
         var app = SubstituteVariables(stepDef.App ?? string.Empty, legVars).Trim();
         if (!OperationTargetValidator.DeployAppRegex().IsMatch(app))
@@ -64,7 +63,7 @@ public sealed class PipelineDeploymentTaskFactory(
             await FailDeployStepAsync(runId, legServer, stepRun, healthError, ct).ConfigureAwait(false);
             return;
         }
-        await AddDeployOtlpVariablesAsync(runId, deployVars, ct).ConfigureAwait(false);
+        await AddDeployOtlpVariablesAsync(runId, stageEnvironment, deployVars, ct).ConfigureAwait(false);
         stepRun.ServerId = legServer.Id;
         var deployTask = new ServerTask
         {
@@ -153,18 +152,15 @@ public sealed class PipelineDeploymentTaskFactory(
     }
 
     internal async Task AddDeployOtlpVariablesAsync(
-        int runId, IDictionary<string, string> deployVars, CancellationToken ct)
+        int runId, string? stageEnvironment, IDictionary<string, string> deployVars, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(configuration["AppMonitoring:IngestBaseUrl"])) return;
         try
         {
-            var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-            var projectId = run?.Pipeline is null
-                ? null
-                : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
-            if (projectId is null) return;
+            var target = await DeployObservabilityTarget.ResolveAsync(repo, runId, stageEnvironment, ct).ConfigureAwait(false);
+            if (target is null) return;
             var otelEnv = await appDeployEnv.GetDeployEnvAsync(
-                projectId.Value, environmentId: null, runId, ct).ConfigureAwait(false);
+                target.Value.ProjectId, target.Value.EnvironmentId, runId, ct).ConfigureAwait(false);
             foreach (var (key, value) in otelEnv)
                 deployVars[$"AETHEUS_DEPLOY_APPENV_{key}"] = value;
         }

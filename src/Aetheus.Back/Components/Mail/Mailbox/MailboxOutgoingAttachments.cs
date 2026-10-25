@@ -24,11 +24,11 @@ public static class MailboxOutgoingAttachments
             if (attachment is null) throw new BadRequestException("An attached file is missing.");
             var size = attachment.Content?.LongLength ?? 0;
             if (size > MailboxLimits.MaxAttachmentBytes)
-                throw new BadRequestException($"An attached file exceeds {MailboxLimits.MaxAttachmentBytes / (1024 * 1024)} MB.");
+                throw new BadRequestException($"An attached file exceeds {MailboxLimits.MaxAttachmentBytes / (1024 * 1024)} Mo.");
             total += size;
         }
         if (total > MailboxLimits.MaxAttachmentsTotalBytes)
-            throw new BadRequestException($"The attached files exceed {MailboxLimits.MaxAttachmentsTotalBytes / (1024 * 1024)} MB together.");
+            throw new BadRequestException($"The attached files exceed {MailboxLimits.MaxAttachmentsTotalBytes / (1024 * 1024)} Mo together.");
     }
 
     /// <summary>Adds each file as an attachment (base64, disposition attachment) under its sanitized name.</summary>

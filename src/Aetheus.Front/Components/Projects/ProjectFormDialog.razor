@@ -67,7 +67,7 @@
         </OmniColumn>
     </OmniRow>
 
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
         @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
         @if (!_isNew)
         {
@@ -76,7 +76,7 @@
             </OmniOverflowMenu>
         }
         <div class="flex-spacer"></div>
-        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /> <span>@(_isNew ? L["Create"] : L["Save"])</span></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close())" ButtonType="OmniButtonType.Button" Disabled="@_saving"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close())" ButtonType="OmniButtonType.Button" Disabled="@_saving"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniTemplateForm>

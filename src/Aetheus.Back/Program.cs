@@ -39,6 +39,8 @@ builder.Services.AddAetheusTelemetry(builder.Configuration, options =>
 builder.Services.AddSingleton(TimeProvider.System);
 // RequestErrorLoggingMiddleware counts the refused requests that match no route.
 builder.Services.AddSingleton<UnmatchedRequestCounter>();
+// R1-40: a request past the threshold logs what the process was doing meanwhile (GC, pool, background work).
+builder.Services.AddSlowRequestDiagnostics(builder.Configuration);
 
 // --- Data Protection ---
 builder.AddAetheusDataProtection();
@@ -347,6 +349,7 @@ else
 }
 
 app.UseAetheusSecurityHeaders(corsOrigins);
+app.UseMiddleware<SlowRequestDiagnosticsMiddleware>();
 app.UseMiddleware<RequestErrorLoggingMiddleware>();
 app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseResponseCompression();

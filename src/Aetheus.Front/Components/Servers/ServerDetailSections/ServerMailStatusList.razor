@@ -24,9 +24,9 @@
 }
 <OmniCard Class="omni-u-mb-lg mail-status">
     <OmniStack Gap="OmniSpacing.Medium">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailStatusTitle"]</OmniHeading>
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@(Mail.IsManagedByAetheus ? L["MailManagedByAetheus"] : L["MailAdoptedStack"])</OmniBadge>
+            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@(Mail.IsManagedByAetheus ? L["MailManagedByAetheus"] : L["MailAdoptedStack"])</OmniBadge>
             @if (!string.IsNullOrEmpty(Mail.Hostname))
             {
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["Hostname"] : @Mail.Hostname</OmniText>
@@ -39,7 +39,7 @@
 
         @if (CanManage && Mail.HelperVersion < CurrentHelperVersion)
         {
-            <OmniAlert Severity="OmniSeverity.Warning" Class="mail-helper-outdated">@string.Format(L["MailHelperOutdated"], Mail.HelperVersion)</OmniAlert>
+            <OmniAlert Severity="OmniSeverity.Warning" Class="mail-helper-outdated">@string.Format(L["MailHelperOutdated"], Mail.HelperVersion, CurrentHelperVersion)</OmniAlert>
         }
 
         @if (_loading && _diagnostics is null)
@@ -71,11 +71,11 @@
             }
             @if (FirstRed is null && StatusItems.Count > 0)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-all-green">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-all-green">
                     <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Success" Class="omni-u-m-0">@L["MailStatusAllGreen"]</OmniText>
                     @if (CanManage)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendTestAsync" Busy="@IsBusy(MailTaskKind.DeliveryTest)"><OmniIcon Name="OmniIconName.PaperPlaneRight" /> <span>@L["MailSendTest"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendTestAsync" Busy="@IsBusy(MailTaskKind.DeliveryTest)"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent><span>@L["MailSendTest"]</span></ChildContent></OmniButton>
                     }
                 </OmniStack>
             }
@@ -115,7 +115,7 @@
 
         @if (CanManage)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-tools">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="mail-status-tools">
                 @* One button for both services (user decision, 2026-10-17): its main part restarts
                    Postfix, its menu names the service of each action. *@
                 <OmniSplitButton Variant="OmniButtonVariant.Secondary" Text="@ServiceLabel("postfix", "restart")" MenuLabel="@L["MailServiceActions"]"

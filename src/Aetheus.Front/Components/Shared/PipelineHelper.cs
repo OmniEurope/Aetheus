@@ -9,8 +9,6 @@ internal static class PipelineHelper
         PipelineStatus.Success => OmniTone.Success,
         PipelineStatus.Failed => OmniTone.Danger,
         PipelineStatus.Running => OmniTone.Accent,
-        // Use the distinct info-blue variant for Cancelled so it remains readable in the dark theme
-        // and separate from amber partial failures.
         PipelineStatus.Partial => OmniTone.Warning,
         // Use warning styling when rollback restored the previous serving version; the label
         // distinguishes it from a partially successful run.
@@ -18,8 +16,31 @@ internal static class PipelineHelper
         // Use warning styling for a refused result so it remains distinct from a technical
         // execution failure.
         PipelineStatus.Rejected => OmniTone.Warning,
-        PipelineStatus.Cancelled => OmniTone.Info,
+        // Owner decision of 2026-10-24 (recette R-38): a cancelled run is orange like a rolled-back
+        // one, not blue, even if that makes it close to the partial and rejected colours.
+        PipelineStatus.Cancelled => OmniTone.Warning,
+        PipelineStatus.AwaitingResume => OmniTone.Warning,
         _ => OmniTone.Neutral
+    };
+
+    /// <summary>The icon that precedes the status name in a run badge (recette R-37), chosen once here
+    /// so every status reads the same wherever badges are given an icon. Null for an unknown value, which
+    /// keeps the text-only badge.</summary>
+    internal static OmniIconName? GetRunIcon(PipelineStatus status) => status switch
+    {
+        PipelineStatus.Success => OmniIconName.Check,
+        PipelineStatus.Failed => OmniIconName.Close,
+        PipelineStatus.Cancelled => OmniIconName.Prohibit,
+        PipelineStatus.RolledBack => OmniIconName.Reset,
+        PipelineStatus.Running => OmniIconName.Sync,
+        PipelineStatus.Pending => OmniIconName.Timer,
+        PipelineStatus.WaitingForApproval => OmniIconName.Hourglass,
+        PipelineStatus.Partial => OmniIconName.Warning,
+        // A refusal by the assurance seal is a verdict, not a tolerated failure: a shield with a bar
+        // keeps it apart from Partial's warning triangle.
+        PipelineStatus.Rejected => OmniIconName.ShieldSlash,
+        PipelineStatus.AwaitingResume => OmniIconName.Pause,
+        _ => null
     };
 
     /// <summary>Colour for an analysis gate letter: A and B read as healthy, C as a warning, D and

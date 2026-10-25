@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Collections.Concurrent;
 using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Caching.Memory;
@@ -10,7 +9,11 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
 {
     private const string VaultNamesCachePrefix = "vaults:names:";
     private static readonly TimeSpan CacheDuration = BackendRuntimeDefaults.ReferenceDataCacheDuration;
-    private readonly ConcurrentDictionary<string, byte> _activeNameKeys = new();
+
+    /// <summary>Shared by every instance of this scoped service: a name list cached while serving one
+    /// request must be invalidated by another request that creates, renames or deletes a vault. Bumping
+    /// it changes every cache key, so the stale lists are never read again and simply expire.</summary>
+    private static long s_namesGeneration;
 
     /// <summary>The project names the vaults list's checkable filter offers.</summary>
     public Task<VaultFilterValuesDto> GetFilterValuesAsync(List<int>? accessibleIds, CancellationToken ct = default) =>
@@ -71,8 +74,6 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         return await cache.GetOrCreateAsync(key, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = CacheDuration;
-            _activeNameKeys.TryAdd(key, 0);
-            entry.RegisterPostEvictionCallback((k, _, _, _) => _activeNameKeys.TryRemove((string)k, out _));
             return await repo.GetVaultNamesAsync(projectId, accessibleIds, ct).ConfigureAwait(false);
         }).ConfigureAwait(false) ?? [];
     }
@@ -363,6 +364,17 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
         return result;
     }
 
+    public async Task<Dictionary<string, int>> ResolveSecretOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
+    {
+        var vaults = await repo.FindByNamesWithCrossAccessAsync(names, projectId, ct).ConfigureAwait(false);
+        var owners = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Same walk as the merge, so the last vault to set a name (the one whose value wins) owns it.
+        foreach (var vault in vaults.OrderBy(VaultPrecedence))
+            foreach (var secret in vault.Secrets)
+                owners[secret.Key] = vault.Id;
+        return owners;
+    }
+
     private static int VaultPrecedence(Data.Entities.Vault vault)
     {
         if (vault.ProjectServerId.HasValue) return 3;
@@ -426,16 +438,13 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
     private static string BuildNamesCacheKey(int? projectId, List<int>? accessibleIds)
     {
         var pid = projectId?.ToString() ?? "all";
+        var generation = Volatile.Read(ref s_namesGeneration);
         if (accessibleIds is null or [])
-            return $"{VaultNamesCachePrefix}{pid}";
-        return $"{VaultNamesCachePrefix}{pid}:{string.Join(',', accessibleIds.Order())}";
+            return $"{VaultNamesCachePrefix}{generation}:{pid}";
+        return $"{VaultNamesCachePrefix}{generation}:{pid}:{string.Join(',', accessibleIds.Order())}";
     }
 
-    private void InvalidateNamesCache()
-    {
-        foreach (var key in _activeNameKeys.Keys)
-            cache.Remove(key);
-    }
+    private static void InvalidateNamesCache() => Interlocked.Increment(ref s_namesGeneration);
 
     private static VaultDto MapToDto(Vault v) => new()
     {

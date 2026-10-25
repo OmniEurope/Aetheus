@@ -62,7 +62,8 @@ module.exports = [
     },
     {
         files: [
-            'deploy/scripts/**/*.mjs',
+            'scripts/**/*.mjs',
+            'deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/*.mjs',
             'docs-site/src/**/*.mjs',
             'docs/tools/**/*.mjs',
             'tests/js/**/*.mjs',

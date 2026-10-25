@@ -5,7 +5,7 @@
    projects the user follows. Each notification is also e-mailed to the account address (R1-16). *@
 
 @* Use the full tab width with two preference tiles per row. *@
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium" Class="notification-preferences">
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium" Class="notification-preferences">
     @if (_loading)
     {
         <AetheusLoader Size="OmniControlSize.Small" />
@@ -20,8 +20,8 @@
            event with its icon and its switch; the followed projects are a section of their own. *@
         @foreach (var group in Groups)
         {
-            <OmniSettingsSection Title="@L[group.TitleKey]">
-                <div class="settings-pair">
+            @* R-3: OE pairs the settings tiles itself (two per row, stacked on a narrow width). *@
+            <OmniSettingsSection Title="@L[group.TitleKey]" Paired="true">
                 @foreach (var preference in group.Items)
                 {
                     <OmniSettingsTile Title="@PreferenceText(preference)" Class="notification-preference-toggle">
@@ -32,7 +32,6 @@
                         </ChildContent>
                     </OmniSettingsTile>
                 }
-                </div>
             </OmniSettingsSection>
         }
 
@@ -44,13 +43,12 @@
                 <OmniEmptyState Class="notification-subscriptions-empty" Title="@L["NotificationSubscriptionsEmpty"]"
                                 Description="@L["NotificationNoSubscriptionHint"]">
                     <Icon><OmniIcon Name="OmniIconName.BellSlash" /></Icon>
-                    <Actions>
+                    <ActionsContent>
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="FollowAllAsync" Busy="@_followingAll"
                                     Class="notification-follow-all" title="@L["NotificationFollowAllProjects"]">
-                            <OmniIcon Name="OmniIconName.Bell" />
-                            <span>@L["NotificationFollowAll"]</span>
+                            <Icon><OmniIcon Name="OmniIconName.Bell" /></Icon><ChildContent><span>@L["NotificationFollowAll"]</span></ChildContent>
                         </OmniButton>
-                    </Actions>
+                    </ActionsContent>
                 </OmniEmptyState>
             }
             else
@@ -58,8 +56,7 @@
                 <div class="notification-subscriptions-actions">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="FollowAllAsync" Busy="@_followingAll"
                                 Class="notification-follow-all" title="@L["NotificationFollowAllProjects"]">
-                        <OmniIcon Name="OmniIconName.Bell" />
-                        <span>@L["NotificationFollowAll"]</span>
+                        <Icon><OmniIcon Name="OmniIconName.Bell" /></Icon><ChildContent><span>@L["NotificationFollowAll"]</span></ChildContent>
                     </OmniButton>
                 </div>
                 @* Recette R1-56: the followed projects are a compact grid (project link, unfollow), not a mosaic of cards. *@
@@ -68,7 +65,7 @@
                                   Items="@_subscriptions" TItem="ProjectSubscriptionDto" KeyOf="@(row => row.ProjectId)"
                                   ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                         <Columns>
-                            <OmniDataGridColumn Frozen="true" TItem="ProjectSubscriptionDto" Property="ProjectName" Title="@L["Project"]" Filterable="true">
+                            <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ProjectSubscriptionDto" Property="ProjectName" Title="@L["Project"]" Filterable="true">
                                 <Template Context="subscription">
                                     <OmniLink Href="@($"/projects/{subscription.ProjectId}")">@subscription.ProjectName</OmniLink>
                                 </Template>
@@ -77,7 +74,7 @@
                                 <Template Context="subscription">
                                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => UnsubscribeAsync(subscription))"
                                                 Class="notification-unsubscribe" title="@L["Unsubscribe"]" Label="@L["Unsubscribe"]">
-                                        <OmniIcon Name="OmniIconName.BellSlash" />
+                                        <Icon><OmniIcon Name="OmniIconName.BellSlash" /></Icon>
                                     </OmniButton>
                                 </Template>
                             </OmniDataGridColumn>

@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>verify-production-state</c> function, port of the refusals <c>deploy/scripts/prod-deploy-prepare.sh</c>
+/// The <c>verify-production-state</c> function, port of the refusals the former <c>prod-deploy-prepare.sh</c> script
 /// makes about the production state directory and secret-zero, without any of its writes. Run before
 /// the preparation, it refuses what the preparation would refuse, before anything is loaded or copied:
 /// <list type="number">

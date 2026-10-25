@@ -172,15 +172,36 @@ public sealed class ScannerContainerProcessBuilderTests
         Assert.Equal("/src/.gitleaks.toml", configured[index + 1]);
     }
 
+    /// <summary>ADR-050: a repository without <c>.trivyignore.yaml</c> is scanned by Trivy IaC with no exception
+    /// (no <c>--ignorefile</c>, which Trivy refuses for a missing path: "ignore file not found"); a repository
+    /// with one keeps it, path included.</summary>
     [Fact]
-    public void DropAbsentConfiguration_LeavesAConfigurationOutsideTheSourceUntouched()
+    public void Build_TrivyIacReadsTheRepositoryIgnoreFileOnlyWhenItExists()
+    {
+        using var withoutFile = new TemporaryDirectory();
+        using var withFile = new TemporaryDirectory();
+        File.WriteAllText(Path.Combine(withFile.Path, ".trivyignore.yaml"), "misconfigurations: []\n");
+
+        var defaults = BuildScanner("trivy-iac", withoutFile.Path);
+        var configured = BuildScanner("trivy-iac", withFile.Path);
+
+        Assert.DoesNotContain("--ignorefile", defaults);
+        Assert.DoesNotContain("/src/.trivyignore.yaml", defaults);
+        Assert.Contains("misconfig", defaults);
+        var index = configured.IndexOf("--ignorefile");
+        Assert.True(index >= 0, "The repository's own Trivy ignore file must be passed.");
+        Assert.Equal("/src/.trivyignore.yaml", configured[index + 1]);
+    }
+
+    [Fact]
+    public void DropAbsent_LeavesAFileOutsideTheSourceUntouched()
     {
         using var source = new TemporaryDirectory();
         List<string> outside = ["dir", "/src", "--config", "/rules/gitleaks.toml"];
         List<string> dangling = ["dir", "/src", "--config"];
 
-        Assert.False(GitleaksRepositoryConfiguration.DropAbsentConfiguration(outside, source.Path));
-        Assert.False(GitleaksRepositoryConfiguration.DropAbsentConfiguration(dangling, source.Path));
+        Assert.False(ScannerOptionalRepositoryFile.DropAbsent(outside, "--config", source.Path));
+        Assert.False(ScannerOptionalRepositoryFile.DropAbsent(dangling, "--config", source.Path));
         Assert.Equal(["dir", "/src", "--config", "/rules/gitleaks.toml"], outside);
         Assert.Equal(["dir", "/src", "--config"], dangling);
     }

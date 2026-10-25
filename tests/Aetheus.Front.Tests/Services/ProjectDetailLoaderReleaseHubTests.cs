@@ -133,5 +133,5 @@ public sealed class ProjectDetailLoaderReleaseHubTests : BunitContext
     }
 
     private int ReleaseReads() =>
-        _handler.Requests.ToList().Count(request => request.Url.Contains("api/releases", StringComparison.Ordinal));
+        _handler.RequestsSnapshot().Count(request => request.Url.Contains("api/releases", StringComparison.Ordinal));
 }

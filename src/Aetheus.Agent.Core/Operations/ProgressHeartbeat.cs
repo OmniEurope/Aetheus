@@ -5,7 +5,7 @@ namespace Aetheus.Agent.Core.Operations;
 
 /// <summary>
 /// Writes a progress line at a fixed interval while a long command runs, the job
-/// <c>deploy/scripts/run-with-progress.sh</c> did for the shell steps: a test suite can stay silent for
+/// the former <c>run-with-progress.sh</c> script did for the shell steps: a test suite can stay silent for
 /// minutes, and a silent step cannot be told apart from a stalled runner. The lines stop as soon as the
 /// work ends, whatever its outcome; they never change it.
 /// </summary>

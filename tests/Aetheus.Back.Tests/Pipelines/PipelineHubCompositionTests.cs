@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Hubs;
+using Aetheus.Back.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Back.Tests.Pipelines;

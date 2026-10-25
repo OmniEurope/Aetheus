@@ -47,7 +47,7 @@ RUN mkdir -p /run/sshd \
 # Opt-in build arg (INSTALL_DOTNET=1, set by ylaunch's -net10 via compose). When
 # off (default) the box stays bare. Installs via Microsoft's official, channel-
 # pinned dotnet-install.sh - the same mechanism + SDK version the agent's
-# pipeline-runner module uses (deploy/scripts/install-agent-linux.sh). Placed
+# pipeline-runner module uses (deploy/agent-installer/install-agent-linux.sh). Placed
 # last so toggling -net10 only rebuilds this cheap tail layer.
 ARG INSTALL_DOTNET=0
 ARG DOTNET_INSTALLER_URL=https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh

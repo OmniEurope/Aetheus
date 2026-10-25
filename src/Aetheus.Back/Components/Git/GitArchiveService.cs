@@ -13,7 +13,7 @@ public sealed class GitArchiveService(IGitLightRepository lightRepo, IGitLightSe
         if (entity is null) return null;
 
         var reference = string.IsNullOrWhiteSpace(refName) ? entity.DefaultBranch : refName.Trim();
-        // The CLI refuses a ref git would read as an option (EnsureRefArgsSafe); say so as a 400 here
+        // The CLI refuses a ref git would read as an option (GitArgumentGuard.EnsureRefArgsSafe); say so as a 400 here
         // rather than letting its ArgumentException surface as a 500.
         if (reference.StartsWith('-'))
             throw new BadRequestException($"Ref may not start with '-': '{reference}'.");

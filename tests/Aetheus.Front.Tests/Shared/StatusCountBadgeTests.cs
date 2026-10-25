@@ -65,10 +65,11 @@ public sealed class StatusCountBadgeTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             var badges = cut.FindAll(".status-count-badge");
-            Assert.Equal(4, badges.Count);
+            // The recent-runs tile shows no success/failed count (R-36), only the two monitored-app badges here.
+            Assert.Equal(2, badges.Count);
             Assert.Contains(badges, b => b.ClassList.Contains("omni-badge--success") && b.TextContent.Trim() == "20 AppHealthUp");
             Assert.Contains(badges, b => b.ClassList.Contains("omni-badge--danger") && b.TextContent.Trim() == "5 AppHealthDown");
-            Assert.Equal(4, cut.FindAll(".status-count-badge .status-count-badge__icon").Count);
+            Assert.Equal(2, cut.FindAll(".status-count-badge .status-count-badge__icon").Count);
         });
     }
 }

@@ -91,7 +91,7 @@ internal static class AgentDownloadsExtensions
             // API URL - which also lets us hash the exact payload before streaming it (F-004:
             // X-Content-SHA256 is verified fail-closed by the agent self-update).
             var solutionRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, "..", ".."));
-            var installScript = Path.Combine(solutionRoot, "deploy", "scripts", "install-agent-linux.sh");
+            var installScript = Path.Combine(solutionRoot, "deploy", "agent-installer", "install-agent-linux.sh");
             var hostConfig = HostConfigSourcePath(solutionRoot);
 
             if (prebuiltArchive is not null)
@@ -235,7 +235,7 @@ internal static class AgentDownloadsExtensions
         bool refreshDevelopmentPackages)
     {
         var solutionRootPath = Path.GetFullPath(Path.Combine(backContentRootPath, "..", ".."));
-        var scriptsPath = Path.Combine(solutionRootPath, "deploy", "scripts");
+        var scriptsPath = Path.Combine(solutionRootPath, "deploy", "agent-installer");
 
         // Windows agent: build from local Debug output only if no pre-built archive exists.
         // In Docker/production, the Dockerfile already created the versioned zip - skip rebuilding.
@@ -282,7 +282,7 @@ internal static class AgentDownloadsExtensions
         var linuxBuildPath = Directory.Exists(linuxPublishPath)
             ? linuxPublishPath
             : Path.Combine(solutionRootPath, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0");
-        var linuxInstallScriptPath = Path.Combine(solutionRootPath, "deploy", "scripts", "install-agent-linux.sh");
+        var linuxInstallScriptPath = Path.Combine(solutionRootPath, "deploy", "agent-installer", "install-agent-linux.sh");
         var hostConfigPath = HostConfigSourcePath(solutionRootPath);
 
         // The installer refuses to run without its templates, so an archive without them is no
@@ -463,20 +463,5 @@ internal static class AgentDownloadsExtensions
 
             File.Copy(sourceFilePath, destinationFilePath, true);
         }
-    }
-}
-
-internal static class HostUrlExtensions
-{
-    public static string ResolvePublicApiUrl(IConfiguration config, HttpContext httpContext)
-    {
-        // Configured value wins - deployments should set Aetheus:PublicApiBaseUrl in the
-        // backend appsettings to the canonical API URL (e.g. https://aetheus-api.example.com).
-        var configured = config["Aetheus:PublicApiBaseUrl"];
-        if (!string.IsNullOrWhiteSpace(configured))
-            return configured.TrimEnd('/');
-
-        // Dev fallback only: use the incoming request host.
-        return $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
     }
 }

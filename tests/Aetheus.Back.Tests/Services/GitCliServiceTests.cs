@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Exceptions;
-using Aetheus.Back.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Back.Tests;

@@ -18,19 +18,6 @@ public class GitLightCliService(
 
     // Walking the history (the commits grid, its total, its filters) is its own reader too.
     private readonly GitCommitLogReader _log = new(git, logger, timeProvider);
-    // M-git-2: refs/paths flow from the query string into git argv. Argv is shell-safe (ArgumentList),
-    // but a value starting with '-' can still be parsed by git as an OPTION (argument injection, e.g.
-    // "--output=..."). git-check-ref-format forbids a leading '-' anyway, so rejecting it here is a
-    // free defense-in-depth guard on every user-supplied ref/path before it reaches a git command.
-    internal static void EnsureRefArgsSafe(params string?[] values)
-    {
-        foreach (var v in values)
-        {
-            if (v is not null && v.StartsWith('-'))
-                throw new ArgumentException($"Ref or path may not start with '-': '{v}'.", nameof(values));
-        }
-    }
-
     public async Task InitBareRepoAsync(string diskPath, string defaultBranch = "main", CancellationToken ct = default)
     {
         Directory.CreateDirectory(diskPath);
@@ -129,7 +116,7 @@ public class GitLightCliService(
 
     public async Task CreateBranchAsync(string diskPath, string branchName, string? startRef, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(branchName, startRef);
+        GitArgumentGuard.EnsureRefArgsSafe(branchName, startRef);
         var args = new List<string> { "branch", branchName };
         if (!string.IsNullOrEmpty(startRef)) args.Add(startRef);
         var (exitCode, _, error) = await RunGitAsync(diskPath, args, ct).ConfigureAwait(false);
@@ -144,7 +131,7 @@ public class GitLightCliService(
 
     public async Task CreateTagAsync(string diskPath, string tagName, string? refName, string? message, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(tagName, refName);
+        GitArgumentGuard.EnsureRefArgsSafe(tagName, refName);
         var args = new List<string> { "tag" };
         if (!string.IsNullOrEmpty(message))
         {
@@ -170,7 +157,7 @@ public class GitLightCliService(
 
     public async Task<List<GitLightTreeEntryDto>> GetTreeAsync(string diskPath, string refName, string? path, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(refName, path);
+        GitArgumentGuard.EnsureRefArgsSafe(refName, path);
         var treePath = string.IsNullOrEmpty(path) ? $"{refName}" : $"{refName}:{path}";
         var (exitCode, output, _) = await RunGitAsync(diskPath, ["ls-tree", "-l", treePath], ct).ConfigureAwait(false);
         if (exitCode != 0 || string.IsNullOrWhiteSpace(output)) return [];
@@ -200,7 +187,7 @@ public class GitLightCliService(
 
     public async Task<GitLightBlobDto?> GetBlobAsync(string diskPath, string refName, string path, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(refName, path);
+        GitArgumentGuard.EnsureRefArgsSafe(refName, path);
         // Get size first
         var (exitStat, statOut, _) = await RunGitAsync(diskPath, ["cat-file", "-s", $"{refName}:{path}"], ct).ConfigureAwait(false);
         if (exitStat != 0) return null;
@@ -234,7 +221,7 @@ public class GitLightCliService(
 
     public Task<Stream?> GetBlobStreamAsync(string diskPath, string refName, string path, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(refName, path);
+        GitArgumentGuard.EnsureRefArgsSafe(refName, path);
         var process = StartStreamingGit(diskPath, ["show", $"{refName}:{path}"]);
         if (process is null) return Task.FromResult<Stream?>(null);
 
@@ -246,7 +233,7 @@ public class GitLightCliService(
     public async Task<Stream?> GetArchiveStreamAsync(string diskPath, string refName, string prefix, CancellationToken ct = default)
     {
         // The ref reaches git as argv like every other read route, so it gets the same guard.
-        EnsureRefArgsSafe(refName);
+        GitArgumentGuard.EnsureRefArgsSafe(refName);
         // Resolve the tree first: once the zip streams, the 200 is on the wire and a git failure could
         // only truncate it. An unknown ref is a 404 instead.
         var (exitCode, _, _) = await RunGitAsync(
@@ -281,7 +268,7 @@ public class GitLightCliService(
     {
         // M-git-2: source/target reach `git worktree add <target>` and `git merge <source>` as argv - a
         // leading '-' would be parsed as an option. Guard them like the other ref-taking entry points.
-        EnsureRefArgsSafe(source, target);
+        GitArgumentGuard.EnsureRefArgsSafe(source, target);
         // Use a temporary worktree for the merge
         var worktreeDir = Path.Combine(Path.GetTempPath(), $"aetheus-merge-{Guid.NewGuid():N}");
         try
@@ -456,7 +443,7 @@ public class GitLightCliService(
 
     public async Task<List<GitLightBlameLine>> GetBlameAsync(string diskPath, string refName, string path, CancellationToken ct = default)
     {
-        EnsureRefArgsSafe(refName, path);
+        GitArgumentGuard.EnsureRefArgsSafe(refName, path);
         var (exitCode, output, _) = await RunGitAsync(diskPath, ["blame", "--porcelain", refName, "--", path], ct).ConfigureAwait(false);
         if (exitCode != 0) return [];
 

@@ -5,14 +5,14 @@
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<ProjectDto>(_projects, _totalCount))">
         <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="ProjectDto" Property="Name" Title="@L["Name"]" Filterable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ProjectDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                 <Template Context="p">
                     <a href="/projects/@p.Id/overview" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@p.Name</a>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ProjectDto" Property="Status" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="p">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@(p.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[p.Status.ToString()]</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(p.Status == ProjectStatus.Active ? OmniTone.Success : OmniTone.Neutral)">@L[p.Status.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ProjectDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:d}" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />

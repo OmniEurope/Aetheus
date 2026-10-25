@@ -16,6 +16,7 @@ public sealed class CertbotRenewalCheckNotificationHandler(INotificationService 
         return notifications.SendEventAsync(EventType, new
         {
             domainEvent.ServerId,
+            domainEvent.ServerName,
             domainEvent.CheckedAt
         }, ct);
     }

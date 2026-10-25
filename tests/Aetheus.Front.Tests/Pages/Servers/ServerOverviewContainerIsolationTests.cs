@@ -19,6 +19,8 @@ public sealed class ServerOverviewContainerIsolationTests : BunitContext
         _handler = BunitTestHelper.RegisterServices(this);
         BunitTestHelper.UseImmediateDialogs(this);
         Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
+        // The container isolation tile sits in the runner tab.
+        ServerOverviewTabsTests.OpenTab(this, "runner");
     }
 
     private ImmediateDialogService Dialog => (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();

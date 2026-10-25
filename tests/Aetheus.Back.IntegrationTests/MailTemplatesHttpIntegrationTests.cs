@@ -159,7 +159,7 @@ public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture)
     }
 
     private static string Appearance(OmniThemePreset preset, OmniThemePalette palette) =>
-        $$"""{"theme":"light","preset":"{{preset.Name}}","palette":"{{palette.Name}}","font":"","density":"comfortable","textSize":"5","controlSize":"5","backdropMotion":"on"}""";
+        $$"""{"version":1,"appearance":"Light","preset":"{{preset.Name}}","palette":"{{palette.Name}}","font":"","density":"comfortable","textSize":"5","controlSize":"5","backdropMotion":"on"}""";
 
     private static WebApplicationFactory<Program> WithSender(AetheusWebApplicationFactory factory, IEmailSender sender) =>
         factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services => services.AddSingleton(sender)));
@@ -185,7 +185,7 @@ public sealed class MailTemplatesHttpIntegrationTests(PostgresFixture fixture)
         if (languageJson is not null)
             db.UserPreferences.Add(new UserPreference { UserId = id, Key = "aetheus.language", Value = languageJson, ChangedAt = DateTime.UtcNow });
         if (appearanceJson is not null)
-            db.UserPreferences.Add(new UserPreference { UserId = id, Key = "aetheus.appearance", Value = appearanceJson, ChangedAt = DateTime.UtcNow });
+            db.UserPreferences.Add(new UserPreference { UserId = id, Key = MailRecipientStyle.AppearancePreferenceKey, Value = appearanceJson, ChangedAt = DateTime.UtcNow });
         await db.SaveChangesAsync(ct);
         return (id, username, email);
     }

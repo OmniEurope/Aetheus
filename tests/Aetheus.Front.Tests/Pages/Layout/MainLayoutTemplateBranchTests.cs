@@ -178,20 +178,23 @@ public class MainLayoutTemplateBranchTests : BunitContext
 
         cut.Find(".omni-app-menu__trigger").Click();
         cut.WaitForElement(".omni-app-menu__card");
-        // OE's order: light, dark, system; the pressed one is the user's mode (dark, the Aetheus default, when
-        // nothing is chosen). The menu binds no appearance: it follows OE's OmniAppearanceState.
-        var modes = cut.FindAll(".omni-app-menu__mode");
-        Assert.Equal(["false", "true", "false"], modes.Select(mode => mode.GetAttribute("aria-checked")));
+        // OE 1.9.0 (recette R-20): the mode row is a radio group of three joined icon buttons (light, dark,
+        // system); the one in force is checked (dark, the Aetheus default, when nothing is chosen). The menu
+        // binds no appearance: it follows OE's OmniAppearanceState.
+        const string modes = ".omni-app-menu__mode [role=radiogroup] [role=radio]";
+        Assert.Equal(3, cut.FindAll(modes).Count);
+        Assert.Equal("true", cut.FindAll(modes)[1].GetAttribute("aria-checked"));
 
         // ClickAsync: the handler is async (it stores and repaints), so the dispatch task is awaited.
-        await modes[0].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        // One click on the light button picks light.
+        await cut.FindAll(modes)[0].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
         Assert.Equal(OmniAppearance.Light, Services.GetRequiredService<OmniAppearanceState>().Appearance);
         Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "localStorage.setItem"
             && Equals(i.Arguments[0], StorageKeys.Theme));
         // The theme scope owns the resolved mode instead of the document root.
         Assert.DoesNotContain(JSInterop.Invocations, i => i.Identifier == "Aetheus.setOmniTheme");
-        cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(".omni-app-menu__mode")[0].GetAttribute("aria-checked")));
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.FindAll(modes)[0].GetAttribute("aria-checked")));
     }
 
     // ── _newVersionAvailable = true → version alert banner (lines 133-140) ────

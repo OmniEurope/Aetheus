@@ -13,4 +13,8 @@ public static class TaskFailureCodes
     /// does not declare the capability the operation needs. Raised by the backend, never by an agent,
     /// so the run fails with a reason instead of leaving the task Pending forever.</summary>
     public const string AgentIncompatible = nameof(AgentIncompatible);
+
+    /// <summary>The agent session that held the task was replaced (agent restart, host reboot) before
+    /// the task could finish, and the task is not replayed on its own. Raised by the backend.</summary>
+    public const string AgentSessionReplaced = nameof(AgentSessionReplaced);
 }

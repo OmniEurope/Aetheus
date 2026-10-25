@@ -3,6 +3,7 @@ using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 

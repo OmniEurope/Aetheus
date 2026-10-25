@@ -24,7 +24,6 @@ global using Aetheus.Front.Components.Settings;
 global using Aetheus.Front.Components.Shared;
 global using Aetheus.Front.Components.Shared.Services;
 global using Aetheus.Front.Components.Tasks;
-global using Aetheus.Front.Components.Teamspeak;
 global using Aetheus.Front.Components.Users;
 global using Aetheus.Front.Components.VariableLibraries;
 global using Aetheus.Front.Components.Vaults;

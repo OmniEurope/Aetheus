@@ -10,7 +10,7 @@ namespace Aetheus.Shared.Components.Pipelines;
 /// <item>a required test gate of the candidate's seal set to a non-zero value (its suite found failures),</item>
 /// <item>or the seal itself refusing the result (<c>CANDIDATE_DEPLOYABLE=false</c>).</item>
 /// </list>
-/// The gate list is the seal's own (deploy/scripts/generate-candidate-assurance-contract.mjs, its
+/// The gate list is the seal's own (deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs, its
 /// <c>tests</c> object): every one of them grades F when non-zero. An advisory probe such as
 /// <c>SMOKE_GATE_STATUS</c> (a <c>type: smoke</c> step with the default <c>evidence_gate: advisory</c>)
 /// is deliberately not in it: a finding it records does not refuse anything.
@@ -45,10 +45,15 @@ public static class PipelineControlVerdict
 
     /// <summary>True when one of these outputs refuses the result: a required test gate with findings,
     /// or the seal's explicit refusal.</summary>
-    public static bool RejectsResult(IEnumerable<KeyValuePair<string, string>> outputs)
+    public static bool RejectsResult(IEnumerable<KeyValuePair<string, string>> outputs) => Refusals(outputs).Any();
+
+    /// <summary>The outputs that refuse the result, as published (<c>UNIT_TEST_GATE_STATUS</c> with its
+    /// non-zero value, <c>CANDIDATE_DEPLOYABLE</c> set to false): what a Rejected run is rejected for
+    /// (recette R1-9).</summary>
+    public static IEnumerable<KeyValuePair<string, string>> Refusals(IEnumerable<KeyValuePair<string, string>> outputs)
     {
         ArgumentNullException.ThrowIfNull(outputs);
-        return outputs.Any(variable =>
+        return outputs.Where(variable =>
             (GateVariables.Contains(variable.Key) && IsFindings(variable.Value))
             || (string.Equals(variable.Key, DeployableVerdictVariable, StringComparison.OrdinalIgnoreCase)
                 && bool.TryParse(variable.Value, out var deployable) && !deployable));

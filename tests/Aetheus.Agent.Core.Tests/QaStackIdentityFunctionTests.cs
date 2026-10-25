@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# ports of <c>deploy/scripts/qa/qa-stack-identity.sh</c> and of the <c>ensure-node-runtime.sh</c>
+/// The C# ports of the former <c>qa-stack-identity.sh</c> script and of the <c>ensure-node-runtime.sh</c>
 /// entry point, run through the real executor: the slug, role, database and stack names the QA steps
 /// derived from the project and the run, their refusals, and the pinned Node.js published as
 /// <c>NODE</c>.

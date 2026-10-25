@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniRow Gap="OmniSpacing.XSmall">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(IsActive ? OmniTone.Success : OmniTone.Neutral)">@(IsActive ? L["Active"] : L["Inactive"])</OmniBadge>
+    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(IsActive ? OmniTone.Success : OmniTone.Neutral)">@(IsActive ? L["Active"] : L["Inactive"])</OmniBadge>
     @if (Source == MailRecordSource.Adopted)
     {
         <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["MailRecordAdopted"]</OmniBadge>

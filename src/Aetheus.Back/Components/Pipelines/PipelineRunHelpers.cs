@@ -16,20 +16,18 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public static partial class PipelineRunHelpers
 {
+    internal const string SystemPrepareStage = "System:Prepare";
+    internal const string SystemCleanupStage = PipelineSystemStages.Cleanup;
+    internal const string CancellationRequestedVariable = "__AETHEUS_CANCEL_REQUESTED";
+    // Who cancelled the run and why, kept beside the request marker for the run page.
+    internal const string CancelledByVariable = "__AETHEUS_CANCELLED_BY";
+    internal const string CancellationReasonVariable = "__AETHEUS_CANCEL_REASON";
+
     public const int MaxMatrixAxes = 8;
     public const int MaxMatrixValuesPerAxis = 32;
     public const int MaxMatrixLegs = 256;
 
-    // --- Condition / output-variable regexes ---
-
-    [GeneratedRegex(@"eq\s*\(\s*variables\['(\w+)'\]\s*,\s*'([^']*)'\s*\)", RegexOptions.IgnoreCase)]
-    private static partial Regex EqConditionPattern();
-
-    [GeneratedRegex(@"ne\s*\(\s*variables\['(\w+)'\]\s*,\s*'([^']*)'\s*\)", RegexOptions.IgnoreCase)]
-    private static partial Regex NeConditionPattern();
-
-    [GeneratedRegex(@"contains\s*\(\s*variables\['(\w+)'\]\s*,\s*'([^']*)'\s*\)", RegexOptions.IgnoreCase)]
-    private static partial Regex ContainsConditionPattern();
+    // --- Output-variable regex ---
 
     [GeneratedRegex(@"##aetheus\[setvariable name=(\w+)\](.+)$", RegexOptions.Multiline)]
     private static partial Regex OutputVariablePattern();
@@ -71,7 +69,7 @@ public static partial class PipelineRunHelpers
 
     public static bool HasCancellationRequest(string? additionalVariablesJson) =>
         DeserializeResolvedVariables(additionalVariablesJson)
-            .TryGetValue(PipelineRunService.CancellationRequestedVariable, out var requested)
+            .TryGetValue(PipelineRunHelpers.CancellationRequestedVariable, out var requested)
         && string.Equals(requested, "true", StringComparison.OrdinalIgnoreCase);
 
     public static List<CoverageFileDto> DeserializeCoverageFiles(string? json)
@@ -131,54 +129,11 @@ public static partial class PipelineRunHelpers
 
     // --- P-10: Condition Evaluation ---
 
-    public static bool EvaluateCondition(string? condition, Dictionary<string, string> variables, List<string> completedStages, bool previousStageFailed)
-    {
-        if (string.IsNullOrWhiteSpace(condition)) return true;
-
-        var trimmed = condition.Trim().ToLowerInvariant();
-
-        return trimmed switch
-        {
-            "always()" => true,
-            "succeeded()" => !previousStageFailed,
-            "failed()" => previousStageFailed,
-            "cancelled()" => false,
-            _ => EvaluateVariableCondition(condition, variables)
-        };
-    }
-
-    public static bool EvaluateVariableCondition(string condition, Dictionary<string, string> variables)
-    {
-        var eqMatch = EqConditionPattern().Match(condition);
-        if (eqMatch.Success)
-        {
-            var varName = eqMatch.Groups[1].Value;
-            var expected = eqMatch.Groups[2].Value;
-            return variables.TryGetValue(varName, out var actual) &&
-                   string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var neMatch = NeConditionPattern().Match(condition);
-        if (neMatch.Success)
-        {
-            var varName = neMatch.Groups[1].Value;
-            var expected = neMatch.Groups[2].Value;
-            return !variables.TryGetValue(varName, out var actual) ||
-                   !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
-        }
-
-        var containsMatch = ContainsConditionPattern().Match(condition);
-        if (containsMatch.Success)
-        {
-            var varName = containsMatch.Groups[1].Value;
-            var substring = containsMatch.Groups[2].Value;
-            return variables.TryGetValue(varName, out var actual) &&
-                   actual.Contains(substring, StringComparison.OrdinalIgnoreCase);
-        }
-
-        // Unknown condition format - fail-closed (do not run the stage)
-        return false;
-    }
+    /// <summary>Evaluates a stage or step condition (<see cref="PipelineConditionEvaluator"/>). An
+    /// unsupported condition comes back invalid, never as met or not met: the caller fails the stage or
+    /// step with the verdict's error.</summary>
+    public static PipelineConditionVerdict EvaluateCondition(string? condition, Dictionary<string, string> variables, bool previousStageFailed)
+        => PipelineConditionEvaluator.Evaluate(condition, variables, previousStageFailed);
 
     // --- P-12: Output Variables ---
 
@@ -326,7 +281,7 @@ public static partial class PipelineRunHelpers
         var reasons = new List<string>();
         foreach (var stageName in pendingSteps.Select(s => s.StageName).Distinct())
         {
-            if (stageName is PipelineRunService.SystemPrepareStage or PipelineRunService.SystemCleanupStage) continue;
+            if (stageName is PipelineRunHelpers.SystemPrepareStage or PipelineRunHelpers.SystemCleanupStage) continue;
             var stageDef = YamlParsingHelper.FlattenJobs(definition).FirstOrDefault(s => s.Name == stageName);
             if (stageDef is null)
             {

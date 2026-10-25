@@ -2,19 +2,19 @@
 @namespace Aetheus.Front.Components.Shared
 @* Share the right-aligned dialog action row while callers provide their primary actions; place
    dismissal last so footers follow the same navigation order. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
            Justify="@(SecondaryContent is null ? OmniJustification.End : OmniJustification.Between)"
            Gap="OmniSpacing.Small" Class="dialog-footer">
     @if (SecondaryContent is not null)
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             @SecondaryContent
         </OmniStack>
     }
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         @ChildContent
         <OmniButton Variant="@OmniCancelVariant" OnClick="@(_ => OnCancel.InvokeAsync())">
-            <OmniIcon Name="OmniIconName.Close" /> @(CancelText ?? L["GoBack"])
+            <Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent>@(CancelText ?? L["GoBack"])</ChildContent>
         </OmniButton>
     </OmniStack>
 </OmniStack>

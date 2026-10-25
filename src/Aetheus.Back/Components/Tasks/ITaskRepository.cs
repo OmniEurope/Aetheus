@@ -29,6 +29,9 @@ public interface ITaskRepository
     Task<ServerStatus?> GetServerStatusAsync(int serverId, CancellationToken ct = default);
     /// <summary>Whether an online server has renewed its dedicated task-polling lease.</summary>
     Task<bool> IsServerTaskPollingActiveAsync(int serverId, CancellationToken ct = default);
+    /// <summary>The facts that explain why a queued task of this server is not claimed, or null when the server
+    /// row does not exist. Read once per task entering its hold, for the hold diagnosis.</summary>
+    Task<PendingHoldServerFacts?> GetPendingHoldFactsAsync(int serverId, CancellationToken ct = default);
 
     Task<List<ServerTask>> GetPendingTasksAsync(int serverId, CancellationToken ct = default);
     Task<List<ServerTask>> ClaimPendingTasksAsync(

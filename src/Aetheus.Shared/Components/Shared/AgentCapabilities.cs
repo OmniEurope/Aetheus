@@ -118,8 +118,8 @@ public static class AgentCapabilities
     {
         >= OperationKind.DockerRestartContainer and <= OperationKind.DockerBuildImage => DockerExecution,
         OperationKind.SystemPackageUpgrade => PatchManagement,
-        >= OperationKind.ApacheReload and <= OperationKind.ApacheApplyConfigSet => ApacheManagement,
-        >= OperationKind.CertbotObtain and <= OperationKind.CertbotRenewalCheck => CertbotManagement,
+        >= OperationKind.ApacheReload and <= OperationKind.ApacheDeleteSite => ApacheManagement,
+        >= OperationKind.CertbotObtain and <= OperationKind.CertbotRemoveDomain => CertbotManagement,
         >= OperationKind.RkhunterScan and <= OperationKind.RkhunterPropupd => Analysis,
         >= OperationKind.FirewallAllow and <= OperationKind.FirewallSetEnabled => FirewallManagement,
         _ => null
@@ -137,6 +137,27 @@ public static class AgentCapabilities
         >= OperationKind.PortsentryStart and <= OperationKind.PortsentrySetup => PortsentryManagement,
         >= OperationKind.CronSave and <= OperationKind.CronDelete => CronManagement,
         >= OperationKind.TeamspeakServerQuery and <= OperationKind.TeamspeakGetLogs => TeamspeakManagement,
+        _ => null
+    };
+
+    /// <summary>
+    /// The capability the confirming heartbeat must report once an
+    /// <see cref="Agents.AgentEnableableCapabilities"/> token is installed (R1-5, ADR-055).
+    /// <see cref="Agents.AgentEnableableCapabilities.RkhunterManage"/> reports none, so its grant is not
+    /// confirmed by the heartbeat.
+    /// </summary>
+    public static string? ForEnableableToken(string token) => token switch
+    {
+        Agents.AgentEnableableCapabilities.PatchManage => PatchManagement,
+        Agents.AgentEnableableCapabilities.PackageManage => PackageManagement,
+        Agents.AgentEnableableCapabilities.ServiceEnable => ServiceManagement,
+        Agents.AgentEnableableCapabilities.CronManage => CronManagement,
+        Agents.AgentEnableableCapabilities.ApacheManage => ApacheManagement,
+        Agents.AgentEnableableCapabilities.CertbotManage => CertbotManagement,
+        Agents.AgentEnableableCapabilities.PortsentryManage => PortsentryManagement,
+        Agents.AgentEnableableCapabilities.FirewallManage => FirewallManagement,
+        Agents.AgentEnableableCapabilities.MailSetup => MailManagement,
+        Agents.AgentEnableableCapabilities.TeamspeakSetup => TeamspeakManagement,
         _ => null
     };
 }

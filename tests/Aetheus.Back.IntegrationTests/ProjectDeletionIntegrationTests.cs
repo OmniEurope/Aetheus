@@ -23,7 +23,7 @@ namespace Aetheus.Back.IntegrationTests;
 public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : RelationalTestBase(fixture), IDisposable
 {
     /// <summary>More task log lines than one batch holds, so the batched delete loops.</summary>
-    private const int ManyLogLines = ProjectDeletionRepository.BatchSize + 7;
+    private const int ManyLogLines = ProjectDeletionBatches.BatchSize + 7;
 
     private readonly string _storageRoot = Directory.CreateDirectory(
         Path.Combine(Path.GetTempPath(), "aetheus-project-deletion-" + Guid.NewGuid().ToString("N"))).FullName;

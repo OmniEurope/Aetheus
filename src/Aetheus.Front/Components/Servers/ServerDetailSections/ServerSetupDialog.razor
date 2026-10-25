@@ -14,5 +14,5 @@
             <ValidationMessage For="@(() => _model.MailOnWarning)" />
         }
     </OmniStack>
-    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Monitor" /> <span>@L["Install"]</span></OmniButton></DialogFooter>
+    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Monitor" /></Icon><ChildContent><span>@L["Install"]</span></ChildContent></OmniButton></DialogFooter>
 </OmniTemplateForm>

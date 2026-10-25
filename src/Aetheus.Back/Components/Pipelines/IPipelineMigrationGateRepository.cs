@@ -10,4 +10,18 @@ public interface IPipelineMigrationGateRepository
 
     /// <summary>The run's verdicts, oldest first.</summary>
     Task<List<PipelineMigrationGateVerdict>> ListForRunAsync(int runId, CancellationToken ct = default);
+
+    Task<bool> EnvironmentExistsAsync(int environmentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The latest verdict of a migrate step that ran on one of the environment's servers; null when none did.
+    /// The environment is reached through the server the step ran on, since a run records no environment.
+    /// </summary>
+    Task<PipelineMigrationGateVerdict?> FindLatestForEnvironmentAsync(int environmentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The version of the release the earliest successful run deployed when the gate let
+    /// <paramref name="migrationId"/> run; null when no recorded deployment applied it.
+    /// </summary>
+    Task<string?> FindFirstAppliedReleaseVersionAsync(string migrationId, CancellationToken ct = default);
 }

@@ -1,31 +1,19 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<div class="run-tile-link analysis-run-gate-tile" role="button" tabindex="0"
-     @onclick="@(() => GateRequested.InvokeAsync())"
-     @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await GateRequested.InvokeAsync(); })">
-    <OmniCard Class="run-overview-card">
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-            <OmniIcon Name="OmniIconName.ShieldCheck" Class="run-tile-icon" /> @L["AnalysisGateOverview"]
-        </OmniText>
-        @* Same three slots as the other run tiles, same badge gap as Status. *@
-        <div class="run-tile-main">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                @* The word is dropped when the letter carries the same verdict; see
-                   PipelineRunGatePresentation.ShowsStatusWord for the blocked and error cases. *@
-                @if (PipelineRunGatePresentation.ShowsStatusWord(Gate))
-                {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge>
-                }
-                @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
-                {
-                    <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
-                }
-            </OmniStack>
-        </div>
-        <div class="run-tile-foot">
-            <span class="run-tile-subrow">
-                <span class="run-tile-sublabel">@string.Format(L["AnalysisGateFindingsCount"], Gate.FindingCount)</span>
-            </span>
-        </div>
-    </OmniCard>
-</div>
+@* The tile is itself the link to the Gate tab (OmniFactTile.Href), a direct child of the run's OmniTileGrid. *@
+<OmniFactTile Title="@L["AnalysisGateOverview"]" Href="@Href" Class="analysis-run-gate-tile">
+    <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
+    <ChildContent>
+        @* The word is dropped when the letter carries the same verdict; see
+           PipelineRunGatePresentation.ShowsStatusWord for the blocked and error cases. *@
+        @if (PipelineRunGatePresentation.ShowsStatusWord(Gate))
+        {
+            <OmniFactTileRow Term="@L["Status"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge></ChildContent></OmniFactTileRow>
+        }
+        @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
+        {
+            <OmniFactTileRow Term="@L["GateGrade"]"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" /></ChildContent></OmniFactTileRow>
+        }
+        <OmniFactTileRow Term="@L["AnalysisGateFindings"]"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent>@Gate.FindingCount</ChildContent></OmniFactTileRow>
+    </ChildContent>
+</OmniFactTile>

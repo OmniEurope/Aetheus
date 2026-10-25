@@ -64,3 +64,25 @@ internal sealed class ServerTokenConfiguration : IEntityTypeConfiguration<Server
                .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class ServerModuleConfiguration : IEntityTypeConfiguration<ServerModule>
+{
+    public void Configure(EntityTypeBuilder<ServerModule> builder)
+    {
+        builder.HasOne(e => e.Server)
+               .WithMany(s => s.Modules)
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class ServerAppConfiguration : IEntityTypeConfiguration<ServerApp>
+{
+    public void Configure(EntityTypeBuilder<ServerApp> builder)
+    {
+        builder.HasOne(e => e.Server)
+               .WithMany(s => s.Apps)
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}

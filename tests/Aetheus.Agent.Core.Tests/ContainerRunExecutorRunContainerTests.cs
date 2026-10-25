@@ -77,10 +77,12 @@ public sealed class ContainerRunExecutorRunContainerTests : IDisposable
             timeoutSeconds, log.Write, TestContext.Current.CancellationToken);
 
     [Fact]
-    public async Task AContainerThatPrintsAndSucceeds_StreamsStdoutAsInfoAndStderrAsError_AndExitsZero()
+    public async Task AContainerThatPrintsAndSucceeds_StreamsStdoutAsInfo_AndStderrAsAWarningUnlessItStatesAnError()
     {
         var log = new OutputLog();
-        var program = Program("echo from-stdout\r\necho from-stderr 1>&2", "echo from-stdout\necho from-stderr >&2");
+        var program = Program(
+            "echo from-stdout\r\necho from-stderr 1>&2\r\necho ERROR from-error 1>&2",
+            "echo from-stdout\necho from-stderr >&2\necho ERROR from-error >&2");
 
         var result = await Run(program, log, NewFile("step.sh"));
 
@@ -88,7 +90,11 @@ public sealed class ContainerRunExecutorRunContainerTests : IDisposable
         Assert.False(result.TimedOut);
         Assert.Null(result.FailureCode);
         Assert.True(log.Has("from-stdout", TaskLogLevel.Info));
-        Assert.True(log.Has("from-stderr", TaskLogLevel.Error));
+        // R-36: standard error is a channel, not a verdict. An unmarked line is a Warning that keeps its channel
+        // mark; only the line that states an error is an Error.
+        Assert.True(log.Has("[stderr] from-stderr", TaskLogLevel.Warning));
+        Assert.True(log.Has("ERROR from-error", TaskLogLevel.Error));
+        Assert.False(log.Has("from-stderr", TaskLogLevel.Error));
     }
 
     [Fact]

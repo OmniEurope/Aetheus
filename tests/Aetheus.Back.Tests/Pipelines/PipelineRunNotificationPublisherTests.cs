@@ -205,4 +205,74 @@ public sealed class PipelineRunNotificationPublisherTests
             Arg.Is<string?>(value => value == null),
             Arg.Any<string?>());
     }
+
+    [Fact]
+    public async Task R19_AFailedRun_CarriesItsCauseAndTheFailedStep_InThePayload()
+    {
+        _repo.GetFailedStepsAsync(9, 3, Arg.Any<CancellationToken>()).Returns([
+            new StepFailureProjection("Deploy", "restart", null, 2, "SSH_TIMEOUT", "The host did not answer"),
+            new StepFailureProjection("Deploy", "verify", null, 1, null, null)]);
+        string? payload = null;
+        await _userNotifications.RecordProjectEventAsync(
+            Arg.Any<string>(), Arg.Do<string>(json => payload = json), Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<string?>());
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Failed, TestContext.Current.CancellationToken);
+
+        using var document = System.Text.Json.JsonDocument.Parse(payload!);
+        Assert.Equal("The host did not answer (SSH_TIMEOUT)", document.RootElement.GetProperty("Cause").GetString());
+        Assert.Equal("Deploy / restart, Deploy / verify", document.RootElement.GetProperty("CauseStep").GetString());
+    }
+
+    [Fact]
+    public async Task R19_ARejectedRun_CarriesTheRefusingOutputs_InThePayload()
+    {
+        _repo.GetSuccessfulStepOutputsAsync(9, Arg.Any<CancellationToken>()).Returns([
+            new StepOutputProjection("Qa", "seal", """{"UNIT_TEST_GATE_STATUS":"3","SMOKE_GATE_STATUS":"2","CANDIDATE_DEPLOYABLE":"false"}"""),
+            new StepOutputProjection("Qa", "other", """{"FOO":"bar"}""")]);
+        string? payload = null;
+        await _userNotifications.RecordProjectEventAsync(
+            Arg.Any<string>(), Arg.Do<string>(json => payload = json), Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<string?>());
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Rejected, TestContext.Current.CancellationToken);
+
+        using var document = System.Text.Json.JsonDocument.Parse(payload!);
+        Assert.Equal("UNIT_TEST_GATE_STATUS=3, CANDIDATE_DEPLOYABLE=false", document.RootElement.GetProperty("Cause").GetString());
+        Assert.Equal("Qa / seal", document.RootElement.GetProperty("CauseStep").GetString());
+    }
+
+    [Fact]
+    public async Task R19_ASuccessfulRun_NamesNoCause_AndNeverReadsTheStepsForIt()
+    {
+        string? payload = null;
+        await _userNotifications.RecordProjectEventAsync(
+            Arg.Any<string>(), Arg.Do<string>(json => payload = json), Arg.Any<CancellationToken>(),
+            Arg.Any<string?>(), Arg.Any<string?>());
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Success, TestContext.Current.CancellationToken);
+
+        using var document = System.Text.Json.JsonDocument.Parse(payload!);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, document.RootElement.GetProperty("Cause").ValueKind);
+        await _repo.DidNotReceiveWithAnyArgs().GetFailedStepsAsync(default, default, TestContext.Current.CancellationToken);
+        await _repo.DidNotReceiveWithAnyArgs().GetSuccessfulStepOutputsAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Confirmed R1-9: an on_success follow-up is launched without any trigger step pointing at it, so it
+    /// is its own root: its result is mailed to every recipient, like a run started alone.</summary>
+    [Fact]
+    public async Task R19_AnOnSuccessFollowUp_IsItsOwnRoot_AndIsMailedLikeARootRun()
+    {
+        _repo.GetRootRunReferencesAsync(Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<int, PipelineRunRootReference>());
+
+        await _sut.PublishRunCompletedAsync(9, PipelineStatus.Failed, TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineFailed,
+            Arg.Is<string>(json => json.Contains("\"IsChildRun\":false") && json.Contains("\"RootRunId\":9")),
+            Arg.Any<CancellationToken>(),
+            null,
+            PipelineRunNotificationPublisher.EmailOnceMarker(9));
+    }
 }

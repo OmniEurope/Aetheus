@@ -153,6 +153,34 @@ public sealed class ServerHeartbeatDockerRiskTests
     }
 
     [Fact]
+    public async Task R33_RunTestcontainersReaper_PrivilegedAndSocketAreExpected_ButIsAlertedOnceNoLongerAttributed()
+    {
+        const string ryuk = "testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f";
+        var reaperRisks = DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket;
+        await HeartbeatAsync(Container(ryuk, reaperRisks, role: AetheusContainerRole.TestcontainersReaper));
+        Assert.Empty(RiskAlerts());
+
+        // The agent stops attributing it once its run is over: the same container is then a privileged one.
+        await HeartbeatAsync(Container(ryuk, reaperRisks));
+
+        var alert = Assert.Single(RiskAlerts());
+        Assert.Equal("Critical", alert.Severity);
+        Assert.Contains("privileged", alert.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task R33_RunTestcontainersReaper_HostPidBeyondItsRole_IsAlerted()
+    {
+        await HeartbeatAsync(Container("testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f",
+            DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket | DockerContainerRisks.HostPid,
+            role: AetheusContainerRole.TestcontainersReaper));
+
+        var alert = Assert.Single(RiskAlerts());
+        Assert.Contains("host PID namespace", alert.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("privileged", alert.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DangerousCapabilities_SysAdminIsCritical_NetAdminAloneIsAWarning()
     {
         await HeartbeatAsync(

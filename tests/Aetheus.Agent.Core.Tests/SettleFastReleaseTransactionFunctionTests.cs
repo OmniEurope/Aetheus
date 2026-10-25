@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of the leftover-transaction guard of <c>deploy/scripts/release-fast-deploy.sh</c>, run
+/// The C# port of the leftover-transaction guard of the former <c>release-fast-deploy.sh</c> script, run
 /// through the real executor on a real state directory: the same decisions
 /// <c>DeploymentSafetyAuditTests.FastRelease_ClosesACommittedButUnclosedTransactionInsteadOfRefusingForever</c>
 /// pins in the script (a committed transaction that went live is closed, any other leftover refused).

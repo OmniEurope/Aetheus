@@ -2,6 +2,7 @@
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Plugins;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

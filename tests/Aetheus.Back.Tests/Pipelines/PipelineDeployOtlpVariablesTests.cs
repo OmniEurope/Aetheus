@@ -50,7 +50,7 @@ public class PipelineDeployOtlpVariablesTests
             });
         var variables = new Dictionary<string, string> { ["AETHEUS_DEPLOY_KIND"] = "binary" };
 
-        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, variables, TestContext.Current.CancellationToken);
+        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             new Dictionary<string, string>
@@ -67,7 +67,7 @@ public class PipelineDeployOtlpVariablesTests
     {
         var variables = new Dictionary<string, string>();
 
-        await Factory(ingestBaseUrl: " ").AddDeployOtlpVariablesAsync(RunId, variables, TestContext.Current.CancellationToken);
+        await Factory(ingestBaseUrl: " ").AddDeployOtlpVariablesAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
         Assert.Empty(variables);
         await _repo.DidNotReceive().GetPipelineRunWithPipelineAsync(Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -79,7 +79,7 @@ public class PipelineDeployOtlpVariablesTests
         RunOfProject(projectId: null);
         var variables = new Dictionary<string, string>();
 
-        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, variables, TestContext.Current.CancellationToken);
+        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
         Assert.Empty(variables);
         await _deployEnv.DidNotReceive().GetDeployEnvAsync(Arg.Any<int>(), Arg.Any<int?>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
@@ -93,7 +93,7 @@ public class PipelineDeployOtlpVariablesTests
             .ThrowsAsync(new InvalidOperationException("ingest key store unavailable"));
         var variables = new Dictionary<string, string>();
 
-        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, variables, TestContext.Current.CancellationToken);
+        await Factory("https://ingest.local").AddDeployOtlpVariablesAsync(RunId, null, variables, TestContext.Current.CancellationToken);
 
         Assert.Empty(variables);
         Assert.Contains(_logger.ReceivedCalls(), call =>

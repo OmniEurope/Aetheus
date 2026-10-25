@@ -1,23 +1,26 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
+@using Microsoft.AspNetCore.Components.Sections
 
 <AgentOfflineNotice Server="@Server" />
+
+@* Recette R-29: the page's main action sits in the page header, on the title line. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenCreateDialog())" Disabled="@(AgentOffline || !Cron.IsInstalled || _actionRunning)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+</SectionContent>
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
     <OmniBadge Fill="OmniFill.Solid" Tone="@(Cron.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Cron.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@string.Format(L["CronJobCount"], Cron.Jobs.Count)</OmniBadge>
-    <div class="blade-content-spacer"></div>
-
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenCreateDialog())" Disabled="@(AgentOffline || !Cron.IsInstalled || _actionRunning)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
 </OmniRow>
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Cron" />
 
 <OmniTabs>
         <OmniTabsItem Title="@L["CronJobs"]">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 <CountBadge Value="@FilteredJobs.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterCronJobs"]" @bind-Value="_jobSearch" Placeholder="@L["FilterCronJobs"]" />
             </OmniStack>
@@ -31,7 +34,7 @@
                             <code>@j.Schedule</code>
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="CronJobDto" Property="Command" Title="@L["Command"]" Filterable="true">
+                    <OmniDataGridColumn TItem="CronJobDto" Property="Command" Truncate="true" Title="@L["Command"]" Filterable="true">
                         <Template Context="j">
                             <code>@j.Command</code>
                         </Template>
@@ -40,10 +43,10 @@
                     <OmniDataGridColumn TItem="CronJobDto" Title="@L["Actions"]" Width="10rem" Sortable="false" Filterable="false">
                         <Template Context="j">
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialog(j))" title="@L["Edit"]" Disabled="@(AgentOffline || j.IsSystem)"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialog(j))" title="@L["Edit"]" Disabled="@(AgentOffline || j.IsSystem)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DeleteCronJob"], string.Format(L["ConfirmDeleteCronJob"], j.Id),
-                                        () => DeleteJobAsync(j), L["Delete"].Value))" title="@L["Delete"]" Disabled="@(AgentOffline || j.IsSystem)"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                        () => DeleteJobAsync(j), L["Delete"].Value))" title="@L["Delete"]" Disabled="@(AgentOffline || j.IsSystem)"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             </OmniStack>
                             </span>
                         </Template>

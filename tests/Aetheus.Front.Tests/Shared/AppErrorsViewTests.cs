@@ -182,6 +182,44 @@ public sealed class AppErrorsViewTests : BunitContext
     }
 
     [Fact]
+    public void R39_DetailDialog_CopyAsMarkdown_PutsEveryFieldOnTheClipboard_AndOnlyThere()
+    {
+        BunitTestHelper.RegisterServices(this);
+        var clipboard = JSInterop.SetupModule("./_content/OmniEurope.Blazor/omniInterop.js");
+        clipboard.Setup<bool>("copyText", _ => true).SetResult(true);
+        var cut = Render<AppErrorDetailDialog>(parameters => parameters.Add(component => component.Error, new AppErrorEventDto
+        {
+            Id = 4,
+            Fingerprint = "fp-123",
+            ExceptionType = "InvalidOperationException",
+            Message = "boom happened with `code`",
+            TopFrame = "at Toto.Run() in Toto.cs:line 12",
+            OccurrenceCount = 3,
+            FirstSeenAt = new DateTime(2026, 9, 20, 8, 0, 0, DateTimeKind.Utc),
+            LastSeenAt = new DateTime(2026, 9, 25, 9, 30, 0, DateTimeKind.Utc)
+        }));
+
+        // A secondary action of the footer, named by the localized label (the keys are echoed in tests).
+        var copy = cut.Find(".dialog-footer .app-error-detail-copy");
+        Assert.Contains("CopyAsMarkdown", copy.TextContent, StringComparison.Ordinal);
+        Assert.Contains("omni-button--secondary", copy.ClassList);
+
+        copy.Click();
+
+        var markdown = (string)Assert.Single(clipboard.Invocations["copyText"]).Arguments[0]!;
+        Assert.Contains("InvalidOperationException", markdown, StringComparison.Ordinal);
+        Assert.Contains("**Occurrences**: `3`", markdown, StringComparison.Ordinal);
+        Assert.Contains("2026-09-20T08:00:00.000Z", markdown, StringComparison.Ordinal);
+        Assert.Contains("2026-09-25T09:30:00.000Z", markdown, StringComparison.Ordinal);
+        Assert.Contains("fp-123", markdown, StringComparison.Ordinal);
+        Assert.Contains("boom happened with `code`", markdown, StringComparison.Ordinal);
+        Assert.Contains("at Toto.Run() in Toto.cs:line 12", markdown, StringComparison.Ordinal);
+        // The message holds a backtick: it sits in a fence nothing inside it can close, and the stack frame in its own block.
+        Assert.Contains("```\nboom happened with `code`\n```", markdown.Replace("\r\n", "\n"), StringComparison.Ordinal);
+        Assert.Contains("### ErrorTopFrame", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void R361_DetailDialog_WithoutTopFrame_SaysSoInsteadOfAnEmptyTrace()
     {
         BunitTestHelper.RegisterServices(this);

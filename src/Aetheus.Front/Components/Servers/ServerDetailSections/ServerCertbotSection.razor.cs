@@ -45,6 +45,48 @@ public partial class ServerCertbotSection : ServerActionSectionBase
         ? string.Format(L[succeeded ? "CertbotRenewalCheckPassed" : "CertbotRenewalCheckFailed"], checkedAt.ToString("g"))
         : L["CertbotRenewalCheckNever"];
 
+    // Recette R1-7: the raw output stands in for the reason when no certificate was named, or when one was
+    // named without a reason.
+    private bool ShowOutputTail => Certbot.RenewalCheckOutputTail.Count > 0
+        && (Certbot.RenewalCheckFailures.Count == 0 || Certbot.RenewalCheckFailures.Any(failure => failure.Reason.Length == 0));
+
+    private string OutputTailText => string.Join('\n', Certbot.RenewalCheckOutputTail);
+
+    /// <summary>The condition the helper writes before a proxying rule it can protect; the fix the box shows.</summary>
+    internal const string AcmeChallengeCondition = @"RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/";
+
+    /// <summary>One Apache file and the lines of the proxying rules the helper reported in it.</summary>
+    internal sealed record AcmeProxyRuleFile(string Path, IReadOnlyList<string> Lines);
+
+    // Recette R-11: the helper records "<file>:<line>" per rule; the box says it once per file.
+    private IReadOnlyList<AcmeProxyRuleFile> AcmeProxyRuleFiles => GroupAcmeProxyRules(Certbot.AcmeProxyRules);
+
+    internal static IReadOnlyList<AcmeProxyRuleFile> GroupAcmeProxyRules(IEnumerable<string> rules) =>
+    [
+        .. rules.Select(SplitRule)
+            .GroupBy(rule => rule.Path, StringComparer.Ordinal)
+            .Select(group => new AcmeProxyRuleFile(group.Key,
+                [.. group.Select(rule => rule.Line).OfType<string>().Distinct(StringComparer.Ordinal)]))
+    ];
+
+    private static (string Path, string? Line) SplitRule(string rule)
+    {
+        var colon = rule.LastIndexOf(':');
+        return colon > 0 && colon < rule.Length - 1 && rule[(colon + 1)..].All(char.IsAsciiDigit)
+            ? (rule[..colon], rule[(colon + 1)..])
+            : (rule, null);
+    }
+
+    private string AcmeProxyRuleLine(AcmeProxyRuleFile file) => file.Lines.Count == 0
+        ? string.Format(L["CertbotAcmeProxyRuleFile"], file.Path)
+        : string.Format(L[file.Lines.Count == 1 ? "CertbotAcmeProxyRuleFileLine" : "CertbotAcmeProxyRuleFileLines"],
+            file.Path, string.Join(", ", file.Lines));
+
+    // A helper from before version 6 still reports the rules reserved to websocket upgrades.
+    private string AcmeProxyRulesNote => Certbot.HelperVersion < CertbotHelperVersion.Current
+        ? L["CertbotAcmeProxyRulesNoteOutdated"]
+        : L["CertbotAcmeProxyRulesNote"];
+
     private static OmniTone ConventionStyle(CertbotCertificateDto cert) => cert.RenewalConvention switch
     {
         CertbotRenewalConvention.Conforming => OmniTone.Success,
@@ -64,26 +106,38 @@ public partial class ServerCertbotSection : ServerActionSectionBase
     private static string ConventionDetail(CertbotCertificateDto cert) =>
         string.IsNullOrEmpty(cert.WebrootPath) ? cert.Authenticator : $"{cert.Authenticator}: {cert.WebrootPath}";
 
-    private async Task ExecuteActionAsync(CertbotAction action, string? certName = null)
+    private async Task ExecuteActionAsync(CertbotAction action, string? certName = null, string? domainName = null)
     {
         await ExecuteServerActionAsync(() => Api.ServerTools.ExecuteCertbotActionAsync(
             ServerId, new CertbotActionRequest
             {
                 Action = action,
-                CertificateName = certName
-            }), FollowTitle(action, certName));
+                CertificateName = certName,
+                DomainName = domainName
+            }), FollowTitle(action, certName, domainName));
     }
 
     // Recette R3-37: what the follower calls the task this action queues.
-    private string FollowTitle(CertbotAction action, string? certName) => action switch
+    private string FollowTitle(CertbotAction action, string? certName, string? domainName) => action switch
     {
         CertbotAction.Normalize => L["CertbotNormalize"],
         CertbotAction.RenewalCheck => L["CertbotRenewalCheck"],
         CertbotAction.RenewAll => L["RenewAllCerts"],
         CertbotAction.Renew => $"{L["Renew"]} {certName}",
         CertbotAction.RevokeAndDelete => $"{L["Revoke"]} {certName}",
+        CertbotAction.RemoveDomain => string.Format(L["CertbotRemoveDomainFollow"], domainName, certName),
         _ => L[action.ToString()]
     };
+
+    /// <summary>Recette R-12: a certificate can drop one of its names, never its last one (the helper refuses it
+    /// too); certbot reissues it in place, nothing is deleted.</summary>
+    internal static IReadOnlyList<string> RemovableDomains(CertbotCertificateDto cert) =>
+        cert.Domains.Count < 2 ? [] : cert.Domains;
+
+    private Task ConfirmRemoveDomain(CertbotCertificateDto cert, string domain) => ShowDestructiveConfirm(
+        L["CertbotRemoveDomainTitle"], string.Format(L["CertbotRemoveDomainConfirm"], domain, cert.Name),
+        () => ExecuteActionAsync(CertbotAction.RemoveDomain, cert.Name, domain), L["CertbotRemoveDomainVerb"].Value,
+        OmniIconName.Delete);
 
     private async Task OpenCreateDialog()
     {

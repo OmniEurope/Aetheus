@@ -34,6 +34,13 @@ public sealed class AlertCooldownReservationIntegrationTests(PostgresFixture fix
         await notifications.Received(1).SendEventAsync("alert.triggered", Arg.Any<object>(), Arg.Any<CancellationToken>());
         await using var verify = NewContext();
         Assert.NotNull(await verify.AlertRules.Where(rule => rule.Id == ruleId).Select(rule => rule.LastTriggeredAt).SingleAsync(ct));
+        // R-52, on real PostgreSQL: the alert that was emitted once is stored once, and its identifier is the one in the event.
+        var stored = await verify.AlertOccurrences.SingleAsync(ct);
+        Assert.Equal(ruleId, stored.AlertRuleId);
+        await notifications.Received(1).SendEventAsync(
+            "alert.triggered",
+            Arg.Is<object>(payload => System.Text.Json.JsonSerializer.Serialize(payload).Contains($"\"AlertId\":{stored.Id},", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
     }
 
     private AlertEvaluatorService NewEvaluator(INotificationService notifications)
@@ -41,6 +48,8 @@ public sealed class AlertCooldownReservationIntegrationTests(PostgresFixture fix
         var services = new ServiceCollection()
             .AddScoped(_ => NewContext())
             .AddScoped<IAlertRepository>(provider => new AlertRepository(provider.GetRequiredService<AppDbContext>(), TimeProvider.System))
+            .AddScoped<IAlertOccurrenceRepository>(provider => new AlertOccurrenceRepository(provider.GetRequiredService<AppDbContext>()))
+            .AddScoped<IAlertOccurrenceService>(provider => new AlertOccurrenceService(provider.GetRequiredService<IAlertOccurrenceRepository>(), Microsoft.Extensions.Logging.Abstractions.NullLogger<AlertOccurrenceService>.Instance))
             .AddSingleton(notifications)
             .BuildServiceProvider();
         return new AlertEvaluatorService(

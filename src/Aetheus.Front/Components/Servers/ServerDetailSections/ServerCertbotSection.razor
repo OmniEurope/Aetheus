@@ -1,8 +1,21 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
+@using Microsoft.AspNetCore.Components.Sections
 
 <AgentOfflineNotice Server="@Server" />
+
+@* Recette R-29: the page's main action sits in the page header, on the title line, with its menu beside it.
+   R3-41: Create is the one visible action; the maintenance actions sit in the "More actions" menu with the
+   conditions their buttons had. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["NewCertificate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    <OmniOverflowMenu Label="@L["MoreActions"]">
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotNormalizeTitle"]" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))"><Icon><OmniIcon Name="OmniIconName.Swap" /></Icon><ChildContent>@L["CertbotNormalize"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotRenewalCheckTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRenewalCheck"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["RenewAll"]" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["RenewAll"]</ChildContent></OmniMenuItem>
+    </OmniOverflowMenu>
+</SectionContent>
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -16,16 +29,6 @@
     {
         <OmniBadge Fill="OmniFill.Solid" Tone="@RenewalCheckStyle" data-testid="certbot-renewal-check">@RenewalCheckText</OmniBadge>
     }
-    <div class="blade-content-spacer"></div>
-
-    @* Recette R3-41: Create is the zone's one visible action; the maintenance actions sit in the
-       "More actions" menu with the conditions their buttons had. *@
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["NewCertificate"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    <OmniOverflowMenu Label="@L["MoreActions"]">
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotNormalizeTitle"]" OnClick="@(() => ShowConfirm(L["CertbotNormalize"], L["ConfirmCertbotNormalize"], () => ExecuteActionAsync(CertbotAction.Normalize), L["CertbotNormalize"]))"><Icon><OmniIcon Name="OmniIconName.Swap" /></Icon><ChildContent>@L["CertbotNormalize"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["CertbotRenewalCheckTitle"]" OnClick="@(() => ExecuteActionAsync(CertbotAction.RenewalCheck))"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["CertbotRenewalCheck"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Disabled="@(AgentOffline || !Certbot.IsInstalled || _actionRunning)" title="@L["RenewAll"]" OnClick="@(() => ShowConfirm(L["RenewAllCerts"], L["ConfirmRenewAllCerts"], () => ExecuteActionAsync(CertbotAction.RenewAll), L["Renew"]))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["RenewAll"]</ChildContent></OmniMenuItem>
-    </OmniOverflowMenu>
 </OmniRow>
 
 @* A server whose certbot helper is older than this release (or has no version marker) is told to update the agent. *@
@@ -34,23 +37,47 @@
     <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-lg certbot-helper-outdated">@string.Format(L["CertbotHelperOutdated"], Certbot.HelperVersion, CertbotHelperVersion.Current)</OmniAlert>
 }
 
+@* Recette R-2: a proxying RewriteRule the helper could not protect hands the ACME challenge to the application.
+   Recette R-11: said in plain words, one line per file with its verdict, then the fix. Rules reserved to
+   websocket upgrades are no longer reported (no effect on the challenge); an outdated helper may still list them. *@
+@if (Certbot is { IsInstalled: true } && Certbot.AcmeProxyRules.Count > 0)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["CertbotAcmeProxyRulesTitle"]" Class="omni-u-mb-lg certbot-acme-proxy-rules">
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["CertbotAcmeProxyRulesBody"]</OmniText>
+            <OmniStack Gap="OmniSpacing.XSmall" Class="certbot-acme-proxy-rules-list">
+                @foreach (var file in AcmeProxyRuleFiles)
+                {
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 certbot-acme-proxy-rule" title="@file.Path">@AcmeProxyRuleLine(file)</OmniText>
+                }
+            </OmniStack>
+            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["CertbotAcmeProxyRulesFix"]</OmniText>
+            <OmniCodeBlock Class="certbot-acme-proxy-rules-fix" Code="@AcmeChallengeCondition" Wrap="true" />
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@AcmeProxyRulesNote</OmniText>
+        </OmniStack>
+    </OmniAlert>
+}
+
 @* Recette R3-56: a failed rehearsal names each certificate that failed it and certbot's reason. *@
 @if (Certbot is { IsInstalled: true, RenewalCheckSucceeded: false })
 {
     <OmniAlert Severity="OmniSeverity.Danger" Title="@L["CertbotRenewalCheckFailuresTitle"]" Class="omni-u-mb-lg certbot-renewal-failures">
-        @if (Certbot.RenewalCheckFailures.Count == 0)
-        {
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 certbot-renewal-failures-unnamed">@L["CertbotRenewalCheckNoReason"]</OmniText>
-        }
-        else
-        {
-            <OmniStack Gap="OmniSpacing.XSmall">
-                @foreach (var failure in Certbot.RenewalCheckFailures)
-                {
-                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 certbot-renewal-failure">@string.Format(L["CertbotRenewalFailureLine"], failure.Name, failure.Reason.Length > 0 ? failure.Reason : L["CertbotRenewalFailureNoReason"].Value)</OmniText>
-                }
-            </OmniStack>
-        }
+        @* Recette R1-7: a failed check never ends on "no reason": without a named certificate (or a reason
+           for one), the last lines certbot printed are shown, and only a helper that recorded none says so. *@
+        <OmniStack Gap="OmniSpacing.Small">
+            @if (Certbot.RenewalCheckFailures.Count == 0 && Certbot.RenewalCheckOutputTail.Count == 0)
+            {
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 certbot-renewal-failures-unnamed">@L["CertbotRenewalCheckNoReason"]</OmniText>
+            }
+            @foreach (var failure in Certbot.RenewalCheckFailures)
+            {
+                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 certbot-renewal-failure">@string.Format(L["CertbotRenewalFailureLine"], failure.Name, failure.Reason.Length > 0 ? failure.Reason : L["CertbotRenewalFailureNoReason"].Value)</OmniText>
+            }
+            @if (ShowOutputTail)
+            {
+                <OmniCodeBlock Class="certbot-renewal-output" Title="@L["CertbotRenewalOutputTitle"]" Code="@OutputTailText" Wrap="true" />
+            }
+        </OmniStack>
     </OmniAlert>
 }
 
@@ -60,13 +87,13 @@
     <Tabs>
         @* --- Certificates tab --- *@
         <OmniTabsItem Key="certificates" Title="@L["Certificates"]">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 <CountBadge Value="@FilteredCertificates.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterCertificates"]" @bind-Value="_certSearch" Placeholder="@L["FilterCertificates"]" />
             </OmniStack>
             <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["Certificates"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@FilteredCertificates" TItem="CertbotCertificateDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="CertbotCertificateDto" Property="Name" Title="@L["CertName"]" Width="12.5rem" Filterable="true" />
+                    <OmniDataGridColumn Frozen="true" TItem="CertbotCertificateDto" Property="Name" Title="@L["CertName"]" Filterable="true" />
                     <OmniDataGridColumn TItem="CertbotCertificateDto" Title="@L["Domains"]" Sortable="false">
                         <Template Context="c">
                             @string.Join(", ", c.Domains)
@@ -74,7 +101,7 @@
                     </OmniDataGridColumn>
                     <OmniDataGridColumn TItem="CertbotCertificateDto" Property="ExpiryDate" Title="@L["Expiry"]" Width="11.25rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange">
                         <Template Context="c">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@c.ExpiryDate.ToString("d")</OmniText>
                                 @if (IsExpiringSoon(c))
                                 {
@@ -90,9 +117,14 @@
                     </OmniDataGridColumn>
                     <OmniDataGridColumn TItem="CertbotCertificateDto" Title="@L["Actions"]" Width="9rem" Sortable="false">
                         <Template Context="c">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.Renew, c.Name))" title="@L["Renew"]" Label="@L["Renew"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(CertbotAction.Renew, c.Name))" title="@L["Renew"]" Label="@L["Renew"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon></OmniButton>
                                 <OmniOverflowMenu Label="@L["MoreActions"]">
+                                    @* Recette R-12: reissue the certificate without one of its names (never its last). *@
+                                    @foreach (var domain in RemovableDomains(c))
+                                    {
+                                        <OmniMenuItem Disabled="@AgentOffline" Class="certbot-remove-domain" OnClick="@(() => ConfirmRemoveDomain(c, domain))"><Icon><OmniIcon Name="OmniIconName.Remove" /></Icon><ChildContent>@string.Format(L["CertbotRemoveDomainItem"], domain)</ChildContent></OmniMenuItem>
+                                    }
                                     <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ShowDestructiveConfirm(L["RevokeCert"], string.Format(L["ConfirmRevokeCert"], c.Name),
                                             () => ExecuteActionAsync(CertbotAction.RevokeAndDelete, c.Name), L["Revoke"].Value))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Revoke"]</ChildContent></OmniMenuItem>
                                 </OmniOverflowMenu>

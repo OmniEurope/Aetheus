@@ -7,7 +7,7 @@ using Aetheus.Tests.Shared;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/generate-artifact-provenance.mjs</c>, with the case of its
+/// The C# port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-artifact-provenance.mjs</c>, with the case of its
 /// <c>artifact-provenance.test.mjs</c>. The expected files are what the script wrote for the same
 /// workspace (Node.js 24, captured when the function replaced it), with the built-in Aetheus categories
 /// and with a project's own map (an integer key, which <c>Object.entries</c> puts first, and a missing

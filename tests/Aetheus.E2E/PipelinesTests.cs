@@ -137,6 +137,7 @@ public class PipelinesTests : E2ETestBase
                 new System.Text.RegularExpressions.Regex(
                     "The displayed gate is incomplete and must not be treated as passed")))
             .ToBeVisibleAsync(new() { Timeout = 10000 });
-        await Expect(Page.Locator(".analysis-run-gate-grade")).ToHaveCountAsync(0);
+        // R1-38: the Gate grade is the first row of the grade block; an incomplete gate shows no grade.
+        await Expect(Page.Locator("[data-testid='grade-row-gate']")).ToHaveCountAsync(0);
     }
 }

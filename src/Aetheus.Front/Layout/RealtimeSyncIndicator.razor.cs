@@ -36,9 +36,15 @@ public partial class RealtimeSyncIndicator : IAsyncDisposable
     public void OnPageVisibilityChanged(bool visible)
     {
         if (visible)
+        {
+            HubFactory.PageVisibility.Visible();
             Status.PageVisible();
+        }
         else
+        {
+            HubFactory.PageVisibility.Hidden();
             Status.PageHidden();
+        }
     }
 
     private void OnStatusChanged() => _ = InvokeAsync(StateHasChanged);

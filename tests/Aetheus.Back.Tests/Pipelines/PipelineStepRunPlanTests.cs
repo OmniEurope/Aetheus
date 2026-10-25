@@ -44,9 +44,9 @@ public sealed class PipelineStepRunPlanTests
             rows.Select(r => r.StepName));
         Assert.Equal(Enumerable.Range(0, rows.Count), rows.Select(r => r.Order));
         Assert.All(rows, r => Assert.Equal(7, r.PipelineRunId));
-        Assert.Equal(PipelineRunService.SystemPrepareStage, rows[0].StageName);
+        Assert.Equal(PipelineRunHelpers.SystemPrepareStage, rows[0].StageName);
         Assert.True(rows[0].IsSystem);
-        Assert.Equal(PipelineRunService.SystemCleanupStage, rows[^1].StageName);
+        Assert.Equal(PipelineRunHelpers.SystemCleanupStage, rows[^1].StageName);
         Assert.True(rows[^1].IsSystem);
         Assert.True(rows[^1].ContinueOnError);
 

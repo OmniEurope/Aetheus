@@ -37,8 +37,12 @@ public sealed class GridExportCoverageAuditTests
             "Useful for AI: the project's open findings, to have them triaged or fixed.",
         [Key("Components/Pipelines/PipelineRunGateFindings.razor", "AnalysisFindingDto")] =
             "Useful for AI: the findings that blocked a run's quality gate, to have them fixed.",
-        [Key("Components/Shared/AppLogsView.razor", "AppLogEntryDto")] =
+        [Key("Components/Logs/AppLogsView.razor", "AppLogEntryDto")] =
             "Useful for AI: a monitored application's logs, to diagnose an incident.",
+        [Key("Components/Projects/ProjectDetailSections/ProjectLogsSection.razor", "TaskLogDto")] =
+            "Useful for AI: a project's task logs, to diagnose a failed run (R-34, user decision of 2026-10-22).",
+        [Key("Components/Servers/ServerDetailSections/ServerLogsSection.razor", "TaskLogDto")] =
+            "Useful for AI: a server's logs, to diagnose a host (R-34, user decision of 2026-10-22).",
         [Key("Components/Shared/AppErrorsView.razor", "AppErrorEventDto")] =
             "Useful for AI: a monitored application's error groups with their frames, to diagnose them.",
         [Key("Components/Logs/SystemLogs.razor", "SystemLogEntryDto")] =

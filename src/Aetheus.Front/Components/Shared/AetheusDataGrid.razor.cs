@@ -41,6 +41,15 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     [Parameter] public Action<OmniDataGridRowRenderArgs<TItem>>? RowRender { get; set; }
     [Parameter] public OmniDataGridRowMode EditMode { get; set; } = OmniDataGridRowMode.Single;
     [Parameter] public bool AllowAltering { get; set; }
+
+    /// <summary>What puts a row in edit mode (OE <c>OmniDataGrid.EditTrigger</c>). <c>Cell</c>: a single click
+    /// or key anywhere in a cell whose column has an <c>EditTemplate</c> edits the row, the focus landing in that
+    /// cell (recette R-75).</summary>
+    [Parameter] public OmniDataGridEditTrigger EditTrigger { get; set; } = OmniDataGridEditTrigger.Action;
+
+    /// <summary>Raised when a row enters edit mode, whichever way (a cell, <see cref="EditRow"/>), before its
+    /// editors render: the page loads its edit buffers here.</summary>
+    [Parameter] public EventCallback<TItem> RowEdit { get; set; }
     [Parameter] public bool FullHeight { get; set; }
 
     /// <summary>Identify rows by their DTO Id so live refresh can highlight newly received

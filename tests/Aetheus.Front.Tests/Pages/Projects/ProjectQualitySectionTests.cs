@@ -438,7 +438,7 @@ public class ProjectQualitySectionTests : BunitContext
             });
         var navigation = Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
-        var menu = new Aetheus.Front.Layout.ProjectSectionMenu();
+        var menu = new Aetheus.Front.Components.Shared.ProjectSectionMenu();
         var cut = Render<ProjectQualitySection>(parameters => parameters
             .Add(component => component.ProjectId, projectId)
             .AddCascadingValue(menu));
@@ -476,8 +476,8 @@ public class ProjectQualitySectionTests : BunitContext
     {
         _handler.SetJsonResponse("api/pipelines/projects/7/quality-trend", new ProjectQualityTrendDto());
         MockAnalysisEndpoints(7);
-        var menu = new Aetheus.Front.Layout.ProjectSectionMenu();
-        menu.Set([new Aetheus.Front.Layout.ProjectSectionMenuAction("download", "stale", null, false, () => Task.CompletedTask)]);
+        var menu = new Aetheus.Front.Components.Shared.ProjectSectionMenu();
+        menu.Set([new Aetheus.Front.Components.Shared.ProjectSectionMenuAction("download", "stale", null, false, () => Task.CompletedTask)]);
 
         var cut = Render<ProjectQualitySection>(parameters => parameters
             .Add(component => component.ProjectId, 7)
@@ -504,14 +504,14 @@ public class ProjectQualitySectionTests : BunitContext
         var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 8));
 
         // Each figure is a tile linking to its detail page.
-        var navigation = Services.GetRequiredService<NavigationManager>();
+        // (OmniStatTile.Href: the tile root is itself the link, so it carries the address.)
         cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile").Count));
         foreach (var (value, target) in new[] { ("773f2080", "/git-repositories/commits/41"), ("#2464", "/pipelines/runs/2464"), ("1.4.2", "/releases/12") })
         {
-            cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
-                .Single(tile => tile.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim() == value)
-                .Click();
-            Assert.EndsWith(target, navigation.Uri, StringComparison.Ordinal);
+            var tile = cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
+                .Single(candidate => candidate.QuerySelector(".omni-stat-tile__value")!.TextContent.Trim() == value);
+            Assert.Equal("a", tile.TagName.ToLowerInvariant());
+            Assert.Equal(target, tile.GetAttribute("href"));
         }
     }
 

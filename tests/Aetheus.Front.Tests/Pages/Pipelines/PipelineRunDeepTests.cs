@@ -99,6 +99,27 @@ public class PipelineRunDeepTests : BunitContext
         Assert.Contains("no online server matches agent", cut.Markup);
     }
 
+    [Theory]
+    [InlineData("notice:baseline-absent|Restore-artifacts step 'baseline': nothing to restore")]
+    // Runs recorded before the notice code existed hold the English warning.
+    [InlineData("Restore-artifacts step 'baseline': the selected release contract does not require this retained artifact; explicit fallback selected.")]
+    public void R16_ANoBaselineOnAFirstRelease_IsAnInfo_NotAnOrangeWarning_AndIsNotCounted(string stored)
+    {
+        var run = MakeRun(PipelineStatus.Success) with { Id = 11, Warnings = [stored] };
+        _handler.SetJsonResponse("api/pipelines/runs/11", run);
+
+        var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 11));
+        cut.WaitForState(() => cut.FindAll("[data-testid='run-notice']").Count > 0);
+
+        var notice = Assert.Single(cut.FindAll("[data-testid='run-notice']"));
+        // The localizer stub answers with the key: the page asks for the French sentence and its "?" help.
+        Assert.Contains("RunNoticeBaselineAbsent", notice.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(notice.QuerySelector("[data-testid='pipeline-info-tip']"));
+        // Neither the English server sentence nor a counted warning.
+        Assert.DoesNotContain("explicit fallback", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("WarningsCount", cut.Markup, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void SelectStep_SetsSelectedInSplitView()
     {

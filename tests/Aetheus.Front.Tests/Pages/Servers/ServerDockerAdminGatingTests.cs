@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -79,18 +80,18 @@ public sealed class ServerDockerAdminGatingTests : BunitContext
         ], isAdmin: false);
 
     /// <summary>The shell sits behind the running container's "..." menu, whose items exist once it is open.</summary>
-    private static bool ShellOffered(IRenderedComponent<ServerDockerSection> cut)
+    private static bool ShellOffered(IRenderedComponent<PageHeaderOutletHost> cut)
     {
         var tab = cut.FindComponent<DockerContainersTab>();
         tab.Find("tbody [aria-label='MoreActions']").Click();
         return tab.Markup.Contains("DockerShell", StringComparison.Ordinal);
     }
 
-    private static bool ImageDeleteOffered(IRenderedComponent<ServerDockerSection> cut) =>
+    private static bool ImageDeleteOffered(IRenderedComponent<PageHeaderOutletHost> cut) =>
         cut.FindComponent<DockerImagesTab>().FindAll("button[title='Delete']").Count > 0;
 
     /// <summary>Opens the compose editor on the stack and delivers its file, as the agent's task would.</summary>
-    private static bool ComposeDeployOffered(IRenderedComponent<ServerDockerSection> cut)
+    private static bool ComposeDeployOffered(IRenderedComponent<PageHeaderOutletHost> cut)
     {
         var tab = cut.FindComponent<DockerComposeTab>();
         // Edit compose sits in the stack row's "More actions" menu (STD-BTN detection 11).
@@ -101,7 +102,7 @@ public sealed class ServerDockerAdminGatingTests : BunitContext
         return tab.FindAll("button").Any(button => button.TextContent.Contains("Deploy", StringComparison.Ordinal));
     }
 
-    private IRenderedComponent<ServerDockerSection> RenderSection() => Render<ServerDockerSection>(p => p
+    private IRenderedComponent<PageHeaderOutletHost> RenderSection() => this.RenderWithPageHeader<ServerDockerSection>(p => p
         .Add(x => x.Server, new ServerDetailDto
         {
             Id = ServerId,

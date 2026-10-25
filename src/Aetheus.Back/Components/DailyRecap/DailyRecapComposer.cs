@@ -26,7 +26,7 @@ internal static class DailyRecapComposer
             blocks.Add(Expiring(report, t, report.Certificates, "CertificatesTitle", "CertificatesSummary", report.CertificateHorizonDays));
         if (report.Has(DailyRecapSection.Secrets))
             blocks.Add(Expiring(report, t, report.Secrets, "SecretsTitle", "SecretsSummary", report.SecretHorizonDays));
-        if (report.Has(DailyRecapSection.Findings)) blocks.Add(Findings(report, t));
+        if (report.Has(DailyRecapSection.Findings)) blocks.Add(Findings(report, t, frontOrigin));
         if (report.Has(DailyRecapSection.Mail)) blocks.Add(Mail(report, t));
         var shown = blocks.OfType<RecapBlock>().ToList();
         if (shown.Count == 0) shown.Add(new RecapBlock(t["QuietDayTitle"], t["QuietDaySummary"], []));
@@ -34,7 +34,6 @@ internal static class DailyRecapComposer
         return new RecapDocument(
             t.Format("Subject", date),
             t.Format("Heading", date),
-            t.Format("Intro", report.TimeZone.Id, t.Moment(report.GeneratedAtUtc, report.TimeZone)),
             Tiles(report, t),
             shown,
             t["Footer"],
@@ -57,15 +56,15 @@ internal static class DailyRecapComposer
         {
             var succeeded = report.PipelineRuns.Count(run => run.Status == PipelineStatus.Success);
             var failed = report.PipelineRuns.Count(run => PipelineTone(run.Status) == RecapTone.Danger);
-            if (succeeded > 0) tiles.Add(new RecapTile(t["TileRunsSucceeded"], Count(succeeded, t), RecapTone.Success));
-            if (failed > 0) tiles.Add(new RecapTile(t["TileRunsFailed"], Count(failed, t), RecapTone.Danger));
+            if (succeeded > 0) tiles.Add(new RecapTile(t.Plural("TileRunsSucceeded", succeeded), Count(succeeded, t), RecapTone.Success));
+            if (failed > 0) tiles.Add(new RecapTile(t.Plural("TileRunsFailed", failed), Count(failed, t), RecapTone.Danger));
         }
         if (report.Has(DailyRecapSection.Servers))
         {
             var watched = report.Servers.Where(server => server.Status != ServerStatus.Disabled).ToList();
             var online = watched.Count(server => server.Status == ServerStatus.Online);
             var tone = online == watched.Count ? RecapTone.Success : RecapTone.Danger;
-            if (watched.Count > 0) tiles.Add(new RecapTile(t["TileServersOnline"], t.Format("Ratio", online, watched.Count), tone));
+            if (watched.Count > 0) tiles.Add(new RecapTile(t.Plural("TileServersOnline", watched.Count), t.Format("Ratio", online, watched.Count), tone));
         }
         return tiles;
     }
@@ -79,15 +78,21 @@ internal static class DailyRecapComposer
         var items = runs
             .OrderBy(run => ToneRank(PipelineTone(run.Status)))
             .ThenBy(run => run.CompletedAtUtc)
+            // Two lines at most (recette R-58): the badge and the run's name, which opens the run, then where and when.
             .Select(run => new RecapItem(
                 run.PipelineName,
-                Join(run.ProjectName, run.BranchName),
+                Join(run.ProjectName, run.BranchName, t.Format("RunNumber", run.RunId, t.Time(run.CompletedAtUtc, report.TimeZone))),
                 new RecapBadge(PipelineTone(run.Status), t[$"Run{run.Status}"]),
-                [new RecapLine(t["FinishedAt"], null, t.Format("RunNumber", run.RunId, t.Time(run.CompletedAtUtc, report.TimeZone)))],
-                run.RunId > 0 ? Link(frontOrigin, $"/pipelines/runs/{run.RunId}", t["RunLink"]) : null))
+                [],
+                run.RunId > 0 ? Link(frontOrigin, $"/pipelines/runs/{run.RunId}", t["RunLink"]) : null,
+                TitleIsLink: true))
             .ToList();
-        var summary = t.Format("PipelinesSummary", runs.Count, succeeded, failed, runs.Count - succeeded - failed);
-        var note = runs.Count >= DailyRecapCollector.MaxPipelineRuns ? t.Format("PipelinesTruncated", DailyRecapCollector.MaxPipelineRuns) : t["PipelinesParentsOnly"];
+        var other = runs.Count - succeeded - failed;
+        var summary = t.Plural("PipelinesSummary", runs.Count, runs.Count,
+            t.Plural("PipelinesSucceededCount", succeeded, succeeded),
+            t.Plural("PipelinesFailedCount", failed, failed),
+            t.Plural("PipelinesOtherCount", other, other));
+        var note = runs.Count >= DailyRecapCollector.MaxPipelineRuns ? t.Format("PipelinesTruncated", DailyRecapCollector.MaxPipelineRuns) : null;
         return new RecapBlock(t["PipelinesTitle"], summary, items, note);
     }
 
@@ -105,7 +110,7 @@ internal static class DailyRecapComposer
                 server.Id > 0 ? Link(frontOrigin, $"/servers/{server.Id}/overview", t["ServerLink"]) : null))
             .ToList();
         var attention = report.Servers.Count(server => ServerTone(server) is RecapTone.Danger or RecapTone.Warning);
-        var summary = t.Format("ServersSummary", report.Servers.Count, attention);
+        var summary = t.Plural("ServersSummary", report.Servers.Count, report.Servers.Count, t.Plural("ServersAttentionCount", attention, attention));
         return new RecapBlock(t["ServersTitle"], summary, items);
     }
 
@@ -134,7 +139,7 @@ internal static class DailyRecapComposer
         : new RecapLine(
             t["Disk"],
             new RecapBadge(DiskTone(disk.Level), t[$"Disk{disk.Level}"]),
-            t.Format("DiskFree", t.Number(disk.FreeGb), t.Number(disk.TotalGb), t.Number(100d - disk.UsedPercent)));
+            t.Plural("DiskFree", disk.FreeGb, t.Number(disk.FreeGb), t.Number(disk.TotalGb), t.Number(100d - disk.UsedPercent)));
 
     private static RecapBlock? Releases(DailyRecapReport report, DailyRecapText t)
     {
@@ -173,7 +178,10 @@ internal static class DailyRecapComposer
                     lines);
             })
             .ToList();
-        var summary = t.Format("BackupsSummary", items.Count, items.Count - failed, failed);
+        var succeeded = items.Count - failed;
+        var summary = t.Plural("BackupsSummary", items.Count, items.Count,
+            t.Plural("BackupsSucceededCount", succeeded, succeeded),
+            t.Plural("BackupsFailedCount", failed, failed));
         return new RecapBlock(t["BackupsTitle"], summary, items);
     }
 
@@ -187,36 +195,39 @@ internal static class DailyRecapComposer
             var days = (int)Math.Floor((entry.ExpiresAtUtc - report.GeneratedAtUtc).TotalDays);
             var badge = days < 0
                 ? new RecapBadge(RecapTone.Danger, t["Expired"])
-                : new RecapBadge(days <= UrgentDays ? RecapTone.Danger : RecapTone.Warning, t.Format("ExpiresInDays", days));
+                : new RecapBadge(days <= UrgentDays ? RecapTone.Danger : RecapTone.Warning, t.Plural("ExpiresInDays", days, days));
             return new RecapItem(entry.Name, entry.Owner, badge,
                 [new RecapLine(t["ExpiresOn"], null, t.Moment(entry.ExpiresAtUtc, report.TimeZone))]);
         }).ToList();
-        var summary = t.Format(summaryKey, items.Count, horizonDays);
+        var summary = t.Plural(summaryKey, items.Count, items.Count, t.Plural("DaysCount", horizonDays, horizonDays));
         return new RecapBlock(t[titleKey], summary, items);
     }
 
-    private static RecapBlock? Findings(DailyRecapReport report, DailyRecapText t)
+    /// <summary>No finding is listed (recette R-60): the section says how many there are, by severity (most
+    /// severe first, zero counts left out), and carries one link to the findings page of the platform.</summary>
+    private static RecapBlock? Findings(DailyRecapReport report, DailyRecapText t, string? frontOrigin)
     {
         var findings = report.Findings;
         if (findings.NewTotal == 0 && findings.Resolved == 0) return null;
-        var lines = Enum.GetValues<AnalysisSeverity>()
+        var bySeverity = Enum.GetValues<AnalysisSeverity>()
             .OrderByDescending(severity => severity)
             .Where(severity => findings.NewBySeverity.GetValueOrDefault(severity) > 0)
-            .Select(severity => new RecapLine(
-                t[$"Severity{severity}"],
-                new RecapBadge(severity >= AnalysisSeverity.High ? RecapTone.Danger : severity == AnalysisSeverity.Medium ? RecapTone.Warning : RecapTone.Neutral,
-                    t[$"Severity{severity}"]),
-                t.Format("FindingsNewCount", findings.NewBySeverity[severity])))
+            .Select(severity => t.Plural($"FindingsCount{severity}", findings.NewBySeverity[severity], findings.NewBySeverity[severity]))
             .ToList();
-        var items = lines.Count == 0 ? [] : new List<RecapItem> { new(t["FindingsNewTitle"], null, null, lines) };
-        var summary = t.Format("FindingsSummary", findings.NewTotal, findings.Resolved);
-        return new RecapBlock(t["FindingsTitle"], summary, items);
+        var newTotal = t.Plural("FindingsNewTotal", findings.NewTotal, findings.NewTotal);
+        if (bySeverity.Count > 0) newTotal = t.Format("FindingsNewWithSeverities", newTotal, string.Join(", ", bySeverity));
+        var summary = t.Format("FindingsSummary",
+            newTotal,
+            t.Plural("FindingsResolvedCount", findings.Resolved, findings.Resolved));
+        return new RecapBlock(t["FindingsTitle"], summary, [], Link: Link(frontOrigin, "/analysis", t["FindingsLink"]));
     }
 
     private static RecapBlock? Mail(DailyRecapReport report, DailyRecapText t)
     {
-        if (report.MailServers.Count == 0) return null;
-        var items = report.MailServers.Select(mail => new RecapItem(
+        // Nothing to report, nothing shown (recette R-61): the section lists the servers whose service stopped or whose queue waits.
+        var reported = report.MailServers.Where(mail => !mail.PostfixRunning || !mail.DovecotRunning || mail.QueueSize > 0).ToList();
+        if (reported.Count == 0) return null;
+        var items = reported.Select(mail => new RecapItem(
             mail.ServerName,
             t.Format("ReportedAt", t.Moment(mail.LastUpdatedUtc, report.TimeZone)),
             mail.PostfixRunning && mail.DovecotRunning
@@ -235,7 +246,7 @@ internal static class DailyRecapComposer
             new("Postfix", Running(mail.PostfixRunning, t), string.Empty),
             new("Dovecot", Running(mail.DovecotRunning, t), string.Empty)
         };
-        if (mail.QueueSize > 0) lines.Add(new RecapLine(t["MailQueue"], null, t.Format("MailQueueCount", mail.QueueSize)));
+        if (mail.QueueSize > 0) lines.Add(new RecapLine(t["MailQueue"], null, t.Plural("MailQueueCount", mail.QueueSize, mail.QueueSize)));
         return lines;
     }
 

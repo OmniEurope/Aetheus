@@ -36,7 +36,7 @@
     <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
         @if (Target is not null)
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Open"><OmniIcon Name="OmniIconName.ArrowRight" /> <span>@L["Open"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Open"><Icon><OmniIcon Name="OmniIconName.ArrowRight" /></Icon><ChildContent><span>@L["Open"]</span></ChildContent></OmniButton>
         }
     </DialogFooter>
 </OmniStack>

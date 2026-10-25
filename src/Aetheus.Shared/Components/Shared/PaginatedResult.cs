@@ -68,20 +68,6 @@ public sealed record TaskPaginationRequest : PaginationRequest
     public int? ServerId { get; init; }
 }
 
-public sealed record ProjectPaginationRequest : PaginationRequest
-{
-    public ProjectStatus? ProjectStatus { get; init; }
-}
-
-public sealed record PipelinePaginationRequest : PaginationRequest
-{
-    public PipelineTriggerType? TriggerType { get; init; }
-    public int? EnvironmentId { get; init; }
-    public int? ProjectServerId { get; init; }
-    public int? ProjectId { get; init; }
-    public int? ServerId { get; init; }
-}
-
 public sealed record ImportResultDto
 {
     public int ImportedCount { get; init; }

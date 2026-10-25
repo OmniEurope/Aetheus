@@ -13,7 +13,53 @@ internal sealed class ScannerProcessExecutionRunner(
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
+    /// <summary>Runs the scanner. OpenGrep's stderr carries its normal end-of-scan tables, so for that
+    /// scanner the lines are logged by <see cref="OpenGrepRunLog"/> once the outcome is known (Info after
+    /// a normal end, Error otherwise); every other scanner keeps the process runner's Error-level stderr.
+    /// <paramref name="sourceDirectory"/> lets the OpenGrep log name the files skipped for their size.</summary>
     internal async Task<(ExecutorResult Result, bool QuotaExceeded)> RunAsync(
+        ScannerManifestEntry scanner,
+        ProcessStartInfo process,
+        string reportPath,
+        string outputDirectory,
+        string? cacheDirectory,
+        int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput,
+        CancellationToken ct,
+        string? sourceDirectory = null)
+    {
+        if (!string.Equals(scanner.Key, OpenGrepSandbox.ScannerKey, StringComparison.OrdinalIgnoreCase))
+            return await RunWithRetryAsync(
+                scanner, process, reportPath, outputDirectory, cacheDirectory, timeoutSeconds, onOutput, ct)
+                .ConfigureAwait(false);
+
+        var log = new OpenGrepRunLog(onOutput);
+        var endedNormally = false;
+        try
+        {
+            var execution = await RunWithRetryAsync(
+                scanner, process, reportPath, outputDirectory, cacheDirectory, timeoutSeconds, log.Capture, ct)
+                .ConfigureAwait(false);
+            endedNormally = EndedNormally(scanner, execution);
+            return execution;
+        }
+        finally
+        {
+            await log.CompleteAsync(
+                endedNormally, sourceDirectory, OpenGrepSkippedFiles.ExcludePatterns(scanner.Arguments))
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The scanner finished by itself: exit code 0 or one of its finding codes, within the
+    /// timeout and the storage quotas. The same test <c>ScannerOperationExecutor</c> applies before it
+    /// reads the report.</summary>
+    private static bool EndedNormally(ScannerManifestEntry scanner, (ExecutorResult Result, bool QuotaExceeded) execution) =>
+        !execution.QuotaExceeded
+        && !execution.Result.TimedOut
+        && (execution.Result.ExitCode == 0 || scanner.FindingExitCodes.Contains(execution.Result.ExitCode));
+
+    private async Task<(ExecutorResult Result, bool QuotaExceeded)> RunWithRetryAsync(
         ScannerManifestEntry scanner,
         ProcessStartInfo process,
         string reportPath,

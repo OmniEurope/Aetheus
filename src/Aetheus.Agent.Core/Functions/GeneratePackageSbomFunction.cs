@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>generate-package-sbom</c> function, port of <c>deploy/scripts/generate-package-sbom.mjs</c>:
+/// The <c>generate-package-sbom</c> function, port of the former <c>generate-package-sbom.mjs</c> script:
 /// writes the deterministic SPDX 2.3 JSON SBOM of a NuGet or npm package byte for byte as the script
 /// does (<see cref="JsJson.StringifyIndented"/> plus a line feed). The package and its dependencies
 /// (<see cref="PackageSbomDependencies"/>), the package itself excluded from them, become one entry per

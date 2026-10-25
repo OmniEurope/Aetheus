@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/run-qa-integration-suite.sh</c>, run through the real executor with
+/// The C# port of the former <c>run-qa-integration-suite.sh</c> script, run through the real executor with
 /// a <c>dotnet</c> stand-in that reports the pinned SDK and writes the TRX each case asks for: the runner
 /// the tested source selects, the classification (findings versus unusable evidence), the failed names
 /// recorded (the cases of <c>failed-tests-publication.test.mjs</c>), the restore guard, and the static
@@ -28,6 +28,11 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         ["test_project"] = Project
     };
     private readonly Dictionary<string, string> _env = new(StringComparer.Ordinal);
+
+    private readonly List<string[]> _docker = [];
+    private readonly List<ProcessStartInfo> _testProcesses = [];
+    private string[] _ownContainers = [];
+    private string[] _staleRows = [];
 
     private string? _trx;
     private int _testExit;
@@ -70,9 +75,18 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
     private Task<(int, string[])> Answer(ProcessStartInfo process, CancellationToken _)
     {
         var arguments = process.ArgumentList.ToArray();
+        if (Path.GetFileNameWithoutExtension(process.FileName) == "docker")
+        {
+            _docker.Add(arguments);
+            var rows = arguments[0] == "ps" ? (arguments.Contains("-aq") ? _ownContainers : _staleRows) : [];
+            return Task.FromResult((0, rows));
+        }
+
         if (arguments is ["--version"])
             return Task.FromResult((0, new[] { Sdk }));
         _dotnet.Add(arguments);
+        if (arguments[0] == "test")
+            _testProcesses.Add(process);
         if (arguments[0] == "restore")
             return Task.FromResult((_restoreExit, Array.Empty<string>()));
         var results = arguments[Array.IndexOf(arguments, "--results-directory") + 1];
@@ -103,6 +117,42 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
              "--report-trx", "--report-trx-filename", "integration.trx", "--results-directory", Results], test);
         Assert.Contains(_harness.Log, entry => entry.Line == "==> Integration tests (current) started");
         Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current produced an executed-test proof with findings status 0.");
+    }
+
+    [Fact]
+    public async Task WithDocker_RyukIsDisabledAndOnlyThisRunsAndStaleContainersAreRemoved()
+    {
+        _harness.Executable("bin/docker");
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+        var old = DateTimeOffset.UtcNow.AddHours(-3).ToUnixTimeSeconds();
+        var recent = DateTimeOffset.UtcNow.AddMinutes(-5).ToUnixTimeSeconds();
+        _staleRows = [$"aaa {old}", $"bbb {recent}", "ccc notanumber"];
+        _ownContainers = ["own1"];
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        var environment = Assert.Single(_testProcesses).Environment;
+        Assert.Equal("true", environment["TESTCONTAINERS_RYUK_DISABLED"]);
+        var run = environment["AETHEUS_TESTCONTAINERS_RUN"];
+        Assert.False(string.IsNullOrEmpty(run));
+        Assert.True(long.TryParse(environment["AETHEUS_TESTCONTAINERS_STARTED_AT"], out _));
+        var removals = _docker.Where(call => call[0] == "rm").ToArray();
+        Assert.Equal(2, removals.Length);
+        Assert.Equal(["rm", "-f", "-v", "aaa"], removals[0]);
+        Assert.Equal(["rm", "-f", "-v", "own1"], removals[1]);
+        Assert.Contains(_docker, call => call.Contains($"label=aetheus.testcontainers.run={run}"));
+    }
+
+    [Fact]
+    public async Task WithoutDocker_TheSuiteStillRunsWithRyukDisabledAndNoCleanup()
+    {
+        _trx = FailedTestNamesTests.Trx(("Integration.Passes", "Passed"));
+
+        await RunAsync();
+
+        Assert.Empty(_docker);
+        Assert.Equal("true", Assert.Single(_testProcesses).Environment["TESTCONTAINERS_RYUK_DISABLED"]);
     }
 
     [Fact]

@@ -35,6 +35,17 @@ public class ServerFirewallSectionTests : BunitContext
             .Add(c => c.FirewallManagementAvailable, cap));
     }
 
+    // Recette R-29: Enable and Disable sit in the page header, rendered here with the section.
+    private IRenderedComponent<PageHeaderOutletHost> RenderWithHeader(ServerFirewallDto dto, bool? cap)
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        BunitTestHelper.UseImmediateDialogs(this);
+        _handler.SetJsonResponse(HttpMethod.Get, "firewall", dto);
+        return this.RenderWithPageHeader<ServerFirewallSection>(p => p
+            .Add(c => c.ServerId, 1)
+            .Add(c => c.FirewallManagementAvailable, cap));
+    }
+
     [Fact]
     public void ActiveWithCapability_RendersRulesAndActiveBadge()
     {
@@ -131,7 +142,7 @@ public class ServerFirewallSectionTests : BunitContext
     private ImmediateDialogService ImmediateDialogs() =>
         (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
 
-    private static Task ClickAsync(IRenderedComponent<ServerFirewallSection> cut, string label) =>
+    private static Task ClickAsync<T>(IRenderedComponent<T> cut, string label) where T : Microsoft.AspNetCore.Components.IComponent =>
         cut.FindAll("button").First(button => button.TextContent.Contains(label, StringComparison.Ordinal)).ClickAsync(new());
 
     [Theory]
@@ -140,7 +151,7 @@ public class ServerFirewallSectionTests : BunitContext
     [InlineData(true, 1)]
     public async Task Disabling_AsksFirst_AndOnlyAConfirmedAnswerQueuesIt(bool? answer, int expectedPosts)
     {
-        var cut = RenderWith(Firewall(active: true, cap: true), cap: true, immediateDialogs: true);
+        var cut = RenderWithHeader(Firewall(active: true, cap: true), cap: true);
         var dialogs = ImmediateDialogs();
         dialogs.ConfirmResult = answer;
         _handler!.SetJsonResponse(HttpMethod.Post, "firewall/toggle", new ServiceTaskResponse { TaskId = 9 });
@@ -161,7 +172,7 @@ public class ServerFirewallSectionTests : BunitContext
     [Fact]
     public async Task Enabling_QueuesWithoutAsking_AndAnUnqueuedTaskIsReportedAsAFailure()
     {
-        var cut = RenderWith(Firewall(active: false, cap: true), cap: true, immediateDialogs: true);
+        var cut = RenderWithHeader(Firewall(active: false, cap: true), cap: true);
         var dialogs = ImmediateDialogs();
         _handler!.SetResponse(HttpMethod.Post, "firewall/toggle", System.Net.HttpStatusCode.InternalServerError);
 

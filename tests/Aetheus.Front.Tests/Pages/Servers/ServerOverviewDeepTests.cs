@@ -86,6 +86,7 @@ public class ServerOverviewDeepTests : BunitContext
     [Fact]
     public void Renders_PipelineRunner_Disabled_State()
     {
+        ServerOverviewTabsTests.OpenTab(this, "runner");
         var cut = RenderSection(MakeServer(pipelineRunnerEnabled: false));
         Assert.Contains("PipelineRunnerDisabledHint", cut.Markup);
     }
@@ -93,6 +94,7 @@ public class ServerOverviewDeepTests : BunitContext
     [Fact]
     public void Renders_PipelineRunner_Enabled_State()
     {
+        ServerOverviewTabsTests.OpenTab(this, "runner");
         var cut = RenderSection(MakeServer(pipelineRunnerEnabled: true));
         Assert.Contains("PipelineRunnerEnabledHint", cut.Markup);
     }

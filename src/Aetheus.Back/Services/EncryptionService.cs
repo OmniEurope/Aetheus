@@ -113,6 +113,7 @@ public sealed class EncryptionService(IConfiguration config, IHostEnvironment en
         {
             if (_keyV1LegacyCache is not null) return _keyV1LegacyCache;
             var passphrase = GetConfiguredPassphrase();
+            // nosemgrep: aetheus.csharp.password-fast-hash - legacy v1 key kept only to decrypt pre-HKDF records.
             _keyV1LegacyCache = SHA256.HashData(Encoding.UTF8.GetBytes(passphrase));
             return _keyV1LegacyCache;
         }
@@ -151,6 +152,7 @@ public sealed class EncryptionService(IConfiguration config, IHostEnvironment en
                 "Auth:EncryptionSalt must be configured (base64, >= 16 bytes) in non-development environments.");
 
         // Deterministic dev-only salt derived from the passphrase so re-runs decrypt prior dev data.
+        // nosemgrep: aetheus.csharp.password-fast-hash - dev-only salt, not a stored password hash.
         return SHA256.HashData(Encoding.UTF8.GetBytes("aetheus-dev-salt:" + GetConfiguredPassphrase()));
     }
 }

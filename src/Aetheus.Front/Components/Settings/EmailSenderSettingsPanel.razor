@@ -14,7 +14,7 @@ else if (_settings is null)
 else
 {
     <OmniSettingsSection Title="@L["EmailSenderTitle"]" Description="@L["EmailSenderDescription"]" Class="email-sender-settings">
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
             <OmniAlert Severity="@EffectiveSeverity" Title="@EffectiveTitle" Class="email-sender-effective">
                 <ChildContent>@EffectiveText</ChildContent>
             </OmniAlert>
@@ -24,15 +24,24 @@ else
                 <div class="email-sender-prepare">
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="PrepareAsync" Busy="@_preparing"
                                 Class="email-sender-prepare-button" title="@L["EmailSenderPrepareHint"]">
-                        <OmniIcon Name="OmniIconName.Key" />
-                        <span>@L["EmailSenderPrepare"]</span>
+                        <Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent><span>@L["EmailSenderPrepare"]</span></ChildContent>
+                    </OmniButton>
+                </div>
+            }
+
+            @if (CanReset)
+            {
+                <div class="email-sender-reset">
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ResetAsync" Busy="@_preparing"
+                                Class="email-sender-reset-button" title="@L["EmailSenderResetHint"]">
+                        <Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent><span>@L["EmailSenderReset"]</span></ChildContent>
                     </OmniButton>
                 </div>
             }
 
             <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="SaveAsync">
                 <OmniDataAnnotationsValidator Localizer="@L" />
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
                     <OmniSwitch @bind-Value="_model.UseCustom" Class="email-sender-use-custom">@L["EmailSenderUseCustom"]</OmniSwitch>
 
                     @if (_model.UseCustom)
@@ -76,8 +85,7 @@ else
 
                     <div>
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving" Class="email-sender-save">
-                            <OmniIcon Name="OmniIconName.Save" />
-                            <span>@L["Save"]</span>
+                            <Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent>
                         </OmniButton>
                     </div>
                 </OmniStack>

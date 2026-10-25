@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Components.Vaults;
+using Aetheus.Shared.Components.PortRegistry;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 

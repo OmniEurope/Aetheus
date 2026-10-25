@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
+using Aetheus.Back.Components.AppMonitoring;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Aetheus.Back.IntegrationTests;
@@ -80,7 +81,7 @@ public sealed class ApiSweepCoverageGuardTests
             "Development-only controller, 404 outside Development - exempt from the GET sweep for the same reason",
         // OTLP ingest is [AllowAnonymous] by design: external apps push telemetry authenticated by a
         // per-app ingest key carried in the request, not by a JWT - an anonymous-401 sweep does not apply.
-        ["Aetheus.Back.Components.AppMonitoring.Ingest.IngestController"] =
+        ["Aetheus.Back.Components.AppMonitoring.IngestController"] =
             "OTLP ingest endpoint is [AllowAnonymous] (per-app ingest-key auth, not JWT) - no 401 to assert",
         ["Aetheus.Back.Components.AppMonitoring.PublicWebAnalyticsController"] =
             "Public browser analytics is anonymous by design and gated by declared origin, rate limit, body cap, and server-side pseudonymization",

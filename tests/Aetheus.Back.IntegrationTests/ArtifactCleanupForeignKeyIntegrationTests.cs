@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Artifacts;
-using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;

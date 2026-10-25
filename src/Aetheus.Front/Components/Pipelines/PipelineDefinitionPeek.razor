@@ -17,12 +17,12 @@
             @if (_current is not null)
             {
                 @* STD-BTN detection 11: Wrap visible, the other actions in the menu. *@
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _wrap = !_wrap)" title="@L["WrapLinesHint"]"><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /> <span>@L["WrapLines"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _wrap = !_wrap)" title="@L["WrapLinesHint"]"><Icon><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /></Icon><ChildContent><span>@L["WrapLines"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["Copy"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>
             }
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClose.InvokeAsync())" title="@L["Close"]" Label="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClose.InvokeAsync())" title="@L["Close"]" Label="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </div>
         @if (_loading)
         {

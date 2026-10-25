@@ -64,7 +64,7 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
         var archive = await AgentDownloadsExtensions.BuildPrebuiltLinuxArchiveWithMarkerAsync(
             prebuilt,
             "https://api.example.test",
-            Path.Combine(_root, "deploy", "scripts", "install-agent-linux.sh"),
+            Path.Combine(_root, "deploy", "agent-installer", "install-agent-linux.sh"),
             Path.Combine(_root, "deploy", "agent-host-config"));
 
         _archives.Add(archive);
@@ -79,7 +79,7 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
     {
         CreateSolution(crlfTemplates: false);
         var prebuilt = await CreatePrebuiltArchiveAsync();
-        var script = Path.Combine(_root, "deploy", "scripts", "install-agent-linux.sh");
+        var script = Path.Combine(_root, "deploy", "agent-installer", "install-agent-linux.sh");
         var hostConfig = Path.Combine(_root, "deploy", "agent-host-config");
 
         var first = await AgentDownloadsExtensions.GetPreparedLinuxArchiveAsync(prebuilt, "https://api.example.test", script, hostConfig);
@@ -184,10 +184,10 @@ public sealed class AgentLinuxArchiveHostConfigTests : IDisposable
         var agentOutput = Path.Combine(_root, "src", "Aetheus.Agent.Linux", "bin", "Debug", "net10.0");
         Directory.CreateDirectory(agentOutput);
         File.WriteAllText(Path.Combine(agentOutput, "Aetheus.Agent.Linux.dll"), "binary");
-        Directory.CreateDirectory(Path.Combine(_root, "deploy", "scripts"));
+        Directory.CreateDirectory(Path.Combine(_root, "deploy", "agent-installer"));
         File.Copy(
-            Path.Combine(RepositoryScan.Root, "deploy", "scripts", "install-agent-linux.sh"),
-            Path.Combine(_root, "deploy", "scripts", "install-agent-linux.sh"));
+            Path.Combine(RepositoryScan.Root, "deploy", "agent-installer", "install-agent-linux.sh"),
+            Path.Combine(_root, "deploy", "agent-installer", "install-agent-linux.sh"));
         foreach (var file in Directory.GetFiles(RepositoryHostConfig, "*", SearchOption.AllDirectories))
         {
             var destination = Path.Combine(_root, "deploy", "agent-host-config", Path.GetRelativePath(RepositoryHostConfig, file));

@@ -19,8 +19,8 @@ else
 {
     @* Metric, Series and Period on one line, each label beside its field, the fields sharing the
        width; a phone stacks them (app.css). *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="app-metrics-filters omni-u-mb-md">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="app-metrics-filters omni-u-mb-md">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
             <OmniLabel For="app-metrics-metric">@L["Metric"]</OmniLabel>
             <OmniDropDown TValue="string" Id="app-metrics-metric" name="app-metrics-metric" Label="@L["Metric"]" @bind-Value="_selectedMetric" Options="@(_names.ToOptions(item => (string)item, item => item))" @bind-Value:after="OnMetricChanged"
                             Filterable="true" Class="app-metrics-filter-field" />
@@ -31,13 +31,13 @@ else
         }
         else if (_groups.Count > 1)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
                 <OmniLabel For="app-metrics-series">@L["Series"]</OmniLabel>
                 <OmniDropDown Id="app-metrics-series" name="app-metrics-series" @bind-Value="_selectedGroupKey" Options="@(_groups.ToOptions(item => item.Key, item => item.Label))"
                                 @bind-Value:after="OnFilterChanged" Class="app-metrics-filter-field" />
             </OmniStack>
         }
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter app-metrics-filter-period">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter app-metrics-filter-period">
             <OmniLabel For="app-metrics-period">@L["Period"]</OmniLabel>
             <OmniDropDown Id="app-metrics-period" name="app-metrics-period" @bind-Value="_hours" Options="@(_periods.ToOptions(item => item.Hours, item => item.Label))"
                             @bind-Value:after="OnFilterChanged" Class="app-metrics-filter-field" />
@@ -51,22 +51,22 @@ else
     else if (_points.Count > 0)
     {
         @* Headline figures: a chart alone makes the reader estimate the numbers that matter most. *@
-        <OmniRow Gap="OmniSpacing.XLarge" Class="omni-u-mb-md">
-            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None">
+        <OmniRow Gap="OmniSpacing.ExtraLarge" Class="omni-u-mb-md">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None">
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["Latest"]</OmniText>
                 <OmniHeading Level="OmniHeadingLevel.H6">@FormatValue(_points[^1].Value)</OmniHeading>
             </OmniStack>
-            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None">
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["Average"]</OmniText>
                 <OmniHeading Level="OmniHeadingLevel.H6">@FormatValue(_average)</OmniHeading>
             </OmniStack>
-            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None">
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["Peak"]</OmniText>
                 <OmniHeading Level="OmniHeadingLevel.H6">@FormatValue(_peak)</OmniHeading>
             </OmniStack>
         </OmniRow>
 
-        <OmniChart Title="@(_selectedMetric ?? L["Metric"])" Description="@AxisTitle">
+        <OmniChart Label="@(_selectedMetric ?? L["Metric"])" Description="@AxisTitle">
             @* CategoryProperty is bound to a real DateTime (not a formatted string), so the chart positions
                points proportionally to elapsed time instead of spacing them evenly by index - a multi-hour
                collection gap stays visible as a gap instead of disappearing. *@

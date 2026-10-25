@@ -1,0 +1,29 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-5: a project configured before a refused variable was held under a scoped name still has it in the
+   environment sample of its configuration repository; one action mends the sample and the library entry. Shown
+   whether or not the project's source repository is readable, since the sample lives in the configuration repository. *@
+@if (Setup.Analysis is { RefusedEnvNames.Count: > 0 } analysis)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["PipelineSetupProdRefusedTitle"]" data-testid="setup-production-refused">
+        <OmniStack Gap="OmniSpacing.Small">
+            <span>@string.Format(L["PipelineSetupProdRefusedText"], analysis.RefusedEnvNames[0].File)</span>
+            @foreach (var refused in analysis.RefusedEnvNames)
+            {
+                <span data-testid="@($"setup-production-refused-{refused.Name}")">@string.Format(L["PipelineSetupProdRefusedLine"], refused.Line, refused.Variable, refused.Name, refused.ScopedName)</span>
+            }
+            @if (Setup.RepairFailed)
+            {
+                <span class="omni-u-text-danger" data-testid="setup-production-refused-error">@(Setup.RepairError is { Length: > 0 } error ? error : L["OperationFailed"].Value)</span>
+            }
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Primary" Busy="@Setup.Repairing" OnClick="@RepairAsync"
+                            data-testid="setup-production-refused-fix"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["PipelineSetupProdRefusedFix"]</span></ChildContent></OmniButton>
+                <PipelineInfoTip Text="@L["PipelineSetupProdRefusedFixHelp"].Value" />
+            </OmniStack>
+        </OmniStack>
+    </OmniAlert>
+}
+else if (Setup.Repaired is { Repaired: true } repaired)
+{
+    <OmniAlert Severity="OmniSeverity.Success" data-testid="setup-production-repaired">@string.Format(L["PipelineSetupProdRepaired"], repaired.File)</OmniAlert>
+}

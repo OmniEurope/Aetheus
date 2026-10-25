@@ -13,7 +13,7 @@ internal sealed class TaskCompletionFinalizer(
     IAuditService audit,
     TimeProvider timeProvider,
     IArtifactService artifactService,
-    ILogger<TaskService> logger,
+    ILogger logger,
     IDomainEventDispatcher domainEvents)
 {
     internal async Task<PipelineStepRun?> UpdateStepRunAsync(

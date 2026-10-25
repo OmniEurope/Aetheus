@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Seeding;
 using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -28,9 +30,9 @@ public sealed class DeliveryTemplateVersionResetIntegrationTests(PostgresFixture
             var project = new Project { Name = "aetheus", Organization = organization };
             setup.Projects.Add(project);
             // Every shipped template exists already, as in production: only the renumbering differs.
-            foreach (var (name, definition) in DeliveryPipelineTemplateSeeder.Definitions)
+            foreach (var (name, definition) in DeliveryTemplateCatalog.Definitions)
             {
-                var shipped = DeliveryPipelineTemplateSeeder.ReadResource(definition.Resources[0]);
+                var shipped = DeliveryTemplateCatalog.ReadResource(definition.Resources[0]);
                 var latest = name == "host-bluegreen-deploy" ? 6 : 1;
                 setup.PipelineTemplates.Add(new PipelineTemplate
                 {
@@ -76,10 +78,13 @@ public sealed class DeliveryTemplateVersionResetIntegrationTests(PostgresFixture
         await using var verify = NewContext();
         var template = await verify.PipelineTemplates.Include(item => item.Versions)
             .SingleAsync(item => item.Name == "host-bluegreen-deploy", TestContext.Current.CancellationToken);
-        Assert.Equal(1, template.LatestVersion);
-        var version = Assert.Single(template.Versions);
-        Assert.Equal(1, version.Version);
-        Assert.Equal(DeliveryPipelineTemplateSeeder.ReadResource("host-bluegreen-deploy-v1.yaml"), version.YamlContent);
+        // The reset renumbers to the first shipped file as v1; the same startup then publishes the later
+        // shipped file (v2) on top of it, so both colours end with exactly v1 and v2.
+        var shippedFiles = DeliveryTemplateCatalog.Definitions["host-bluegreen-deploy"].Resources;
+        Assert.Equal(shippedFiles.Length, template.LatestVersion);
+        Assert.Equal(Enumerable.Range(1, shippedFiles.Length), template.Versions.Select(item => item.Version).Order());
+        var version = template.Versions.Single(item => item.Version == 1);
+        Assert.Equal(DeliveryTemplateCatalog.ReadResource(shippedFiles[0]), version.YamlContent);
         Assert.Equal(1, await verify.AppSettings.CountAsync(
             setting => setting.Key == DeliveryTemplateVersionReset.MarkerKey, TestContext.Current.CancellationToken));
         Assert.Equal(1, await verify.AppSettings.CountAsync(

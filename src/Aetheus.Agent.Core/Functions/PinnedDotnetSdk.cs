@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/ensure-dotnet-sdk.sh</c>: resolves the exact SDK <c>global.json</c> pins,
+/// Port of <c>scripts/ensure-dotnet-sdk.sh</c>: resolves the exact SDK <c>global.json</c> pins,
 /// so an agent never changes SDK silently when its host is upgraded. The host <c>dotnet</c> is kept
 /// when it resolves that exact version from the manifest's directory; otherwise the SDK is installed
 /// with the official installer, pinned by commit and SHA-256, into a version-isolated, non-root cache

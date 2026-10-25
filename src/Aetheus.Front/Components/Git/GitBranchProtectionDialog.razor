@@ -11,6 +11,6 @@
     <OmniCheckBox @bind-Value="_preventDeletion">@L["PreventDeletion"]</OmniCheckBox>
     <OmniCheckBox @bind-Value="_preventForcePush">@L["PreventForcePush"]</OmniCheckBox>
     <DialogFooter OnCancel="@(() => Dialog.Close(false))">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

@@ -30,6 +30,22 @@ internal sealed record ProjectListApp(
 /// query of its own.</summary>
 internal static class ProjectListInsightAssembler
 {
+    internal static ProjectProductionStatus ResolveProductionStatus(IEnumerable<AppHealthStatus> statuses)
+    {
+        var values = statuses.ToList();
+        if (values.Count == 0 || values.Any(status => status == AppHealthStatus.Unknown))
+            return ProjectProductionStatus.Unavailable;
+        if (values.Any(status => status is AppHealthStatus.Down or AppHealthStatus.Degraded))
+            return ProjectProductionStatus.Offline;
+        return values.All(status => status == AppHealthStatus.Up)
+            ? ProjectProductionStatus.Online
+            : ProjectProductionStatus.Unavailable;
+    }
+
+    internal static string NormalizeStageName(string stageName) =>
+        stageName.StartsWith("System:", StringComparison.Ordinal)
+            ? stageName["System:".Length..]
+            : stageName;
     /// <summary>The applications that stand for production: those explicitly in a Production
     /// environment, or, when a project has none, those attached to no environment.</summary>
     public static Dictionary<int, List<ProjectListApp>> ProductionAppsByProject(IEnumerable<ProjectListApp> apps) =>
@@ -65,13 +81,13 @@ internal static class ProjectListInsightAssembler
             run?.Status,
             run?.StartedAt,
             grade,
-            ProjectRepository.ResolveProductionStatus(productionApps.Select(app => app.CurrentStatus)),
+            ResolveProductionStatus(productionApps.Select(app => app.CurrentStatus)),
             analyticsAvailable
                 ? productionApps.Where(app => app.AnalyticsEnabled).Sum(app => app.ActiveSessionCount)
                 : null,
             run?.Status == PipelineStatus.Running,
             run is { Status: PipelineStatus.Running, CurrentStep: { } step }
-                ? $"{ProjectRepository.NormalizeStageName(step.StageName)} · {step.StepName}"
+                ? $"{NormalizeStageName(step.StageName)} · {step.StepName}"
                 : null);
     }
 }

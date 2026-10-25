@@ -7,12 +7,12 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("hub")" /></Icon>
     <Badges>
     </Badges>
-    <Actions>
+    <ActionsContent>
         @if (_canWrite)
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
         }
-    </Actions>
+    </ActionsContent>
     <Filters>
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="ReloadGridAsync" Class="pipeline-list-search" />
     </Filters>
@@ -26,7 +26,7 @@
         <EmptyState Icon="hub" Title="@L["NoServiceConnections"]" Description="@L["NoServiceConnectionsDescription"]" />
     </EmptyTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="ServiceConnectionDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" />
+        <OmniDataGridColumn Frozen="true" TItem="ServiceConnectionDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         <OmniDataGridColumn TItem="ServiceConnectionDto" Property="Type" Title="@L["Type"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText" >
             <Template Context="c">
                 <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@TypeText(c.Type.ToString())</OmniBadge>
@@ -37,12 +37,12 @@
                 <span class="text-mono">@(string.IsNullOrEmpty(c.Url) ? "-" : c.Url)</span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServiceConnectionDto" Property="ProjectName" Title="@L["Project"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Projects" FilterSearchable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="ServiceConnectionDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Projects" FilterSearchable="true" >
             <Template Context="c">@(c.ProjectName ?? "-")</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["ConnectionStatus"]" Width="230px" Sortable="false" Filterable="false" >
             <Template Context="c">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                     @if (_testResults.TryGetValue(c.Id, out var result))
                     {
                         <OmniBadge Fill="OmniFill.Solid" Tone="@StatusBadge(result.Status)"
@@ -51,14 +51,14 @@
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["Actions"]" Width="140px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
+        <OmniDataGridColumn TItem="ServiceConnectionDto" Title="@L["Actions"]" Width="140px" Sortable="false" TextAlign="OmniAlignment.Center" Filterable="false" >
             <Template Context="c">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 @* STD-BTN detection 11: Edit (and its Delete) visible, the other actions in the menu. *@
                 @if (_canWrite)
                 {
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 }
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@(() => TestAsync(c.Id))" Disabled="@(_testing.Contains(c.Id))"><Icon><OmniIcon Name="OmniIconName.Broadcast" /></Icon><ChildContent>@L["TestConnection"]</ChildContent></OmniMenuItem>

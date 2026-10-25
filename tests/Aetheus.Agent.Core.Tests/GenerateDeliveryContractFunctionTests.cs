@@ -9,7 +9,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/generate-delivery-contract.mjs</c>. The verifier
+/// The C# port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-delivery-contract.mjs</c>. The verifier
 /// (<c>verify-delivery-promotion.mjs</c>) recomputes the candidate id from the contract with Node.js, so
 /// the expected contracts are the exact files the script wrote for the same inputs (Node.js 24,
 /// captured when the function replaced it): a bootstrap in source version mode and a candidate over a

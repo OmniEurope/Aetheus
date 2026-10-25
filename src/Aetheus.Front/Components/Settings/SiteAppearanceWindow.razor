@@ -1,8 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Settings
 @* Bind every appearance-window control to OE's OmniAppearanceState (the user preference omni.appearance)
-   so changes are stored and applied; bound rather than left to follow the state, so the content width
-   row, which Aetheus does not apply (its main column is full width), stays hidden. An unset theme uses
+   so changes are stored and applied; bound rather than left to follow the state. The content width row
+   (centred or full width) shows because FullWidthChanged is bound (R1-25); OmniMain in MainLayout
+   applies it, and full width is the default (LegacyAppearanceMigration). An unset theme uses
    Essentiel, and theme-specific motion controls remain available. *@
 <OmniAppearanceWindow Open="_open" OpenChanged="@(open => _open = open)"
                       Title="@L["Theme"]"
@@ -13,4 +14,5 @@
                       Font="Appearance.Font" FontChanged="Appearance.SetFontAsync"
                       TextSizeLevel="Appearance.TextSizeLevel" TextSizeLevelChanged="Appearance.SetTextSizeLevelAsync"
                       Density="Appearance.Density" DensityChanged="Appearance.SetDensityAsync"
-                      ControlSizeLevel="Appearance.ControlSizeLevel" ControlSizeLevelChanged="Appearance.SetControlSizeLevelAsync" />
+                      ControlSizeLevel="Appearance.ControlSizeLevel" ControlSizeLevelChanged="Appearance.SetControlSizeLevelAsync"
+                      FullWidth="Appearance.FullWidth" FullWidthChanged="Appearance.SetFullWidthAsync" />

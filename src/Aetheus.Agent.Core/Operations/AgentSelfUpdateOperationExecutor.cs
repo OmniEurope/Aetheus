@@ -39,14 +39,13 @@ public sealed class AgentSelfUpdateOperationExecutor(
 
     private const string LinuxArchiveName = "aetheus-agent-linux-x64.tar.gz";
     private const string WindowsArchiveName = "aetheus-agent-win-x64.zip";
-    internal const long MaxArchiveBytes = 256L * 1024 * 1024;
     internal const long MaxExtractedPayloadBytes = 1024L * 1024 * 1024;
     internal const int MaxArchiveEntries = 4096;
     internal const int ConfirmationTimeoutSeconds = 330;
-    // Posture 3: the supervisor understands the sixth request field (capabilities to enable). This agent
-    // refuses to hand a request to a supervisor of another version, so a six-field line never reaches a
-    // supervisor that would reject it.
-    internal const string LinuxIntegrationPostureVersion = "3";
+    // Posture 4: the supervisor maps the eleven tokens of AgentEnableableCapabilities from the sixth request
+    // field (ADR-055; posture 3 knew only patch-manage). This agent refuses to hand a request to a supervisor
+    // of another version, so a six-field line never reaches a supervisor that would reject its tokens.
+    internal const string LinuxIntegrationPostureVersion = "4";
     internal const string LinuxIntegrationPostureVersionPath = "/etc/aetheus-agent-posture-version";
     internal bool? IsWindowsOverride { get; set; }
     internal string? InstallDirectoryOverride { get; set; }
@@ -352,7 +351,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
         var expected = manifestSha256 ?? headerSha256;
         if (string.IsNullOrEmpty(expected) && !await AllowMissingChecksumAsync(onOutput).ConfigureAwait(false))
             return DownloadResponseValidation.Invalid;
-        if (response.Content.Headers.ContentLength is > MaxArchiveBytes)
+        if (response.Content.Headers.ContentLength is > AgentReleaseArchiveResolver.MaxArchiveBytes)
         {
             await onOutput(ArchiveTooLargeMessage, TaskLogLevel.Error).ConfigureAwait(false);
             return DownloadResponseValidation.Invalid;
@@ -398,7 +397,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
                 var read = await input.ReadAsync(buffer, ct).ConfigureAwait(false);
                 if (read == 0) break;
                 sizeBytes = checked(sizeBytes + read);
-                if (sizeBytes > MaxArchiveBytes)
+                if (sizeBytes > AgentReleaseArchiveResolver.MaxArchiveBytes)
                 {
                     exceededLimit = true;
                     break;
@@ -426,7 +425,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
                 destination,
                 $"Update archive size differs from manifest: expected {manifestSize}, got {archive.SizeBytes}.",
                 onOutput).ConfigureAwait(false);
-        await onOutput($"Downloaded {archive.SizeBytes / 1024} KB", TaskLogLevel.Info).ConfigureAwait(false);
+        await onOutput($"Downloaded {archive.SizeBytes / 1024} Ko", TaskLogLevel.Info).ConfigureAwait(false);
         if (expectedSha256 is not null
             && !string.Equals(archive.Sha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
@@ -450,7 +449,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
     }
 
     private static string ArchiveTooLargeMessage =>
-        $"Update archive exceeds the {MaxArchiveBytes / (1024 * 1024)} MiB safety limit - aborting.";
+        $"Update archive exceeds the {AgentReleaseArchiveResolver.MaxArchiveBytes / (1024 * 1024)} Mo safety limit - aborting.";
 
     private sealed record DownloadResponseValidation(bool IsValid, string? ExpectedSha256)
     {
@@ -557,7 +556,7 @@ public sealed class AgentSelfUpdateOperationExecutor(
         totalBytes = checked(totalBytes + length);
         if (totalBytes > MaxExtractedPayloadBytes)
             throw new InvalidDataException(
-                $"expanded payload exceeds {MaxExtractedPayloadBytes / (1024 * 1024)} MiB");
+                $"expanded payload exceeds {MaxExtractedPayloadBytes / (1024 * 1024)} Mo");
     }
 
     private static void ValidateArchiveEntry(string name, string extractDir)

@@ -54,7 +54,7 @@ public sealed class DailyRecapRenderingTests
         Certificates = [new RecapExpiring("boutique.exemple.org", "exemple-vps-prod", Generated.AddDays(12))],
         Secrets = [new RecapExpiring("STRIPE_API_KEY", "exemple-coffre-prod", Generated.AddDays(4))],
         Findings = new RecapFindings(new Dictionary<AnalysisSeverity, int> { [AnalysisSeverity.High] = 2, [AnalysisSeverity.Medium] = 5 }, 3),
-        MailServers = [new RecapMailServer("exemple-vps-prod", true, true, 0, Generated.AddMinutes(-3))]
+        MailServers = [new RecapMailServer("exemple-vps-prod", true, true, 3, Generated.AddMinutes(-3))]
     };
 
     private static (RecapDocument Document, string Html, string Text) Render(DailyRecapReport report, DailyRecapLanguage language = DailyRecapLanguage.French)
@@ -188,8 +188,8 @@ public sealed class DailyRecapRenderingTests
         Assert.DoesNotContain("Sauvegardes", text);
         // One run succeeded, none failed: the failed tile is not drawn with a 0.
         Assert.DoesNotContain(document.Tiles, tile => tile.Value == "0");
-        Assert.Contains(document.Tiles, tile => tile.Label == "exécutions de pipeline réussies" && tile.Value == "1");
-        // The sample mail server has an empty queue: no "0 messages" line.
+        Assert.Contains(document.Tiles, tile => tile.Label == "exécution de pipeline réussie" && tile.Value == "1");
+        // The sample mail server queue holds 3 messages: no "0 messages" line is drawn for an empty one.
         Assert.DoesNotContain("0 messages", html);
     }
 
@@ -251,6 +251,142 @@ public sealed class DailyRecapRenderingTests
         var (_, html, _) = Render(report);
 
         Assert.Contains("4 messages", html);
+    }
+
+    private static (string Html, RecapDocument Document) RenderLinked(DailyRecapReport report)
+    {
+        var culture = CultureInfo.GetCultureInfo("fr-FR");
+        var document = DailyRecapComposer.Compose(report, new DailyRecapText(culture), "https://app.example.org");
+        return (RenderMail(document, culture.Name).Html, document);
+    }
+
+    [Fact]
+    public void Header_KeepsTheDay_AndDropsThePeriodAndTheGenerationTime()
+    {
+        var (_, html, text) = Render(SampleReport());
+
+        Assert.Contains("Ce qui s'est passé le jeudi 8 octobre 2026", html);
+        foreach (var gone in new[] { "Journée de", "Généré le", "Europe/Paris" })
+        {
+            Assert.DoesNotContain(gone, html);
+            Assert.DoesNotContain(gone, text);
+        }
+    }
+
+    [Fact]
+    public void Tiles_AreStacked_OneRowEach_WithTheirFigureOnOneLine()
+    {
+        var (_, html, _) = Render(SampleReport());
+
+        // No row of side-by-side cells: that is what split "1 / 1" over two lines on a phone.
+        Assert.DoesNotContain("width:33%", html);
+        Assert.DoesNotContain("width:50%", html);
+        Assert.Contains("2&nbsp;/&nbsp;3", html);
+        Assert.DoesNotContain("2 / 3", html);
+        var tileRows = System.Text.RegularExpressions.Regex.Matches(html, @"<td[^>]*padding:\s*12px[^>]*>\s*<span[^>]*font-size:\s*22px");
+        Assert.Equal(3, tileRows.Count);
+    }
+
+    [Fact]
+    public void EachRun_IsAtMostTwoLines_AndItsNameOpensTheRun()
+    {
+        var (html, document) = RenderLinked(SampleReport());
+
+        Assert.Contains("<a href=\"https://app.example.org/pipelines/runs/4821\"", html);
+        Assert.Contains("<strong>exemple-release-candidate</strong></a>", html);
+        Assert.DoesNotContain("Voir l'exécution et les journaux", html);
+        Assert.DoesNotContain("Voir l’exécution et les journaux", html);
+        Assert.All(document.Blocks[0].Items, item =>
+        {
+            Assert.Empty(item.Lines);
+            Assert.True(item.TitleIsLink);
+            Assert.Contains("exécution n° ", item.Subtitle);
+        });
+    }
+
+    [Fact]
+    public void ThePipelinesSentence_ExplainingParentsOnly_IsGone()
+    {
+        var (document, html, text) = Render(SampleReport());
+
+        Assert.Null(document.Blocks[0].Note);
+        Assert.DoesNotContain("Pipelines parents uniquement", html);
+        Assert.DoesNotContain("Pipelines parents uniquement", text);
+        Assert.Contains("4 exécutions terminées", html);
+    }
+
+    [Fact]
+    public void Findings_AreSummarisedBySeverity_WithOneLinkAndNoItem()
+    {
+        var report = SampleReport() with
+        {
+            Findings = new RecapFindings(new Dictionary<AnalysisSeverity, int>
+            {
+                [AnalysisSeverity.Critical] = 3,
+                [AnalysisSeverity.High] = 5,
+                [AnalysisSeverity.Medium] = 12,
+                [AnalysisSeverity.Low] = 0
+            }, 2)
+        };
+        var (html, document) = RenderLinked(report);
+
+        var findings = document.Blocks.Single(block => block.Title == "Constats de sécurité et de qualité");
+        Assert.Empty(findings.Items);
+        Assert.Equal("20 nouveaux constats (3 critiques, 5 élevés, 12 moyens), 2 résolus.", findings.Summary);
+        Assert.DoesNotContain("faibles", findings.Summary);
+        Assert.Contains("20 nouveaux constats (3 critiques, 5 élevés, 12 moyens), 2 résolus.", html);
+        Assert.Equal("https://app.example.org/analysis", findings.Link?.Url);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "href=\"https://app.example.org/analysis\""));
+        Assert.Contains(">Voir les constats</a>", html);
+    }
+
+    [Fact]
+    public void Findings_Summary_AgreesWithTheCountOfEachSeverity()
+    {
+        var report = SampleReport() with
+        {
+            Findings = new RecapFindings(new Dictionary<AnalysisSeverity, int> { [AnalysisSeverity.Critical] = 1, [AnalysisSeverity.High] = 1 }, 0)
+        };
+        var (document, _, _) = Render(report);
+
+        var findings = document.Blocks.Single(block => block.Title == "Constats de sécurité et de qualité");
+        Assert.Equal("2 nouveaux constats (1 critique, 1 élevé), 0 résolu.", findings.Summary);
+    }
+
+    [Fact]
+    public void TheMailServerSection_IsHidden_WhenThereIsNothingToReport()
+    {
+        var healthy = SampleReport() with { MailServers = [new RecapMailServer("exemple-vps-prod", true, true, 0, Generated)] };
+
+        var (document, html, text) = Render(healthy);
+
+        Assert.DoesNotContain(document.Blocks, block => block.Title == "Serveurs de messagerie");
+        Assert.DoesNotContain("Serveurs de messagerie", html);
+        Assert.DoesNotContain("Serveurs de messagerie", text);
+    }
+
+    [Theory]
+    [InlineData(false, true, 0)]
+    [InlineData(true, false, 0)]
+    [InlineData(true, true, 2)]
+    public void TheMailServerSection_IsShown_WhenAServiceStoppedOrMailWaits(bool postfix, bool dovecot, int queue)
+    {
+        var report = SampleReport() with { MailServers = [new RecapMailServer("exemple-vps-prod", postfix, dovecot, queue, Generated)] };
+
+        var (_, html, _) = Render(report);
+
+        Assert.Contains(">Serveurs de messagerie</h2>", html);
+    }
+
+    [Fact]
+    public void TheFooter_KeepsTheSenderAndTheSettingsLink_Only()
+    {
+        var (html, _) = RenderLinked(SampleReport());
+
+        Assert.Contains("Envoyé par Aetheus", html);
+        Assert.Contains(">Régler le récap</a>", html);
+        foreach (var gone in new[] { "no-reply", "Destinataires", "heure d'envoi", "Paramètres de la plateforme" })
+            Assert.DoesNotContain(gone, html);
     }
 
     [Fact]

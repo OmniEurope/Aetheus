@@ -285,13 +285,18 @@ public partial class Projects : IAsyncDisposable
     private static string LastCommitSha(ProjectDto project) =>
         string.IsNullOrWhiteSpace(project.LastCommitSha) ? "-" : project.LastCommitSha;
 
-    private static string ProductionStatusClass(ProjectProductionStatus status) =>
+    /// <summary>Online reads blue (Accent, the Primary colour, recette R-64), offline red, unknown neutral.</summary>
+    private static OmniTone ProductionStatusTone(ProjectProductionStatus status) =>
         status switch
         {
-            ProjectProductionStatus.Online => "online",
-            ProjectProductionStatus.Offline => "offline",
-            _ => "unavailable"
+            ProjectProductionStatus.Online => OmniTone.Accent,
+            ProjectProductionStatus.Offline => OmniTone.Danger,
+            _ => OmniTone.Neutral
         };
+
+    /// <summary>The API sends UTC instants; the relative-time component takes an offset.</summary>
+    private static DateTimeOffset AsOffset(DateTime utc) =>
+        new(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
 
     /// <summary>The first line of a commit message: the tile shows one line, the title carries the rest.</summary>
     internal static string FirstLine(string message) =>

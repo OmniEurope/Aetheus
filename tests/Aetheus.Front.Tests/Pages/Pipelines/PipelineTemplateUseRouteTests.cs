@@ -40,6 +40,8 @@ public sealed class PipelineTemplateUseRouteTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/projects", [new ProjectDto { Id = 7, Name = "Atlas" }]);
         _handler.SetJsonResponse("api/pipelines/templates",
             new List<PipelineTemplateSummaryDto> { new() { Id = 3, Name = name, Version = 1 } });
+        // The Capabilities step reads what the branch holds (R-10 to R-13).
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/readiness", new PipelineSetupReadinessDto());
         Services.GetRequiredService<NavigationManager>()
             .NavigateTo("http://localhost/pipelines/setup?projectId=7&templateId=3");
         var cut = Render<PipelineSetupWizard>();
@@ -50,7 +52,7 @@ public sealed class PipelineTemplateUseRouteTests : BunitContext
         if (cut.FindAll(".omni-selectable-card--selected").Count == 0)
         {
             await cut.Find("[data-testid='setup-architecture-application']").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-            await cut.Find("[data-testid='setup-same-project'] input[value='False']").ChangeAsync(new Microsoft.AspNetCore.Components.ChangeEventArgs { Value = "False" });
+            await cut.Find("[data-testid='setup-shape-separate']").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         }
         await cut.InvokeAsync(wizard.Instance.NextStep);
         Assert.Equal(2, wizard.Instance.CurrentStep);

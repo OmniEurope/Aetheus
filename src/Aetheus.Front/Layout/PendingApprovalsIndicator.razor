@@ -15,9 +15,9 @@
                      TriggerTitle="@label"
                      Label="@label"
                      PopupLabel="@L["PendingApprovalsTitle"]">
+            <TriggerIcon><OmniIcon Name="OmniIconName.Stamp" Class="header-icon" /></TriggerIcon>
             <TriggerContent>
-                <OmniIcon Name="OmniIconName.Stamp" Class="header-icon" />
-                <span class="task-tracker-count">@(count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.CurrentCulture))</span>
+                <span class="task-tracker-count">@DisplayFormatting.BadgeCount(count)</span>
             </TriggerContent>
             <ChildContent>
                 <div class="task-tracker-popover">

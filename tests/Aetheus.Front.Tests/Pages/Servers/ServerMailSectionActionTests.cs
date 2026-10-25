@@ -40,9 +40,12 @@ public sealed class ServerMailSectionActionTests : BunitContext
         _handler.SetJsonResponse("api/servers/10/mail/diagnostics", new MailDiagnosticsDto());
     }
 
-    private IRenderedComponent<ServerMailSection> RenderSection(bool installed = true)
+    // The accounts tab opens first (R1-29): the domain actions are reached through ?tab=domains, the way a link does.
+    private IRenderedComponent<ServerMailSection> RenderSection(bool installed = true, string? tab = null)
     {
         StubReads();
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>()
+            .NavigateTo(tab is null ? "/servers/10/mail" : $"/servers/10/mail?tab={tab}");
         var server = ServerTestData.MakeMailServer(installed, true, true);
         return Render<ServerMailSection>(p => p
             .Add(x => x.Server, server)
@@ -70,10 +73,29 @@ public sealed class ServerMailSectionActionTests : BunitContext
     public void AnInstalledServerOffersTheMailWriteActions()
     {
         StubReads();
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/servers/10/mail?tab=domains");
         var server = ServerTestData.MakeMailServer(true, true, true) with { MailSetupAvailable = true };
         var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
 
         Assert.NotNull(TryButton(cut, "AddDomain"));
+    }
+
+    [Fact]
+    public void R1_29_TheMailServiceControls_AreNotOnTheAccountsTab()
+    {
+        var cut = RenderSection();
+
+        Assert.Null(TryButton(cut, "MailServiceActions"));
+        Assert.NotNull(TryButton(cut, "AddAccount"));
+    }
+
+    [Fact]
+    public void R1_29_TheStateTab_OffersTheServiceControls()
+    {
+        StubReads();
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/servers/10/mail?tab=status");
+        var server = ServerTestData.MakeMailServer(true, true, true) with { MailSetupAvailable = true };
+        var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
         // Mail service controls appear in the status list after counts are known.
         cut.WaitForAssertion(() => Assert.NotNull(TryButton(cut, "MailServiceActions")));
     }
@@ -83,7 +105,7 @@ public sealed class ServerMailSectionActionTests : BunitContext
     {
         // The dialog is where the domain name is typed; dismissing it must not create anything.
         _dialog.OpenResult = null;
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
         var before = _handler.Requests.Count(r => r.Method == "POST");
 
         TryButton(cut, "AddDomain")!.Click();
@@ -99,7 +121,7 @@ public sealed class ServerMailSectionActionTests : BunitContext
         _handler.SetJsonResponse(
             HttpMethod.Post, "api/servers/10/mail/domains", new MailDomainDto { Id = 9, Name = "new-domain.test" });
         _dialog.OpenResult = Filled(MailDialogMode.AddDomain);
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
 
         TryButton(cut, "AddDomain")!.Click();
 
@@ -115,7 +137,7 @@ public sealed class ServerMailSectionActionTests : BunitContext
         _handler.SetJsonResponse(
             HttpMethod.Post, "api/servers/10/mail/domains", new MailDomainDto { Id = 9, Name = "new-domain.test" });
         _dialog.OpenResult = Filled(MailDialogMode.AddDomain);
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
         var readsBefore = _handler.Requests.Count(r => r.Method == "GET");
 
         TryButton(cut, "AddDomain")!.Click();

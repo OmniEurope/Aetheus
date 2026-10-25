@@ -154,6 +154,22 @@ public class ApiClientPipelinesTests
         AssertLastRequest(HttpMethod.Post, url);
     }
 
+    /// <summary>R-20: the preview needs the parameters the run will use (the production server among them),
+    /// so the preflight request carries them.</summary>
+    [Fact]
+    public async Task PreflightPipelineAsync_SendsTheChosenParameters()
+    {
+        const string url = "api/pipelines/1/preflight";
+        _handler.SetJsonResponse(HttpMethod.Post, url, new PipelinePreflightDto());
+
+        await _api.Pipelines.PreflightPipelineAsync(1, parameters: new Dictionary<string, string> { ["deployServer"] = "web-01" },
+            ct: Xunit.TestContext.Current.CancellationToken);
+
+        AssertLastRequest(HttpMethod.Post, url);
+        using var body = JsonDocument.Parse(_handler.LastRequestBody!);
+        Assert.Equal("web-01", body.RootElement.GetProperty("parameters").GetProperty("deployServer").GetString());
+    }
+
     [Fact]
     public async Task RetryFailedStepsAsync_ReturnsDto()
     {
@@ -231,7 +247,7 @@ public class ApiClientPipelinesTests
         handler2.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto> { new() { Id = 1, Name = "Cached" } });
         await api2.PipelineTemplates.GetPipelineTemplatesAsync();
         // The cache moved into the sub-client that owns it; it is still the only state in the client.
-        var cacheField = typeof(Aetheus.Front.Components.Pipelines.PipelineTemplatesApi).GetField("_templateCache",
+        var cacheField = typeof(Aetheus.Front.Components.Shared.PipelineTemplatesApi).GetField("_templateCache",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         Assert.NotNull(cacheField.GetValue(api2.PipelineTemplates));
 
@@ -256,7 +272,7 @@ public class ApiClientPipelinesTests
         var r = await _api.PipelineTemplates.UpdatePipelineTemplateAsync(1, new UpdatePipelineTemplateRequest { Name = "Updated Template" }, Xunit.TestContext.Current.CancellationToken);
         Assert.Equal("Updated Template", r!.Name);
         AssertLastRequest(HttpMethod.Put, "api/pipelines/templates/1");
-        Assert.Null(typeof(Aetheus.Front.Components.Pipelines.PipelineTemplatesApi).GetField("_templateCache",
+        Assert.Null(typeof(Aetheus.Front.Components.Shared.PipelineTemplatesApi).GetField("_templateCache",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_api.PipelineTemplates));
     }
 
@@ -270,7 +286,7 @@ public class ApiClientPipelinesTests
         var r = await _api.PipelineTemplates.DeletePipelineTemplateAsync(1, Xunit.TestContext.Current.CancellationToken);
         Assert.True(r.Success);
         AssertLastRequest(HttpMethod.Delete, "api/pipelines/templates/1");
-        Assert.Null(typeof(Aetheus.Front.Components.Pipelines.PipelineTemplatesApi).GetField("_templateCache",
+        Assert.Null(typeof(Aetheus.Front.Components.Shared.PipelineTemplatesApi).GetField("_templateCache",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_api.PipelineTemplates));
     }
 

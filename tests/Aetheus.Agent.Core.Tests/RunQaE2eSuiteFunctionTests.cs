@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of the immutable-image path of <c>deploy/scripts/run-qa-e2e-suite.sh</c>, run through the
+/// The C# port of the immutable-image path of the former <c>run-qa-e2e-suite.sh</c> script, run through the
 /// real executor against a Docker CLI stand-in whose <c>docker cp</c> delivers the suite container's
 /// results: the argument refusals, the image revision check, the network and readiness, the suite
 /// container's environment, the classification of the raw exit code against the TRX, the skipped and

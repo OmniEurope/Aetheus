@@ -69,6 +69,6 @@ public sealed class ServerClockTests : IDisposable
         ServerClock.Observe(DateTimeOffset.UtcNow.AddSeconds(20), TimeSpan.Zero);
         var started = new DateTime(2026, 9, 6, 10, 0, 0, DateTimeKind.Utc);
 
-        Assert.Equal("2m 30s", PipelineRunFormatting.FormatDuration(started, started.AddSeconds(150)));
+        Assert.Equal("2min", PipelineRunFormatting.FormatDuration(started, started.AddSeconds(150)));
     }
 }

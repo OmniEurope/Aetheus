@@ -4,13 +4,12 @@
     <div class="run-params-dialog">
         <RunParameterFields @ref="_fields" Parameters="@Parameters" Prefill="@Prefill" AvailableReleases="@AvailableReleases" AvailableReleaseTotal="@AvailableReleaseTotal" />
 
-        @if (!string.IsNullOrEmpty(_error))
-        {
-            <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">@_error</OmniAlert>
-        }
-
-        <DialogFooter OnCancel="@OnCancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="@MaterialIconMap.Resolve(SubmitIcon)" /> <span>@(SubmitText ?? L["Run"])</span></OmniButton>
-        </DialogFooter>
+        @* The actions stay at the bottom of the dialog while the list above scrolls (R-27); a missing
+           required value is told under its own field (R-26), not here. *@
+        <div class="run-params-footer" data-testid="run-params-footer">
+            <DialogFooter OnCancel="@OnCancel">
+                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(SubmitIcon)" /></Icon><ChildContent><span>@(SubmitText ?? L["Run"])</span></ChildContent></OmniButton>
+            </DialogFooter>
+        </div>
     </div>
 </OmniTemplateForm>

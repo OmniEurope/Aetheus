@@ -31,7 +31,7 @@ else
                 <Template Context="version">v@(version.Version)</Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="ChangelogEntry" Title="@L["Changelog"]" Filterable="true" />
-            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Width="12rem" Filterable="true" />
+            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" />
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
         </Columns>
     </AetheusDataGrid>
@@ -47,7 +47,7 @@ else
             {
                 <OmniAlert Severity="OmniSeverity.Danger">
                     @L["LoadFailed"]
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadSelectedYamlAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadSelectedYamlAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
                 </OmniAlert>
             }
             else if (_yamlLoading)

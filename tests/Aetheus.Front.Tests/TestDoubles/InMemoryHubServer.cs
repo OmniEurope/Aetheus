@@ -27,6 +27,7 @@ internal sealed class InMemoryHubServer : IConnectionFactory
     private readonly List<(string Target, JsonElement[] Arguments)> _invocations = [];
     private readonly Dictionary<string, string> _refusals = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement[], object?>> _results = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TaskCompletionSource> _holds = new(StringComparer.Ordinal);
     private readonly StateSignal _changes = new();
     private ServerConnection? _current;
     private int _connections;
@@ -76,6 +77,29 @@ internal sealed class InMemoryHubServer : IConnectionFactory
     public void Accept(string target)
     {
         lock (_gate) _refusals.Remove(target);
+    }
+
+    /// <summary>The hub records every invocation of <paramref name="target"/> but holds its answer back until
+    /// the returned scope is disposed: the client then waits on a hub that is slow to answer.</summary>
+    public IDisposable Hold(string target)
+    {
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_gate) _holds[target] = hold;
+        return new Release(() =>
+        {
+            lock (_gate) _holds.Remove(target);
+            hold.TrySetResult();
+        });
+    }
+
+    private Task? HeldAnswer(string target)
+    {
+        lock (_gate) return _holds.GetValueOrDefault(target)?.Task;
+    }
+
+    private sealed class Release(Action release) : IDisposable
+    {
+        public void Dispose() => release();
     }
 
     /// <summary>The hub answers every invocation of <paramref name="target"/> with this value.</summary>
@@ -238,11 +262,36 @@ internal sealed class InMemoryHubServer : IConnectionFactory
                 : [];
             if (root.TryGetProperty("invocationId", out var id))
             {
-                await WriteAsync(server.Answer(id.GetString()!, target, arguments));
-                server._changes.Pulse();
+                var answer = server.Answer(id.GetString()!, target, arguments);
+                // A held answer is awaited apart from the read loop: a hub slow to answer one invocation
+                // still reads (and the client still answers) what else happens on the connection. The
+                // invocation is signalled at once only then, because the test is waiting for a hub that
+                // has not answered; otherwise it is signalled once the answer is written (AnswerAsync).
+                // Signalling it before the answer let a test that drops the connection on seeing the
+                // invocation cut the answer: the client's join failed, its hub was disposed and the
+                // reconnect the test then waited for never came (the 5 minute hang of the reconnect test).
+                if (server.HeldAnswer(target) is { } held)
+                {
+                    server._changes.Pulse();
+                    _ = AnswerWhenReleasedAsync(held, answer);
+                }
+                else
+                    await AnswerAsync(answer);
             }
             else
                 server.Record(target, arguments);
+        }
+
+        private async Task AnswerWhenReleasedAsync(Task held, object answer)
+        {
+            await held;
+            await AnswerAsync(answer);
+        }
+
+        private async Task AnswerAsync(object answer)
+        {
+            await WriteAsync(answer);
+            server._changes.Pulse();
         }
 
         private void CompletePush(string invocationId)

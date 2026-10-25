@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Services.Email;
+using MailKit.Security;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -93,6 +94,65 @@ public sealed class EmailSenderTests
             .ThrowsAsync(new OperationCanceledException(cts.Token));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _sut.SendAsync(Message("a@x.org"), cts.Token));
+    }
+
+    private EmailSender SenderWithRepair(INoReplyCredentialRepair repair) =>
+        new(_resolver, _transport, NullLogger<EmailSender>.Instance, repair);
+
+    [Fact]
+    public async Task ManagedSender_RefusedPassword_Repairs_AndStillReportsTheRefusalVerbatim()
+    {
+        var repair = Substitute.For<INoReplyCredentialRepair>();
+        _transport.ConnectAsync(Configuration, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new AuthenticationException("535: 5.7.8 Error: authentication failed: (reason unavailable)"));
+
+        var result = await SenderWithRepair(repair).SendAsync(Message("a@x.org"), Ct);
+
+        Assert.Equal(EmailSendStatus.Failed, result.Status);
+        Assert.Equal("535: 5.7.8 Error: authentication failed: (reason unavailable)", result.Message);
+        await repair.Received(1).TryRepairAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ManagedSender_OtherConnectionFailure_DoesNotRepair()
+    {
+        var repair = Substitute.For<INoReplyCredentialRepair>();
+        _transport.ConnectAsync(Configuration, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Connection refused"));
+
+        await SenderWithRepair(repair).SendAsync(Message("a@x.org"), Ct);
+
+        await repair.DidNotReceive().TryRepairAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CustomSender_RefusedPassword_IsNeverRepaired()
+    {
+        // The password of a custom SMTP server is the administrator's own: Aetheus must not replace anything.
+        var repair = Substitute.For<INoReplyCredentialRepair>();
+        _resolver.ResolveAsync(Arg.Any<CancellationToken>())
+            .Returns(new EmailSenderResolution { Source = EmailSenderSource.Custom, Configuration = Configuration });
+        _transport.ConnectAsync(Configuration, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new AuthenticationException("535 authentication failed"));
+
+        var result = await SenderWithRepair(repair).SendAsync(Message("a@x.org"), Ct);
+
+        Assert.Equal(EmailSendStatus.Failed, result.Status);
+        await repair.DidNotReceive().TryRepairAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task FailedRepair_DoesNotHideTheRefusal()
+    {
+        var repair = Substitute.For<INoReplyCredentialRepair>();
+        repair.TryRepairAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("database down"));
+        _transport.ConnectAsync(Configuration, Arg.Any<CancellationToken>())
+            .ThrowsAsync(new AuthenticationException("535 authentication failed"));
+
+        var result = await SenderWithRepair(repair).SendAsync(Message("a@x.org"), Ct);
+
+        Assert.Equal(EmailSendStatus.Failed, result.Status);
+        Assert.Equal("535 authentication failed", result.Message);
     }
 
     [Fact]

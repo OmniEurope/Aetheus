@@ -8,12 +8,12 @@
    administrator's address. *@
 <OmniPageHeader Title="@L["MailTemplates"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("mail")" /></Icon>
-    <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAsync" Busy="@_saving" Disabled="@(!CanSave)" Class="mail-template-save"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAsync" Busy="@_saving" Disabled="@(!CanSave)" Class="mail-template-save"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
         <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@(_template is null || !_template.IsCustomized)" Class="mail-template-more">
             <OmniMenuItem OnClick="@ResetAsync"><Icon><OmniIcon Name="OmniIconName.Restore" /></Icon><ChildContent>@L["MailTemplateRestoreDefault"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 
 <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mb-sm">
@@ -39,12 +39,12 @@ else if (_template is null)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => SelectAsync(_kind, _language))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => SelectAsync(_kind, _language))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 else
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm mail-template-state">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm mail-template-state">
         <OmniBadge Fill="OmniFill.Tonal" Tone="@(_template.IsCustomized ? OmniTone.Info : OmniTone.Neutral)">@(_template.IsCustomized ? L["MailTemplateCustomized"] : L["MailTemplateDefault"])</OmniBadge>
         @if (StateText is { } state)
         {

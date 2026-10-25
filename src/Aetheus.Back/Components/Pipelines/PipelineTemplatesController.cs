@@ -93,7 +93,7 @@ public class PipelineTemplatesController(
         if (!await HasPermissionAsync(null, Permission.Write, ct)) return Forbid();
         var (allowed, organizationId) = await ResolveCreationOrganizationAsync(null, ct);
         if (!allowed) return Forbid();
-        if (file.Length == 0 || file.Length > 1_048_576) return BadRequest(new ApiError { Message = "File is empty or exceeds 1 MB." });
+        if (file.Length == 0 || file.Length > 1_048_576) return BadRequest(new ApiError { Message = "File is empty or exceeds 1 Mo." });
 
         using var reader = new StreamReader(file.OpenReadStream());
         var yaml = await reader.ReadToEndAsync(ct);

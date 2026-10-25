@@ -1,0 +1,80 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/alerts/{AlertId:long}"
+
+<PageTitle>@($"{L["Alert"]} #{AlertId}") - Aetheus</PageTitle>
+
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Large" />
+}
+else if (_forbidden)
+{
+    <EmptyState Icon="lock" Title="@L["AccessDenied"]" />
+}
+else if (_alert is null)
+{
+    <EmptyState Icon="notifications_off" Title="@L["AlertNotFound"]" />
+}
+else
+{
+    @* Recette R-52: the page the notification mail's button opens. One main action, the server it is about. *@
+    <OmniPageHeader Title="@Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+        <Icon><OmniIcon Name="@MaterialIconMap.Resolve("notifications")" /></Icon>
+        <Badges>
+            <OmniBadge Fill="OmniFill.Solid" Tone="@SeverityTone">@L.Localize(_alert.Severity)</OmniBadge>
+        </Badges>
+        <ActionsContent>
+            @if (_alert.ServerId is { } serverId)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"/servers/{serverId}/overview"))"><Icon><OmniIcon Name="OmniIconName.HardDrive" /></Icon><ChildContent><span>@L["ViewServer"]</span></ChildContent></OmniButton>
+            }
+        </ActionsContent>
+    </OmniPageHeader>
+
+    @if (_alert.Threshold is not null)
+    {
+        <OmniTileGrid Columns="3" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
+            @if (_alert.ObservedValue is not null)
+            {
+                <OmniStatTile Title="@L["AlertMeasuredValue"]" Value="@MeasuredValue" />
+            }
+            <OmniStatTile Title="@L["Threshold"]" Value="@ThresholdText" />
+            @if (_alert.SustainedSeconds is { } seconds)
+            {
+                <OmniStatTile Title="@L["Duration"]" Value="@DisplayFormatting.Duration(TimeSpan.FromSeconds(seconds))" />
+            }
+        </OmniTileGrid>
+    }
+
+    <OmniCard Class="omni-u-mt-lg">
+        <HeaderContent><OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Details"]</OmniText></HeaderContent>
+        <ChildContent>
+            <OmniDescriptionList Columns="2">
+                @if (_alert.Operator is not null)
+                {
+                    <OmniDescriptionItem Term="@L["AlertRule"]">@_alert.RuleName</OmniDescriptionItem>
+                }
+                @if (_alert.ServerId is { } linkedServerId)
+                {
+                    <OmniDescriptionItem Term="@L["Server"]"><OmniLink Href="@($"/servers/{linkedServerId}/overview")">@_alert.ServerName</OmniLink></OmniDescriptionItem>
+                }
+                <OmniDescriptionItem Term="@L["Metric"]">@MetricText</OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["TriggeredAt"]">@TriggeredAtText</OmniDescriptionItem>
+                @if (_alert.Operator is not null)
+                {
+                    <OmniDescriptionItem Term="@L["AlertRuleState"]">
+                        <OmniBadge Fill="OmniFill.Solid" Tone="@RuleStateTone">@RuleStateText</OmniBadge>
+                    </OmniDescriptionItem>
+                }
+            </OmniDescriptionList>
+        </ChildContent>
+    </OmniCard>
+
+    @if (!string.IsNullOrWhiteSpace(_alert.Message))
+    {
+        <OmniCard Class="omni-u-mt-lg">
+            <HeaderContent><OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["AlertMessage"]</OmniText></HeaderContent>
+            <ChildContent><OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@_alert.Message</OmniText></ChildContent>
+        </OmniCard>
+    }
+}

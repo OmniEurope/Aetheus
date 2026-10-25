@@ -108,7 +108,7 @@ public sealed class ProjectOverviewSectionLiveTests : BunitContext
     }
 
     private int RecentReads() =>
-        _handler.Requests.ToList().Count(request => request.Url.Contains("api/pipelines/runs/recent?projectId=1", StringComparison.Ordinal));
+        _handler.RequestsSnapshot().Count(request => request.Url.Contains("api/pipelines/runs/recent?projectId=1", StringComparison.Ordinal));
 
     private async Task RenderConnectedAsync()
     {

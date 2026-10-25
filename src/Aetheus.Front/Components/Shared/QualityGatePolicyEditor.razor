@@ -14,8 +14,8 @@ else
             <div class="quality-gate-activation-icon" aria-hidden="true">
                 <OmniIcon Name="OmniIconName.ShieldCheck" />
             </div>
-            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XLarge">
-                <OmniRow Gap="OmniSpacing.XLarge">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.ExtraLarge">
+                <OmniRow Gap="OmniSpacing.ExtraLarge">
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["QualityGateOptionalBadge"]</OmniBadge>
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">YAML</OmniBadge>
                 </OmniRow>
@@ -29,7 +29,7 @@ else
     </OmniCard>
 
     <OmniRow Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md">
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
             <OmniHeading Level="OmniHeadingLevel.H5">@L["QualityGates"]</OmniHeading>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["QualityGatesInheritanceHelp"]</OmniText>
         </OmniStack>
@@ -37,7 +37,7 @@ else
         {
             @* STD-BTN detection 11: Add visible, the other actions in the menu. *@
             <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="BeginAdd" title="@L["QualityGateAddRule"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="BeginAdd" title="@L["QualityGateAddRule"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@(() => ApplyPresetAsync(false))" Disabled="@_applying" title="@L["QualityGateRecommended"]"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["Recommended"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => ApplyPresetAsync(true))" Disabled="@_applying"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["QualityGateStrict"]</ChildContent></OmniMenuItem>
@@ -52,7 +52,7 @@ else
     {
         <OmniUpload MaximumFileSize="1048576"
                     AllowedContentTypes="@JsonContentTypes"
-                    FilesSelected="ImportAsync" />
+                    OnFilesSelect="ImportAsync" />
     }
 
     @if (_showForm)
@@ -163,8 +163,8 @@ else
                 </OmniRow>
                 @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
                 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md">
-                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CancelEdit"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CancelEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem OnClick="PreviewAsync" Disabled="@_previewing" title="@L["QualityGatePreview"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["Preview"]</ChildContent></OmniMenuItem>
                     </OmniOverflowMenu>
@@ -204,12 +204,14 @@ else
         </OmniAlert>
     }
 
+    @* R-5: the rule counts are OE stat tiles of one OmniTileGrid (same width, same height). *@
+    <OmniTileGrid Columns="3" Gap="OmniSpacing.Small" Class="quality-gate-stat-tiles">
+        <OmniStatTile Value="@_policies.Count.ToString()" Title="@L["QualityGateRuleCount"]" />
+        <OmniStatTile Value="@_policies.Count(item => item.IsInherited).ToString()" Title="@L["QualityGateInheritedCount"]" />
+        <OmniStatTile Value="@_policies.Count(item => !item.IsInherited).ToString()" Title="@L["QualityGateLocalCount"]" />
+    </OmniTileGrid>
+
     <OmniCard Class="quality-gate-rules-card">
-        <div class="quality-gate-stat-strip">
-            <div><strong>@_policies.Count</strong><span>@L["QualityGateRuleCount"]</span></div>
-            <div><strong>@_policies.Count(item => item.IsInherited)</strong><span>@L["QualityGateInheritedCount"]</span></div>
-            <div><strong>@_policies.Count(item => !item.IsInherited)</strong><span>@L["QualityGateLocalCount"]</span></div>
-        </div>
         <OmniDataGrid Items="@_policies" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AnalysisPolicyDto"
             EmptyText="@L["NoRecords"]" Class="analysis-table quality-gate-table" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
             <Columns>
@@ -236,23 +238,23 @@ else
                 <OmniDataGridColumn TItem="AnalysisPolicyDto" Property="Version" Title="@L["Version"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
                 <OmniDataGridColumn TItem="AnalysisPolicyDto" Property="IsEffective" Title="@L["Status"]" Width="8rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EffectiveText">
                     <Template Context="item">
-                        <OmniBadge Fill="OmniFill.Solid"
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid"
                             Tone="@(item.IsEffective ? OmniTone.Success : OmniTone.Danger)">@(item.IsEffective ? L["Enabled"].Value : L["Disabled"].Value)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 @if (CanEdit)
                 {
                     <OmniDataGridColumn TItem="AnalysisPolicyDto" Title="@L["Actions"]" Filterable="false" Sortable="false"
-                        TextAlign="OmniDataGridTextAlign.End" Width="13rem">
+                        TextAlign="OmniAlignment.End" Width="13rem">
                         <Template Context="item">
                             @* STD-BTN detection 11: Edit (or Override) visible, the other actions in the menu. *@
                             @if (CanEditDirectly(item))
                             {
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => BeginEdit(item))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => BeginEdit(item))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                             }
                             else
                             {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => BeginOverride(item))" title="@L["QualityGateOverride"]" Label="@L["QualityGateOverride"]"><OmniIcon Name="OmniIconName.GitDiff" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => BeginOverride(item))" title="@L["QualityGateOverride"]" Label="@L["QualityGateOverride"]"><Icon><OmniIcon Name="OmniIconName.GitDiff" /></Icon></OmniButton>
                             }
                             <OmniOverflowMenu Label="@L["MoreActions"]">
                                 @if (CanEditDirectly(item))
@@ -275,7 +277,7 @@ else
                 <OmniHeading Level="OmniHeadingLevel.H5">
                     @L["QualityGateHistoryFor", _historyPolicy.Name]
                 </OmniHeading>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _historyPolicy = null)" Label="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _historyPolicy = null)" Label="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
             </OmniRow>
             <OmniDataGrid Items="@_revisions" ExportTitle="@ExportContext.Title(L["Versions"])" ExportFields="@ExportContext.Fields()" TItem="AnalysisPolicyRevisionDto"
  EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
@@ -289,9 +291,9 @@ else
                     @if (CanEdit)
                     {
                         <OmniDataGridColumn TItem="AnalysisPolicyRevisionDto" Title="@L["Actions"]" Filterable="false"
-                            Sortable="false" TextAlign="OmniDataGridTextAlign.End" Width="9rem">
+                            Sortable="false" TextAlign="OmniAlignment.End" Width="9rem">
                             <Template Context="revision">
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackAsync(revision))" Disabled="@(revision.Version == _historyPolicy.Version || _applying)" title="@L["Restore"]" Label="@L["Restore"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackAsync(revision))" Disabled="@(revision.Version == _historyPolicy.Version || _applying)" title="@L["Restore"]" Label="@L["Restore"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
                             </Template>
                         </OmniDataGridColumn>
                     }

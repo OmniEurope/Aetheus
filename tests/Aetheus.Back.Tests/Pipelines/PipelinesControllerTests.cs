@@ -692,6 +692,55 @@ public class PipelinesControllerTests
         Assert.IsType<NotFoundResult>(response);
     }
 
+    // --- ResumeRun (R-39) ---
+
+    [Fact]
+    public async Task R39_ResumeRun_WithPipelineWrite_ResumesInTheSignedInUsersName()
+    {
+        _sut.ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "alice")], "test"))
+            }
+        };
+
+        var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContentResult>(response);
+        await _authz.Received(1).HasPermissionAsync(
+            Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 1, Permission.Write, Arg.Any<CancellationToken>());
+        await _runService.Received(1).ResumeAwaitingRunAsync(10, "alice", TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The same permission as cancelling the run or deciding its approval: without Pipeline.Write
+    /// on the run's pipeline, nothing is replayed.</summary>
+    [Fact]
+    public async Task R39_ResumeRun_WithoutPipelineWrite_IsForbiddenAndResumesNothing()
+    {
+        _authz.HasPermissionAsync(
+                Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 1, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response);
+        await _runService.DidNotReceive().ResumeAwaitingRunAsync(
+            Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R39_ResumeRun_UnknownRun_Returns404AndResumesNothing()
+    {
+        _runService.GetPipelineIdForRunAsync(77, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        var response = await _sut.ResumeRun(77, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFoundResult>(response);
+        await _runService.DidNotReceive().ResumeAwaitingRunAsync(
+            Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task RetryFailedSteps_Found_ReturnsOk()
     {

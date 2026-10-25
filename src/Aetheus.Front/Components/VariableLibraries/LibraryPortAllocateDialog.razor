@@ -43,6 +43,6 @@
     }
 
     <DialogFooter OnCancel="@(() => Dialog.Close(_created.Count > 0))">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AllocateAsync" Disabled="@(_blocker is not null || _serverId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon name="OmniIconName.Archive" /> <span>@L["PortAllocate"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AllocateAsync" Disabled="@(_blocker is not null || _serverId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Archive" /></Icon><ChildContent><span>@L["PortAllocate"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

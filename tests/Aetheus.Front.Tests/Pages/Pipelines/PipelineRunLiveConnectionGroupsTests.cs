@@ -61,6 +61,28 @@ public sealed class PipelineRunLiveConnectionGroupsTests
         Assert.Equal([90, 91, 92, 93], Hub.IntArguments("JoinPipelineRunGroup").Order());
     }
 
+    /// <summary>R1-12: the server announces an analysis report publication per run; the connection says
+    /// "publishing" from the first announcement of any run of the tree until the last one ends, and tells
+    /// the page each change so it can veil its timeline.</summary>
+    [Fact]
+    public async Task AnAnalysisPublication_IsReportedWhileAnyRunOfTheTreePublishes()
+    {
+        var changes = 0;
+        await using var connection = Connection(onLiveStateChanged: () => Interlocked.Increment(ref changes));
+        await connection.StartAsync();
+        Assert.False(connection.AnalysisPublishing);
+
+        await Hub.PushAsync("AnalysisPublishing", 90, true);
+        Assert.True(connection.AnalysisPublishing);
+        await Hub.PushAsync("AnalysisPublishing", 91, true);
+        await Hub.PushAsync("AnalysisPublishing", 90, false);
+        Assert.True(connection.AnalysisPublishing);
+
+        await Hub.PushAsync("AnalysisPublishing", 91, false);
+        Assert.False(connection.AnalysisPublishing);
+        Assert.Equal(4, Volatile.Read(ref changes));
+    }
+
     [Fact]
     public async Task ARefusedJoin_IsTriedAgainOnTheNextPass()
     {

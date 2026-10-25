@@ -26,7 +26,7 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
         string diskPath, string? refName, int skip, int take, string? search, string? afterSha,
         GitCommitLogFilter? filter, CancellationToken ct)
     {
-        GitLightCliService.EnsureRefArgsSafe(refName);
+        GitArgumentGuard.EnsureRefArgsSafe(refName);
         var args = BuildCommitLogArgs(refName, skip, take, search, afterSha, filter);
 
         var (exitCode, output, _) = await git.RunGitAsync(diskPath, args, ct).ConfigureAwait(false);
@@ -60,7 +60,7 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
     public async Task<int> GetCommitCountAsync(
         string diskPath, string? refName, string? search, GitCommitLogFilter? filter, CancellationToken ct)
     {
-        GitLightCliService.EnsureRefArgsSafe(refName);
+        GitArgumentGuard.EnsureRefArgsSafe(refName);
         // rev-list honours the same --grep/--author/--since/--until as log, so the total counts exactly
         // what the page lists.
         var args = new List<string> { "rev-list", "--count" };
@@ -134,7 +134,7 @@ internal sealed class GitCommitLogReader(GitProcessRunner git, ILogger logger, T
         {
             foreach (var branch in branches)
             {
-                GitLightCliService.EnsureRefArgsSafe(branch);
+                GitArgumentGuard.EnsureRefArgsSafe(branch);
                 args.Add($"refs/heads/{branch}");
             }
             return;

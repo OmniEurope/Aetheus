@@ -35,7 +35,7 @@ public sealed class OpenAiChatCompletionsAdapter : IAiProviderAdapter
                 new JsonObject { ["role"] = "system", ["content"] = request.SystemPrompt },
                 new JsonObject { ["role"] = "user", ["content"] = request.UserPrompt })
         };
-        var effort = AiProviderCatalog.EffortToken(request.Effort);
+        var effort = AiEffortTokens.Of(request.Effort);
         if (sendEffort && effort is not null)
             body["reasoning_effort"] = effort;
         var message = new HttpRequestMessage(HttpMethod.Post, Endpoint(baseUrl))

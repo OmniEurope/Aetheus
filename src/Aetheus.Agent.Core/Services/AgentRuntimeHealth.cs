@@ -59,6 +59,63 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
 
     public int ActiveTaskCount => Math.Max(0, Volatile.Read(ref _activeTaskCount));
 
+    // R-33: when this agent's pipeline tasks ran. A container is attributed to a run only on this record,
+    // which the agent writes itself: labels and names are chosen by whatever started the container.
+    private readonly Lock _pipelineWindowsGate = new();
+    private readonly Dictionary<long, PipelineTaskWindow> _pipelineWindows = [];
+    private long _pipelineWindowSequence;
+
+    /// <summary>Records that a pipeline task runs from now until the returned handle is disposed.</summary>
+    internal IDisposable TrackPipelineTask()
+    {
+        lock (_pipelineWindowsGate)
+        {
+            var id = ++_pipelineWindowSequence;
+            _pipelineWindows[id] = new PipelineTaskWindow(timeProvider.GetUtcNow(), null);
+            return new PipelineTaskRegistration(() => EndPipelineTask(id));
+        }
+    }
+
+    /// <summary>True when a pipeline task of this agent was already running at <paramref name="createdAt"/>
+    /// and is still running, or ended no longer than <see cref="AgentRuntimeDefaults.PipelineContainerGrace"/>
+    /// ago (a reaper outlives its test process by a few seconds).</summary>
+    public bool CreatedDuringLivePipelineTask(DateTimeOffset createdAt)
+    {
+        lock (_pipelineWindowsGate)
+        {
+            var now = timeProvider.GetUtcNow();
+            foreach (var (id, window) in _pipelineWindows.ToList())
+            {
+                if (window.End is { } ended && now - ended > AgentRuntimeDefaults.PipelineContainerGrace)
+                    _pipelineWindows.Remove(id);
+            }
+            return _pipelineWindows.Values.Any(window =>
+                window.Start <= createdAt && (window.End is null || createdAt <= window.End));
+        }
+    }
+
+    private void EndPipelineTask(long id)
+    {
+        lock (_pipelineWindowsGate)
+        {
+            if (_pipelineWindows.TryGetValue(id, out var window) && window.End is null)
+                _pipelineWindows[id] = window with { End = timeProvider.GetUtcNow() };
+        }
+    }
+
+    private sealed record PipelineTaskWindow(DateTimeOffset Start, DateTimeOffset? End);
+
+    private sealed class PipelineTaskRegistration(Action end) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                end();
+        }
+    }
+
     public int ActiveProcessCount
     {
         get
@@ -70,12 +127,30 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
 
     public bool IsIdle => ActiveTaskCount == 0 && ActiveProcessCount == 0;
 
+    /// <summary>The processes still counted as running, one line each (PID, name, exited, recorded and current
+    /// start time): what a test prints when the count does not settle, so the failure names the survivor.</summary>
+    internal IReadOnlyList<string> DescribeActiveProcesses() =>
+        [.. _activeProcesses.Values.Select(Describe)];
+
+    private static string Describe(ProcessIdentity identity)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(identity.ProcessId);
+            return $"PID {identity.ProcessId} {process.ProcessName} exited={process.HasExited} recorded={identity.StartTimeUtcTicks} current={ReadStartTimeTicks(process)}";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
+        {
+            return $"PID {identity.ProcessId} recorded={identity.StartTimeUtcTicks} unreadable: {ex.GetType().Name} {ex.Message}";
+        }
+    }
+
     internal IDisposable TrackProcess(Process process)
     {
         ArgumentNullException.ThrowIfNull(process);
         var registrationId = Interlocked.Increment(ref _processRegistrationSequence);
         _activeProcesses[registrationId] = new ProcessIdentity(process.Id, ReadStartTimeTicks(process));
-        return new ProcessRegistration(this, registrationId);
+        return new ProcessRegistration(_activeProcesses, registrationId);
     }
 
     public DateTimeOffset? LastHeartbeatSuccessAt => Read(ref _lastHeartbeatSuccessUtcTicks);
@@ -129,14 +204,15 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
         }
     }
 
-    private sealed class ProcessRegistration(AgentRuntimeHealth owner, long registrationId) : IDisposable
+    private sealed class ProcessRegistration(
+        ConcurrentDictionary<long, ProcessIdentity> activeProcesses, long registrationId) : IDisposable
     {
         private int _disposed;
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                owner._activeProcesses.TryRemove(registrationId, out _);
+                activeProcesses.TryRemove(registrationId, out _);
         }
     }
 

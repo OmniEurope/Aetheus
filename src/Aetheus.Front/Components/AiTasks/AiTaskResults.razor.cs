@@ -165,13 +165,8 @@ public partial class AiTaskResults : IDisposable
         ? last.CreatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
         : "-";
 
-    internal static string FormatDuration(long durationMs)
-    {
-        var duration = TimeSpan.FromMilliseconds(durationMs);
-        return duration.TotalMinutes >= 1
-            ? string.Create(CultureInfo.CurrentCulture, $"{(int)duration.TotalMinutes} min {duration.Seconds:00} s")
-            : string.Create(CultureInfo.CurrentCulture, $"{duration.TotalSeconds:0.#} s");
-    }
+    internal static string FormatDuration(long durationMs) =>
+        DisplayFormatting.Duration(TimeSpan.FromMilliseconds(durationMs));
 
     private static string RunDate(AiRunResultDto run) =>
         run.CreatedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);

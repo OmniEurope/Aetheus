@@ -2,7 +2,6 @@
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;

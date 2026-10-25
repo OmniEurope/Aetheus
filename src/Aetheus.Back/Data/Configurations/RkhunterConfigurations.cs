@@ -27,3 +27,14 @@ internal sealed class RkhunterWarningConfiguration : IEntityTypeConfiguration<Rk
                .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class RkhunterScanResultConfiguration : IEntityTypeConfiguration<RkhunterScanResult>
+{
+    public void Configure(EntityTypeBuilder<RkhunterScanResult> builder)
+    {
+        builder.HasOne(e => e.Server)
+               .WithMany(s => s.RkhunterScanResults)
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}

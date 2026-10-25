@@ -20,7 +20,7 @@ public sealed record DotnetTestClassificationFailure(string Reason);
 /// disagreement between them is itself a refusal: an exit code of 0 with failures recorded, or a
 /// non-zero exit with nothing failed, means one of the two is lying and neither can be graded.
 ///
-/// The shell twin of this rule (<c>deploy/scripts/classify-dotnet-test-result.mjs</c>) was deleted with
+/// The shell twin of this rule (the former <c>classify-dotnet-test-result.mjs</c> script) was deleted with
 /// the last pipeline step that ran it; <c>DotnetTestClassifierVerdictTests</c> pins the verdicts both gave
 /// on a shared corpus.
 /// </summary>

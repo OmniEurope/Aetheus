@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+
 namespace Aetheus.Shared.Components.Tasks;
 
 /// <summary>
@@ -156,6 +157,22 @@ public enum OperationKind
     /// config-tests, reloads and restores the whole set on failure.</summary>
     ApacheApplyConfigSet = 311,
 
+    /// <summary>Recette R-12: enables a site by linking <c>sites-enabled/&lt;site&gt;</c> to the regular file
+    /// <c>sites-available/&lt;site&gt;</c> (sticky directory ACL, no sudo, no <c>a2ensite</c>), then runs the
+    /// fixed configtest helper and <c>systemctl reload apache2.service</c> (controlled-sudo); the link is
+    /// removed again when either fails. Target is the site filename (<c>ApacheSiteFileRegex</c>).</summary>
+    ApacheEnableSite = 312,
+
+    /// <summary>Recette R-12: disables a site by removing its <c>sites-enabled</c> link (only a link that
+    /// points to the <c>sites-available</c> file of the same name), then configtest and reload; the link is put
+    /// back when either fails. Target is the site filename.</summary>
+    ApacheDisableSite = 313,
+
+    /// <summary>Recette R-12: deletes the <c>sites-available</c> file of a DISABLED site (refused while any
+    /// <c>sites-enabled</c> entry points to it), then configtest; the file is written back when Apache rejects
+    /// the result. Target is the site filename.</summary>
+    ApacheDeleteSite = 314,
+
     /// <summary>type: certbot - obtain/install an HTTPS certificate for one or more domains via a
     /// root-owned controlled-sudo helper (<c>sudo -n /usr/local/lib/aetheus/aetheus-certbot-issue</c>,
     /// which re-validates the domains then runs <c>certbot certonly --apache</c>). When ACME validation
@@ -186,6 +203,13 @@ public enum OperationKind
 
     CertbotNormalize = 325,    // Reconfigure off-convention Certbot lineages to webroot; target is unused.
     CertbotRenewalCheck = 326, // Rehearse Certbot renewal with dry-run and retain the result for collection; target is unused.
+
+    /// <summary>Recette R-12: reissues a certificate WITHOUT one of its names - the helper runs
+    /// <c>certbot certonly --cert-name &lt;name&gt; -d &lt;each remaining name&gt;</c> through the ACME web root
+    /// (<c>sudo -n aetheus-certbot-manage remove-name &lt;name&gt; &lt;domain&gt;</c>). The certificate itself is
+    /// never deleted. Target is the certificate name; the name to take out travels in
+    /// <c>AETHEUS_CERTBOT_REMOVE_DOMAIN</c> and reaches the helper as its third argument.</summary>
+    CertbotRemoveDomain = 327,
 
     // RKHunter (items #10.2/#10.3) - same controlled-sudo recipe as Apache. Target unused.
     RkhunterScan = 350,        // sudo aetheus-rkhunter check (helper runs rkhunter --check --skip-keypress --nocolors --report-warnings-only)

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>Aetheus.Telemetry</PackageId>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Authors>Aetheus</Authors>
     <Description>Safe optional OpenTelemetry configuration for applications monitored by Aetheus.</Description>
     <PackageTags>opentelemetry;otlp;observability;apm;aetheus</PackageTags>

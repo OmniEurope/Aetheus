@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
+using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.SignalR;
 

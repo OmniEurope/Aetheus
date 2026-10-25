@@ -19,9 +19,9 @@ public partial class StepStatusBadge
         _ => OmniTone.Neutral
     };
 
-    private OmniFill BadgeFill => PipelineRunFormatting.IsNonBlockingFailure(Step)
-        ? OmniFill.Outline
-        : OmniFill.Solid;
+    /// <summary>Recette R-24: every failure is a filled red badge, a non-blocking one included (its tooltip
+    /// says it did not block); only the advisory badge beside it stays an outline.</summary>
+    private static OmniFill BadgeFill => OmniFill.Solid;
 
     /// <summary>The badge's icon fragment, null when the status has no icon (OE's Icon is a fragment).</summary>
     private RenderFragment? StatusIcon => PipelineRunFormatting.StepStatusIcon(Step) is { } icon

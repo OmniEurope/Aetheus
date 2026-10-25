@@ -9,12 +9,22 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Aetheus.Agent.Core.Operations;
 
-public sealed record ArchitectureEdge(string Source, string Target, int Count);
-public sealed record ArchitectureViolation(string RuleId, string Source, string Target, string Message);
+/// <param name="NavigationCount">How many of the <paramref name="Count"/> references are EF Core navigation properties
+/// between two entity types (ADR-056): an edge whose references are all navigations does not make a cycle.</param>
+public sealed record ArchitectureEdge(string Source, string Target, int Count, int NavigationCount = 0);
+/// <param name="Identity">What makes the violation the same one from a run to the next, when its message
+/// cannot: a cycle group is identified by its graph and its smallest member, while the path the message gives
+/// as an example can change with the code. Null keeps the message as the identity.</param>
+public sealed record ArchitectureViolation(
+    string RuleId, string Source, string Target, string Message, string? Identity = null);
+
+/// <param name="CycleGroups">The members of each group of cycles (a strongly connected component), sorted,
+/// in the order of <paramref name="Cycles"/>: <c>Cycles[i]</c> is one concrete cycle of <c>CycleGroups[i]</c>.</param>
 public sealed record ArchitectureGraph(
     IReadOnlyList<ArchitectureEdge> Edges,
     IReadOnlyList<IReadOnlyList<string>> Cycles,
-    IReadOnlyDictionary<string, double> Instability);
+    IReadOnlyDictionary<string, double> Instability,
+    IReadOnlyList<IReadOnlyList<string>> CycleGroups);
 public sealed record ArchitectureReport(
     IReadOnlyList<ArchitectureEdge> Edges,
     IReadOnlyList<IReadOnlyList<string>> Cycles,
@@ -50,44 +60,74 @@ public static class ArchitectureAnalyzer
             ["assembly"] = [],
             ["project"] = []
         };
-        var visitor = new DependencySymbolVisitor(counts);
+        // The part of each edge that comes from EF Core navigation properties between two entity types (ADR-056).
+        var navigationCounts = counts.ToDictionary(
+            item => item.Key, _ => new Dictionary<(string Source, string Target), int>(), StringComparer.Ordinal);
+        var entities = EfEntityModel.Build(compilation, trees);
+        var visitor = new DependencySymbolVisitor(counts, navigationCounts, entities);
         visitor.Visit(compilation.Assembly.GlobalNamespace);
         foreach (var tree in trees)
         {
             var semanticModel = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
-            new DependencySyntaxWalker(semanticModel, visitor).Visit(tree.GetRoot());
+            new DependencySyntaxWalker(semanticModel, visitor, entities).Visit(tree.GetRoot());
         }
 
         var graphs = counts.ToDictionary(
             item => item.Key,
-            item => BuildGraph(item.Value),
+            item => BuildGraph(item.Value, navigationCounts[item.Key]),
             StringComparer.Ordinal);
         var namespaceGraph = graphs["namespace"];
         var edges = namespaceGraph.Edges;
         var cycles = namespaceGraph.Cycles;
         var violations = FindViolations(edges, rulesPath);
-        foreach (var graph in graphs.Where(item => item.Key is "assembly" or "project"))
-        {
-            foreach (var cycle in graph.Value.Cycles)
-            {
-                var ruleId = graph.Key == "namespace" ? "architecture-cycle" : $"architecture-cycle-{graph.Key}";
-                violations.Add(new ArchitectureViolation(ruleId, cycle[0], cycle[^1],
-                    $"{char.ToUpperInvariant(graph.Key[0])}{graph.Key[1..]} dependency cycle: "
-                    + $"{string.Join(" -> ", cycle)} -> {cycle[0]}"));
-            }
-        }
+        // ADR-056: every group of cycles is a finding, whatever the graph. The type and namespace graphs, whose
+        // cycles used to be a count against a threshold, name the members of the group; the assembly and
+        // project graphs keep the message their findings already had, so those stay the same findings.
+        foreach (var graph in graphs)
+            for (var index = 0; index < graph.Value.Cycles.Count; index++)
+                violations.Add(CycleViolation(graph.Key, graph.Value.Cycles[index], graph.Value.CycleGroups[index]));
         return new ArchitectureReport(edges, cycles, violations, namespaceGraph.Instability, graphs);
     }
 
-    private static ArchitectureGraph BuildGraph(Dictionary<(string Source, string Target), int> counts)
+    /// <summary>How many members of a group the message of its finding lists before saying how many more.</summary>
+    private const int MaxListedCycleMembers = 30;
+
+    private static ArchitectureViolation CycleViolation(
+        string graph, IReadOnlyList<string> cycle, IReadOnlyList<string> members)
+    {
+        var ruleId = graph == "namespace" ? "architecture-cycle" : $"architecture-cycle-{graph}";
+        var path = $"{string.Join(" -> ", cycle)} -> {cycle[0]}";
+        if (graph is not ("type" or "namespace"))
+            return new ArchitectureViolation(ruleId, cycle[0], cycle[^1],
+                $"{char.ToUpperInvariant(graph[0])}{graph[1..]} dependency cycle: {path}");
+
+        var listed = string.Join(", ", members.Take(MaxListedCycleMembers));
+        var more = members.Count > MaxListedCycleMembers ? $" and {members.Count - MaxListedCycleMembers} more" : string.Empty;
+        // The group is named by its smallest member, which is also where the example path starts.
+        return new ArchitectureViolation(ruleId, cycle[0], cycle[^1],
+            $"{char.ToUpperInvariant(graph[0])}{graph[1..]} dependency cycle between {members.Count} {graph}s: {listed}{more}. "
+            + $"One path: {path}",
+            $"{graph}:{members[0]}");
+    }
+
+    private static ArchitectureGraph BuildGraph(
+        Dictionary<(string Source, string Target), int> counts,
+        Dictionary<(string Source, string Target), int> navigationCounts)
     {
         var edges = counts
             .Where(item => !string.Equals(item.Key.Source, item.Key.Target, StringComparison.Ordinal))
-            .Select(item => new ArchitectureEdge(item.Key.Source, item.Key.Target, item.Value))
+            .Select(item => new ArchitectureEdge(
+                item.Key.Source, item.Key.Target, item.Value, navigationCounts.GetValueOrDefault(item.Key)))
             .OrderBy(item => item.Source, StringComparer.Ordinal)
             .ThenBy(item => item.Target, StringComparer.Ordinal)
             .ToList();
-        return new ArchitectureGraph(edges, FindCycles(edges), CalculateInstability(edges));
+        // An edge is a navigation edge when every reference behind it is a navigation property between entity types.
+        var navigationEdges = edges
+            .Where(edge => edge.NavigationCount == edge.Count)
+            .GroupBy(edge => edge.Source, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(edge => edge.Target).ToList(), StringComparer.Ordinal);
+        var (cycles, groups) = FindCycles(edges, navigationEdges);
+        return new ArchitectureGraph(edges, cycles, CalculateInstability(edges), groups);
     }
 
     private static ImmutableArray<MetadataReference> TrustedPlatformReferences()
@@ -133,7 +173,9 @@ public static class ArchitectureAnalyzer
         }, StringComparer.Ordinal);
     }
 
-    private static List<IReadOnlyList<string>> FindCycles(IReadOnlyList<ArchitectureEdge> edges)
+    private static (List<IReadOnlyList<string>> Cycles, List<IReadOnlyList<string>> Groups) FindCycles(
+        IReadOnlyList<ArchitectureEdge> edges,
+        IReadOnlyDictionary<string, List<string>> navigationEdges)
     {
         var adjacency = edges.GroupBy(edge => edge.Source)
             .ToDictionary(
@@ -147,9 +189,10 @@ public static class ArchitectureAnalyzer
         var stack = new Stack<string>();
         var onStack = new HashSet<string>(StringComparer.Ordinal);
         var cycles = new List<IReadOnlyList<string>>();
+        var groups = new List<IReadOnlyList<string>>();
         foreach (var node in edges.SelectMany(edge => new[] { edge.Source, edge.Target }).Distinct(StringComparer.Ordinal))
             if (!indexes.ContainsKey(node)) Visit(node);
-        return cycles;
+        return (cycles, groups);
 
         void Visit(string node)
         {
@@ -175,12 +218,46 @@ public static class ArchitectureAnalyzer
                 onStack.Remove(current);
                 component.Add(current);
             } while (!string.Equals(current, node, StringComparison.Ordinal));
-            if (component.Count > 1)
+            if (component.Count > 1 && !IsExplainedByNavigations(component, navigationEdges))
             {
                 var cycle = FindConcreteCycle(component, adjacency);
-                if (cycle.Count > 1) cycles.Add(cycle);
+                if (cycle.Count <= 1) return;
+                cycles.Add(cycle);
+                groups.Add([.. component.Order(StringComparer.Ordinal)]);
             }
         }
+    }
+
+    /// <summary>
+    /// ADR-056: a group of cycles is standard EF Core bidirectional navigation, not a design defect, when its
+    /// members are strongly connected by navigation edges alone. One reference that is not a navigation between
+    /// entity types (a service, a method parameter, a non-entity type) keeps the whole group a finding.
+    /// </summary>
+    private static bool IsExplainedByNavigations(
+        List<string> component,
+        IReadOnlyDictionary<string, List<string>> navigationEdges)
+    {
+        var members = component.ToHashSet(StringComparer.Ordinal);
+        var forward = Reach(component[0], navigationEdges, members);
+        if (forward.Count != members.Count) return false;
+        var reversed = navigationEdges
+            .SelectMany(item => item.Value.Select(target => (Source: target, Target: item.Key)))
+            .GroupBy(edge => edge.Source, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(edge => edge.Target).ToList(), StringComparer.Ordinal);
+        return Reach(component[0], reversed, members).Count == members.Count;
+    }
+
+    private static HashSet<string> Reach(
+        string start,
+        IReadOnlyDictionary<string, List<string>> edges,
+        HashSet<string> members)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal) { start };
+        var pending = new Stack<string>([start]);
+        while (pending.Count > 0)
+            foreach (var target in edges.GetValueOrDefault(pending.Pop()) ?? [])
+                if (members.Contains(target) && seen.Add(target)) pending.Push(target);
+        return seen;
     }
 
     private static IReadOnlyList<string> FindConcreteCycle(
@@ -215,7 +292,8 @@ public static class ArchitectureAnalyzer
 
     private sealed class DependencySyntaxWalker(
         SemanticModel semanticModel,
-        DependencySymbolVisitor dependencies) : CSharpSyntaxWalker
+        DependencySymbolVisitor dependencies,
+        EfEntityModel entities) : CSharpSyntaxWalker
     {
         public override void VisitIdentifierName(IdentifierNameSyntax node)
         {
@@ -256,12 +334,14 @@ public static class ArchitectureAnalyzer
                 IEventSymbol eventSymbol => eventSymbol.ContainingType,
                 _ => semanticModel.GetTypeInfo(node).Type
             };
-            dependencies.Add(source, target);
+            dependencies.Add(source, target, entities.IsInNavigationDeclaration(semanticModel, node));
         }
     }
 
     private sealed class DependencySymbolVisitor(
-        IReadOnlyDictionary<string, Dictionary<(string Source, string Target), int>> graphs) : SymbolVisitor
+        IReadOnlyDictionary<string, Dictionary<(string Source, string Target), int>> graphs,
+        IReadOnlyDictionary<string, Dictionary<(string Source, string Target), int>> navigationGraphs,
+        EfEntityModel entities) : SymbolVisitor
     {
         private readonly Dictionary<string, ProjectIdentity> projectIdentities = new(StringComparer.OrdinalIgnoreCase);
 
@@ -278,39 +358,50 @@ public static class ArchitectureAnalyzer
             {
                 switch (member)
                 {
-                    case IFieldSymbol field: Add(symbol, field.Type); break;
-                    case IPropertySymbol property: Add(symbol, property.Type); break;
+                    case IFieldSymbol field: Add(symbol, field.Type, IsNavigationAccessor(field.AssociatedSymbol)); break;
+                    case IPropertySymbol property: Add(symbol, property.Type, entities.NavigationTarget(property) is not null); break;
                     case IEventSymbol eventSymbol: Add(symbol, eventSymbol.Type); break;
                     case IMethodSymbol method:
-                        Add(symbol, method.ReturnType);
-                        foreach (var parameter in method.Parameters) Add(symbol, parameter.Type);
+                        var navigation = IsNavigationAccessor(method.AssociatedSymbol);
+                        Add(symbol, method.ReturnType, navigation);
+                        foreach (var parameter in method.Parameters) Add(symbol, parameter.Type, navigation);
                         break;
                     case INamedTypeSymbol nested: nested.Accept(this); break;
                 }
             }
         }
 
-        internal void Add(INamedTypeSymbol source, ITypeSymbol? type)
+        // The backing field and the accessors of a navigation property are the navigation itself.
+        private bool IsNavigationAccessor(ISymbol? associated) =>
+            associated is IPropertySymbol property && entities.NavigationTarget(property) is not null;
+
+        /// <param name="navigation">The reference is the type or the initializer of a navigation property of
+        /// <paramref name="source"/>; it counts as a navigation edge only when both ends are entity types.</param>
+        internal void Add(INamedTypeSymbol source, ITypeSymbol? type, bool navigation = false)
         {
             if (type is null) return;
             if (type is IArrayTypeSymbol array) type = array.ElementType;
             if (type is INamedTypeSymbol named)
             {
-                foreach (var argument in named.TypeArguments) Add(source, argument);
+                foreach (var argument in named.TypeArguments) Add(source, argument, navigation);
                 if (Namespace(named).StartsWith("System", StringComparison.Ordinal)) return;
-                AddEdge("type", TypeName(source), TypeName(named));
-                AddEdge("namespace", Namespace(source), Namespace(named));
-                AddEdge("assembly", Identity(source).Assembly, Identity(named).Assembly);
-                AddEdge("project", Identity(source).Project, Identity(named).Project);
+                var isNavigation = navigation && entities.IsEntity(source) && entities.IsEntity(named);
+                AddEdge("type", TypeName(source), TypeName(named), isNavigation);
+                AddEdge("namespace", Namespace(source), Namespace(named), isNavigation);
+                AddEdge("assembly", Identity(source).Assembly, Identity(named).Assembly, isNavigation);
+                AddEdge("project", Identity(source).Project, Identity(named).Project, isNavigation);
             }
         }
 
-        private void AddEdge(string level, string source, string target)
+        private void AddEdge(string level, string source, string target, bool navigation)
         {
             if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target)
                 || source == target || target.StartsWith("System", StringComparison.Ordinal)) return;
             var edges = graphs[level];
             edges[(source, target)] = edges.GetValueOrDefault((source, target)) + 1;
+            if (!navigation) return;
+            var navigationEdges = navigationGraphs[level];
+            navigationEdges[(source, target)] = navigationEdges.GetValueOrDefault((source, target)) + 1;
         }
 
         private static string TypeName(INamedTypeSymbol symbol) =>

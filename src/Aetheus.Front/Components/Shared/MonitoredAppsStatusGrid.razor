@@ -14,7 +14,7 @@
         <EmptyState Icon="monitor_heart" Title="@L["NoMonitoredApps"]" />
     </EmptyContent>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="MonitoredAppStatusDto" Property="Name" Title="@L["Name"]" MinWidth="9rem" Filterable="true">
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="MonitoredAppStatusDto" Property="Name" Title="@L["Name"]" Filterable="true">
             <Template Context="app">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniLink Href="@AppHref(app)">@app.Name</OmniLink>
@@ -23,10 +23,10 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="CurrentStatus" Title="@L["Status"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="app">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@HealthBadge(app.CurrentStatus)">@L[$"AppHealth{app.CurrentStatus}"]</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@HealthBadge(app.CurrentStatus)">@L[$"AppHealth{app.CurrentStatus}"]</OmniBadge>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="OnlineVisitorCount" Title="@L["CurrentVisitors"]" Width="8rem"
+        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="OnlineVisitorCount" Title="@L["CurrentVisitors"]" Width="11rem"
             Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators"
             Visible="@(Applications?.Any(app => app.OnlineVisitorCount.HasValue) == true)">
             <Template Context="app">
@@ -36,7 +36,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" MinWidth="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="LastStatusChangeAt" Title="@L["Since"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
     </Columns>
 </OmniDataGrid>

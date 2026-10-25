@@ -18,14 +18,14 @@
                visible action when the run has no project. *@
             @if (ProjectId is int projectId)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenProjectQuality(projectId))" title="@L["AnalysisOpenProjectQuality"]"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["AnalysisOpenProjectQuality"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenProjectQuality(projectId))" title="@L["AnalysisOpenProjectQuality"]"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["AnalysisOpenProjectQuality"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0 || _exporting)" title="@L["AnalysisExportAllAiPrompt"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["AnalysisExport"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>
             }
             else
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0)" Busy="@_exporting" title="@L["AnalysisExportAllAiPrompt"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["AnalysisExport"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ExportAllAiPromptAsync" Disabled="@(ListedCount == 0)" Busy="@_exporting" title="@L["AnalysisExportAllAiPrompt"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["AnalysisExport"]</span></ChildContent></OmniButton>
             }
         </div>
     </div>
@@ -36,69 +36,50 @@
             <PipelineRunBlockingTests Tests="BlockingTests" ViewingRunId="@Gate.PipelineRunId" />
         </OmniAlert>
     }
-    <div class="analysis-run-gate-toolbar omni-u-mb-md">
-        @* Recette R1-60: one tile for the grade the run shows, and beside it the single measure that sets
-           it (the first in display order); the full breakdown stays below. *@
-        @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
-        {
-            <div class="analysis-run-gate-headline">
-                <GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge analysis-run-gate-grade" />
-                <div class="analysis-run-gate-cause">
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["GateGrade"]</OmniText>
-                    @if (PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)
-                    {
-                        <OmniText Element="OmniTextElement.Strong">@L["GateFirstCauseBlockingTests"]</OmniText>
-                    }
-                    else if (AnalysisGradeBreakdown.FirstLimitingMeasure(Gate.Grade) is { } cause)
-                    {
-                        <OmniText Element="OmniTextElement.Strong">@($"{AnalysisGradeBreakdown.MeasureLabel(L, cause.Key)} : {AnalysisGradeBreakdown.MeasureText(cause)}")</OmniText>
-                        @if (cause.DistanceToNextGrade.HasValue && cause.NextGrade.HasValue && !cause.WeightedFindingScore)
-                        {
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["AnalysisDistanceToGrade", cause.DistanceToNextGrade.Value.ToString("0.##"), cause.NextGrade.Value]</OmniText>
-                        }
-                    }
-                </div>
-            </div>
-        }
+    @* Recette R-17: why the gate is rejected, in one sentence (the rules it crossed), and why the letter can still
+       be good. *@
+    @if (PipelineRunGatePresentation.RejectionReason(Gate, L) is { } rejection)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md" data-testid="gate-rejection-reason">
+            <div>@rejection</div>
+            @if (PipelineRunGatePresentation.RejectedByRules(Gate) && PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is not null)
+            {
+                <small class="omni-u-text-muted">@L["GateRejectedGradeNote"]</small>
+            }
+        </OmniAlert>
+    }
+    @* Recette R1-37 (mockup pipeline-run-gate): the single grade block on the left, the key figures stacked
+       in a column on the right (under the block on a narrow window); then the findings section. *@
+    <div class="@(HasGradeBlock ? "analysis-run-gate-layout" : "analysis-run-gate-layout analysis-run-gate-layout--figures-only")">
+        @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
+           duplication, complexity, a cycle) the tab did not show. *@
+        @* Recette R1-38: the Gate grade is the first row of the single grade block (it was a wide frame of its own). *@
+        <AnalysisGradeBreakdown Grade="@Gate.Grade" GateRow="true" GateGrade="@PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade)"
+                                SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
         @* The OE key-figure tile: value over its label, the label wraps, so a narrow column keeps
            both inside the tile (a side-by-side nowrap pair spilled out of it at 375 px). *@
-        @* Tiles count findings separately from reports; a rule-alert count is shown only with the
-           corresponding alert list. *@
-        <div class="analysis-run-gate-metrics">
-            <OmniStatTile Value="@($"{Gate.FindingCount}")" Label="@L["AnalysisGateFindings"]" />
-            <OmniStatTile Value="@($"{Gate.NewFindingCount}")" Label="@L["AnalysisGateNewFindings"]" />
-            @if (Gate.Violations.Count > 0)
-            {
-                <OmniStatTile Value="@($"{Gate.Violations.Count}")" Label="@L["AnalysisGateViolations"]" />
-            }
-        </div>
+        @* Recette R1-36 / ADR-056: no rule-alert tile. A threshold the analysis crosses is a finding, counted
+           and listed with the others. *@
+        <OmniTileGrid Columns="@(HasGradeBlock ? 1 : 4)" Gap="OmniSpacing.Small" Class="analysis-run-gate-metrics">
+            <OmniStatTile Value="@($"{Gate.FindingCount}")" Title="@L["AnalysisGateFindings"]" />
+            <OmniStatTile Value="@($"{Gate.NewFindingCount}")" Title="@L["AnalysisGateNewFindings"]" />
+        </OmniTileGrid>
     </div>
-    @* Recette R2-052: what the letter is made of. A B over "0 findings" came from a measure (coverage,
-       duplication, complexity, a cycle) the tab did not show. *@
-    <AnalysisGradeBreakdown Grade="@Gate.Grade"
-                            SealBlockedByTests="@(PipelineRunGatePresentation.GradeComesFromSeal(Gate, RunGrade) && BlockingTests.Count > 0)" />
-    @* Recette R2-138: an alert is a policy rule a measure crossed (dependency cycles, complex methods, a
-       new medium finding), not a finding. Recette R1-63: said in words, with why it is not in the list. *@
-    @if (Gate.Violations.Count > 0)
-    {
-        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-mt-md omni-u-mb-xs">@L["AnalysisGateViolationsExplained"]</OmniText>
-        <OmniDataList TItem="AnalysisRunGateViolationDto" Items="@Gate.Violations" Class="analysis-run-gate-violations omni-u-mb-md">
-            <ItemTemplate Context="violation">
-                <div class="analysis-run-gate-violation">
-                    <OmniBadge Tone="@(violation.Outcome == "Block" ? OmniTone.Danger : OmniTone.Warning)">@L[violation.Outcome == "Block" ? "AnalysisGateViolationBlock" : "AnalysisGateViolationWarn"]</OmniBadge>
-                    <span>@ViolationLabel(violation)</span>
-                </div>
-            </ItemTemplate>
-        </OmniDataList>
-    }
-    @* The findings already decided on are hidden until asked for; the switch says how many. *@
-    @if (Gate.DecidedFindingCount > 0)
-    {
-        <OmniSwitch TValue="bool" @bind-Value="_showDecided" @bind-Value:after="ShowDecidedChangedAsync" Class="omni-u-mb-sm analysis-run-gate-decided-switch">@string.Format(L["AnalysisGateShowDecided"], Gate.DecidedFindingCount)</OmniSwitch>
-    }
+    @* The findings section: its title with the count of the list, and on the right the switch that adds
+       the findings already decided on (hidden until asked for; the switch says how many). *@
+    <div class="analysis-run-gate-section-head" data-testid="gate-findings-head">
+        <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@L["AnalysisGateFindings"]</OmniHeading>
+        <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Tonal" data-testid="gate-findings-count">@ListedCount</OmniBadge>
+        @if (Gate.DecidedFindingCount > 0)
+        {
+            <OmniSwitch TValue="bool" @bind-Value="_showDecided" @bind-Value:after="ShowDecidedChangedAsync" Class="analysis-run-gate-decided-switch">@string.Format(L["AnalysisGateShowDecided"], Gate.DecidedFindingCount)</OmniSwitch>
+        }
+    </div>
     @if (ListedCount == 0)
     {
-        <EmptyState Icon="task_alt" Title="@L["AnalysisNoFindings"]" Description="@L["AnalysisNoFindingsDescription"]" />
+        <div class="analysis-run-gate-empty">
+            <EmptyState Icon="task_alt" Title="@L["AnalysisNoFindings"]" Description="@L["AnalysisNoFindingsDescription"]" />
+        </div>
     }
     else
     {

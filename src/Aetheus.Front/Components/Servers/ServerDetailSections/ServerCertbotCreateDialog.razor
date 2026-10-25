@@ -20,7 +20,7 @@
             </ChildContent></OmniFormField>
         }
         <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
         </Aetheus.Front.Components.Shared.DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

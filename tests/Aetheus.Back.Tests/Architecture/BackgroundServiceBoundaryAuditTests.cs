@@ -32,10 +32,9 @@ public sealed class BackgroundServiceBoundaryAuditTests
     [Fact]
     public void NoBackgroundService_RestatesTheDeploymentReplayPolicy()
     {
-        var servicesDirectory = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Back", "Services");
         var violations = new List<string>();
 
-        foreach (var file in RepositoryScan.Enumerate(servicesDirectory, "*.cs"))
+        foreach (var file in ScannedFiles())
         {
             var lines = File.ReadAllLines(file);
             for (var index = 0; index < lines.Length; index++)
@@ -54,10 +53,52 @@ public sealed class BackgroundServiceBoundaryAuditTests
 
         Assert.True(
             violations.Count == 0,
-            "A background service under Services/ is restating the Pipelines module's deployment "
+            "A background service is restating the Pipelines module's deployment "
             + "policy. Ask the module instead (PipelineOutageReplayPolicy), so a new deployment "
             + "operation does not have to be remembered in two places:"
             + Environment.NewLine + "  " + string.Join(Environment.NewLine + "  ", violations));
+    }
+
+    [Fact]
+    public void EveryHostedService_IsInTheScannedFiles()
+    {
+        // The scan finds hosted services by their declaration, wherever they live under the back end
+        // (they sit in Services/ and in the modules they sweep). This proves the declaration match
+        // misses none: each concrete hosted service of the assembly must come from a scanned file.
+        var scannedText = ScannedFiles().Select(File.ReadAllText).ToList();
+        var hostedServices = typeof(Aetheus.Back.Components.Servers.MetricsCleanupService).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && !type.IsNested
+                && typeof(Microsoft.Extensions.Hosting.IHostedService).IsAssignableFrom(type))
+            .Select(type => type.Name)
+            .ToList();
+
+        Assert.True(hostedServices.Count >= 5, $"Only found {hostedServices.Count} hosted service(s) - likely a discovery bug.");
+        var missed = hostedServices
+            .Where(name => !scannedText.Any(text => System.Text.RegularExpressions.Regex.IsMatch(
+                text, @"\bclass\s+" + name + @"\b")))
+            .ToList();
+        Assert.True(missed.Count == 0,
+            "These hosted services are declared in a file the boundary guard does not scan: "
+            + string.Join(", ", missed));
+    }
+
+    /// <summary>
+    /// Every file of <c>Services/</c> (the guard's original scope), plus every other file of the back end
+    /// that declares a hosted service: a service moved into, or added to, a module stays covered.
+    /// </summary>
+    private static IReadOnlyList<string> ScannedFiles()
+    {
+        var backDirectory = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Back");
+        var servicesDirectory = Path.Combine(backDirectory, "Services");
+        var hostedServiceDeclaration = new System.Text.RegularExpressions.Regex(
+            @"\bclass\s+\w+[^{;]*\b\w*(BackgroundService|HostedService|HostedLifecycleService)\b");
+
+        var hosted = RepositoryScan.Enumerate(backDirectory, "*.cs")
+            .Where(file => hostedServiceDeclaration.IsMatch(File.ReadAllText(file)));
+        return RepositoryScan.Enumerate(servicesDirectory, "*.cs")
+            .Concat(hosted)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     [Fact]

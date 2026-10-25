@@ -1,8 +1,22 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 @inherits ServerActionSectionBase
+@using Microsoft.AspNetCore.Components.Sections
 
 <AgentOfflineNotice Server="@Server" />
+
+@* Recette R-29: the page's main action sits in the page header, on the title line, with its menu beside it.
+   R3-41/R3-42: Restart is the one visible action (blue); Start, Stop, Reload and Test sit in the
+   "More actions" menu with the conditions their buttons had. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Restart))" Disabled="@(AgentOffline || !Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Restart"]</span></ChildContent></OmniButton>
+    <OmniOverflowMenu Label="@L["MoreActions"]">
+        <OmniMenuItem OnClick="@(() => ExecuteActionAsync(ApacheAction.Start))" Disabled="@(AgentOffline || Apache.IsRunning)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => ShowDestructiveConfirm(L["StopApache"], L["ConfirmStopApache"], () => ExecuteActionAsync(ApacheAction.Stop), L["Stop"].Value, OmniIconName.Stop))" Disabled="@(AgentOffline || !Apache.IsRunning || _actionRunning)"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@(() => ExecuteActionAsync(ApacheAction.Reload))" Disabled="@(AgentOffline || !Apache.IsRunning)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["Reload"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ExecuteActionAsync(ApacheAction.TestConfig))" title="@L["TestConfig"]"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["Test"]</ChildContent></OmniMenuItem>
+    </OmniOverflowMenu>
+</SectionContent>
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -15,17 +29,6 @@
     {
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">PID @Apache.Pid</OmniText>
     }
-    <div class="blade-content-spacer"></div>
-
-    @* Recette R3-41/R3-42: Restart is the zone's one visible action (blue); Start, Stop, Reload and Test
-       sit in the "More actions" menu with the conditions their buttons had. *@
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(ApacheAction.Restart))" Disabled="@(AgentOffline || !Apache.IsRunning)" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@(_actionRunning)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
-    <OmniOverflowMenu Label="@L["MoreActions"]">
-        <OmniMenuItem OnClick="@(() => ExecuteActionAsync(ApacheAction.Start))" Disabled="@(AgentOffline || Apache.IsRunning)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => ShowDestructiveConfirm(L["StopApache"], L["ConfirmStopApache"], () => ExecuteActionAsync(ApacheAction.Stop), L["Stop"].Value, OmniIconName.Stop))" Disabled="@(AgentOffline || !Apache.IsRunning || _actionRunning)"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem OnClick="@(() => ExecuteActionAsync(ApacheAction.Reload))" Disabled="@(AgentOffline || !Apache.IsRunning)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent>@L["Reload"]</ChildContent></OmniMenuItem>
-        <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ExecuteActionAsync(ApacheAction.TestConfig))" title="@L["TestConfig"]"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["Test"]</ChildContent></OmniMenuItem>
-    </OmniOverflowMenu>
 </OmniRow>
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Apache" />
@@ -47,7 +50,7 @@
     <Tabs>
         @* --- Sites tab (enabled + disabled, split) --- *@
         <OmniTabsItem Key="sites" Title="@L["Sites"]">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 <CountBadge Value="@FilteredVirtualHosts.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterSites"]" @bind-Value="_vhostSearch" Placeholder="@L["FilterSites"]" />
             </OmniStack>
@@ -62,17 +65,11 @@
             <OmniDataGrid @ref="_enabledGrid" ExportTitle="@ExportContext.Title(L["SitesEnabled"])" ExportFields="@ExportContext.Fields()" Items="@EnabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
                 OnRowClick="@(args => OpenConfigEditorAsync(Path.GetFileName(args.Item.Primary.ConfigFile)))">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Width="16.25rem" Filterable="true">
-                        <Template Context="g">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                <strong>@g.ServerName</strong>
-                                @if (g.Members.Count > 1)
-                                {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@L["ApacheVirtualHostCountHint", g.Members.Count]">@($"× {g.Members.Count}")</OmniBadge>
-                                }
-                            </OmniStack>
-                        </Template>
+                    <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Filterable="true">
+                        <Template Context="g"><strong>@g.ServerName</strong></Template>
                     </OmniDataGridColumn>
+                    @* Recette R-13: the VirtualHost count has its own column (it was a "× n" badge beside the name). *@
+                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Property="BlockCount" Title="@L["ApacheBlocks"]" Width="6rem" TextAlign="OmniAlignment.End" Filterable="false" />
                     <OmniDataGridColumn TItem="ApacheVirtualHostGroup" ExportValue="@PortsExport" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
@@ -88,10 +85,10 @@
                         <Template Context="g">
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniRow Gap="OmniSpacing.XSmall">
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@($":{m.Port}")</span></OmniButton>
+                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
                                 }
                             </OmniRow>
                             </span>
@@ -106,17 +103,11 @@
             <OmniDataGrid @ref="_disabledGrid" ExportTitle="@ExportContext.Title(L["SitesDisabled"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@DisabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3"
                 OnRowClick="@(args => OpenConfigEditorAsync(Path.GetFileName(args.Item.Primary.ConfigFile)))">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Width="16.25rem" Filterable="true">
-                        <Template Context="g">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                <strong>@g.ServerName</strong>
-                                @if (g.Members.Count > 1)
-                                {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@L["ApacheVirtualHostCountHint", g.Members.Count]">@($"× {g.Members.Count}")</OmniBadge>
-                                }
-                            </OmniStack>
-                        </Template>
+                    <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Filterable="true">
+                        <Template Context="g"><strong>@g.ServerName</strong></Template>
                     </OmniDataGridColumn>
+                    @* Recette R-13: the VirtualHost count has its own column (it was a "× n" badge beside the name). *@
+                    <OmniDataGridColumn TItem="ApacheVirtualHostGroup" Property="BlockCount" Title="@L["ApacheBlocks"]" Width="6rem" TextAlign="OmniAlignment.End" Filterable="false" />
                     <OmniDataGridColumn TItem="ApacheVirtualHostGroup" ExportValue="@PortsExport" Title="@L["Ports"]" Width="12.5rem" Sortable="false" Filterable="false">
                         <Template Context="g">
                             <OmniRow Gap="OmniSpacing.XSmall">
@@ -131,11 +122,18 @@
                         <Template Context="g">
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniRow Gap="OmniSpacing.XSmall">
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} ({m.Port})")"><OmniIcon Name="OmniIconName.Check" /> <span>@($":{m.Port}")</span></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
                                 }
+                                @* Recette R-12: a disabled site's file can be deleted, one entry per file of the row. *@
+                                <OmniOverflowMenu Label="@L["MoreActions"]">
+                                    @foreach (var file in SiteFiles(g))
+                                    {
+                                        <OmniMenuItem Tone="OmniTone.Danger" Disabled="@AgentOffline" OnClick="@(() => ConfirmDeleteSite(file))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@string.Format(L["ApacheDeleteSiteItem"], file)</ChildContent></OmniMenuItem>
+                                    }
+                                </OmniOverflowMenu>
                             </OmniRow>
                             </span>
                         </Template>
@@ -146,7 +144,7 @@
 
         @* --- Modules tab --- *@
         <OmniTabsItem Key="modules" Title="@L["Modules"]">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 <CountBadge Value="@FilteredModules.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterModules"]" @bind-Value="_moduleSearch" Placeholder="@L["FilterModules"]" />
             </OmniStack>
@@ -165,11 +163,11 @@
                                 @if (m.IsEnabled)
                                 {
                                     <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DisableModule"], string.Format(L["ConfirmDisableModule"], m.Name),
-                                            () => ExecuteActionAsync(ApacheAction.DisableModule, m.Name.Replace("_module", "")), L["Disable"].Value, OmniIconName.Prohibit))" title="@L["Disable"]" Label="@L["Disable"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton>
+                                            () => ExecuteActionAsync(ApacheAction.DisableModule, m.Name.Replace("_module", "")), L["Disable"].Value, OmniIconName.Prohibit))" title="@L["Disable"]" Label="@L["Disable"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton>
                                 }
                                 else
                                 {
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableModule, m.Name.Replace("_module", "")))" title="@L["Enable"]" Label="@L["Enable"]"><OmniIcon Name="OmniIconName.Check" /></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableModule, m.Name.Replace("_module", "")))" title="@L["Enable"]" Label="@L["Enable"]"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon></OmniButton>
                                 }
                             }
                         </Template>
@@ -185,7 +183,7 @@
                     Class="w-rem-8-75" />
                 <OmniNumeric aria-label="@L["Lines"]" @bind-Value="_logLines" TValue="int" Minimum="1" Maximum="10000" Class="w-rem-6" />
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["Lines"]</OmniText>
-                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@FetchLogsAsync" Class="@(_logLoading ? "btn-busy" : null)" Busy="@(_logLoading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["ViewLogs"]</span></OmniButton>
+                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@FetchLogsAsync" Class="@(_logLoading ? "btn-busy" : null)" Busy="@(_logLoading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["ViewLogs"]</span></ChildContent></OmniButton>
                 @* STD-BTN detection 11: View logs visible, the other actions in the menu. *@
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@ToggleFollow" Disabled="@(AgentOffline && !_logFollowing)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_logFollowing ? "stop" : "play_arrow"))" /></Icon><ChildContent>@(_logFollowing ? L["StopFollow"] : L["FollowLogs"])</ChildContent></OmniMenuItem>

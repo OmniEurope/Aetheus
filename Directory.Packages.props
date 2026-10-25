@@ -68,7 +68,7 @@
     <PackageVersion Include="Otp.NET" Version="1.4.1" />
     <PackageVersion Include="System.CommandLine" Version="2.0.12" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
-    <PackageVersion Include="OmniEurope.Blazor" Version="1.8.2" />
+    <PackageVersion Include="OmniEurope.Blazor" Version="1.9.1" />
     <PackageVersion Include="OmniEurope.Performance" Version="1.1.0" />
   </ItemGroup>
 

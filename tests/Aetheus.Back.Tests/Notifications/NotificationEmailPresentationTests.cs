@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Notifications;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Services.Email;
 using Microsoft.Extensions.Configuration;
 using MimeKit;
@@ -32,6 +33,21 @@ public sealed class NotificationEmailPresentationTests
         Assert.Contains("href=\"https://aetheus.example.org/pipelines/runs/2698\"", message.HtmlBody);
     }
 
+    [Theory]
+    [InlineData("\"fr\"", "Échec de l'exécution du pipeline", "Le pipeline s'est arrêté sur un échec.", "fr")]
+    [InlineData("\"en\"", "Pipeline execution failed", "The pipeline stopped with a failure.", "en")]
+    public void TheNotificationWords_AreReadFromTheEmbeddedResource_InTheRecipientsLanguage(
+        string languageJson, string title, string intro, string htmlLanguage)
+    {
+        // NotificationEmailStrings(.fr).resx is found by its embedded name; this renders a real mail from
+        // it in each language, so a moved or renamed resource fails here and not in a recipient's inbox.
+        var message = NotificationMailKit.Build(FailedRun, "https://aetheus.example.org", languageJson: languageJson);
+
+        Assert.Contains(title, message.Subject);
+        Assert.Contains(intro, message.TextBody);
+        Assert.Contains($"lang=\"{htmlLanguage}\"", message.HtmlBody);
+    }
+
     public static IEnumerable<object[]> CatalogEvents => NotificationEventTypes.All.Select(e => new object[] { e.EventType });
 
     [Theory]
@@ -41,7 +57,7 @@ public sealed class NotificationEmailPresentationTests
         var message = NotificationMailKit.Build(new NotificationEmail("reader@example.org", eventType, eventType, "{}"));
         Assert.DoesNotContain(eventType, message.Subject);
         Assert.DoesNotContain("Aetheus notification", message.Subject);
-        Assert.Contains("Source event\t" + eventType, message.TextBody);
+        Assert.DoesNotContain("Source event", message.TextBody);
         Assert.Contains("lang=\"en\"", message.HtmlBody);
         Assert.Contains("notification subscriptions or platform notification rules", message.TextBody);
     }

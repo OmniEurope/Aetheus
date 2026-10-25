@@ -41,6 +41,12 @@ public static class PipelineFunctions
         new SettleFastReleaseTransactionFunction(),
         new VerifyProductionStateFunction(),
         new VerifyProductionSecretsFunction(),
+        // The heredoc programs of the production, nightly and demo preparations and of the vitrine publication
+        new BackfillEnvSecretFunction(),
+        new ReconcileEnvUrlsFunction(),
+        new RenderEnvSampleFunction(),
+        new RenderApacheUpstreamFunction(),
+        new PublishVitrineFunction(),
         // PLAN-002 lot 8
         new OpenGrepRuleTestsFunction(),
         // PLAN-002 lot 1.10
@@ -60,6 +66,7 @@ public static class PipelineFunctions
         new GenerateArtifactProvenanceFunction(),
         new VerifyReleaseAncestryFunction(),
         new PayloadEvidenceFunction(),
-        new RecordNightlyQualificationFunction()
+        new RecordNightlyQualificationFunction(),
+        new VerifyPublicDistributionFunction()
     ];
 }

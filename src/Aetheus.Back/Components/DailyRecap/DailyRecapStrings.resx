@@ -6,8 +6,7 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="Subject" xml:space="preserve"><value>Aetheus daily recap - {0}</value></data>
   <data name="Heading" xml:space="preserve"><value>What happened on {0}</value></data>
-  <data name="Intro" xml:space="preserve"><value>Day from 00:00 to 24:00 ({0}). Generated on {1}.</value></data>
-  <data name="Footer" xml:space="preserve"><value>Sent by Aetheus from its no-reply address. Recipients, sections and send time are set in Administration &gt; Platform settings &gt; Daily recap.</value></data>
+  <data name="Footer" xml:space="preserve"><value>Sent by Aetheus</value></data>
   <data name="LabelSeparator" xml:space="preserve"><value>:</value></data>
   <data name="TileRunsSucceeded" xml:space="preserve"><value>successful pipeline runs</value></data>
   <data name="TileRunsFailed" xml:space="preserve"><value>failed pipeline runs</value></data>
@@ -23,13 +22,12 @@
   <data name="RunRolledBack" xml:space="preserve"><value>Rolled back</value></data>
   <data name="RunRejected" xml:space="preserve"><value>Rejected</value></data>
   <data name="PipelinesTitle" xml:space="preserve"><value>Pipelines</value></data>
-  <data name="PipelinesSummary" xml:space="preserve"><value>{0} runs finished: {1} succeeded, {2} failed, {3} other.</value></data>
-  <data name="PipelinesParentsOnly" xml:space="preserve"><value>Parent pipelines only: a child pipeline started by another one is not listed, its outcome is part of its parent's status.</value></data>
+  <data name="PipelinesSummary" xml:space="preserve"><value>{0} runs finished: {1}, {2}, {3}.</value></data>
   <data name="PipelinesTruncated" xml:space="preserve"><value>Only the first {0} runs of the day are listed.</value></data>
   <data name="FinishedAt" xml:space="preserve"><value>Finished at</value></data>
   <data name="RunNumber" xml:space="preserve"><value>run #{0} at {1}</value></data>
   <data name="ServersTitle" xml:space="preserve"><value>Servers</value></data>
-  <data name="ServersSummary" xml:space="preserve"><value>{0} servers, {1} needing attention.</value></data>
+  <data name="ServersSummary" xml:space="preserve"><value>{0} servers, {1}.</value></data>
   <data name="LastSeen" xml:space="preserve"><value>last heartbeat {0}</value></data>
   <data name="ServerOnline" xml:space="preserve"><value>Online</value></data>
   <data name="ServerOffline" xml:space="preserve"><value>Offline</value></data>
@@ -50,7 +48,7 @@
   <data name="AgentUpdateRequired" xml:space="preserve"><value>Update required</value></data>
   <data name="Disk" xml:space="preserve"><value>Disk</value></data>
   <data name="DiskUnknown" xml:space="preserve"><value>no measure reported</value></data>
-  <data name="DiskFree" xml:space="preserve"><value>{0} GB free of {1} GB ({2} % free)</value></data>
+  <data name="DiskFree" xml:space="preserve"><value>{0} Go free of {1} Go ({2} % free)</value></data>
   <data name="DiskOk" xml:space="preserve"><value>OK</value></data>
   <data name="DiskLow" xml:space="preserve"><value>Low space</value></data>
   <data name="DiskCritical" xml:space="preserve"><value>Critical space</value></data>
@@ -60,22 +58,26 @@
   <data name="ReleaseRolledBack" xml:space="preserve"><value>Rolled back</value></data>
   <data name="At" xml:space="preserve"><value>At</value></data>
   <data name="BackupsTitle" xml:space="preserve"><value>Backups</value></data>
-  <data name="BackupsSummary" xml:space="preserve"><value>{0} backups finished: {1} succeeded, {2} failed.</value></data>
+  <data name="BackupsSummary" xml:space="preserve"><value>{0} backups finished: {1}, {2}.</value></data>
   <data name="BackupWhere" xml:space="preserve"><value>{0} on {1}</value></data>
   <data name="BackupSucceeded" xml:space="preserve"><value>Succeeded</value></data>
   <data name="BackupFailed" xml:space="preserve"><value>Failed</value></data>
   <data name="Reason" xml:space="preserve"><value>Reason</value></data>
   <data name="CertificatesTitle" xml:space="preserve"><value>Certificates</value></data>
-  <data name="CertificatesSummary" xml:space="preserve"><value>{0} certificates expire within {1} days.</value></data>
+  <data name="CertificatesSummary" xml:space="preserve"><value>{0} certificates expire within {1}.</value></data>
   <data name="SecretsTitle" xml:space="preserve"><value>Vault secrets</value></data>
-  <data name="SecretsSummary" xml:space="preserve"><value>{0} vault secrets expire within {1} days.</value></data>
+  <data name="SecretsSummary" xml:space="preserve"><value>{0} vault secrets expire within {1}.</value></data>
   <data name="Expired" xml:space="preserve"><value>Expired</value></data>
   <data name="ExpiresInDays" xml:space="preserve"><value>In {0} days</value></data>
   <data name="ExpiresOn" xml:space="preserve"><value>Expires on</value></data>
   <data name="FindingsTitle" xml:space="preserve"><value>Security and quality findings</value></data>
-  <data name="FindingsSummary" xml:space="preserve"><value>{0} new findings, {1} resolved.</value></data>
-  <data name="FindingsNewTitle" xml:space="preserve"><value>New findings by severity</value></data>
-  <data name="FindingsNewCount" xml:space="preserve"><value>{0} new</value></data>
+  <data name="FindingsSummary" xml:space="preserve"><value>{0}, {1}.</value></data>
+  <data name="FindingsNewWithSeverities" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="FindingsCountCritical" xml:space="preserve"><value>{0} critical</value></data>
+  <data name="FindingsCountHigh" xml:space="preserve"><value>{0} high</value></data>
+  <data name="FindingsCountMedium" xml:space="preserve"><value>{0} medium</value></data>
+  <data name="FindingsCountLow" xml:space="preserve"><value>{0} low</value></data>
+  <data name="FindingsCountInfo" xml:space="preserve"><value>{0} info</value></data>
   <data name="SeverityNone" xml:space="preserve"><value>None</value></data>
   <data name="SeverityInfo" xml:space="preserve"><value>Info</value></data>
   <data name="SeverityLow" xml:space="preserve"><value>Low</value></data>
@@ -97,4 +99,26 @@
   <data name="EmailLabel" xml:space="preserve"><value>Your daily overview</value></data>
   <data name="RunLink" xml:space="preserve"><value>View execution and logs</value></data>
   <data name="ServerLink" xml:space="preserve"><value>View server</value></data>
+  <data name="FindingsLink" xml:space="preserve"><value>View findings</value></data>
+  <data name="TileRunsSucceededOne" xml:space="preserve"><value>successful pipeline run</value></data>
+  <data name="TileRunsFailedOne" xml:space="preserve"><value>failed pipeline run</value></data>
+  <data name="TileServersOnlineOne" xml:space="preserve"><value>server online</value></data>
+  <data name="PipelinesSummaryOne" xml:space="preserve"><value>{0} run finished: {1}, {2}, {3}.</value></data>
+  <data name="PipelinesSucceededCount" xml:space="preserve"><value>{0} succeeded</value></data>
+  <data name="PipelinesFailedCount" xml:space="preserve"><value>{0} failed</value></data>
+  <data name="PipelinesOtherCount" xml:space="preserve"><value>{0} other</value></data>
+  <data name="ServersSummaryOne" xml:space="preserve"><value>{0} server, {1}.</value></data>
+  <data name="ServersAttentionCount" xml:space="preserve"><value>{0} needing attention</value></data>
+  <data name="BackupsSummaryOne" xml:space="preserve"><value>{0} backup finished: {1}, {2}.</value></data>
+  <data name="BackupsSucceededCount" xml:space="preserve"><value>{0} succeeded</value></data>
+  <data name="BackupsFailedCount" xml:space="preserve"><value>{0} failed</value></data>
+  <data name="CertificatesSummaryOne" xml:space="preserve"><value>{0} certificate expires within {1}.</value></data>
+  <data name="SecretsSummaryOne" xml:space="preserve"><value>{0} vault secret expires within {1}.</value></data>
+  <data name="DaysCount" xml:space="preserve"><value>{0} days</value></data>
+  <data name="DaysCountOne" xml:space="preserve"><value>{0} day</value></data>
+  <data name="ExpiresInDaysOne" xml:space="preserve"><value>In {0} day</value></data>
+  <data name="FindingsNewTotal" xml:space="preserve"><value>{0} new findings</value></data>
+  <data name="FindingsNewTotalOne" xml:space="preserve"><value>{0} new finding</value></data>
+  <data name="FindingsResolvedCount" xml:space="preserve"><value>{0} resolved</value></data>
+  <data name="MailQueueCountOne" xml:space="preserve"><value>{0} message</value></data>
 </root>

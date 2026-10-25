@@ -34,7 +34,6 @@ public sealed class AnalysisPolicyEngineTests
     [InlineData("duplication.percentage", 5.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("complexity.cyclomatic.average", 10.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("complexity.cyclomatic.maximum", 25.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
-    [InlineData("architecture.cycles", 1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     public async Task EvaluateAsync_DefaultAbsoluteQualityThresholdAppliesVersionedBehavior(
         string key,
         double value,
@@ -46,6 +45,31 @@ public sealed class AnalysisPolicyEngineTests
         Assert.Equal(expectedStatus, evaluation.Status);
         Assert.Equal(expectedStatus == AnalysisGateStatus.Warning ? 1 : 0, evaluation.WarningCount);
         Assert.Equal(expectedStatus == AnalysisGateStatus.Blocked ? 1 : 0, evaluation.BlockerCount);
+    }
+
+    [Theory]
+    [InlineData("architecture.cycles")]
+    [InlineData("architecture.cycles.type")]
+    [InlineData("architecture.cycles.namespace")]
+    public async Task EvaluateAsync_ACycleCountIsNoLongerAThresholdAlert(string key)
+    {
+        // R1-36 / ADR-053: a group of cycles is a finding of its own (published by the agent with its
+        // members), so the count of cycles has no rule of its own and alerts nothing.
+        var evaluation = await EvaluateAsync(
+            AnalysisCategory.Architecture, Metric(key, 40, AnalysisMetricDirection.LowerIsBetter));
+
+        Assert.Equal(AnalysisGateStatus.Passed, evaluation.Status);
+        Assert.Equal(0, evaluation.WarningCount);
+        Assert.Equal(0, evaluation.BlockerCount);
+    }
+
+    [Fact]
+    public void TheDefaultCatalog_HasNoDependencyCycleRule()
+    {
+        Assert.DoesNotContain(
+            AnalysisDefaultPolicyCatalog.Policies,
+            policy => policy.PolicyKey == "quality.architecture.cycles"
+                || policy.MetricKey?.StartsWith("architecture.cycles", StringComparison.Ordinal) == true);
     }
 
     [Fact]
@@ -209,7 +233,7 @@ public sealed class AnalysisPolicyEngineTests
     [InlineData("coverage.line.percent", 90, AnalysisMetricDirection.HigherIsBetter, AnalysisGateStatus.Passed)]
     [InlineData("duplication.percentage", 5.1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
     [InlineData("complexity.cyclomatic.maximum", 14, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Passed)]
-    [InlineData("architecture.cycles", 1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Warning)]
+    [InlineData("architecture.cycles", 1, AnalysisMetricDirection.LowerIsBetter, AnalysisGateStatus.Passed)]
     public async Task EvaluateAsync_InheritPresetPreservesObservedLegacyVerdictAndEvidence(
         string key,
         double value,

@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/verify-delivery-promotion.mjs</c>, run through the real executor
+/// The C# port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-delivery-promotion.mjs</c>, run through the real executor
 /// on every contract the script itself verified (<c>TestData/delivery-promotion-cases.json</c>,
 /// <see cref="ScriptReferenceData"/>), each sealed by the real JS generator: every case of
 /// <c>delivery-contract.test.mjs</c>, the refusals of the candidate (schema 1, invalid, identity,

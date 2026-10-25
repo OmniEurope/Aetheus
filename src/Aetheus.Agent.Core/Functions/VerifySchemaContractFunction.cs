@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>verify-schema-contract</c> function, port of <c>deploy/scripts/verify-schema-contract.mjs</c>
+/// The <c>verify-schema-contract</c> function, port of the former <c>verify-schema-contract.mjs</c> script
 /// and of the fingerprint of <c>schema-fingerprint.mjs</c>: the ordered list of applied EF migration
 /// ids (trimmed, empty lines dropped, sorted by UTF-16 code unit as JavaScript sorts) hashed with
 /// SHA-256 over its <c>\n</c>-joined text. The contract derives <c>schemaAfter</c> from the source tree

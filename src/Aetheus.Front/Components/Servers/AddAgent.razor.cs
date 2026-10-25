@@ -219,9 +219,10 @@ public partial class AddAgent : IAsyncDisposable
             inner.AddContent(1, L["WizardPlatformDescription"]);
             inner.CloseElement();
 
-            // One choice among two OE selectable cards, in a named radio group.
-            inner.OpenComponent<OmniStack>(2);
-            inner.AddAttribute(3, nameof(OmniStack.Gap), OmniSpacing.Medium);
+            // One choice among two OE selectable cards, in a named radio group; R-3: the two are tiles of
+            // one OmniTileGrid (same width, same height).
+            inner.OpenComponent<OmniTileGrid>(2);
+            inner.AddAttribute(3, nameof(OmniTileGrid.Columns), 2);
             inner.AddAttribute(4, "role", "radiogroup");
             inner.AddAttribute(5, "aria-label", L["Platform"].Value);
             inner.AddAttribute(6, "ChildContent", (RenderFragment)(options =>

@@ -5,8 +5,8 @@
    replace the search row. *@
 @if (true)
 {
-    <SectionContent SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewEnvironment" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewEnvironment" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </SectionContent>
 }
 
@@ -21,16 +21,16 @@
             <ActionContent>
                 @if (_canWrite)
                 {
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewEnvironment"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewEnvironment"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
                 }
             </ActionContent>
         </EmptyState>
     </EmptyTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="EnvironmentDto" Property="Name" Title="@L["Name"]" MinWidth="10rem" Filterable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="EnvironmentDto" Property="Name" Title="@L["Name"]" Filterable="true" >
             <Template Context="env">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None">
                         <a href="/environments/@env.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@env.Name</a>
                         @if (!IsProjectScope && !string.IsNullOrEmpty(env.ProjectName))
                         {
@@ -45,13 +45,13 @@
                 <OmniBadge Fill="OmniFill.Solid" Tone="@EnvironmentHelper.TypeStyle(env.Type)">@L.Localize(env.Type)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="EnvironmentDto" Property="Description" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
-        <OmniDataGridColumn TItem="EnvironmentDto" Title="@L["Servers"]" ExportValue="@ServersExport" Width="100px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="EnvironmentDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
+        <OmniDataGridColumn TItem="EnvironmentDto" Title="@L["Servers"]" ExportValue="@ServersExport" Width="100px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
             <Template Context="env">
                 <CountBadge Value="@env.Servers.Count" Variant="OmniTone.Neutral" />
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="EnvironmentDto" Property="RequireApproval" Title="@L["Approval"]" Width="110px" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" >
+        <OmniDataGridColumn TItem="EnvironmentDto" Property="RequireApproval" Title="@L["Approval"]" Width="110px" TextAlign="OmniAlignment.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" >
             <Template Context="env">
                 @if (env.RequireApproval)
                 {
@@ -60,11 +60,11 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="EnvironmentDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-        <OmniDataGridColumn TItem="EnvironmentDto" Title="" Width="60px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
+        <OmniDataGridColumn TItem="EnvironmentDto" Title="" Width="60px" Sortable="false" TextAlign="OmniAlignment.Center" Filterable="false" >
             <Template Context="env">
                 @* Duplicate uses the approved blue STD-BTN exception on each row. *@
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => DuplicateEnvironment(env))" Disabled="@(!_canWrite)" title="@L["Duplicate"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => DuplicateEnvironment(env))" Disabled="@(!_canWrite)" title="@L["Duplicate"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                 </span>
             </Template>
         </OmniDataGridColumn>

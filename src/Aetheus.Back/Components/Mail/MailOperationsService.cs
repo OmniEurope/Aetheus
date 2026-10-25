@@ -121,7 +121,7 @@ public sealed class MailOperationsService(
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrEmpty(request.RawMessage) || request.RawMessage.Length > MailValidation.MaxLearnMessageLength)
-            throw new BadRequestException("The message must be between 1 byte and 1 MiB.");
+            throw new BadRequestException("The message must be between 1 byte and 1 Mo.");
         await EnsureMailManageableAsync(serverId, ct).ConfigureAwait(false);
         var kind = request.IsSpam ? "spam" : "ham";
         var env = new Dictionary<string, string>(StringComparer.Ordinal) { [MailSetupEnv.LearnMessage] = request.RawMessage };

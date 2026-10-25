@@ -2,7 +2,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Aetheus.Agent.Core.Configuration;
-using Aetheus.Agent.Core.Extensions;
+using Aetheus.Agent.Core.Services;
 
 namespace Aetheus.Agent.Core.Tests;
 
@@ -23,7 +23,7 @@ public class CertPinningTests
         using var other = MakeSelfSigned();
         var thumb = cert.GetCertHashString(HashAlgorithmName.SHA256);
 
-        var cb = AgentCoreServiceCollectionExtensions.BuildCertValidationCallback(
+        var cb = AgentTlsPosture.BuildCertValidationCallback(
             new AetheusAgentOptions { PinnedServerCertThumbprint = thumb });
 
         Assert.NotNull(cb);
@@ -34,14 +34,14 @@ public class CertPinningTests
     [Fact]
     public void NoPinNoInsecure_UsesDefaultValidation()
     {
-        Assert.Null(AgentCoreServiceCollectionExtensions.BuildCertValidationCallback(new AetheusAgentOptions()));
+        Assert.Null(AgentTlsPosture.BuildCertValidationCallback(new AetheusAgentOptions()));
     }
 
     [Fact]
     public void AllowInsecure_AcceptsAny_WhenNoPin()
     {
         using var cert = MakeSelfSigned();
-        var cb = AgentCoreServiceCollectionExtensions.BuildCertValidationCallback(
+        var cb = AgentTlsPosture.BuildCertValidationCallback(
             new AetheusAgentOptions { AllowInsecureCerts = true });
         Assert.NotNull(cb);
         Assert.True(cb!(this, cert, null, System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors));

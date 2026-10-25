@@ -12,6 +12,7 @@ internal sealed class CertbotRenewalInspector(Func<string, string?> readFile, Fu
     private const string RenewalDir = "/etc/letsencrypt/renewal";
     private const string AcmeAliasPath = "/etc/apache2/conf-enabled/aetheus-acme-webroot.conf";
     private const string RenewalCheckPath = "/var/lib/aetheus-certbot/renewal-check";
+    private const string AcmeProxyRulesPath = "/var/lib/aetheus-certbot/acme-proxy-rules";
 
     public List<CertbotCertificateDto> Annotate(IEnumerable<CertbotCertificateDto> certificates)
     {
@@ -52,6 +53,42 @@ internal sealed class CertbotRenewalInspector(Func<string, string?> readFile, Fu
                     Reason = parts.Length > 1 ? Truncate(parts[1].Trim(), CertbotRenewalFailureDto.MaxReasonLength) : string.Empty
                 })
                 .Take(CertbotRenewalFailureDto.MaxFailures)
+        ];
+    }
+
+    /// <summary>Recette R1-7: the <c>output=&lt;line&gt;</c> lines the manage helper records after a failed rehearsal
+    /// (its header, then the last meaningful lines certbot printed).</summary>
+    public List<string> ReadRenewalCheckOutputTail() => ParseRenewalCheckOutputTail(readFile(RenewalCheckPath));
+
+    internal static List<string> ParseRenewalCheckOutputTail(string? content)
+    {
+        if (content is null) return [];
+        return
+        [
+            .. content.Split('\n')
+                .Select(line => line.TrimEnd('\r'))
+                .Where(line => line.StartsWith("output=", StringComparison.Ordinal))
+                .Select(line => Truncate(line["output=".Length..], CertbotDataDto.MaxOutputTailLineLength))
+                .Where(line => line.Length > 0)
+                .Take(CertbotDataDto.MaxOutputTailLines)
+        ];
+    }
+
+    /// <summary>Recette R-2: the <c>rule=&lt;file&gt;:&lt;line&gt;</c> lines the manage helper records for each proxying
+    /// Apache <c>RewriteRule</c> that still lets the ACME challenge reach the application.</summary>
+    public List<string> ReadAcmeProxyRules() => ParseAcmeProxyRules(readFile(AcmeProxyRulesPath));
+
+    internal static List<string> ParseAcmeProxyRules(string? content)
+    {
+        if (content is null) return [];
+        return
+        [
+            .. content.Split('\n')
+                .Select(line => line.TrimEnd('\r'))
+                .Where(line => line.StartsWith("rule=", StringComparison.Ordinal))
+                .Select(line => Truncate(line["rule=".Length..], CertbotDataDto.MaxAcmeProxyRuleLength))
+                .Where(line => line.Length > 0)
+                .Take(CertbotDataDto.MaxAcmeProxyRules)
         ];
     }
 

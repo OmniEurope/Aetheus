@@ -203,6 +203,7 @@ public class ServerService(
             DiskUsedGb = latestMetric?.DiskUsedGb ?? 0,
             DiskTotalGb = latestMetric?.DiskTotalGb ?? 0,
             InodeUsedPercent = latestMetric?.InodeUsedPercent,
+            Disks = ServerDisks.Read(server.DisksJson),
             ClockOffsetMs = latestMetric?.ClockOffsetMs,
             ClockOffsetUncertaintyMs = latestMetric?.ClockOffsetUncertaintyMs,
             StorageDiagnostics = latestMetric is null

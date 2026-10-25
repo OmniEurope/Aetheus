@@ -135,6 +135,13 @@ public sealed record PipelineStepDefinition
     /// below <c>.pipeline/configs/</c>. The whole set is rendered and applied atomically.</summary>
     public Dictionary<string, string> ConfigFiles { get; init; } = [];
 
+    /// <summary>A shell step's environment file: the versioned sample below <c>.pipeline/configs/</c>
+    /// (<c>KEY=#{NAME}#</c> lines, no values) the control plane renders from the run's variables, the
+    /// libraries and the vaults, then hands to the step as base64 in <c>AETHEUS_ENV_FILE_B64</c>. The
+    /// vault values the sample names reach the step only inside that file, and only a step whose shell
+    /// mentions <c>AETHEUS_ENV_FILE_B64</c> receives it (ADR-057).</summary>
+    public string? EnvTemplate { get; init; }
+
     /// <summary>S-FEAT-K3P8: minimum line-coverage percent (0–100) for a <c>type: coverage</c> step.
     /// When set, the step fails if the published line rate is below it (respecting continue_on_error).</summary>
     public double? MinCoverage { get; init; }

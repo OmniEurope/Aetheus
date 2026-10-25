@@ -81,7 +81,7 @@ public sealed class SudoersReadAclAuditTests
     }
 
     private static string ReadInstallScript()
-        => File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "scripts", "install-agent-linux.sh"));
+        => File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "agent-installer", "install-agent-linux.sh"));
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 }

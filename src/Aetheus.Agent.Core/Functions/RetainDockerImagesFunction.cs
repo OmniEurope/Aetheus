@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>retain-docker-images</c> function, port of <c>deploy/scripts/retain-docker-images.sh</c>:
+/// The <c>retain-docker-images</c> function, port of the former <c>retain-docker-images.sh</c> script:
 /// every image a container references (running or stopped) is protected, which keeps the live colour
 /// and its N-1; for each managed repository the tags are walked newest first, protected and the
 /// <c>keep</c> most recent ones are kept, and every other tag is removed, after re-resolving it and the
@@ -26,7 +26,6 @@ namespace Aetheus.Agent.Core.Functions;
 public sealed partial class RetainDockerImagesFunction : IPipelineFunction
 {
     private const string InventoryFormat = "{{.ID}}|{{.Repository}}:{{.Tag}}|{{.CreatedAt}}";
-    private const string TagFormat = "{{.ID}}|{{.Repository}}:{{.Tag}}";
 
     [GeneratedRegex("^[a-zA-Z0-9._/-]+\\z")]
     private static partial Regex SafeRepository();
@@ -119,6 +118,8 @@ public sealed partial class RetainDockerImagesFunction : IPipelineFunction
     /// <summary>One retention pass: the protected image ids and the per-repository decisions.</summary>
     private sealed class Retention(FunctionDocker docker, PipelineFunctionContext context, bool dryRun, long keep)
     {
+        private const string TagFormat = "{{.ID}}|{{.Repository}}:{{.Tag}}";
+
         private readonly List<string> _protected = [];
 
         public FunctionDocker Docker => docker;

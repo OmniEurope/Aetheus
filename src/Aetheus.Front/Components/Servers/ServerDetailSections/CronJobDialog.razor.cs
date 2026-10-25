@@ -42,7 +42,7 @@ public partial class CronJobDialog
     }
 
     private (bool IsValid, string? NextRun, string? Error) ScheduleValidation =>
-        ServerCronSection.ValidateCronExpression(_form.Schedule);
+        CronSchedulePreview.ValidateCronExpression(_form.Schedule);
 
     private void Cancel() => Dialog.Close(null);
 

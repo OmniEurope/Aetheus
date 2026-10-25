@@ -12,9 +12,24 @@ public sealed class FrontendCachePolicyAuditTests
 
         Assert.Contains("text/html", program, StringComparison.Ordinal);
         Assert.Contains("/_content/OmniEurope.Blazor", program, StringComparison.Ordinal);
-        Assert.Contains("no-store, no-cache, must-revalidate", program, StringComparison.Ordinal);
-        Assert.Contains("Headers.Pragma = \"no-cache\"", program, StringComparison.Ordinal);
-        Assert.Contains("Headers.Expires = \"0\"", program, StringComparison.Ordinal);
+
+        // The HTML shell is revalidated, never forbidden from storage: no-store keeps the page out of
+        // the browser's back/forward cache (user-approved policy, 2026-10-22). Pragma and Expires are
+        // dropped for it.
+        var html = Branch(program, "if (isHtml)", "else if (isServiceWorker || isRuntimeSettings)");
+        Assert.Contains("Headers.CacheControl = \"no-cache\";", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"no-store", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("must-revalidate\"", html, StringComparison.Ordinal);
+        Assert.Contains("Headers.Remove(\"Pragma\")", html, StringComparison.Ordinal);
+        Assert.Contains("Headers.Remove(\"Expires\")", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Headers.Pragma =", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Headers.Expires =", html, StringComparison.Ordinal);
+
+        // The service worker and the runtime settings keep the strict policy.
+        var strict = Branch(program, "else if (isServiceWorker || isRuntimeSettings)", "else if (isFramework)");
+        Assert.Contains("Headers.CacheControl = \"no-store, no-cache, must-revalidate\";", strict, StringComparison.Ordinal);
+        Assert.Contains("Headers.Pragma = \"no-cache\"", strict, StringComparison.Ordinal);
+        Assert.Contains("Headers.Expires = \"0\"", strict, StringComparison.Ordinal);
         Assert.True(
             program.IndexOf("app.Use(async", StringComparison.Ordinal)
             < program.IndexOf("app.UseBlazorFrameworkFiles()", StringComparison.Ordinal),
@@ -116,6 +131,15 @@ public sealed class FrontendCachePolicyAuditTests
         Assert.Contains("[Route(\"api/security\")]", controller, StringComparison.Ordinal);
         Assert.Contains("[HttpPost(\"csp-report\")]", controller, StringComparison.Ordinal);
         Assert.Contains("\"application/reports+json\"", controller, StringComparison.Ordinal);
+    }
+
+    private static string Branch(string program, string start, string end)
+    {
+        var from = program.IndexOf(start, StringComparison.Ordinal);
+        Assert.True(from >= 0, $"The cache policy no longer has the branch '{start}'.");
+        var to = program.IndexOf(end, from, StringComparison.Ordinal);
+        Assert.True(to > from, $"The cache policy branch '{start}' no longer ends at '{end}'.");
+        return program[from..to];
     }
 
     private static string RepoRoot()

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/bluegreen-host-reset.sh</c>, run through the real executor as a
+/// The C# port of the former <c>bluegreen-host-reset.sh</c> script, run through the real executor as a
 /// deployment function against an in-memory Docker daemon and a real state directory: everything of
 /// the disposable project removed and proved gone, nothing of anything else, and every identity guard
 /// refusing before a single Docker command.
@@ -80,6 +80,18 @@ public sealed class BlueGreenHostResetFunctionTests : IDisposable
         Assert.Contains(">>> Removing the volumes of app-nightly: app-nightly-git-repos app-nightly_db-data ", LogLines);
         Assert.Contains("Environment app-nightly reset: no container, no volume, no deployment state.", LogLines);
         Assert.Equal(["keep-me"], Directory.EnumerateFileSystemEntries(_state).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Reset_AFreshWorkspaceWithoutAStateDirectoryStillResets()
+    {
+        Directory.Delete(_state, recursive: true);
+
+        var (result, _) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(["c3"], _docker.Containers.Select(container => container.Id));
+        Assert.Contains("Environment app-nightly reset: no container, no volume, no deployment state.", LogLines);
     }
 
     [Fact]

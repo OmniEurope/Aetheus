@@ -10,11 +10,11 @@
     else if (_settings is not null)
     {
         <OmniDescriptionList Columns="2">
-            <OmniDescriptionItem Label="@L["MailClientServer"]">@(string.IsNullOrWhiteSpace(_settings.Host) ? L["MailClientNoHost"] : _settings.Host)</OmniDescriptionItem>
-            <OmniDescriptionItem Label="@L["Username"]">@(string.IsNullOrWhiteSpace(Email) ? L["MailClientUsernameValue"] : Email)</OmniDescriptionItem>
-            <OmniDescriptionItem Label="@L["MailClientImap"]">@_settings.ImapPort</OmniDescriptionItem>
-            <OmniDescriptionItem Label="@L["MailClientSmtp"]">@_settings.SubmissionPort</OmniDescriptionItem>
-            <OmniDescriptionItem Label="@L["Password"]">@L["MailClientPasswordValue"]</OmniDescriptionItem>
+            <OmniDescriptionItem Term="@L["MailClientServer"]">@(string.IsNullOrWhiteSpace(_settings.Host) ? L["MailClientNoHost"] : _settings.Host)</OmniDescriptionItem>
+            <OmniDescriptionItem Term="@L["Username"]">@(string.IsNullOrWhiteSpace(Email) ? L["MailClientUsernameValue"] : Email)</OmniDescriptionItem>
+            <OmniDescriptionItem Term="@L["MailClientImap"]">@_settings.ImapPort</OmniDescriptionItem>
+            <OmniDescriptionItem Term="@L["MailClientSmtp"]">@_settings.SubmissionPort</OmniDescriptionItem>
+            <OmniDescriptionItem Term="@L["Password"]">@L["MailClientPasswordValue"]</OmniDescriptionItem>
         </OmniDescriptionList>
     }
 </OmniStack>

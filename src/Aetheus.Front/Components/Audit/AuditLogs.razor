@@ -9,7 +9,7 @@
     <Badges>
         <HelpLink PageKey="audit" />
     </Badges>
-    <Actions>
+    <ActionsContent>
         @if (_chainResult is not null)
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="@(_chainResult.IsValid ? OmniTone.Success : OmniTone.Danger)">@(_chainResult.IsValid ? string.Format(L["AuditChainIntactCount"], _chainResult.TotalEntries) : string.Format(L["AuditBreakAt"], _chainResult.FirstInvalidId))</OmniBadge>
@@ -18,9 +18,9 @@
         {
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AuditIntegrityUnavailable"]</OmniBadge>
         }
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@VerifyChainAsync" Class="@(_verifyingChain ? "btn-busy" : null)" Busy="@(_verifyingChain)"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["AuditVerifyChain"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@VerifyChainAsync" Class="@(_verifyingChain ? "btn-busy" : null)" Busy="@(_verifyingChain)"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["AuditVerifyChain"]</span></ChildContent></OmniButton>
         @* No Refresh, new entries arrive over the admin hub. *@
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 <AetheusDataGrid @ref="_grid" TItem="AuditLogDto" RowClick="@(log => ShowDetailsDialogAsync(log))" Data="@_logs" Count="@_count" LoadData="@LoadData" ExportRead="@ReadExportAsync"
     PageSize="20" AllowSorting="true" IsLoading="@_loading" Density="OmniDensity.Compact" FullHeight="true"
@@ -33,7 +33,7 @@
                 <span title="@log.Timestamp.ToString("F")">@RelativeTime.FormatAgo(L, log.Timestamp)</span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Width="140px" Filterable="true" />
+        <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Filterable="true" />
         <OmniDataGridColumn TItem="AuditLogDto" Property="Action" Title="@L["Action"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_actionOptions" FormatFilterValue="@ActionText" FilterSearchable="true" >
             <Template Context="log">
                 <OmniBadge Fill="OmniFill.Solid" Tone="@AuditActionPresentation.Badge(log.Action)">@ActionText(log.Action)</OmniBadge>
@@ -41,17 +41,17 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="AuditLogDto" Property="EntityType" Title="@L["EntityType"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_entityOptions" FilterSearchable="true" />
         <OmniDataGridColumn TItem="AuditLogDto" Property="EntityId" Title="@L["ID"]" Width="80px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-        <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" MinWidth="15rem" Sortable="false" Filterable="false">
+        <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" Sortable="false" Filterable="false">
             <Template Context="log">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsDialogAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsDialogAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
                 @if (!string.IsNullOrWhiteSpace(log.Details))
                 {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyDetailsAsync(log.Details))" title="@L["CopyDetails"]" Label="@L["CopyDetails"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => CopyDetailsAsync(log.Details))" title="@L["CopyDetails"]" Label="@L["CopyDetails"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                 }
                 </span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Title="@L["Details"]" Filterable="true" />
+        <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Truncate="true" Title="@L["Details"]" Filterable="true" />
     </Columns>
 </AetheusDataGrid>

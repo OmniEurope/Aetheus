@@ -1,0 +1,7 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Type badge of a registry package: the brand mark and colour of NuGet, npm or Maven. The brand colour is a
+   user-chosen exception to the badge tones (R1-19), carried by the package-kind-badge CSS classes. *@
+<OmniBadge Fill="OmniFill.Solid" Class="@CssClass">
+    <Icon><OmniIcon Glyph="@PackageRegistryKindGlyphs.For(Kind)" /></Icon>
+    <ChildContent>@L.Localize(Kind)</ChildContent>
+</OmniBadge>

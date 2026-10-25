@@ -100,6 +100,7 @@ public class AppDbContext(
     public DbSet<RunMetric> RunMetrics => Set<RunMetric>();
     public DbSet<PipelineMigrationGateVerdict> PipelineMigrationGateVerdicts => Set<PipelineMigrationGateVerdict>();
     public DbSet<AlertRule> AlertRules => Set<AlertRule>();
+    public DbSet<AlertOccurrence> AlertOccurrences => Set<AlertOccurrence>();
     public DbSet<EnvironmentCheck> EnvironmentChecks => Set<EnvironmentCheck>();
     public DbSet<GitConnection> GitConnections => Set<GitConnection>();
     public DbSet<PullRequest> PullRequests => Set<PullRequest>();

@@ -8,10 +8,10 @@
     <Badges>
         <HelpLink PageKey="git-repositories" />
     </Badges>
-    <Actions>
+    <ActionsContent>
         @* Repository hub events keep the list current. *@
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
 @* Inside a project the project is known and the grid's header filters search, so neither the
@@ -26,7 +26,7 @@
             Placeholder="@L["SelectProject"]" AllowEmpty="true" @bind-Value="_projectFilter" @bind-Value:after="@(() => OnProjectFilterChanged(new object()))" />
         @if (_projectFilter.HasValue)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><OmniIcon Name="OmniIconName.Close" /> <span>@L["ClearFilters"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
         }
     </OmniRow>
 </div>
@@ -60,19 +60,19 @@ else
     EmptyText="@L["NoRepositoriesFound"]" class="@GitGridClass" FullHeight="true"
     RowClick="@(r => Nav.NavigateTo($"git-repositories/{r.Id}?projectId={r.ProjectId}"))">
         <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="GitLightRepoDto" Property="Name" Title="@L["Name"]" Width="auto" Filterable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="GitLightRepoDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                 <Template Context="r">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         <a href="@($"git-repositories/{r.Id}?projectId={r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.Name</a>
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="GitLightRepoDto" Property="ProjectName" Title="@L["Project"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="GitLightRepoDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
                 <Template Context="r">
                     <a href="@($"projects/{r.ProjectId}")" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@r.ProjectName</a>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="GitLightRepoDto" Property="Description" Title="@L["Description"]" Width="auto" Filterable="true" />
+            <OmniDataGridColumn TItem="GitLightRepoDto" Property="Description" Truncate="true" Title="@L["Description"]" Width="auto" Filterable="true" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="DefaultBranch" Title="@L["DefaultBranch"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.DefaultBranches" FilterSearchable="true" >
                 <Template Context="r">
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@r.DefaultBranch</OmniBadge>
@@ -82,22 +82,22 @@ else
                 <Template Context="r">
                     @if (r.IsEmpty)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="LastPushAt" Title="@L["LastPush"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
-            <OmniDataGridColumn TItem="GitLightRepoDto" Title="@L["Actions"]" MinWidth="14rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
+            <OmniDataGridColumn TItem="GitLightRepoDto" Title="@L["Actions"]" Sortable="false" TextAlign="OmniAlignment.End" Filterable="false" >
                 <Template Context="r">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         @* Open is the row's primary action. *@
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"git-repositories/{r.Id}?projectId={r.ProjectId}"))" title="@L["View"]" Label="@L["View"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRepo(r))" Disabled="@(!_canWrite)" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"git-repositories/{r.Id}?projectId={r.ProjectId}"))" title="@L["View"]" Label="@L["View"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRepo(r))" Disabled="@(!_canWrite)" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>
@@ -116,7 +116,7 @@ else
             }
             else if (_projectFilter.HasValue && _canWrite)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
             }
         </ActionContent>
     </EmptyState>

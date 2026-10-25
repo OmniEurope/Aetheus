@@ -267,6 +267,13 @@ internal sealed record BlueGreenStepBinding
             case OperationKind.BlueGreenSwitch:
                 return TrySwitchFields(reloadHelper, revision, upstreamTemplate, upstreamConf, out error);
 
+            // A step that carries a revision (the template's first step does since catalog v2) must not
+            // reach the schema with a placeholder, or the refusal would come only at the switch, after the
+            // shared schema was already migrated.
+            case OperationKind.BlueGreenMigrate when HasUnresolvedReference(revision):
+                error = UnresolvedRevisionMessage(revision);
+                return false;
+
             // Without the migration sources the expand/contract gate cannot inspect what is about to run
             // against a schema the previous colour is still serving, so refuse rather than skip it.
             case OperationKind.BlueGreenMigrate when migrationsDir.Length == 0:
@@ -309,6 +316,18 @@ internal sealed record BlueGreenStepBinding
     }
 
     /// <summary>
+    /// A <c>$(NAME)</c> the run could not resolve stays literal in the substituted text, so a revision
+    /// derived from a run variable (the template's default is the launch commit) that the run never
+    /// defined would otherwise be written to the journal as that placeholder.
+    /// </summary>
+    private static bool HasUnresolvedReference(string revision) =>
+        revision.Contains("$(", StringComparison.Ordinal);
+
+    private static string UnresolvedRevisionMessage(string revision) =>
+        $"'revision' is '{revision}', an unresolved variable reference: the run defines no source revision for the journal. "
+        + "Launch the pipeline on a commit or set BG_REVISION to the revision being deployed.";
+
+    /// <summary>
     /// The reload helper is invoked argv-exact through sudo, so it must be a fixed absolute path.
     /// Allowing whitespace or traversal would let a variable turn the grant into an arbitrary
     /// privileged command.
@@ -320,6 +339,11 @@ internal sealed record BlueGreenStepBinding
         if (revision.Length == 0)
         {
             error = "'revision' is required so the journal records what was deployed.";
+            return false;
+        }
+        if (HasUnresolvedReference(revision))
+        {
+            error = UnresolvedRevisionMessage(revision);
             return false;
         }
         // Rendering the template is the switch. Allowing the step to omit it would produce a reload

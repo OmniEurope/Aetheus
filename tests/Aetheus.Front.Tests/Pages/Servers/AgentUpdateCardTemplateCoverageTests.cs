@@ -94,6 +94,25 @@ public class AgentUpdateCardTemplateCoverageTests : BunitContext
         Assert.Contains("Downloading update...", cut.Markup);
     }
 
+    // R-46: the percentage froze between two reports; the bar only moves along its track and announces no value.
+    [Theory]
+    [InlineData(AgentUpdatePhase.Downloading, 40)]
+    [InlineData(AgentUpdatePhase.AgentOffline, 95)]
+    public void R46_InProgress_ShowsAnIndeterminateBar_NotAPercentage(AgentUpdatePhase phase, int percent)
+    {
+        var cut = Render<AgentUpdateProgressCard>(p =>
+        {
+            p.Add(x => x.ServerId, 1);
+            p.Add(x => x.Hub, null);
+        });
+        SetPhase(cut.Instance, phase, percent, null);
+        cut.Render();
+
+        var bar = cut.Find("[role=progressbar]");
+        Assert.Null(bar.GetAttribute("aria-valuenow"));
+        Assert.Contains("indeterminate", bar.OuterHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void Renders_NoMessage_WhenMessageIsNull()
     {

@@ -4,5 +4,5 @@
    product's STD-BTN exception keeps this navigation action blue. *@
 <OmniButton Variant="OmniButtonVariant.Primary" Size="@Size"
             OnClick="@(_ => GoBackAsync())" title="@Title" Label="@Title">
-    <OmniIcon Name="OmniIconName.ArrowLeft" /> @Text
+    <Icon><OmniIcon Name="OmniIconName.ArrowLeft" /></Icon><ChildContent>@Text</ChildContent>
 </OmniButton>

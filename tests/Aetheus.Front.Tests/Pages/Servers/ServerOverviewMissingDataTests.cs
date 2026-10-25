@@ -46,6 +46,21 @@ public sealed class ServerOverviewMissingDataTests : BunitContext
     }
 
     [Fact]
+    public void ServicesTile_IsItselfTheLinkInTheTileGrid_NotWrappedInOne()
+    {
+        var cut = Render<ServerOverviewSection>(p => p
+            .Add(x => x.Server, NeverReportedServer())
+            .Add(x => x.MetricsReceived, false)
+            .Add(x => x.MetricsLoadCompleted, true));
+
+        // Five tiles, all direct children of one OE tile grid (same size), the Services one a real link.
+        Assert.Equal(5, cut.FindAll(".omni-tile-grid.metric-tile-grid > .omni-card").Count);
+        var services = cut.Find(".metric-tile-grid > a.omni-card--action");
+        Assert.Equal("/servers/3/services", services.GetAttribute("href"));
+        Assert.Single(cut.FindAll(".metric-tile-grid a"));
+    }
+
+    [Fact]
     public void StorageNeverCollected_WithMetricHistory_ShowsNeverAndNoYearOne()
     {
         var localizer = Services.GetRequiredService<IStringLocalizer<AppStrings>>();
@@ -57,6 +72,7 @@ public sealed class ServerOverviewMissingDataTests : BunitContext
             new() { BuildCacheAvailable = true, BuildCacheBytes = 2L * 1024 * 1024 * 1024, Timestamp = now }
         };
 
+        ServerOverviewTabsTests.OpenTab(this, "storage");
         var cut = Render<ServerOverviewSection>(p => p
             .Add(x => x.Server, NeverReportedServer())
             .Add(x => x.Metrics, metrics));

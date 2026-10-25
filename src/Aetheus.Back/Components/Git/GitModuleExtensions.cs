@@ -27,6 +27,7 @@ public static class GitModuleExtensions
         services.AddScoped<GitFilterValuesService>();
         services.AddScoped<GitArchiveService>();
         services.AddScoped<IGitSmartHttpService, GitSmartHttpService>();
+        services.AddScoped<IGitBranchMovedAnnouncer, GitBranchMovedAnnouncer>();
         services.AddScoped<IGitBranchAdvanceService, GitBranchAdvanceService>();
         services.AddHostedService<GitLightMaintenanceService>();
 

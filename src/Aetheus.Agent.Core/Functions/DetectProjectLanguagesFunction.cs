@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/detect-project-languages.sh</c>: reports which language toolchains the
+/// Port of the former <c>detect-project-languages.sh</c> script: reports which language toolchains the
 /// repository holds, so later steps can be conditioned on them. Same rules as the script: a language is
 /// present when a product file of that language exists below the root, skipping the directories that
 /// never hold product code (build outputs, dependency caches, tool folders and the annotated

@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Back.Components.AppMonitoring.Ingest;
 using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.AppMonitoring;
@@ -56,17 +55,22 @@ internal static class IngestKeyRotation
                 AppMonitoringDefaults.DefaultIngestKeyOverlapDays),
             0,
             AppMonitoringDefaults.MaximumIngestKeyOverlapDays);
-        if (keepSecondPrevious)
+        // A deployed key that is the previous one coming back (two runs of the same application
+        // alternating) moves up without pushing the second previous key out, which a live colour may
+        // still hold (R1-11, production refusals of 2026-10-21). A returning second previous key needs
+        // nothing special: it leaves its slot as it becomes the current key.
+        var previousReturns = string.Equals(app.PreviousIngestKeyHash, newHash, StringComparison.Ordinal);
+        if (!keepSecondPrevious)
+        {
+            app.SecondPreviousIngestKeyHash = null;
+            app.SecondPreviousIngestKeyValidUntil = null;
+        }
+        else if (!previousReturns)
         {
             app.SecondPreviousIngestKeyHash = app.PreviousIngestKeyHash;
             app.SecondPreviousIngestKeyValidUntil = app.PreviousIngestKeyHash is null
                 ? null
                 : app.PreviousIngestKeyValidUntil;
-        }
-        else
-        {
-            app.SecondPreviousIngestKeyHash = null;
-            app.SecondPreviousIngestKeyValidUntil = null;
         }
         app.PreviousIngestKeyHash = previousHash;
         app.PreviousIngestKeyValidUntil = previousHash is null ? null : now.AddDays(overlapDays);

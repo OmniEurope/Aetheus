@@ -44,7 +44,7 @@ public sealed class ServerMailReinstallTests : BunitContext
             [nameof(ServerMailReinstall.ServerId)] = 10,
             [nameof(ServerMailReinstall.Mail)] = mail,
             [nameof(ServerMailReinstall.CanManage)] = canManage
-        }, PipelinesList.HeaderActionsSection);
+        }, PageHeaderActions.SectionName);
         return _host.FindComponent<ServerMailReinstall>();
     }
 
@@ -69,12 +69,14 @@ public sealed class ServerMailReinstallTests : BunitContext
         _handler.SetJsonResponse("api/servers/10/mail/accounts", new PaginatedResult<MailAccountDto>());
         _handler.SetJsonResponse("api/servers/10/mail/aliases", new PaginatedResult<MailAliasDto>());
         _handler.SetJsonResponse("api/servers/10/mail/diagnostics", new MailDiagnosticsDto());
+        // The mail actions menu belongs to the State tab (R1-29), so the page opens on it.
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo("/servers/10/mail?tab=status");
         var server = ServerTestData.MakeMailServer() with { MailSetupAvailable = true };
         _host = this.RenderWithOutlets<ServerMailSection>(new Dictionary<string, object?>
         {
             [nameof(ServerMailSection.Server)] = server,
             [nameof(ServerMailSection.ServerId)] = 10
-        }, PipelinesList.HeaderActionsSection);
+        }, PageHeaderActions.SectionName);
 
         _host.WaitForAssertion(() => Assert.Single(_host.FindAll("[data-outlet=\"pipelines-header-actions\"] .mail-actions-menu")));
         var header = _host.Find("[data-outlet=\"pipelines-header-actions\"]");

@@ -1,0 +1,354 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# C# injection rules: SQL, OS commands, file paths, markup, XPath, LDAP, outbound URLs and regular
+# expressions. Tests: tests/security-rules/aetheus-csharp-injection.cs.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP cheat sheets, the .NET security
+# documentation), not from any third-party rule set. Each rule names the act that is wrong and a
+# safe alternative; a pattern that fires on the correct answer is a rule somebody switches off.
+#
+# Rules that need to know where data came from are taint rules. Their sources are the ASP.NET Core
+# request surface (query string, form, headers, route values and bound action parameters).
+rules:
+  - id: aetheus.csharp.ef-raw-sql-dynamic
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A raw SQL API receives a string that is built at run time. Pass the values as parameters
+      (FromSqlInterpolated, FromSql, SqlQuery or a DbParameter) so they can never become SQL text.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $Q.FromSqlRaw($SQL, ...)
+          - pattern: $DB.Database.SqlQueryRaw<$T>($SQL, ...)
+          - pattern: $DB.Database.ExecuteSqlRaw($SQL, ...)
+          - pattern: $DB.Database.ExecuteSqlRawAsync($SQL, ...)
+      # An interpolated string reaching ExecuteSqlRaw is already reported by
+      # aetheus.csharp.raw-sql-interpolation, so only concatenation is reported for it here.
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+      - pattern-not: $DB.Database.ExecuteSqlRaw($"...", ...)
+      - pattern-not: $DB.Database.ExecuteSqlRawAsync($"...", ...)
+
+  - id: aetheus.csharp.ado-command-text-dynamic
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The text of an ADO.NET command is built from an interpolated or concatenated string. Put the
+      values in command parameters (AddWithValue is not required, Parameters.Add is enough).
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: new SqlCommand($SQL, ...)
+          - pattern: new NpgsqlCommand($SQL, ...)
+          - pattern: new MySqlCommand($SQL, ...)
+          - pattern: new SqliteCommand($SQL, ...)
+          - pattern: new OracleCommand($SQL, ...)
+          - pattern: new OdbcCommand($SQL, ...)
+          - pattern: new OleDbCommand($SQL, ...)
+          - pattern: new SqlDataAdapter($SQL, ...)
+          - pattern: $CMD.CommandText = $SQL;
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+
+  - id: aetheus.csharp.dapper-dynamic-sql
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A Dapper query or command is given an interpolated or concatenated SQL string. Use @name
+      placeholders and pass the values in the parameter object.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $C.Query($SQL, ...)
+          - pattern: $C.QueryAsync($SQL, ...)
+          - pattern: $C.QueryFirst($SQL, ...)
+          - pattern: $C.QueryFirstAsync($SQL, ...)
+          - pattern: $C.QueryFirstOrDefault($SQL, ...)
+          - pattern: $C.QueryFirstOrDefaultAsync($SQL, ...)
+          - pattern: $C.QuerySingle($SQL, ...)
+          - pattern: $C.QuerySingleAsync($SQL, ...)
+          - pattern: $C.QuerySingleOrDefault($SQL, ...)
+          - pattern: $C.QuerySingleOrDefaultAsync($SQL, ...)
+          - pattern: $C.QueryMultiple($SQL, ...)
+          - pattern: $C.QueryMultipleAsync($SQL, ...)
+          - pattern: $C.Execute($SQL, ...)
+          - pattern: $C.ExecuteAsync($SQL, ...)
+          - pattern: $C.ExecuteScalar($SQL, ...)
+          - pattern: $C.ExecuteScalarAsync($SQL, ...)
+          - pattern: $C.ExecuteReader($SQL, ...)
+          - pattern: $C.ExecuteReaderAsync($SQL, ...)
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+  - id: aetheus.csharp.process-shell-interpreter-dynamic-arguments
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A shell interpreter is started with arguments built at run time, so any metacharacter in the
+      data becomes a command. Start the real program directly and pass each argument separately
+      (ProcessStartInfo.ArgumentList).
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($SHELL, $ARGS)
+          - pattern: new ProcessStartInfo($SHELL, $ARGS)
+      - metavariable-regex:
+          metavariable: $SHELL
+          regex: (?i)^@?"(?:[^"]*[\\/])?(?:cmd(?:\.exe)?|bash|sh|zsh|dash|ash|powershell(?:\.exe)?|pwsh(?:\.exe)?)"$
+      - pattern-not: Process.Start($SHELL, "...")
+      - pattern-not: new ProcessStartInfo($SHELL, "...")
+
+  - id: aetheus.csharp.process-command-dynamic
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The program or the command line given to the operating system is an interpolated or
+      concatenated string. The data decides what is executed. Name the program as a constant and pass
+      the data as separate arguments (ProcessStartInfo.ArgumentList).
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($CMD, ...)
+          - pattern: new ProcessStartInfo($CMD, ...)
+          - pattern: $PSI.FileName = $CMD;
+          - pattern: $PSI.Arguments = $CMD;
+      - metavariable-regex:
+          metavariable: $CMD
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+
+  - id: aetheus.csharp.path-traversal-request-input
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A value taken from the HTTP request reaches a file system API. "../" sequences or an absolute
+      path let the caller leave the intended directory. Reduce the value to a file name
+      (Path.GetFileName) or resolve the full path and check that it stays under the allowed root.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021 Broken Access Control
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.Query[...]
+          - pattern: $REQ.Form[...]
+          - pattern: $REQ.Headers[...]
+          - pattern: $REQ.RouteValues[...]
+          - pattern: $REQ.Cookies[...]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromForm] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromHeader] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+    pattern-sinks:
+      - patterns:
+          - pattern: $F.$M($PATH, ...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(?:System\.IO\.)?(?:File|Directory)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(?:ReadAllText|ReadAllTextAsync|ReadAllBytes|ReadAllBytesAsync|ReadAllLines|ReadAllLinesAsync|ReadLines|OpenRead|OpenText|OpenWrite|Open|WriteAllText|WriteAllTextAsync|WriteAllBytes|WriteAllBytesAsync|WriteAllLines|AppendAllText|AppendAllTextAsync|Delete|Copy|Move|CreateDirectory|EnumerateFiles|EnumerateDirectories|GetFiles|GetDirectories)$
+          - focus-metavariable: $PATH
+      - patterns:
+          - pattern-either:
+              - pattern: new FileStream($PATH, ...)
+              - pattern: new StreamReader($PATH, ...)
+              - pattern: new StreamWriter($PATH, ...)
+              - pattern: PhysicalFile($PATH, ...)
+              - pattern: Results.File($PATH, ...)
+          - focus-metavariable: $PATH
+    pattern-sanitizers:
+      - pattern: Path.GetFileName(...)
+      - pattern: Path.GetRandomFileName()
+      - pattern: Guid.Parse(...)
+      - pattern: int.Parse(...)
+
+  - id: aetheus.csharp.ssrf-request-input
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A URL taken from the HTTP request is fetched by the server. The caller can aim it at the
+      internal network, the cloud metadata address or a loopback service. Check the host against an
+      allow-list of known hosts before the request is made.
+    metadata:
+      cwe: CWE-918
+      owasp: A10:2021 Server-Side Request Forgery
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.Query[...]
+          - pattern: $REQ.Form[...]
+          - pattern: $REQ.Headers[...]
+          - pattern: $REQ.RouteValues[...]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromBody] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              # A receiver whose name says it is an HTTP client; a service called GetAsync(request) is not.
+              - patterns:
+                  - pattern-either:
+                      - pattern: $CLIENT.GetAsync($URL, ...)
+                      - pattern: $CLIENT.GetStringAsync($URL, ...)
+                      - pattern: $CLIENT.GetStreamAsync($URL, ...)
+                      - pattern: $CLIENT.GetByteArrayAsync($URL, ...)
+                      - pattern: $CLIENT.PostAsync($URL, ...)
+                      - pattern: $CLIENT.PutAsync($URL, ...)
+                      - pattern: $CLIENT.DeleteAsync($URL, ...)
+                  - metavariable-regex:
+                      metavariable: $CLIENT
+                      regex: (?i)^.*(?:client|http|web|fetch|rest)
+              - pattern: new Uri($URL, ...)
+              - pattern: WebRequest.Create($URL)
+              - pattern: new HttpRequestMessage($METHOD, $URL)
+          - focus-metavariable: $URL
+    pattern-sanitizers:
+      - pattern: $ALLOWED.Contains(...)
+      - pattern: IsAllowedHost(...)
+
+  - id: aetheus.csharp.xpath-injection
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      An XPath expression is built from an interpolated or concatenated string, so the data can
+      change the query. Use an XsltArgumentList variable or XPathExpression with a custom resolver.
+    metadata:
+      cwe: CWE-643
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $N.SelectNodes($XPATH, ...)
+          - pattern: $N.SelectSingleNode($XPATH, ...)
+          - pattern: $N.CreateNavigator().Select($XPATH, ...)
+          - pattern: $N.CreateNavigator().Evaluate($XPATH, ...)
+          - pattern: XPathExpression.Compile($XPATH, ...)
+          - pattern: $E.XPathSelectElement($XPATH, ...)
+          - pattern: $E.XPathSelectElements($XPATH, ...)
+          - pattern: $E.XPathEvaluate($XPATH, ...)
+      - metavariable-regex:
+          metavariable: $XPATH
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+
+  - id: aetheus.csharp.ldap-filter-injection
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      An LDAP search filter is built from an interpolated or concatenated string. A value such as
+      "*)(uid=*" changes the query. Escape each value for LDAP filters before it is inserted.
+    metadata:
+      cwe: CWE-90
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $SEARCHER.Filter = $FILTER;
+          - pattern: new DirectorySearcher($ENTRY, $FILTER, ...)
+          - pattern: new SearchRequest($DN, $FILTER, ...)
+      - metavariable-regex:
+          metavariable: $FILTER
+          regex: '(?s)^(?!@?"(?:[^"\\]|\\.)*"\s*\+\s*@?"(?:[^"\\]|\\.)*"\s*$)(?:\$@?"|@\$"|[\w.()\[\]]+\s*\+|@?"(?:[^"\\]|\\.)*"\s*\+)'
+
+  - id: aetheus.csharp.html-raw-dynamic
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      Markup that is not a literal is written to the page without encoding (Html.Raw, HtmlString,
+      Content with text/html). Encode the data (HtmlEncoder) or render it through a component.
+    metadata:
+      cwe: CWE-79
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $H.Raw($X)
+          - pattern: new HtmlString($X)
+          - pattern: new Microsoft.AspNetCore.Html.HtmlString($X)
+          - pattern: Content($X, "text/html", ...)
+          - pattern: Results.Content($X, "text/html", ...)
+      # A literal is a constant, and an encoder around the value is the fix, not the bug.
+      - metavariable-regex:
+          metavariable: $X
+          regex: ^(?!@?"|\$@?"|HtmlEncoder\.Default\.Encode|WebUtility\.HtmlEncode)
+  - id: aetheus.csharp.regex-dynamic-pattern-without-timeout
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A regular expression is built from a run-time value and has no match timeout. A crafted value
+      or input can make it backtrack for minutes (ReDoS). Pass a TimeSpan timeout, and escape data
+      that is meant as literal text with Regex.Escape.
+    metadata:
+      cwe: CWE-1333
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: new Regex($P)
+          - pattern: new Regex($P, $OPTIONS)
+          - pattern: Regex.IsMatch($INPUT, $P)
+          - pattern: Regex.IsMatch($INPUT, $P, $OPTIONS)
+          - pattern: Regex.Match($INPUT, $P)
+          - pattern: Regex.Match($INPUT, $P, $OPTIONS)
+          - pattern: Regex.Matches($INPUT, $P)
+          - pattern: Regex.Matches($INPUT, $P, $OPTIONS)
+          - pattern: Regex.Replace($INPUT, $P, $REPLACEMENT)
+          - pattern: Regex.Replace($INPUT, $P, $REPLACEMENT, $OPTIONS)
+          - pattern: Regex.Split($INPUT, $P)
+          - pattern: Regex.Split($INPUT, $P, $OPTIONS)
+      - pattern-not: new Regex("...")
+      - pattern-not: new Regex("...", $OPTIONS)
+      - pattern-not: Regex.IsMatch($INPUT, "...")
+      - pattern-not: Regex.IsMatch($INPUT, "...", $OPTIONS)
+      - pattern-not: Regex.Match($INPUT, "...")
+      - pattern-not: Regex.Match($INPUT, "...", $OPTIONS)
+      - pattern-not: Regex.Matches($INPUT, "...")
+      - pattern-not: Regex.Matches($INPUT, "...", $OPTIONS)
+      - pattern-not: Regex.Replace($INPUT, "...", $REPLACEMENT)
+      - pattern-not: Regex.Replace($INPUT, "...", $REPLACEMENT, $OPTIONS)
+      - pattern-not: Regex.Split($INPUT, "...")
+      - pattern-not: Regex.Split($INPUT, "...", $OPTIONS)
+      # Data that is escaped with Regex.Escape is literal text and cannot backtrack catastrophically.
+      - metavariable-regex:
+          metavariable: $P
+          regex: '(?s)^(?!.*Regex\.Escape)'

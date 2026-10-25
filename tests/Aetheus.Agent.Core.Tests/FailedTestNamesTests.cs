@@ -4,7 +4,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of the <c>record</c> half of <c>deploy/scripts/list-failed-tests.mjs</c>, with the cases
+/// The C# port of the <c>record</c> half of the former <c>list-failed-tests.mjs</c> script, with the cases
 /// of <c>list-failed-tests.test.mjs</c> that apply to it: which outcomes count, entity decoding, the
 /// one-line safety rules, and the bounded value the pipeline publishes.
 /// </summary>

@@ -1,0 +1,223 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# C# web application rules: token validation, CORS, cookies, redirects, Blazor markup and secrets
+# in logs. Tests: tests/security-rules/aetheus-csharp-web.cs.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP ASVS and cheat sheets, the ASP.NET Core
+# security documentation), not from any third-party rule set.
+rules:
+  - id: aetheus.csharp.jwt-validation-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A token check is switched off. Without the issuer, audience, lifetime and signing key checks, a
+      token minted by anybody, for anybody, at any time is accepted as valid.
+    metadata:
+      cwe: CWE-347
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-either:
+      - pattern: ValidateIssuer = false
+      - pattern: ValidateAudience = false
+      - pattern: ValidateLifetime = false
+      - pattern: ValidateIssuerSigningKey = false
+      - pattern: RequireSignedTokens = false
+      - pattern: RequireExpirationTime = false
+      - pattern: $P.ValidateIssuer = false
+      - pattern: $P.ValidateAudience = false
+      - pattern: $P.ValidateLifetime = false
+      - pattern: $P.ValidateIssuerSigningKey = false
+      - pattern: $P.RequireSignedTokens = false
+      - pattern: $P.RequireExpirationTime = false
+      # A validator that parses the token without checking its signature.
+      - pattern: SignatureValidator = (...) => new JwtSecurityToken(...)
+      - pattern: $P.SignatureValidator = (...) => new JwtSecurityToken(...)
+
+  - id: aetheus.csharp.jwt-https-metadata-disabled
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      The signing keys of the identity provider are fetched over plain HTTP, where anyone on the path
+      can swap them and mint valid tokens. Keep RequireHttpsMetadata on.
+    metadata:
+      cwe: CWE-319
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    pattern-either:
+      - pattern: RequireHttpsMetadata = false
+      - pattern: $O.RequireHttpsMetadata = false
+
+  - id: aetheus.csharp.cors-any-origin-with-credentials
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A CORS policy that allows every origin (AllowAnyOrigin, or SetIsOriginAllowed returning true)
+      and also credentials lets any web page act as the signed-in user. List the allowed origins
+      with WithOrigins.
+    metadata:
+      cwe: CWE-942
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-regex: (?s)(?:AllowAnyOrigin\(\)|SetIsOriginAllowed\(\s*\(?\s*\w*\s*\)?\s*=>\s*true\s*\))(?:(?!;).){0,400}?\.AllowCredentials\(\)|\.AllowCredentials\(\)(?:(?!;).){0,400}?(?:AllowAnyOrigin\(\)|SetIsOriginAllowed\(\s*\(?\s*\w*\s*\)?\s*=>\s*true\s*\))
+
+  - id: aetheus.csharp.cors-allow-any-origin
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      AllowAnyOrigin lets every web page call this API from a browser. That is right for a public,
+      credential-free API and wrong for anything else; list the allowed origins with WithOrigins.
+    metadata:
+      cwe: CWE-942
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern: $B.AllowAnyOrigin()
+      # The combination with credentials has its own, stronger rule.
+      - pattern-not-inside: $X.AllowCredentials()
+      - pattern-not: $X.AllowCredentials().AllowAnyOrigin()
+
+  - id: aetheus.csharp.cookie-secure-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The cookie is allowed on plain HTTP, where it is readable by anyone on the network. Keep
+      Secure on (CookieSecurePolicy.Always).
+    metadata:
+      cwe: CWE-614
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: Secure = false
+      - pattern: $O.Secure = false
+      - pattern: SecurePolicy = CookieSecurePolicy.None
+      - pattern: $O.SecurePolicy = CookieSecurePolicy.None
+
+  - id: aetheus.csharp.cookie-httponly-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A cookie that script can read is stolen by any cross-site scripting flaw. Keep HttpOnly on for
+      every cookie that carries a session or a token.
+    metadata:
+      cwe: CWE-1004
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: HttpOnly = false
+      - pattern: $O.HttpOnly = false
+      - pattern: HttpOnly = HttpOnlyPolicy.None
+      - pattern: $O.HttpOnly = HttpOnlyPolicy.None
+
+  - id: aetheus.csharp.cookie-samesite-none
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      SameSite=None sends the cookie on every cross-site request, which removes the browser's main
+      protection against cross-site request forgery. Use Lax or Strict unless the cookie is meant to be
+      embedded in another site.
+    metadata:
+      cwe: CWE-1275
+      owasp: A01:2021 Broken Access Control
+      category: security
+    pattern-either:
+      - pattern: SameSite = SameSiteMode.None
+      - pattern: $O.SameSite = SameSiteMode.None
+
+  - id: aetheus.csharp.cookie-without-options
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A cookie is written without options, so it is neither Secure nor HttpOnly and carries no
+      SameSite attribute. Pass a CookieOptions with those set.
+    metadata:
+      cwe: CWE-614
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern: $R.Cookies.Append($NAME, $VALUE)
+
+  - id: aetheus.csharp.open-redirect
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The redirect target is not a constant and the method never checks it. A link such as
+      /login?returnUrl=https://evil.example sends the signed-in user to another site. Use
+      LocalRedirect, or check Url.IsLocalUrl before redirecting.
+    metadata:
+      cwe: CWE-601
+      owasp: A01:2021 Broken Access Control
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: Redirect($URL)
+          - pattern: RedirectPermanent($URL)
+          - pattern: $RESPONSE.Redirect($URL)
+          - pattern: $RESPONSE.Redirect($URL, $PERMANENT)
+          - pattern: new RedirectResult($URL)
+          - pattern: new RedirectResult($URL, $PERMANENT)
+          - pattern: Results.Redirect($URL)
+      - pattern-not: Redirect("...")
+      - pattern-not: RedirectPermanent("...")
+      - pattern-not: $RESPONSE.Redirect("...")
+      - pattern-not: $RESPONSE.Redirect("...", $PERMANENT)
+      - pattern-not: new RedirectResult("...")
+      - pattern-not: new RedirectResult("...", $PERMANENT)
+      - pattern-not: Results.Redirect("...")
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... $URLHELPER.IsLocalUrl(...) ...>;
+            ...
+          }
+
+  - id: aetheus.csharp.blazor-markupstring-dynamic
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A MarkupString written from a value that is not a literal is rendered as raw HTML, so any
+      script in it runs in the page. Encode the value, or make sure the HTML comes from a renderer
+      that drops raw HTML and scripts.
+    metadata:
+      cwe: CWE-79
+      owasp: A03:2021 Injection
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: (MarkupString)$X
+          - pattern: new MarkupString($X)
+      - pattern-not: (MarkupString)"..."
+      - pattern-not: new MarkupString("...")
+      # A method that HTML-encodes before it builds the markup is the safe shape of this call.
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... $ENCODER.HtmlEncode(...) ...>;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... HtmlEncoder.Default.Encode(...) ...>;
+            ...
+          }
+
+  - id: aetheus.csharp.secret-in-log
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A value whose name says it is a secret is written to the log, where it is kept, shipped and
+      read by people who must not have it. Log that the value was used, never the value.
+    metadata:
+      cwe: CWE-532
+      owasp: A09:2021 Security Logging and Monitoring Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.LogTrace(..., $VALUE, ...)
+          - pattern: $LOGGER.LogDebug(..., $VALUE, ...)
+          - pattern: $LOGGER.LogInformation(..., $VALUE, ...)
+          - pattern: $LOGGER.LogWarning(..., $VALUE, ...)
+          - pattern: $LOGGER.LogError(..., $VALUE, ...)
+          - pattern: $LOGGER.LogCritical(..., $VALUE, ...)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: ^(?!(?i:.*cancellation))[\w.]*(?i:password|passwd|secret|apikey|api_key|accesstoken|refreshtoken|bearertoken|privatekey|connectionstring)\w*$

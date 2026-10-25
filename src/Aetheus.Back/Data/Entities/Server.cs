@@ -188,6 +188,10 @@ public class Server
     /// baseline and raises nothing.</summary>
     public string? SshConfigStateJson { get; set; }
 
+    /// <summary>The distinct filesystems of the last heartbeat (<c>DiskInfoDto</c> list as JSON), drawn
+    /// one by one in the storage section. Null until a heartbeat carried disks.</summary>
+    public string? DisksJson { get; set; }
+
     /// <summary>Records retirement in UTC: the row and links remain, but query filters hide the
     /// server and its agent tokens are revoked. Re-enrolling the machine clears retirement;
     /// explicit purge deletes the row.</summary>

@@ -6,7 +6,8 @@ using Aetheus.Back.Services;
 namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>Provisioning creates required library and vault keys from accessible resources but
-/// leaves values empty, preventing another project's hosts or secrets from being copied.</summary>
+/// fills only the keys the generic templates read (R2-21) and leaves every other value empty, so another
+/// project's hosts or secrets are never copied.</summary>
 public sealed class PipelineRequirementsProvisioner(
     IPipelineSetupReadinessService readiness,
     IPipelineRepository pipelines,
@@ -197,43 +198,49 @@ public sealed class PipelineRequirementsProvisioner(
             accessibleIds: readableIds,
             ct: ct).ConfigureAwait(false);
         var source = PickSource(candidates.Items, name, projectId);
-        var keys = source is null
+        var sourceKeys = source is null
             ? []
             : (await libraries.ExportEntriesAsync(source.Id, ct).ConfigureAwait(false))
                 .Select(entry => entry.Key)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
+        // R3-67: the name the templates give the library is `<slug>.share|qa|prod`; the catalog knows the
+        // keys those templates read and how each one is filled (R2-21).
+        var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false);
+        var plan = KeyPlan.Build(PipelineRequirementKeys.ForLibrary(name, slug), sourceKeys);
 
         var created = await libraries.CreateLibraryAsync(new CreateVariableLibraryRequest
         {
             Name = name,
-            Description = DescriptionFor(source),
+            Description = DescriptionFor(source, plan),
             ProjectId = projectId
         }, ct).ConfigureAwait(false);
-        if (keys.Count > 0)
+        var filled = plan.FilledValueKeys;
+        try
         {
-            try
+            if (plan.Values.Count > 0)
             {
                 await libraries.ImportEntriesAsync(
                     created.Id,
-                    [.. keys.Select(key => new CreateVariableEntryRequest { Key = key, Value = string.Empty })],
+                    [.. plan.Values.Select(entry => new CreateVariableEntryRequest { Key = entry.Key, Value = entry.Value })],
                     ct).ConfigureAwait(false);
             }
-            catch
-            {
-                // Mandatory compensation: a library left without its keys satisfies the requirement,
-                // so it would drop out of every later check and its keys would never be offered again.
-                // CancellationToken.None: the removal must run even when ct is what failed the import.
-                await libraries.DeleteLibraryAsync(created.Id, CancellationToken.None).ConfigureAwait(false);
-                throw;
-            }
+        }
+        catch
+        {
+            // Mandatory compensation: a library left without its keys satisfies the requirement,
+            // so it would drop out of every later check and its keys would never be offered again.
+            // CancellationToken.None: the removal must run even when ct is what failed the import.
+            await libraries.DeleteLibraryAsync(created.Id, CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
 
         return new ProvisionedRequirementDto
         {
             Id = created.Id,
             Name = name,
-            Keys = keys,
+            Keys = plan.Keys,
+            FilledKeys = filled,
             KeysCopiedFrom = SourceLabel(source)
         };
     }
@@ -247,25 +254,27 @@ public sealed class PipelineRequirementsProvisioner(
             accessibleIds: readableIds,
             ct: ct).ConfigureAwait(false);
         var source = PickSource(candidates.Items, name, projectId);
-        var keys = source is null
+        var sourceKeys = source is null
             ? []
             : (await vaults.ExportSecretKeysAsync(source.Id, ct).ConfigureAwait(false))
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
+        var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false);
+        var plan = KeyPlan.Build(PipelineRequirementKeys.ForVault(name, slug), sourceKeys);
 
         var created = await vaults.CreateVaultAsync(new CreateVaultRequest
         {
             Name = name,
-            Description = DescriptionFor(source),
+            Description = DescriptionFor(source, plan),
             ProjectId = projectId
         }, ct).ConfigureAwait(false);
-        if (keys.Count > 0)
+        if (plan.Values.Count > 0)
         {
             try
             {
                 await vaults.ImportSecretsAsync(
                     created.Id,
-                    [.. keys.Select(key => new CreateVaultSecretRequest { Key = key, Value = string.Empty })],
+                    [.. plan.Values.Select(entry => new CreateVaultSecretRequest { Key = entry.Key, Value = entry.Value })],
                     ct).ConfigureAwait(false);
             }
             catch
@@ -280,9 +289,33 @@ public sealed class PipelineRequirementsProvisioner(
         {
             Id = created.Id,
             Name = name,
-            Keys = keys,
+            Keys = plan.Keys,
+            FilledKeys = plan.FilledValueKeys,
             KeysCopiedFrom = SourceLabel(source)
         };
+    }
+
+    /// <summary>The keys to write and their values: the catalog's keys with the value their rule gives,
+    /// then the key names of a same-named resource the catalog does not know (always empty, so another
+    /// project's values are never copied).</summary>
+    private sealed record KeyPlan(List<KeyValuePair<string, string>> Values)
+    {
+        public static KeyPlan Build(IReadOnlyList<RequirementKey> catalog, IEnumerable<string> sourceKeys)
+        {
+            var values = catalog
+                .Select(key => new KeyValuePair<string, string>(key.Key, key.Value()))
+                .ToList();
+            var known = catalog.Select(key => key.Key).ToHashSet(StringComparer.Ordinal);
+            values.AddRange(sourceKeys
+                .Where(key => !known.Contains(key))
+                .Select(key => new KeyValuePair<string, string>(key, string.Empty)));
+            return new KeyPlan(values);
+        }
+
+        public List<string> Keys => [.. Values.Select(entry => entry.Key)];
+
+        public List<string> FilledValueKeys =>
+            [.. Values.Where(entry => entry.Value.Length > 0).Select(entry => entry.Key)];
     }
 
     /// <summary>
@@ -301,7 +334,14 @@ public sealed class PipelineRequirementsProvisioner(
         ? null
         : $"{source.ProjectName ?? "-"} / {source.Name}";
 
-    private static string DescriptionFor(OwnedResourceDto? source) => source is null
-        ? "Created from the pipeline requirements. No readable resource of this name existed, so it starts empty."
-        : $"Created from the pipeline requirements, keys from {SourceLabel(source)}. Values are empty: fill them in.";
+    private static string DescriptionFor(OwnedResourceDto? source, KeyPlan plan)
+    {
+        var keys = source is null
+            ? "No readable resource of this name existed, so only the keys the generic templates read were created."
+            : $"Keys from {SourceLabel(source)}.";
+        var values = plan.FilledValueKeys.Count > 0
+            ? "Generated secrets and names derived from the project are filled in; the other values are empty: fill them in."
+            : "Values are empty: fill them in.";
+        return $"Created from the pipeline requirements. {keys} {values}";
+    }
 }

@@ -199,7 +199,7 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
             [1],
             sha: new string('A', 64),
             allowInsecure: false,
-            contentLength: AgentSelfUpdateOperationExecutor.MaxArchiveBytes + 1));
+            contentLength: AgentReleaseArchiveResolver.MaxArchiveBytes + 1));
 
         Assert.Equal(-1, result.ExitCode);
         Assert.False(File.Exists(Path.Combine(
@@ -537,6 +537,49 @@ public class AgentSelfUpdateOperationExecutorTests : IDisposable
             await File.ReadAllTextAsync(request, TestContext.Current.CancellationToken));
         Assert.True(File.Exists(AgentUpdateRecoveryState.GetMarkerPath(_workDir)));
         Assert.False(File.Exists(request + ".tmp"));
+    }
+
+    // ADR-055: posture 4 is the supervisor that maps the eleven whitelisted tokens. A host still on posture 3
+    // knows only patch-manage, so the agent never hands it a request that could carry the other tokens.
+    [Fact]
+    public async Task LinuxRequester_PostureThreeHost_IsRefusedAndNoRequestIsWritten()
+    {
+        var postureVersion = Path.Combine(_workDir, "posture-three-version");
+        var request = Path.Combine(_workDir, "posture-three-request");
+        await File.WriteAllTextAsync(postureVersion, "3\n", TestContext.Current.CancellationToken);
+
+        var requested = await LinuxAgentPostureUpgradeRequester.TryRequestAsync(
+            _workDir,
+            postureVersion,
+            request,
+            AgentSelfUpdateOperationExecutor.LinuxIntegrationPostureVersion,
+            "qualified-request",
+            (_, _) => Task.CompletedTask,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("4", AgentSelfUpdateOperationExecutor.LinuxIntegrationPostureVersion);
+        Assert.False(requested);
+        Assert.False(File.Exists(request));
+    }
+
+    [Fact]
+    public async Task LinuxRequester_PostureFourHost_AcceptsTheRequest()
+    {
+        var postureVersion = Path.Combine(_workDir, "posture-four-version");
+        var request = Path.Combine(_workDir, "posture-four-request");
+        await File.WriteAllTextAsync(postureVersion, "4\n", TestContext.Current.CancellationToken);
+
+        var requested = await LinuxAgentPostureUpgradeRequester.TryRequestAsync(
+            _workDir,
+            postureVersion,
+            request,
+            AgentSelfUpdateOperationExecutor.LinuxIntegrationPostureVersion,
+            "qualified-request",
+            (_, _) => Task.CompletedTask,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(requested);
+        Assert.True(File.Exists(request));
     }
 
     [Fact]

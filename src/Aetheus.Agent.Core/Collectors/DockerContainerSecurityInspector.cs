@@ -15,6 +15,13 @@ internal static class DockerContainerSecurityInspector
 {
     internal const string RoleLabel = "io.aetheus.role";
     internal const string BrowserSmokeRole = "browser-smoke";
+    internal const string TestcontainersLabel = "org.testcontainers";
+    internal const string RyukImageRepository = "testcontainers/ryuk";
+    internal const string RyukNamePrefix = "testcontainers-ryuk-";
+    /// <summary>The only process the testcontainers/ryuk image starts: its Dockerfile declares
+    /// <c>CMD ["/bin/ryuk"]</c> and no entrypoint, and Testcontainers configures it through environment
+    /// variables, never arguments.</summary>
+    internal const string RyukProcessPath = "/bin/ryuk";
 
     /// <summary>One JSON object per container. Missing labels come back as <c>null</c>.</summary>
     internal const string InspectFormat =
@@ -22,6 +29,8 @@ internal static class DockerContainerSecurityInspector
         + "\"privileged\":{{json .HostConfig.Privileged}},\"pidMode\":{{json .HostConfig.PidMode}},"
         + "\"networkMode\":{{json .HostConfig.NetworkMode}},\"capAdd\":{{json .HostConfig.CapAdd}},"
         + "\"mounts\":{{json .Mounts}},"
+        + "\"created\":{{json .Created}},\"path\":{{json .Path}},\"args\":{{json .Args}},"
+        + "\"testcontainers\":{{json (index .Config.Labels \"" + TestcontainersLabel + "\")}},"
         + "\"role\":{{json (index .Config.Labels \"" + RoleLabel + "\")}},"
         + "\"service\":{{json (index .Config.Labels \"com.docker.compose.service\")}}}";
 
@@ -40,10 +49,14 @@ internal static class DockerContainerSecurityInspector
 
     /// <summary>Applies the inspect answer to the containers it describes, matched by ID prefix
     /// (<c>docker ps</c> prints the 12-character short ID).</summary>
+    /// <param name="createdDuringPipelineTask">The agent's own record of its pipeline tasks (R-33): true when a
+    /// container created at that instant belongs to a run still live. Null recognises no Testcontainers
+    /// reaper.</param>
     internal static List<DockerContainerDto> Apply(
-        IReadOnlyList<DockerContainerDto> containers, string inspectOutput, string? builderName)
+        IReadOnlyList<DockerContainerDto> containers, string inspectOutput, string? builderName,
+        Func<DateTimeOffset, bool>? createdDuringPipelineTask = null)
     {
-        var findings = Parse(inspectOutput, builderName);
+        var findings = Parse(inspectOutput, builderName, createdDuringPipelineTask);
         return containers.Select(container =>
         {
             var match = findings.FirstOrDefault(f =>
@@ -64,7 +77,8 @@ internal static class DockerContainerSecurityInspector
     internal sealed record Finding(
         string Id, DockerContainerRisks Risks, string DangerousCapabilities, AetheusContainerRole Role);
 
-    internal static List<Finding> Parse(string inspectOutput, string? builderName)
+    internal static List<Finding> Parse(
+        string inspectOutput, string? builderName, Func<DateTimeOffset, bool>? createdDuringPipelineTask = null)
     {
         var result = new List<Finding>();
         foreach (var line in inspectOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -82,14 +96,15 @@ internal static class DockerContainerSecurityInspector
             }
             using (document)
             {
-                var finding = Read(document.RootElement, builderName);
+                var finding = Read(document.RootElement, builderName, createdDuringPipelineTask);
                 if (finding is not null) result.Add(finding);
             }
         }
         return result;
     }
 
-    private static Finding? Read(JsonElement root, string? builderName)
+    private static Finding? Read(
+        JsonElement root, string? builderName, Func<DateTimeOffset, bool>? createdDuringPipelineTask)
     {
         var id = String(root, "id");
         if (id.Length == 0) return null;
@@ -105,9 +120,59 @@ internal static class DockerContainerSecurityInspector
         var capabilities = DangerousCapabilities(root);
         if (capabilities.Length > 0)
             risks |= DockerContainerRisks.DangerousCapabilities;
-        var role = ResolveRole(String(root, "name").TrimStart('/'), String(root, "image"),
-            String(root, "role"), String(root, "service"), builderName);
+        var name = String(root, "name").TrimStart('/');
+        var image = String(root, "image");
+        var role = ResolveRole(name, image, String(root, "role"), String(root, "service"), builderName);
+        if (role == AetheusContainerRole.None
+            && IsPipelineTestcontainersReaper(name, image, String(root, "testcontainers"), String(root, "created"),
+                RunsOnlyTheRyukProcess(root), createdDuringPipelineTask))
+            role = AetheusContainerRole.TestcontainersReaper;
         return new Finding(id, risks, capabilities, role);
+    }
+
+    /// <summary>
+    /// R-33: Ryuk, started by a pipeline step's tests. Every condition is required: the image repository is
+    /// exactly <c>testcontainers/ryuk</c> (any tag or digest, no other registry or prefix), the container
+    /// carries <c>org.testcontainers=true</c>, its name is <c>testcontainers-ryuk-</c> followed by a session
+    /// UUID, its process is the image's own <see cref="RyukProcessPath"/> with no arguments (an overridden
+    /// entrypoint or command runs arbitrary code with Ryuk's privileges), and the agent's own task record
+    /// places its creation inside a pipeline task still live (or just ended). The name, image and label alone
+    /// are chosen by whoever starts the container; the task record is not, so a look-alike started outside a
+    /// run, or one that outlives its run, stays flagged.
+    /// </summary>
+    internal static bool IsPipelineTestcontainersReaper(
+        string name, string image, string testcontainersLabel, string created, bool runsOnlyTheRyukProcess,
+        Func<DateTimeOffset, bool>? createdDuringPipelineTask)
+    {
+        if (createdDuringPipelineTask is null) return false;
+        if (!runsOnlyTheRyukProcess) return false;
+        if (!string.Equals(ImageRepository(image), RyukImageRepository, StringComparison.Ordinal)) return false;
+        if (!string.Equals(testcontainersLabel, "true", StringComparison.Ordinal)) return false;
+        if (!name.StartsWith(RyukNamePrefix, StringComparison.Ordinal)
+            || !Guid.TryParseExact(name[RyukNamePrefix.Length..], "D", out _)) return false;
+        return DateTimeOffset.TryParse(created, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var createdAt)
+            && createdDuringPipelineTask(createdAt);
+    }
+
+    /// <summary>True only when Docker reports the container's process as exactly <see cref="RyukProcessPath"/>
+    /// with an empty argument list; a missing or malformed path or argument list counts as another process.</summary>
+    private static bool RunsOnlyTheRyukProcess(JsonElement root) =>
+        string.Equals(String(root, "path"), RyukProcessPath, StringComparison.Ordinal)
+        && root.TryGetProperty("args", out var args)
+        && args.ValueKind == JsonValueKind.Array
+        && args.GetArrayLength() == 0;
+
+    /// <summary>The repository of an image reference, without tag or digest; <c>docker.io/</c> is how Docker
+    /// Hub may be written, any other registry is a different image.</summary>
+    private static string ImageRepository(string image)
+    {
+        var reference = image.Trim();
+        var digest = reference.IndexOf('@', StringComparison.Ordinal);
+        if (digest >= 0) reference = reference[..digest];
+        var tag = reference.LastIndexOf(':');
+        if (tag > reference.LastIndexOf('/')) reference = reference[..tag];
+        return reference.StartsWith("docker.io/", StringComparison.Ordinal) ? reference["docker.io/".Length..] : reference;
     }
 
     private static bool MountsDockerSocket(JsonElement root)

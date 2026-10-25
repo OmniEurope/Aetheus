@@ -30,13 +30,12 @@
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoRunOptions"]</OmniText>
         }
 
-        @if (!string.IsNullOrEmpty(_error))
-        {
-            <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">@_error</OmniAlert>
-        }
-
-        <DialogFooter OnCancel="@OnCancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_reloading" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Run"]</span></OmniButton>
-        </DialogFooter>
+        @* The actions stay at the bottom of the dialog while the list above scrolls (R-27); a missing
+           required value is told under its own field (R-26), not here. *@
+        <div class="run-params-footer" data-testid="run-params-footer">
+            <DialogFooter OnCancel="@OnCancel">
+                <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_reloading" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Run"]</span></ChildContent></OmniButton>
+            </DialogFooter>
+        </div>
     </div>
 </OmniTemplateForm>

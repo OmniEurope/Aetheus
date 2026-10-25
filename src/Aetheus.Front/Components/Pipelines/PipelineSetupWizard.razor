@@ -13,18 +13,8 @@
 }
 else
 {
-    @* New pipelines from the templates, or the pipelines of an existing project. *@
-    <OmniRadioButtonList TValue="bool" Label="@L["PipelineSetupStartFrom"]" Options="@StartOptions"
-                         Value="@_copyMode" ValueChanged="@OnModeChanged" ValueExpression="@(() => _copyMode)"
-                         Class="omni-u-mb-md" data-testid="setup-start-from" />
-}
-@if (!_loading && _copyMode)
-{
-    <PipelineProjectCopyWizard Projects="@_projects" InitialProjectId="@_selectedProjectId" OnCancel="@GoBack" />
-}
-else if (!_loading)
-{
+    @* One wizard for both starting points: the "start from" choice is the first thing of its Project step
+       and swaps the steps behind it (the templates' steps, or those of copying an existing project). *@
     <WizardDialog Steps="@_steps" CanAdvance="@CanAdvance" StepChanged="@OnStepChanged" InitialStep="@_initialStep"
-                  OnFinishClicked="@CreatePipelinesAsync" OnCancelClicked="@GoBack"
-                  FinishText="@L["CreatePipelines"]" />
+                  OnFinishClicked="@FinishAsync" OnCancelClicked="@GoBack" FinishText="@FinishText" />
 }

@@ -46,7 +46,32 @@ public enum PipelineSetupReadinessKind
     /// plain repository address, or a mirror not synchronized yet), so the files the templates need
     /// cannot be checked from here. A warning, never "missing": nobody saw them absent. Items are
     /// the paths to check in that repository.</summary>
-    ExternalRepositoryNotInspected
+    ExternalRepositoryNotInspected,
+
+    /// <summary>A variable library the pipelines read holds an empty value for a variable they use
+    /// (<c>$(NAME)</c> without a default): a copied library is created with empty values. A run would stop
+    /// on it. Items are variable names.</summary>
+    EmptyLibraryValues,
+
+    /// <summary>Same as <see cref="EmptyLibraryValues"/> for a vault secret. Items are secret names.</summary>
+    EmptyVaultSecrets,
+
+    /// <summary>The branch holds no .NET solution (<c>*.sln</c>, <c>*.slnx</c>) and a selected pipeline
+    /// builds with the template's default .NET commands, which stop on it. Items are the variables that
+    /// replace those commands (<c>APPLICATION_CI_COMMANDS</c>, <c>APPLICATION_QUALITY_COMMANDS</c>).</summary>
+    NoDotNetSolution,
+
+    /// <summary>The branch holds no .NET test project a QA can run and the QA pipeline uses the template's
+    /// default commands, which fail rather than validate nothing. Items are the variables that replace them.</summary>
+    NoDotNetTestProject,
+
+    /// <summary>The branch holds no Compose file at its root and the production deployment uses the
+    /// template's default commands, which need one. Items are the file names looked for.</summary>
+    NoComposeFile,
+
+    /// <summary>No enrolled runner reports Docker and the production deployment uses the template's default
+    /// commands, which run Docker Compose.</summary>
+    NoDockerRunner
 }
 
 /// <summary>

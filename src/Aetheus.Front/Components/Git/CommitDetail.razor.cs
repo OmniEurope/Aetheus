@@ -7,7 +7,7 @@ public partial class CommitDetail
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private Layout.ProjectNavContextService ProjectNav { get; set; } = default!;
+    [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
 
     [Parameter] public int CommitId { get; set; }
 

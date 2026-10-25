@@ -142,7 +142,7 @@ public class StageEditPanelTests : BunitContext
     }
 
     [Fact]
-    public void Renders_StepMoveButtons()
+    public void Renders_StepMoveActionsInTheStepMenu()
     {
         var stage = CreateStage();
         var cut = Render<StageEditPanel>(p => p
@@ -150,8 +150,30 @@ public class StageEditPanelTests : BunitContext
             .Add(x => x.AvailableServers, new List<string>())
             .Add(x => x.OtherStageNames, new List<string>()));
 
+        // R-2: each step keeps one visible action (Edit) and one menu holding move up, move down and delete.
+        Assert.Equal(stage.Steps.Count, cut.FindAll(".omni-overflow-menu__trigger").Count);
+        Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Edit);
+        Assert.NotNull(cut.FindMenuItem("MoveUp"));
+        Assert.NotNull(cut.FindMenuItem("MoveDown"));
+        Assert.NotNull(cut.FindMenuItem("Delete"));
         Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.Upgrade);
         Assert.Contains(cut.FindComponents<OmniIcon>(), icon => icon.Instance.Name == OmniIconName.ArrowDown);
+    }
+
+    [Fact]
+    public void MovingAStepDownFromItsMenu_ReordersTheSteps()
+    {
+        PipelineStageDefinition? changed = null;
+        var cut = Render<StageEditPanel>(p => p
+            .Add(x => x.Stage, CreateStage())
+            .Add(x => x.AvailableServers, new List<string>())
+            .Add(x => x.OtherStageNames, new List<string>())
+            .Add(x => x.StageChanged, EventCallback.Factory.Create<PipelineStageDefinition>(this, s => changed = s)));
+
+        cut.FindMenuItem("MoveDown")!.Click();
+
+        Assert.NotNull(changed);
+        Assert.Equal(["test", "compile"], changed.Steps.Select(step => step.Name));
     }
 
     [Fact]

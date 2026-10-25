@@ -37,7 +37,8 @@ public sealed class CertbotOperationExecutor(
     public bool CanHandle(OperationKind kind) => kind is OperationKind.CertbotObtain
         or OperationKind.CertbotRenew or OperationKind.CertbotRenewAll
         or OperationKind.CertbotDelete or OperationKind.CertbotRevoke
-        or OperationKind.CertbotNormalize or OperationKind.CertbotRenewalCheck;
+        or OperationKind.CertbotNormalize or OperationKind.CertbotRenewalCheck
+        or OperationKind.CertbotRemoveDomain;
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind, string target,
@@ -45,16 +46,55 @@ public sealed class CertbotOperationExecutor(
         int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken cancellationToken)
-        => kind is OperationKind.CertbotObtain
-            ? ObtainAsync(target, envVars, timeoutSeconds, onOutput, cancellationToken)
-            : ManageAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
+        => kind switch
+        {
+            OperationKind.CertbotObtain => ObtainAsync(target, envVars, timeoutSeconds, onOutput, cancellationToken),
+            OperationKind.CertbotRemoveDomain => RemoveDomainAsync(target, envVars, timeoutSeconds, onOutput, cancellationToken),
+            _ => ManageAsync(kind, target, timeoutSeconds, onOutput, cancellationToken)
+        };
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind, string target, int timeoutSeconds,
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
-        => kind is OperationKind.CertbotObtain
-            ? ObtainAsync(target, new Dictionary<string, string>(), timeoutSeconds, onOutput, cancellationToken)
-            : ManageAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
+        => ExecuteAsync(kind, target, new Dictionary<string, string>(), timeoutSeconds, onOutput, cancellationToken);
+
+    // Reissues the certificate without one of its names through the manage helper, which reads the names the
+    // certificate holds on disk, refuses a name it does not hold or its last one, and keeps the certificate.
+    private async Task<ExecutorResult> RemoveDomainAsync(
+        string certName,
+        IReadOnlyDictionary<string, string> envVars,
+        int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput,
+        CancellationToken ct)
+    {
+        if (!IsLinux)
+        {
+            await onOutput("Certbot operations are only supported on Linux", TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+        if (!OperationTargetValidator.IsValid(OperationKind.CertbotRemoveDomain, certName))
+        {
+            await onOutput($"Invalid certbot certificate name '{certName}'.", TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+        var domain = envVars.GetValueOrDefault(CertbotTaskVariables.RemoveDomain, string.Empty);
+        if (!MailValidation.IsValidDomainName(domain) || domain.Any(char.IsControl))
+        {
+            await onOutput($"Invalid domain name to remove '{domain}'.", TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+
+        timeoutSeconds = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
+        var psi = SudoProcessStartInfo.Create();
+        foreach (var arg in BuildRemoveDomainArgv(certName, domain)) psi.ArgumentList.Add(arg);
+
+        await onOutput($"certbot: reissuing {certName} without {domain} (the certificate is kept)…", TaskLogLevel.Info).ConfigureAwait(false);
+        return await RunProcessAsync(psi, timeoutSeconds, onOutput, logger, ct).ConfigureAwait(false);
+    }
+
+    // `sudo -n <manage-helper> remove-name <certName> <domain>` - argv-exact; the helper re-validates both.
+    internal static string[] BuildRemoveDomainArgv(string certName, string domain) =>
+        ["-n", ManageHelperPath, "remove-name", certName, domain];
 
     private async Task<ExecutorResult> ObtainAsync(
         string primaryDomain,

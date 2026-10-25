@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -30,7 +31,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         _handler.SetJsonResponse($"api/servers/{serverId}/rkhunter/logs", true);
     }
 
-    private IRenderedComponent<ServerRkhunterSection> RenderInstalled(
+    private IRenderedComponent<PageHeaderOutletHost> RenderInstalled(
         RkhunterDataDto? rk = null,
         int serverId = 50)
     {
@@ -42,15 +43,15 @@ public class ServerRkhunterSectionRenderTests : BunitContext
             WarningCount = 0,
             ScanScheduleCron = "0 3 * * *"
         };
-        return Render<ServerRkhunterSection>(p => p
+        return this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, serverId)
             .Add(x => x.Rk, data));
     }
 
-    private IRenderedComponent<ServerRkhunterSection> RenderNotInstalled(int serverId = 50)
+    private IRenderedComponent<PageHeaderOutletHost> RenderNotInstalled(int serverId = 50)
     {
         _handler.SetJsonResponse($"api/servers/{serverId}/rkhunter/warnings", new List<RkhunterWarningDto>());
-        return Render<ServerRkhunterSection>(p => p
+        return this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, serverId)
             .Add(x => x.Rk, new RkhunterDataDto { IsInstalled = false }));
     }
@@ -64,8 +65,8 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         Assert.Contains(cut.FindAll(".omni-badge"), badge => badge.TextContent.Trim() == "Installed");
         Assert.Contains("RunScan", cut.Markup, StringComparison.Ordinal);
         // R3-42: Scan is the zone's only button; the logs sit in its split-button menu.
-        Assert.Single(cut.FindAll(".omni-row > .omni-split-button"));
-        Assert.Empty(cut.Find(".omni-row").QuerySelectorAll("button.omni-button").Where(b => !b.ClassName!.Contains("omni-split-button", StringComparison.Ordinal)).Select(b => b.OuterHtml[..Math.Min(300, b.OuterHtml.Length)]));
+        Assert.Single(cut.FindAll(".test-outlet > .omni-split-button"));
+        Assert.Empty(cut.Find(".test-outlet").QuerySelectorAll("button.omni-button").Where(b => !b.ClassName!.Contains("omni-split-button", StringComparison.Ordinal)).Select(b => b.OuterHtml[..Math.Min(300, b.OuterHtml.Length)]));
         cut.Find(".omni-split-button__toggle").Click();
         Assert.Contains(cut.FindAll(".omni-split-button__menu .omni-menu__item"),
             item => item.TextContent.Contains("ViewLogs", StringComparison.Ordinal));
@@ -104,7 +105,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
             }
         ]);
         var rk = new RkhunterDataDto { IsInstalled = true, Version = "1.4.6", WarningCount = 1 };
-        var cut = Render<ServerRkhunterSection>(p => p
+        var cut = this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, 50)
             .Add(x => x.Rk, rk));
 
@@ -133,11 +134,11 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var method = typeof(ServerRkhunterSection).GetMethod("ExecuteActionAsync", Priv)!;
 
         await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [RkhunterAction.RunScan])!);
+            await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [RkhunterAction.RunScan])!);
 
         var running = (bool)typeof(ServerRkhunterSection)
             .GetField("_actionRunning", Priv)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerRkhunterSection>().Instance)!;
         Assert.False(running);
     }
 
@@ -149,7 +150,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
 
         var ex = await Record.ExceptionAsync(async () =>
             await cut.InvokeAsync(async () =>
-                await (Task)method.Invoke(cut.Instance, [RkhunterAction.UpdateDatabase])!));
+                await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [RkhunterAction.UpdateDatabase])!));
 
         Assert.Null(ex);
     }
@@ -165,17 +166,17 @@ public class ServerRkhunterSectionRenderTests : BunitContext
             new RkhunterWarningDto { Id = 2, Category = "network", Detail = "port", Severity = "low",    FoundAt = DateTime.UtcNow }
         ]);
         var rk = new RkhunterDataDto { IsInstalled = true, Version = "1.4.6" };
-        var cut = Render<ServerRkhunterSection>(p => p
+        var cut = this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, 50)
             .Add(x => x.Rk, rk));
 
         var method = typeof(ServerRkhunterSection).GetMethod("LoadWarningsAsync", Priv)!;
         await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [])!);
+            await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [])!);
 
         var warnings = (List<RkhunterWarningDto>)typeof(ServerRkhunterSection)
             .GetField("_warnings", Priv)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerRkhunterSection>().Instance)!;
         Assert.Equal(2, warnings.Count);
     }
 
@@ -197,11 +198,11 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var method = typeof(ServerRkhunterSection).GetMethod("LoadScanHistoryAsync", Priv)!;
 
         await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [])!);
+            await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [])!);
 
         var history = (List<RkhunterScanResultDto>)typeof(ServerRkhunterSection)
             .GetField("_scanHistory", Priv)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerRkhunterSection>().Instance)!;
         Assert.Equal(2, history.Count);
     }
 
@@ -211,15 +212,15 @@ public class ServerRkhunterSectionRenderTests : BunitContext
     public async Task SaveScheduleAsync_WithCron_CompletesAndClearsSaving()
     {
         var cut = RenderInstalled();
-        typeof(ServerRkhunterSection).GetField("_scheduleCron", Priv)!.SetValue(cut.Instance, "0 4 * * *");
+        typeof(ServerRkhunterSection).GetField("_scheduleCron", Priv)!.SetValue(cut.FindComponent<ServerRkhunterSection>().Instance, "0 4 * * *");
 
         var method = typeof(ServerRkhunterSection).GetMethod("SaveScheduleAsync", Priv)!;
         await cut.InvokeAsync(async () =>
-            await (Task)method.Invoke(cut.Instance, [])!);
+            await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [])!);
 
         var saving = (bool)typeof(ServerRkhunterSection)
             .GetField("_savingSchedule", Priv)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerRkhunterSection>().Instance)!;
         Assert.False(saving);
     }
 
@@ -227,12 +228,12 @@ public class ServerRkhunterSectionRenderTests : BunitContext
     public async Task SaveScheduleAsync_EmptyCron_SendsNullExpression()
     {
         var cut = RenderInstalled();
-        typeof(ServerRkhunterSection).GetField("_scheduleCron", Priv)!.SetValue(cut.Instance, "");
+        typeof(ServerRkhunterSection).GetField("_scheduleCron", Priv)!.SetValue(cut.FindComponent<ServerRkhunterSection>().Instance, "");
 
         var method = typeof(ServerRkhunterSection).GetMethod("SaveScheduleAsync", Priv)!;
         var ex = await Record.ExceptionAsync(async () =>
             await cut.InvokeAsync(async () =>
-                await (Task)method.Invoke(cut.Instance, [])!));
+                await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [])!));
 
         Assert.Null(ex);
     }
@@ -247,7 +248,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
 
         var ex = await Record.ExceptionAsync(async () =>
             await cut.InvokeAsync(async () =>
-                await (Task)method.Invoke(cut.Instance, [])!));
+                await (Task)method.Invoke(cut.FindComponent<ServerRkhunterSection>().Instance, [])!));
 
         Assert.Null(ex);
     }
@@ -262,7 +263,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         _handler.SetJsonResponse("api/servers/50/rkhunter/history", new List<RkhunterScanResultDto>());
         var notification = new TaskCompletedNotification { TaskName = "Run RKHunter Scan", ServerId = 50 };
 
-        await cut.Instance.HandleTaskCompletedAsync(notification);
+        await cut.FindComponent<ServerRkhunterSection>().Instance.HandleTaskCompletedAsync(notification);
 
         // The RKHunter task name matches, so the handler refreshes scan history via the history GET.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/50/rkhunter/history"));
@@ -275,7 +276,7 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var notification = new TaskCompletedNotification { TaskName = "Deploy Application", ServerId = 50 };
 
         // Should return early without refreshing
-        var ex = await Record.ExceptionAsync(() => cut.Instance.HandleTaskCompletedAsync(notification));
+        var ex = await Record.ExceptionAsync(() => cut.FindComponent<ServerRkhunterSection>().Instance.HandleTaskCompletedAsync(notification));
         Assert.Null(ex);
     }
 
@@ -302,13 +303,13 @@ public class ServerRkhunterSectionRenderTests : BunitContext
         var before = Reads();
 
         // Heartbeat trigger only: RKHunter completions already arrive through HandleTaskCompletedAsync.
-        await cut.Instance.LiveFeed!.OnTaskCompletedAsync(new TaskCompletedNotification { TaskId = 3, ServerId = 50 });
+        await cut.FindComponent<ServerRkhunterSection>().Instance.LiveFeed!.OnTaskCompletedAsync(new TaskCompletedNotification { TaskId = 3, ServerId = 50 });
         Assert.Equal(before, Reads());
 
-        await cut.Instance.LiveFeed.OnHeartbeatAsync(50);
+        await cut.FindComponent<ServerRkhunterSection>().Instance.LiveFeed!.OnHeartbeatAsync(50);
 
         Assert.Equal(before + 2, Reads());
-        Assert.Equal("pushed warning", Assert.Single(cut.Instance.Warnings).Detail);
+        Assert.Equal("pushed warning", Assert.Single(cut.FindComponent<ServerRkhunterSection>().Instance.Warnings).Detail);
     }
 
     // ── Static helpers ────────────────────────────────────────────────────────

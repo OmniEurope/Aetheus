@@ -1,9 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits ProjectWritableSectionBase
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
     @* The breadcrumb leaf already reads "Board" - no need to repeat it as a section title. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
         <OmniDropDown aria-label="@L["Assignee"]" TValue="string" Options="@(Assignees.ToOptions(item => (string)item, item => item))" @bind-Value="_assigneeFilter" AllowEmpty="true"
             Placeholder="@L["Assignee"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
         <OmniDropDown aria-label="@L["Tags"]" TValue="string" Options="@(Tags.ToOptions(item => (string)item, item => item))" @bind-Value="_tagFilter" AllowEmpty="true"
@@ -11,7 +11,7 @@
     </OmniStack>
     @if (_canWrite)
     {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     }
 </OmniStack>
 
@@ -56,7 +56,7 @@ else
                                 }
                                 @if (_canWrite)
                                 {
-                                    <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(card))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton></span>
+                                    <span @onclick:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(card))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton></span>
                                 }
                             </div>
                         </OmniCard>

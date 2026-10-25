@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>generate-assurance-contract</c> function, port of
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c>: seals the analysis grades and the
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c>: seals the analysis grades and the
 /// test gate outcomes of a qualification into the candidate assurance contract (schema 2), copies or
 /// generates one evidence file per analysis, and publishes the overall grade as
 /// <c>CANDIDATE_ASSURANCE_GRADE</c>. The contract, the evidence files and the seal

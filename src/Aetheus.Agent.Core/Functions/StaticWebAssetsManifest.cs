@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/rebase-static-web-assets.mjs</c>: a prebuilt test project's static web
+/// Port of the former <c>rebase-static-web-assets.mjs</c> script: a prebuilt test project's static web
 /// assets runtime manifest names absolute content roots of the CI workspace that built it. Each root
 /// must lie under the web project (the last <c>/&lt;project&gt;/</c> in it, compared ignoring case);
 /// it is rebased onto the same path under the restored source tree, created, and written back with a

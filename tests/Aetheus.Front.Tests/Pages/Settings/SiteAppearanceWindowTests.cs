@@ -24,7 +24,7 @@ public sealed class SiteAppearanceWindowTests : BunitContext
         Assert.Equal(density, SiteAppearance.ParseDensity(stored));
 
     [Fact]
-    public async Task Open_ShowsTheUsersAppearance_AndEveryRowAetheusApplies_ButNotTheContentWidth()
+    public async Task Open_ShowsTheUsersAppearance_AndEveryRowAetheusApplies_ContentWidthIncluded()
     {
         var theme = OmniThemePresets.All[1];
         await State.SetPresetAsync(theme);
@@ -38,16 +38,34 @@ public sealed class SiteAppearanceWindowTests : BunitContext
 
         var window = cut.Find(".omni-appearance-window");
         // Decision of 2026-10-06: theme, palette with the mode beside it, font, density, text size, control
-        // size (the moving field only under Givre and Trou noir, below). The content width row OE shows when
-        // the window follows the state is left out: Aetheus' main column is always full width.
+        // size (the moving field only under Givre and Trou noir, below). R1-25 (2026-10-21): the content
+        // width row (centred or full width) is shown too, since the window binds FullWidthChanged.
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
-        Assert.Equal(6, rows.Length);
+        Assert.Equal(7, rows.Length);
         Assert.Contains(rows, row => row.TextContent.Contains("7/10", StringComparison.Ordinal));
         Assert.Contains(rows, row => row.TextContent.Contains("3/10", StringComparison.Ordinal));
         var densities = rows[3].QuerySelectorAll(".omni-select-bar__item");
         Assert.Equal(3, densities.Length);
-        Assert.Empty(window.QuerySelectorAll(".omni-switch__track"));
         Assert.Contains("omni-select-bar__item--selected", densities[0].ClassList);
+    }
+
+    /// <summary>R1-25: the window offers the content width, shows the state's value and keeps the choice
+    /// in the user's appearance, which the main area of the shell follows.</summary>
+    [Fact]
+    public async Task TheContentWidth_IsOffered_ShowsTheStateValue_AndTheChoiceIsKept()
+    {
+        await State.SetFullWidthAsync(true);
+        var cut = Render<SiteAppearanceWindow>();
+        await cut.InvokeAsync(cut.Instance.OpenAsync);
+
+        var window = cut.FindComponent<OmniAppearanceWindow>().Instance;
+        Assert.True(window.FullWidthChanged.HasDelegate);
+        Assert.True(window.FullWidth);
+
+        await cut.InvokeAsync(() => window.FullWidthChanged.InvokeAsync(false));
+
+        Assert.False(State.FullWidth);
+        Assert.False(cut.FindComponent<OmniAppearanceWindow>().Instance.FullWidth);
     }
 
     /// <summary>Decision of 2026-10-06: under a theme that moves its field the window offers to hold it
@@ -61,7 +79,7 @@ public sealed class SiteAppearanceWindowTests : BunitContext
 
         var window = cut.Find(".omni-appearance-window");
         var rows = window.QuerySelectorAll(".omni-appearance-settings--window .omni-appearance-settings__row");
-        Assert.Equal(6, rows.Length);
+        Assert.Equal(7, rows.Length);
         // The switch sits on the theme row's title line, so it adds no row.
         var track = rows[0].QuerySelector(".omni-switch__track");
         Assert.NotNull(track);

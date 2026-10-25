@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,10 +58,11 @@ public class ServerPortsentrySectionRenderTests : BunitContext
             .Add(x => x.Ps, data));
     }
 
-    private IRenderedComponent<ServerPortsentrySection> RenderNotInstalled(int serverId = 50)
+    // Recette R-29: Setup sits in the page header, so the header outlet is rendered with the section.
+    private IRenderedComponent<PageHeaderOutletHost> RenderNotInstalled(int serverId = 50)
     {
         _handler.SetJsonResponse($"api/servers/{serverId}/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
-        return Render<ServerPortsentrySection>(p => p
+        return this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, serverId)
             .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = false }));
     }
@@ -70,7 +72,10 @@ public class ServerPortsentrySectionRenderTests : BunitContext
     [Fact]
     public void Renders_InstalledState_ShowsPortSentryHeading()
     {
-        var cut = RenderInstalled();
+        StubPortsentryApi(50);
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
+            .Add(x => x.ServerId, 50)
+            .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = true, IsRunning = true, Version = "2.0", Mode = "atcp" }));
         Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
     }
 

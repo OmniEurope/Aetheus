@@ -1,7 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@* R2-17 / R2-26: ONE block "to do before creating" in three zones: the Git repository line, the libraries and
+   vaults line, then the list of those libraries and vaults below both. Each line keeps its height before and
+   after its creation, and the two create buttons (Primary, an exception the user chose) share one column.
+   Creating updates this block in place: OE's busy veil lies over it and its content stays mounted underneath
+   (R2-20). Explanations are tooltips (R2-18); the only alert is the one saying the creation cannot go on. *@
 <div class="pipeline-setup-readiness" data-testid="setup-readiness">
-    <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineSetupReadinessTitle"]</OmniHeading>
-    @if (Loading)
+    @if (Readiness is null && Loading)
     {
         <AetheusLoader Size="OmniControlSize.Small" />
     }
@@ -13,89 +17,102 @@
     }
     else
     {
-        @if (Readiness.Checks.Count == 0)
-        {
-            <OmniAlert Severity="OmniSeverity.Success">
-                @L["PipelineSetupReadinessAllClear"]
-            </OmniAlert>
-        }
-        else
-        {
-            <PipelineReadinessChecks Checks="@Readiness.Checks" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl"
-                                     ProvisionOffered="true" OnChanged="@OnChanged" />
-        }
+        <OmniCard Class="@(Busy ? "omni-busy" : null)" aria-busy="@(Busy ? "true" : "false")" data-testid="setup-todo">
+            <HeaderContent>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
+                           Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <strong>@L["PipelineSetupRecapTodoTitle"]</strong>
+                        <PipelineInfoTip Text="@L["PipelineSetupRecapTodoHelp"].Value" />
+                    </OmniStack>
+                    <OmniBadge Tone="@(ActionCount > 0 ? OmniTone.Warning : OmniTone.Success)" Fill="OmniFill.Outline"
+                               data-testid="setup-todo-state">@StateText</OmniBadge>
+                </OmniStack>
+            </HeaderContent>
+            <ChildContent>
+                <div class="pipeline-setup-todo">
+                    <div class="pipeline-setup-todo-row" data-testid="setup-todo-repository">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Wrap="true" Gap="OmniSpacing.Small">
+                            <OmniBadge Tone="@(RepositoryMissing ? OmniTone.Warning : OmniTone.Success)" Fill="OmniFill.Tonal">
+                                <Icon><OmniIcon Name="@(RepositoryMissing ? OmniIconName.Warning : OmniIconName.Check)" /></Icon>
+                            </OmniBadge>
+                            <strong>@L["PipelineSetupRecapRepository"]</strong>
+                            <PipelineInfoTip Text="@RepositoryHelp" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 omni-u-text-muted">
+                                @L[RepositoryMissing ? "PipelineSetupRecapRepositoryMissing" : "PipelineSetupRecapRepositoryReady"]
+                            </OmniText>
+                        </OmniStack>
+                        <div class="pipeline-setup-todo-action">
+                            @if (RepositoryMissing)
+                            {
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync"
+                                            data-testid="setup-readiness-create-repository"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateGitRepository"]</span></ChildContent></OmniButton>
+                            }
+                        </div>
+                    </div>
 
-        @* Missing required libraries and vaults can be created directly from their readiness
-           findings. *@
-        @if (CanProvision)
+                    @if (Elements.Count > 0)
+                    {
+                        <div class="pipeline-setup-todo-row" data-testid="setup-todo-elements">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Wrap="true" Gap="OmniSpacing.Small">
+                                <OmniBadge Tone="@(Pending.Count > 0 ? OmniTone.Warning : OmniTone.Success)" Fill="OmniFill.Tonal">
+                                    <Icon><OmniIcon Name="@(Pending.Count > 0 ? OmniIconName.Warning : OmniIconName.Check)" /></Icon>
+                                </OmniBadge>
+                                <strong>@L["PipelineSetupRecapElements"]</strong>
+                                <PipelineInfoTip Text="@L["PipelineSetupRecapElementsHelp"].Value" />
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 omni-u-text-muted"
+                                          data-testid="setup-todo-elements-state">@ElementsState</OmniText>
+                            </OmniStack>
+                            <div class="pipeline-setup-todo-action">
+                                @if (CanProvision)
+                                {
+                                    <div data-testid="setup-provision">
+                                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ProvisionAsync" Busy="@_provisioning"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["PipelineSetupProvision"]</span></ChildContent></OmniButton>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small"
+                                   Class="pipeline-setup-todo-list" data-testid="setup-todo-elements-list">
+                            @foreach (var element in Elements)
+                            {
+                                <OmniTooltip Text="@Purpose(element)" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
+                                    <OmniBadge Tone="@(element.Created ? OmniTone.Success : OmniTone.Neutral)" Fill="OmniFill.Tonal"
+                                               data-testid="@(element.Created ? "setup-provisioned-created" : "setup-provisioned-pending")">@ChipText(element)</OmniBadge>
+                                </OmniTooltip>
+                            }
+                        </OmniStack>
+                    }
+                </div>
+            </ChildContent>
+        </OmniCard>
+
+        @if (OtherChecks.Count > 0)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium"
-                         Class="omni-u-mt-sm" data-testid="setup-provision">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ProvisionAsync" Class="@(_provisioning ? "btn-busy" : null)" Busy="@(_provisioning)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["PipelineSetupProvision"]</span></OmniButton>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 omni-u-text-muted">
-                    @L["PipelineSetupProvisionHint"]
-                </OmniText>
-            </OmniStack>
+            @* R2-24: the findings are another block than the to-do list, told apart by a rule. *@
+            <OmniDivider />
+            <OmniCard data-testid="setup-checks">
+                <HeaderContent><strong>@L["PipelineSetupRecapChecksTitle"]</strong></HeaderContent>
+                <ChildContent>
+                    <OmniStack Gap="OmniSpacing.Medium">
+                        <PipelineReadinessChecks Checks="@OtherChecks" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl"
+                                                 BlockingAsAlert="false" OnChanged="@OnChanged" />
+                    </OmniStack>
+                </ChildContent>
+            </OmniCard>
         }
         @if (_provisionError is not null)
         {
-            <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mt-sm">
+            <OmniAlert Severity="OmniSeverity.Danger">
                 @_provisionError
             </OmniAlert>
         }
-        @* Each created library or vault stays listed as created, and is checked only once the user
-           has opened it. *@
-        @if (Provisioned.Count > 0)
+        @if (Blocked)
         {
-            <OmniAlert Severity="@(AllChecked ? OmniSeverity.Success : OmniSeverity.Info)"
-                         Class="omni-u-mt-sm" data-testid="setup-provisioned">
-                <OmniStack Gap="OmniSpacing.Small">
-                    <strong>@L["PipelineSetupProvisioned"]</strong>
-                    @foreach (var element in Provisioned)
-                    {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true"
-                                   data-testid="setup-provisioned-item">
-                            @if (element.Checked)
-                            {
-                                <OmniBadge Tone="OmniTone.Success" data-testid="setup-provisioned-checked"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent>@L["PipelineSetupProvisionedChecked"]</ChildContent></OmniBadge>
-                            }
-                            else
-                            {
-                                <OmniBadge Tone="OmniTone.Info" data-testid="setup-provisioned-created">@L["PipelineSetupProvisionedCreated"]</OmniBadge>
-                            }
-                            <strong>@L[element.Kind == ProvisionedKind.Library ? "VariableLibrary" : "Vault"] @element.Name</strong>
-                            <span>@string.Format(L["PipelineSetupProvisionedKeys"], element.KeyCount)</span>
-                            @if (!element.KeysCopied)
-                            {
-                                <span>@L["PipelineSetupProvisionedEmpty"]</span>
-                            }
-                            <OmniLink Href="@CheckHref(element)" OnClick="@(() => MarkChecked(element))"
-                                      data-testid="setup-provisioned-open"><OmniIcon Name="OmniIconName.ArrowRight" /> @L["PipelineSetupProvisionedOpen"]</OmniLink>
-                        </OmniStack>
-                    }
-                    @if (!AllChecked)
-                    {
-                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"
-                                  data-testid="setup-provisioned-pending">
-                            @L["PipelineSetupProvisionedCheckFirst"]
-                        </OmniText>
-                    }
-                </OmniStack>
+            <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-blocked">
+                @L["PipelineSetupRecapBlocked"]
             </OmniAlert>
-        }
-
-        @* Never let an empty finding list read as "the files are there" when they were never read. *@
-        @if (!Readiness.RepositoryInspected)
-        {
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                @L["PipelineSetupReadinessFilesNotChecked"]
-            </OmniText>
-        }
-        else if (!string.IsNullOrWhiteSpace(Readiness.InspectedBranch))
-        {
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                @string.Format(L["PipelineSetupReadinessCheckedOn"], Readiness.InspectedBranch)
-            </OmniText>
         }
     }
 </div>

@@ -58,4 +58,5 @@ public sealed record PackageRegistryRegistrationVersion(
     string Version,
     bool IsListed,
     DateTime CreatedAt,
-    string Metadata);
+    string Metadata,
+    bool IsDeprecated = false);

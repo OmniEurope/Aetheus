@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 using Aetheus.Back.Components.Pipelines;
+using Aetheus.Back.Hubs;
+using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Tests.Architecture;
 
@@ -79,7 +81,7 @@ public sealed class BackendModuleDependencyArchitectureTests
 
         var pipelineHubParameters = typeof(Aetheus.Back.Hubs.PipelineHub).GetConstructors()
             .SelectMany(ctor => ctor.GetParameters()).Select(parameter => parameter.ParameterType).ToList();
-        Assert.Contains(typeof(Aetheus.Back.Components.Pipelines.IPipelineRunLookupReader), pipelineHubParameters);
+        Assert.Contains(typeof(Aetheus.Back.Services.IPipelineRunLookupReader), pipelineHubParameters);
 
         var module = File.ReadAllText(Path.Combine(
             FindRepoRoot(), "src", "Aetheus.Back", "Components", "Pipelines", "PipelinesModuleExtensions.cs"));
@@ -139,7 +141,7 @@ public sealed class BackendModuleDependencyArchitectureTests
 
         // The scheduler resolves its repository per pass from a scope, not through its constructor.
         var scheduler = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "src", "Aetheus.Back", "Services", "PipelineSchedulerService.cs"));
+            FindRepoRoot(), "src", "Aetheus.Back", "Components", "Pipelines", "PipelineSchedulerService.cs"));
         if (scheduler.Contains("GetRequiredService<IPipelineRepository>", StringComparison.Ordinal)
             || !scheduler.Contains("GetRequiredService<IPipelineAutoTriggerRepository>", StringComparison.Ordinal))
             offenders.Add("PipelineSchedulerService -> IPipelineAutoTriggerRepository");
@@ -154,7 +156,7 @@ public sealed class BackendModuleDependencyArchitectureTests
 
         // The retention service, like the scheduler, resolves its repository per pass from a scope.
         var retention = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "src", "Aetheus.Back", "Services", "PipelineRetentionService.cs"));
+            FindRepoRoot(), "src", "Aetheus.Back", "Components", "Pipelines", "PipelineRetentionService.cs"));
         if (retention.Contains("GetRequiredService<IPipelineRepository>", StringComparison.Ordinal)
             || !retention.Contains("GetRequiredService<IPipelineRunRetentionRepository>", StringComparison.Ordinal))
             offenders.Add("PipelineRetentionService -> IPipelineRunRetentionRepository");

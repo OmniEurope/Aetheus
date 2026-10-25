@@ -15,11 +15,15 @@ public static class PipelineParameterResolver
     /// Validates <paramref name="supplied"/> against <paramref name="declared"/>. On success returns
     /// the effective name→value map (only declared parameters that resolve to a non-null value).
     /// </summary>
+    /// <param name="enforceRequired">False for a preview that runs before the user has answered: a
+    /// required parameter with no value is then not an error (the launch itself enforces it), so the
+    /// preview does not warn about a field the user has not been asked to fill yet.</param>
     public static bool TryResolve(
         IReadOnlyList<PipelineTemplateParameterDefinition> declared,
         IReadOnlyDictionary<string, string>? supplied,
         out Dictionary<string, string> effective,
-        out List<string> errors)
+        out List<string> errors,
+        bool enforceRequired = true)
     {
         effective = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         errors = [];
@@ -35,7 +39,7 @@ public static class PipelineParameterResolver
             if (!declaredNames.Contains(key))
                 errors.Add($"Unknown parameter '{key}'.");
         foreach (var param in declared)
-            ResolveParameter(param, supplied, effective, errors);
+            ResolveParameter(param, supplied, effective, errors, enforceRequired);
         return errors.Count == 0;
     }
 
@@ -43,7 +47,8 @@ public static class PipelineParameterResolver
         PipelineTemplateParameterDefinition parameter,
         IReadOnlyDictionary<string, string> supplied,
         IDictionary<string, string> effective,
-        ICollection<string> errors)
+        ICollection<string> errors,
+        bool enforceRequired)
     {
         if (string.IsNullOrWhiteSpace(parameter.Name)) return;
         if (IsReservedName(parameter.Name))
@@ -56,7 +61,7 @@ public static class PipelineParameterResolver
         var value = hasSupplied ? rawValue! : parameter.Default;
         if (string.IsNullOrWhiteSpace(value))
         {
-            if (parameter.Required) errors.Add($"Parameter '{parameter.Name}' is required.");
+            if (parameter.Required && enforceRequired) errors.Add($"Parameter '{parameter.Name}' is required.");
             return;
         }
         ValidateParameterType(parameter, value, errors);
@@ -124,7 +129,10 @@ public static class PipelineParameterResolver
             // The parent context of a run started by another (UPSTREAM_RUN_ID, UPSTREAM_PIPELINE,
             // UPSTREAM_CHAIN, UPSTREAM_RELEASE) is written by the engine alone: a launch parameter of
             // that name would let a run claim any parent in the run lineage (audit of 2026-09-30).
-            || name.StartsWith("UPSTREAM_", StringComparison.OrdinalIgnoreCase);
+            || name.StartsWith("UPSTREAM_", StringComparison.OrdinalIgnoreCase)
+            // The Gate's verdict on the deployed release (RELEASE_GATE_STATUS, RELEASE_GATE_GRADE,
+            // RELEASE_GATE_APPROVAL) is read from the release by the engine alone (recette R-24).
+            || name.StartsWith("RELEASE_GATE_", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The declared defaults (name→default) for parameters that declare one - injected at the
     /// lowest precedence so an explicit YAML <c>variables:</c> entry of the same name still wins.</summary>

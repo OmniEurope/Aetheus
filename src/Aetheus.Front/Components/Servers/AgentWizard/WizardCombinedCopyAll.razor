@@ -2,7 +2,7 @@
 @* "Copy all" button plus the consolidated combined command. *@
 <div class="wizard-step-section">
     <OmniButton Variant="OmniButtonVariant.Secondary" Class="omni-u-mb-sm" OnClick="@CopyAllAsync">
-        <OmniIcon Name="OmniIconName.Copy" /> @L["WizardCopyAll"]
+        <Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["WizardCopyAll"]</ChildContent>
     </OmniButton>
     <WizardCodeBlock Code="@Combined" InlineLine="true" />
 </div>

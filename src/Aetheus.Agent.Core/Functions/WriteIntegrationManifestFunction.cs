@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>write-integration-manifest</c> function, port of
-/// <c>deploy/scripts/write-integration-manifest.mjs</c>: writes the integration manifest the delivery
+/// the former <c>write-integration-manifest.mjs</c> script: writes the integration manifest the delivery
 /// contract seals, <c>{"schema":1,"sourceCommit":...,"packages":[...]}</c> on one line, the packages
 /// copied from the declaration as they are. The contract takes a digest over these bytes, so they are
 /// written exactly as the script's <c>JSON.stringify</c> wrote them (see <see cref="ScriptJson"/>).

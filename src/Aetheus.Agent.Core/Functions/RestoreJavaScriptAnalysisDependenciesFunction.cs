@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>restore-javascript-analysis-dependencies</c> function, port of
-/// <c>deploy/scripts/restore-javascript-analysis-dependencies.sh</c>: restores the workspace's
+/// the former <c>restore-javascript-analysis-dependencies.sh</c> script: restores the workspace's
 /// JavaScript dependencies exactly as the committed root <c>package-lock.json</c> pins them, with the
 /// pinned Node.js (<see cref="PinnedNodeRuntime"/>) first on <c>PATH</c>, lifecycle scripts disabled and
 /// network retries bounded. A failed <c>npm ci</c> is retried twice, after 4 then 6 seconds.

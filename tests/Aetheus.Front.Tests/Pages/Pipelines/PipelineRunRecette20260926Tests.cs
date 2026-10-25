@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Pipelines;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
@@ -41,7 +42,7 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
     };
 
     [Fact]
-    public void TheRunPage_ShowsTheReleaseItCreated_ShortAndLinked_AndTheAttestationRightUnderTheTimeline()
+    public void TheRunPage_ShowsTheReleaseItCreated_ShortAndLinked()
     {
         _handler.SetJsonResponse("api/pipelines/runs/2421", Run(new() { ["COMPATIBILITY_MODE"] = "NMinusOne" }));
         _handler.SetJsonResponse(HttpMethod.Get, "api/releases/by-run/2421", new List<ReleaseDto>
@@ -55,96 +56,87 @@ public sealed class PipelineRunRecette20260926Tests : BunitContext
         var version = cut.Find(".run-overview-tiles a[href='/releases/88'] .release-version");
         Assert.Equal("c-9e1d0a3b", version.TextContent);
         Assert.Equal("c-" + PreviousSha, version.GetAttribute("title"));
-        var timeline = cut.Find(".run-overview > .run-tree-scroll");
-        Assert.Contains("run-attestation-card", timeline.NextElementSibling!.ClassName, StringComparison.Ordinal);
+        // R1-12: the timeline sits in the zone OE's veil covers while a report is published.
+        var timeline = cut.Find(".run-overview > .run-timeline-zone");
+        Assert.NotNull(timeline.QuerySelector(".run-tree-scroll"));
+    }
+
+    /// <summary>R1-12: while an analysis report is published for the run, the status tile says so and
+    /// OE's veil lies over the timeline, which stays mounted; both go when the publication ends.</summary>
+    [Fact]
+    public async Task WhileAReportIsPublished_TheRunPageSaysSo_AndVeilsTheTimelineWithoutUnmountingIt()
+    {
+        var hubs = new Aetheus.Front.Tests.TestDoubles.InMemoryHubConnectionFactory(
+            new AuthStateProvider(new Aetheus.Front.Tests.Services.FakeJsRuntime(), Microsoft.Extensions.Logging.Abstractions.NullLogger<AuthStateProvider>.Instance));
+        Services.AddSingleton<HubConnectionFactory>(hubs);
+        _handler.SetJsonResponse("api/pipelines/runs/2421", Run(new()));
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2421));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-overview-tiles")));
+        Assert.Empty(cut.FindAll(".run-analysis-publishing-badge"));
+        Assert.Empty(cut.FindAll(".run-timeline-zone.omni-busy"));
+        await hubs.Server("pipelines").WhenInvokedAsync("JoinPipelineRunGroup");
+
+        await cut.InvokeAsync(() => hubs.Server("pipelines").PushAsync("AnalysisPublishing", 2421, true));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".run-analysis-publishing-badge")));
+        var zone = cut.Find(".run-timeline-zone");
+        Assert.Contains("omni-busy", zone.ClassName, StringComparison.Ordinal);
+        Assert.Equal("true", zone.GetAttribute("aria-busy"));
+        Assert.NotNull(zone.QuerySelector(".run-tree-scroll"));
+        Assert.Contains("AnalysisPublishing", cut.Find(".run-analysis-publishing-badge").TextContent, StringComparison.Ordinal);
+
+        await cut.InvokeAsync(() => hubs.Server("pipelines").PushAsync("AnalysisPublishing", 2421, false));
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".run-analysis-publishing-badge")));
+        Assert.DoesNotContain("omni-busy", cut.Find(".run-timeline-zone").ClassName, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheAttestation_ExplainsNMinusOne_AndLinksTheShortV1Commit()
+    public void R1_33_TheCompatibilityAttestationBlock_IsNoLongerShownOnTheRunPage()
     {
-        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
-            .Add(component => component.Run, Run(new()
-            {
-                ["COMPATIBILITY_MODE"] = "NMinusOne",
-                ["PREVIOUS_VERSION_TESTED"] = PreviousSha,
-                ["COMPATIBILITY_VERDICT"] = "NMinusOneDegraded"
-            }))
-            .Add(component => component.RepoId, 3));
+        _handler.SetJsonResponse("api/pipelines/runs/2421", Run(new()
+        {
+            ["COMPATIBILITY_MODE"] = "NMinusOne",
+            ["PREVIOUS_VERSION_TESTED"] = PreviousSha,
+            ["COMPATIBILITY_VERDICT"] = "NMinusOneVerified"
+        }));
 
-        var mode = cut.Find("[data-testid='attestation-mode']");
-        Assert.Equal("CompatibilityModeValueNMinusOne", mode.QuerySelector(".run-attestation-value")!.TextContent);
-        Assert.Equal("CompatibilityModeHintNMinusOne", mode.QuerySelector(".run-attestation-hint")!.TextContent);
-        var link = cut.Find("[data-testid='attestation-previous'] .short-id a.short-id__text");
-        Assert.Equal($"/git-repositories/3/commits/{PreviousSha}", link.GetAttribute("href"));
-        Assert.Equal("9e1d0a3b", link.TextContent);
-        Assert.Equal(PreviousSha, cut.Find("[data-testid='attestation-previous'] .short-id").GetAttribute("title"));
-        var verdict = cut.Find("[data-testid='attestation-verdict']");
-        Assert.Contains("CompatibilityVerdictValueNMinusOneDegraded", verdict.TextContent, StringComparison.Ordinal);
-        Assert.Equal("CompatibilityVerdictHintNMinusOneDegraded", verdict.QuerySelector(".run-attestation-hint")!.TextContent);
-        Assert.DoesNotContain(">NMinusOne<", cut.Markup, StringComparison.Ordinal);
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2421));
+
+        cut.WaitForAssertion(() => Assert.Contains("aetheus-candidate", cut.Markup));
+        Assert.Empty(cut.FindAll("[data-testid='attestation-mode']"));
+        Assert.DoesNotContain("CompatibilityAttestation", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheAttestation_OfABootstrapRun_SaysThereIsNoV1_AndShowsAnUnknownCodeAsItIs()
+    public void R1_30_ADeployRun_ShowsTheGateGradeOfTheDeployedCandidate_InItsStatusTile()
     {
-        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
-            .Add(component => component.Run, Run(new()
-            {
-                ["COMPATIBILITY_MODE"] = "Bootstrap",
-                ["PREVIOUS_VERSION_TESTED"] = "false",
-                ["COMPATIBILITY_VERDICT"] = "SomethingNew"
-            })));
+        _handler.SetJsonResponse("api/pipelines/runs/2819", Run(new()) with
+        {
+            Id = 2819,
+            PipelineName = "deploy-prod",
+            GateGrade = AnalysisGrade.A,
+            Parameters = new Dictionary<string, string> { ["candidateVersion"] = "c-2800" }
+        });
 
-        Assert.Equal("CompatibilityModeHintBootstrap", cut.Find("[data-testid='attestation-mode'] .run-attestation-hint").TextContent);
-        Assert.Equal("CompatibilityNoPreviousVersion", cut.Find("[data-testid='attestation-previous'] .run-attestation-value").TextContent);
-        Assert.Empty(cut.FindAll("[data-testid='attestation-previous'] a"));
-        var verdict = cut.Find("[data-testid='attestation-verdict']");
-        Assert.Contains("SomethingNew", verdict.TextContent, StringComparison.Ordinal);
-        Assert.Empty(verdict.QuerySelectorAll(".run-attestation-hint"));
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2819));
+
+        cut.WaitForAssertion(() =>
+        {
+            var row = cut.Find(".run-overview-tiles [data-testid='run-deployed-candidate-gate']");
+            Assert.Contains("RunDeployedCandidateGate", row.TextContent, StringComparison.Ordinal);
+            Assert.Contains("grade-badge--a", row.InnerHtml, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
-    public void ARunStoredWithTheScriptsPascalCaseNames_StillShowsItsAttestation()
+    public void R1_30_ARunThatDeploysNoCandidate_ShowsNoGateGradeInItsStatusTile()
     {
-        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
-            .Add(component => component.Run, Run(new()
-            {
-                ["CompatibilityMode"] = "NMinusOne",
-                ["PreviousVersionTested"] = PreviousSha,
-                ["CompatibilityVerdict"] = "NMinusOneVerified"
-            }))
-            .Add(component => component.RepoId, 3));
+        _handler.SetJsonResponse("api/pipelines/runs/2820", Run(new()) with { Id = 2820, GateGrade = AnalysisGrade.A });
 
-        Assert.Equal("CompatibilityModeValueNMinusOne", cut.Find("[data-testid='attestation-mode'] .run-attestation-value").TextContent);
-        Assert.Equal(
-            $"/git-repositories/3/commits/{PreviousSha}",
-            cut.Find("[data-testid='attestation-previous'] a.short-id__text").GetAttribute("href"));
-        Assert.Contains("CompatibilityVerdictValueNMinusOneVerified", cut.Find("[data-testid='attestation-verdict']").TextContent, StringComparison.Ordinal);
-    }
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 2820));
 
-    [Fact]
-    public void TheUpperSnakeCaseName_WinsOverTheLegacyOne()
-    {
-        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
-            .Add(component => component.Run, Run(new()
-            {
-                ["CompatibilityMode"] = "NMinusOne",
-                ["COMPATIBILITY_MODE"] = "Bootstrap",
-                ["PREVIOUS_VERSION_TESTED"] = "false",
-                ["CompatibilityVerdict"] = "NMinusOneDegraded",
-                ["COMPATIBILITY_VERDICT"] = "CurrentVersionVerified"
-            })));
-
-        Assert.Equal("CompatibilityModeValueBootstrap", cut.Find("[data-testid='attestation-mode'] .run-attestation-value").TextContent);
-        Assert.Contains("CompatibilityVerdictValueCurrentVersionVerified", cut.Find("[data-testid='attestation-verdict']").TextContent, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WithoutACompatibilityMode_NoAttestationIsRendered()
-    {
-        var cut = Render<PipelineRunCompatibilityAttestation>(parameters => parameters
-            .Add(component => component.Run, Run([])));
-
-        Assert.Empty(cut.FindAll(".run-attestation-card"));
+        cut.WaitForAssertion(() => Assert.Contains("aetheus-candidate", cut.Markup));
+        Assert.Empty(cut.FindAll("[data-testid='run-deployed-candidate-gate']"));
     }
 }

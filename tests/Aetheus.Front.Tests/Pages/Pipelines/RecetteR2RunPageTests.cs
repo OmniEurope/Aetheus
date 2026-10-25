@@ -85,11 +85,14 @@ public sealed class RecetteR2RunPageTests : BunitContext
         _handler.SetJsonResponse("api/pipelines/runs/7/lineage", new PipelineRunLineageDto { Downstream = FollowUps(1) });
         var naming = Render<PipelineRunLineageTile>(parameters => parameters.Add(component => component.Run, Run(7)));
         naming.WaitForAssertion(() => Assert.Contains("run-lineage-tile--wide", naming.Find(".run-lineage-tile").ClassName, StringComparison.Ordinal));
+        // The two columns are OE's (OmniFactTile.DoubleWidth), not a rule of the application.
+        Assert.Contains("omni-tile--double", naming.Find(".run-lineage-tile").ClassName, StringComparison.Ordinal);
 
         _handler.SetJsonResponse("api/pipelines/runs/8/lineage", new PipelineRunLineageDto { TriggeredBy = "claude" });
         var alone = Render<PipelineRunLineageTile>(parameters => parameters.Add(component => component.Run, Run(8)));
         alone.WaitForAssertion(() => Assert.Contains("claude", alone.Find(".run-lineage-actor").TextContent, StringComparison.Ordinal));
         Assert.DoesNotContain("run-lineage-tile--wide", alone.Find(".run-lineage-tile").ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-tile--double", alone.Find(".run-lineage-tile").ClassName, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -426,7 +429,7 @@ public sealed class RecetteR2RunPageTests : BunitContext
         var cut = Render<PipelineRunApprovalPanel>(parameters => parameters.Add(component => component.Approval, PendingApproval()));
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".approval-reload-first")));
 
-        cut.InvokeAsync(() => Services.GetRequiredService<Aetheus.Front.Layout.ApplicationVersionState>().MarkNewVersionAvailable());
+        cut.InvokeAsync(() => Services.GetRequiredService<Aetheus.Front.Components.Shared.ApplicationVersionState>().MarkNewVersionAvailable());
 
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".approval-reload-first")));
     }

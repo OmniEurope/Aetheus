@@ -7,8 +7,12 @@ public static class AlertsModuleExtensions
     {
         services.AddScoped<IAlertRepository, AlertRepository>();
         services.AddScoped<IAlertService, AlertService>();
+        services.AddScoped<IAlertOccurrenceRepository, AlertOccurrenceRepository>();
+        services.AddScoped<IAlertOccurrenceService, AlertOccurrenceService>();
         services.AddHostedService<AlertEvaluatorService>();
+        services.AddHostedService<AlertOccurrenceRetentionService>();
         services.AddHostedService<StorageAlertProvisioningService>();
+        services.AddHostedService<SecretExpirationService>();
         return services;
     }
 }

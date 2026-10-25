@@ -9,7 +9,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/verify-release-ancestry.sh</c>, run through the real executor with
+/// The C# port of the former <c>verify-release-ancestry.sh</c> script, run through the real executor with
 /// real Git on throwaway repositories built like the ones the script ran on
 /// (<c>TestData/release-ancestry-cases.json</c>, <see cref="ScriptReferenceData"/>; written by a driver
 /// that ran the script with <c>sh</c> in the repository, commit ids recorded as placeholders: <c>{key}</c>,

@@ -5,7 +5,7 @@ using System.Numerics;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>prune-qa-buildx-cache</c> function, port of <c>deploy/scripts/prune-qa-buildx-cache.sh</c>:
+/// The <c>prune-qa-buildx-cache</c> function, port of the former <c>prune-qa-buildx-cache.sh</c> script:
 /// bounds one named Buildx builder's cache with <c>docker buildx prune --builder &lt;name&gt; --force
 /// --reserved-space --max-used-space --min-free-space</c>, refusing an unscoped prune (no builder) and
 /// limits that are not positive integers or whose maximum is below the reserved size. Same checks, same
@@ -47,7 +47,7 @@ public sealed class PruneQaBuildxCacheFunction : IPipelineFunction
             return PipelineFunctionResult.Failure("QA Buildx maximum cache must be greater than or equal to its reserved cache.");
 
         await context.Log(
-            $"Applying bounded QA Buildx maintenance: builder={builder} max={max}GiB reserved={reserved}GiB minFree={minFree}GiB")
+            $"Applying bounded QA Buildx maintenance: builder={builder} max={max}Go reserved={reserved}Go minFree={minFree}Go")
             .ConfigureAwait(false);
         var exitCode = await new FunctionDocker(_tools, context).RunAsync(
             cancellationToken,

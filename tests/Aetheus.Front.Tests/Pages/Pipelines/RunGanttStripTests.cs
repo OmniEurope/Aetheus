@@ -96,7 +96,7 @@ public class RunGanttStripTests : BunitContext
     {
         var component = Render(Step(1, "Compile", 0, 125));
 
-        Assert.Contains("2m05", component.Find(".run-gantt-scale").TextContent, StringComparison.Ordinal);
+        Assert.Contains("2min", component.Find(".run-gantt-scale").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -106,10 +106,37 @@ public class RunGanttStripTests : BunitContext
         var component = Render(Step(1, "Compile", 0, 100), Step(2, "Test", 100, 200));
 
         Assert.Equal(
-            ["0s", "50s", "1m40", "2m30", "3m20"],
+            ["0s", "50s", "1min40s", "2min30s", "3min20s"],
             component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent));
         Assert.All(component.FindAll(".run-gantt-svg"), svg =>
             Assert.Equal(["25", "50", "75"], svg.QuerySelectorAll(".run-gantt-gridline").Select(line => line.GetAttribute("x1"))));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(70)]
+    [InlineData(125)]
+    [InlineData(300)]
+    [InlineData(3_600)]
+    public void TwoConsecutiveAxisTicksNeverShareALabel(int seconds)
+    {
+        var component = Render(Step(1, "Compile", 0, seconds));
+
+        var labels = component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent).Where(text => text.Length > 0).ToList();
+        Assert.Equal(labels.Count, labels.Distinct().Count());
+        Assert.True(labels.Count >= 2);
+    }
+
+    /// <summary>R-23, seen on run 1343: a 21-minute axis read "0s | 5min19s | 10min | 15min | 21min". One axis
+    /// reads in one precision, whole minutes from ten minutes, seconds below.</summary>
+    [Theory]
+    [InlineData(1_276, "0s|5min|10min|15min|21min")]
+    [InlineData(200, "0s|50s|1min40s|2min30s|3min20s")]
+    public void TheAxisReadsInOnePrecision(int seconds, string expected)
+    {
+        var component = Render(Step(1, "Compile", 0, seconds));
+
+        Assert.Equal(expected, string.Join('|', component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent.Trim())));
     }
 
     [Fact]

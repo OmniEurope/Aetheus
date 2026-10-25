@@ -135,4 +135,52 @@ public sealed class PipelineRequirementsCheckerTests
         Assert.Equal(3, outcomes.Count);
         Assert.All(outcomes, outcome => Assert.False(outcome.Satisfied));
     }
+
+    /// <summary>R2-27: an empty value comes back with the id of the library or vault holding it, so the
+    /// summary can link to it; a value whose holder is unknown has none.</summary>
+    [Fact]
+    public async Task AnEmptyValue_CarriesTheIdOfTheLibraryOrVaultHoldingIt()
+    {
+        _libraries.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string> { ["API_HOST"] = "", ["API_PORT"] = "", ["FILLED"] = "x" }, new HashSet<string>()));
+        _libraries.ResolveEntryOwnersWithCrossAccessAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["API_HOST"] = 12, ["FILLED"] = 12 });
+        _vaults.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string> { ["DB_PASSWORD"] = "" }, new HashSet<string>()));
+        _vaults.ResolveSecretOwnersWithCrossAccessAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["DB_PASSWORD"] = 9 });
+
+        var empty = await BuildSut().FindEmptyValuesAsync(["lib"], ["vault"], 7, TestContext.Current.CancellationToken);
+
+        Assert.Equal(12, Assert.Single(empty, value => value.Key == "API_HOST").OwnerId);
+        Assert.Null(Assert.Single(empty, value => value.Key == "API_PORT").OwnerId);
+        Assert.Equal(9, Assert.Single(empty, value => value.Key == "DB_PASSWORD").OwnerId);
+        Assert.DoesNotContain(empty, value => value.Key == "FILLED");
+    }
+
+    /// <summary>R-10: the table of empty values says the library or vault by name, read once per owner.</summary>
+    [Fact]
+    public async Task AnEmptyValue_CarriesTheNameOfTheLibraryOrVaultHoldingIt()
+    {
+        _libraries.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string> { ["HOST_PREFIX"] = "", ["API_PORT"] = "", ["ORPHAN"] = "" }, new HashSet<string>()));
+        _libraries.ResolveEntryOwnersWithCrossAccessAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["HOST_PREFIX"] = 12, ["API_PORT"] = 12 });
+        _libraries.GetLibraryDetailAsync(12, Arg.Any<CancellationToken>())
+            .Returns(new VariableLibraryDetailDto { Id = 12, Name = "aetheus.prod" });
+        _vaults.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string> { ["DB_PASSWORD"] = "" }, new HashSet<string>()));
+        _vaults.ResolveSecretOwnersWithCrossAccessAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { ["DB_PASSWORD"] = 9 });
+        _vaults.GetVaultDetailAsync(9, Arg.Any<CancellationToken>())
+            .Returns(new VaultDetailDto { Id = 9, Name = "aetheus-deploy" });
+
+        var empty = await BuildSut().FindEmptyValuesAsync(["lib"], ["vault"], 7, TestContext.Current.CancellationToken);
+
+        Assert.Equal("aetheus.prod", Assert.Single(empty, value => value.Key == "HOST_PREFIX").OwnerName);
+        Assert.Equal("aetheus.prod", Assert.Single(empty, value => value.Key == "API_PORT").OwnerName);
+        Assert.Null(Assert.Single(empty, value => value.Key == "ORPHAN").OwnerName);
+        Assert.Equal("aetheus-deploy", Assert.Single(empty, value => value.Key == "DB_PASSWORD").OwnerName);
+        await _libraries.Received(1).GetLibraryDetailAsync(12, Arg.Any<CancellationToken>());
+    }
 }

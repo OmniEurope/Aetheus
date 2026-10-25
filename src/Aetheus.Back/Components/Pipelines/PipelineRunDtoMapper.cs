@@ -94,9 +94,10 @@ public static class PipelineRunDtoMapper
             PipelineName = r.Pipeline?.Name ?? string.Empty,
             Status = r.Status,
             RunToEnd = r.RunToEnd,
+            ResumeDeadline = r.Status == PipelineStatus.AwaitingResume ? r.ResumeDeadline : null,
             CancellationRequested = HasCancellationRequest(r.AdditionalVariablesJson),
-            CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancelledByVariable),
-            CancellationReason = CancellationNote(r.AdditionalVariablesJson, PipelineRunService.CancellationReasonVariable),
+            CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunHelpers.CancelledByVariable),
+            CancellationReason = CancellationNote(r.AdditionalVariablesJson, PipelineRunHelpers.CancellationReasonVariable),
             // See RunListProjection: a terminal run never reports a current wait.
             WaitingReason = IsWaitable(r.Status) ? r.WaitingReason : null,
             WaitingSince = IsWaitable(r.Status) ? r.WaitingSince : null,

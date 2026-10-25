@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Components.Pipelines;
 
 public sealed record StepOutputProjection(string StageName, string StepName, string? OutputVariablesJson);
+
+/// <summary>A failed step of a run, with what it recorded about its failure (the task's own failure fields first).</summary>
+public sealed record StepFailureProjection(
+    string StageName, string StepName, string? MatrixLeg, int? ExitCode, string? FailureCode, string? FailureReason);
+
 public sealed record PipelineRunRootReference(int RunId, int PipelineId, string PipelineName);
 public sealed record TaskQueuePosition(int Position, int Depth);
 public sealed record PipelineRunQueueReference(int StepId, int TaskId);
@@ -25,7 +31,7 @@ public interface IPipelineRepository
     : IPipelineTemplateRepository, IPipelineRunnerTargetReader, IPipelineAutoTriggerRepository,
         IPipelineApprovalRepository, IPipelineQualityResultRepository, IPipelineArtifactRepository,
         IPipelineRunLookupReader, IPipelineEnvironmentReader, IPipelineReleaseNumberRepository,
-        IPipelineRunRetentionRepository, IPipelineProjectOwnerReader
+        IPipelineRunRetentionRepository, IPipelineProjectOwnerReader, IPipelineResumeWaitRepository
 {
     Task<(List<Pipeline> Items, int TotalCount)> GetPipelinesPagedAsync(
         string? search, PipelineTriggerType? triggerType, int page, int pageSize, List<int>? accessibleIds = null, CancellationToken ct = default);
@@ -141,6 +147,11 @@ public interface IPipelineRepository
     /// <summary>Tracks an artifact a run consumed, flushed with the step's task.</summary>
     void TrackArtifactInput(PipelineRunArtifactInput input);
     void TrackDastExecutionLease(DastExecutionLease lease);
+    /// <summary>Remembers the inserts already waiting to be saved, before a scheduling pass queues its own.</summary>
+    UnsavedInsertsMark MarkUnsavedInserts();
+    /// <summary>Drops every insert queued since <paramref name="mark"/> and the links that reached them, so a pass
+    /// refused half-way leaves no task of its own behind for the next save to write.</summary>
+    void DiscardUnsavedInsertsSince(UnsavedInsertsMark mark);
 
     Task<List<PipelineRun>> GetRunsAsync(int pipelineId, int count, CancellationToken ct = default);
     Task<(List<PipelineRunDto> Items, int TotalCount)> GetRunsPagedAsync(int pipelineId, int page, int pageSize, PipelineRunPaginationRequest? request = null, CancellationToken ct = default);
@@ -169,6 +180,10 @@ public interface IPipelineRepository
         int runId, CancellationToken ct = default);
 
     Task<List<StepOutputProjection>> GetSuccessfulStepOutputsAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>The steps of a run that ended Failed, blocking ones first then in run order, at most <paramref name="max"/>:
+    /// the cause the result mail names (recette R1-9).</summary>
+    Task<List<StepFailureProjection>> GetFailedStepsAsync(int runId, int max, CancellationToken ct = default);
 
     Task<PipelineRun?> GetPipelineRunWithPipelineAsync(int runId, CancellationToken ct = default);
 
@@ -277,6 +292,11 @@ public interface IPipelineRepository
 
     /// <summary>Cancels every non-terminal step and server task still attached to the run.</summary>
     Task CancelActiveStepRunsAndTasksAsync(int runId, CancellationToken ct = default);
+
+    /// <summary>Cancels, in the database, the tasks of the given step runs that an agent could still pick up or
+    /// keep running. For a scheduling pass refused after a mid-pass save wrote tasks it had queued:
+    /// <see cref="DiscardUnsavedInsertsSince"/> only reaches what is still unsaved.</summary>
+    Task CancelActiveTasksOfStepRunsAsync(int runId, IReadOnlyCollection<int> stepRunIds, CancellationToken ct = default);
 
     Task CancelPendingStepRunsAsync(int runId, CancellationToken ct = default);
     /// <summary>Marks the run as cancellation-requested; the first request's author and reason are

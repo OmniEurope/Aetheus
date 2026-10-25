@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>record-storage-evidence</c> function, port of <c>deploy/scripts/record-storage-evidence.sh</c>:
+/// The <c>record-storage-evidence</c> function, port of the former <c>record-storage-evidence.sh</c> script:
 /// at the end of a successful QA, records what the host's storage looks like (the Buildx builder's
 /// cache, the root filesystem) in a ledger kept in the agent's work directory, refuses to record while a
 /// QA Compose stack of this run or an older one survives, and once five samples of the builder exist,
@@ -164,7 +164,7 @@ public sealed partial class RecordStorageEvidenceFunction : IPipelineFunction
     /// <summary>Logs the exact residual QA Compose resources and returns the failure, or null when none remain.</summary>
     private async Task<string?> ResidualFailureAsync(PipelineFunctionContext context, Measure measure, string slug, string runId)
     {
-        var stack = new Regex($"^{slug}-qa-(rollback-)?[0-9]+$", RegexOptions.CultureInvariant);
+        var stack = new Regex($"^{Regex.Escape(slug)}-qa-(rollback-)?[0-9]+$", RegexOptions.CultureInvariant);
         var containers = await ResidualsAsync(context, measure.Containers!, 3, stack, runId).ConfigureAwait(false);
         var volumes = await ResidualsAsync(context, measure.Volumes!, 2, stack, runId).ConfigureAwait(false);
         var residualContainers = containers.Count(line => line.Trim().Length > 0);

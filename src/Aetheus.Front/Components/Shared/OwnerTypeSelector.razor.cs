@@ -117,6 +117,9 @@ public partial class OwnerTypeSelector
 
     private async Task OnProjectChanged(object? value)
     {
+        // Picking a project of an environment or server owner makes the parent clear every owner id,
+        // exactly like a kind change: the mode the user is working in must not be re-inferred as Global.
+        _userChoseKind = true;
         _selectedProjectId = (int?)value;
         _environments = [];
         _projectServers = [];
@@ -141,11 +144,14 @@ public partial class OwnerTypeSelector
 
     private async Task OnEnvironmentChanged(object? value)
     {
+        // Clearing the environment leaves every owner id null: that is not a return to Global.
+        _userChoseKind = true;
         await SetOwnership(null, (int?)value, null);
     }
 
     private async Task OnProjectServerChanged(object? value)
     {
+        _userChoseKind = true;
         await SetOwnership(null, null, (int?)value);
     }
 

@@ -25,12 +25,26 @@ public sealed class SharedPostgresContainer : IAsyncLifetime
 
     // Pinned to the exact production multi-platform digest (deploy/compose/remote.compose.yml) so tests
     // exercise the same Postgres, not EF InMemory (which skips relational migrations + FK enforcement).
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder(
+    private readonly PostgreSqlContainer _container = RunLabels(new PostgreSqlBuilder(
             "postgres:18-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15")
         .WithDatabase(ItDatabase)
         .WithUsername("aetheus")
-        .WithPassword("aetheus_shared_pwd")
+        .WithPassword("aetheus_shared_pwd"))
         .Build();
+
+    /// <summary>
+    /// The pipeline step disables Ryuk (a privileged, Docker-socket-mounting reaper that trips the container
+    /// risk alert) and sets these two variables, so it can remove this run's containers itself and the stale
+    /// ones of a killed run. A local run (Ryuk enabled, variables unset) adds no label.
+    /// </summary>
+    private static PostgreSqlBuilder RunLabels(PostgreSqlBuilder builder)
+    {
+        var run = Environment.GetEnvironmentVariable("AETHEUS_TESTCONTAINERS_RUN");
+        var startedAt = Environment.GetEnvironmentVariable("AETHEUS_TESTCONTAINERS_STARTED_AT");
+        return string.IsNullOrEmpty(run) || string.IsNullOrEmpty(startedAt)
+            ? builder
+            : builder.WithLabel("aetheus.testcontainers.run", run).WithLabel("aetheus.testcontainers.started-at", startedAt);
+    }
 
     /// <summary>Connection string for the relational-suite database (<c>aetheus_it</c>).</summary>
     public string ItConnectionString => _container.GetConnectionString();

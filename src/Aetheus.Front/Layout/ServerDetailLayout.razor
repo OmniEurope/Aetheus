@@ -21,7 +21,7 @@
 @inject Aetheus.Front.Components.Shared.ServerDetailLoader Loader
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 @inject Microsoft.AspNetCore.Components.NavigationManager Nav
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 @using Aetheus.Front.Components.Servers
 
@@ -32,7 +32,7 @@
        own actions. Header rendering does not depend on server status or compatibility badges. *@
     @{
         RenderFragment? headerActions = Loader.Server is null ? null : @<text>
-            <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection" />
+            <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" />
             @if (IsOverview)
             {
             @* "Configuration", the server's settings, rather than a bare "Edit". *@
@@ -40,8 +40,7 @@
             {
                 <OmniButton Variant="OmniButtonVariant.Primary" title="@L["Configuration"]" Label="@L["Configuration"]"
                             OnClick="@(_ => OpenEditDialog())">
-                    <OmniIcon Name="OmniIconName.Settings" />
-                    <span>@L["Configuration"]</span>
+                    <Icon><OmniIcon Name="OmniIconName.Settings" /></Icon><ChildContent><span>@L["Configuration"]</span></ChildContent>
                 </OmniButton>
             }
             @* Group agent actions, configuration import/export and port checks in Tools. Port
@@ -69,12 +68,12 @@
         </text>;
     }
     <OmniDetailShell State="@DetailState" BackHref="/servers" BackText="@L["BackToServers"]" NotFoundTitle="@L["ServerNotFound"]">
-        <Header>
+        <HeaderContent>
             @* The section is the title and breadcrumb leaf; the server name is an ancestor. *@
-            <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" Actions="@headerActions">
+            <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" ActionsContent="@headerActions">
                 <Icon><OmniIcon Name="@MaterialIconMap.Resolve(SectionIcon)" /></Icon>
             </OmniPageHeader>
-        </Header>
+        </HeaderContent>
         <ChildContent>
             @if (Loader.Server is not null)
             {
@@ -102,9 +101,9 @@
                                 </OmniStack>
                             </OmniColumn>
                         </OmniRow>
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveEditAsync" Class="@(_editSaving ? "btn-busy" : null)" Busy="@(_editSaving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _editVisible = false)"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveEditAsync" Class="@(_editSaving ? "btn-busy" : null)" Busy="@(_editSaving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _editVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
                         </OmniStack>
                     </OmniCard>
                 }

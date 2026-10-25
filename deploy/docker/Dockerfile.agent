@@ -26,9 +26,6 @@ COPY src/Aetheus.Shared/ Aetheus.Shared/
 COPY src/Aetheus.Analyzers/ Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ Aetheus.Agent.Linux/
-COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
 
 RUN dotnet publish Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj -c Release -o /app/publish
 

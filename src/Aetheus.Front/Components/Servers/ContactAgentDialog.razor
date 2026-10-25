@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
 <OmniStack Gap="OmniSpacing.Large" Class="contact-agent-dialog">
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniIcon Name="OmniIconName.CellTower" />
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">
             @string.Format(L["ContactAgentTarget"], ServerName)
@@ -87,22 +87,22 @@
 
     @* The footer needs different button sets and Cancel versus Close semantics for running, failed
        and successful states. Keep it local because DialogFooter owns a fixed cancel action. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @if (_state == ContactState.Running)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelAndCloseAsync"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelAndCloseAsync"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
         }
         else
         {
             @if (_state == ContactState.Failed)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadDiagnosticAsync" Disabled="@(_diagnostic is not null && !_diagnosticLoading)" Class="@(_diagnosticLoading ? "btn-busy" : null)" Busy="@(_diagnosticLoading)" title="@L["WhyOffline"]"><OmniIcon Name="OmniIconName.Question" /> <span>@L["Diagnostic"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadDiagnosticAsync" Disabled="@(_diagnostic is not null && !_diagnosticLoading)" Class="@(_diagnosticLoading ? "btn-busy" : null)" Busy="@(_diagnosticLoading)" title="@L["WhyOffline"]"><Icon><OmniIcon Name="OmniIconName.Question" /></Icon><ChildContent><span>@L["Diagnostic"]</span></ChildContent></OmniButton>
                 @* STD-BTN detection 11: Diagnostic visible, the other actions in the menu. *@
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@StartAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Retry"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>
             }
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(_state == ContactState.Success))"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Close"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(_state == ContactState.Success))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Close"]</span></ChildContent></OmniButton>
         }
     </OmniStack>
 </OmniStack>

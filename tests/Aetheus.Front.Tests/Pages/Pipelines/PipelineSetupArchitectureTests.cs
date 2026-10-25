@@ -24,46 +24,61 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
 
         Assert.Equal(3, cut.FindAll("[data-testid^='setup-architecture-']").Count);
         // No type chosen in advance, so no detail and no way on yet.
-        Assert.Empty(cut.FindAll(".pipeline-setup-option"));
-        Assert.Empty(cut.FindAll("[data-testid='setup-same-project']"));
+        Assert.Empty(cut.FindAll("[data-testid^='setup-option-']"));
+        Assert.Empty(cut.FindAll("[data-testid='setup-shape']"));
         Assert.False(wizard.Instance.CanAdvance);
         Assert.Contains("PipelineArchitectureQuestion", cut.Markup, StringComparison.Ordinal);
     }
 
-    /// <summary>The one-project application shape is a yes/no choice without a default.</summary>
+    /// <summary>R2-3: the application shape is an exclusive choice between two OE tiles, without a
+    /// default; nothing below it is shown before one is chosen.</summary>
     [Fact]
-    public async Task Application_AsksWhetherTheServerServesTheInterface_WithNoDefaultAnswer()
+    public async Task Application_AsksTheShapeWithTwoExclusiveTiles_AndNoDefaultAnswer()
     {
         var (cut, wizard) = await OpenArchitectureStepAsync();
 
         await Choose(cut, "application");
 
-        var question = cut.Find("[data-testid='setup-same-project']");
-        Assert.Contains("PipelineSameProjectQuestion", question.TextContent, StringComparison.Ordinal);
-        var radios = question.QuerySelectorAll("input[type='radio']");
-        Assert.Equal(2, radios.Length);
-        Assert.All(radios, radio => Assert.False(radio.HasAttribute("checked")));
-        Assert.Empty(cut.FindAll(".pipeline-setup-option"));
+        var tiles = cut.FindAll("[data-testid='setup-shape'] button.omni-selectable-card");
+        Assert.Equal(2, tiles.Count);
+        Assert.All(tiles, tile => Assert.Equal("false", tile.GetAttribute("aria-checked")));
+        Assert.Contains("PipelineShapeFullStack", tiles[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("PipelineShapeSeparate", tiles[1].TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='setup-parts']"));
         Assert.False(wizard.Instance.CanAdvance);
     }
 
+    /// <summary>R2-3: choosing a tile unchooses the other one.</summary>
     [Fact]
-    public async Task SameProjectYes_ShowsOnlyTheDatabaseDetail_AndClaimsNoSeparateFrontend()
+    public async Task TheTwoShapeTiles_AreExclusive()
+    {
+        var (cut, _) = await OpenArchitectureStepAsync();
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: true);
+        Assert.Equal("true", cut.Find("[data-testid='setup-shape-fullstack']").GetAttribute("aria-checked"));
+
+        await cut.Find("[data-testid='setup-shape-separate']").ClickAsync(new MouseEventArgs());
+
+        Assert.Equal("false", cut.Find("[data-testid='setup-shape-fullstack']").GetAttribute("aria-checked"));
+        Assert.Equal("true", cut.Find("[data-testid='setup-shape-separate']").GetAttribute("aria-checked"));
+    }
+
+    [Fact]
+    public async Task FullStack_ShowsOnlyTheDatabasePart_AndClaimsNoSeparateFrontend()
     {
         var (cut, wizard) = await OpenArchitectureStepAsync();
 
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: true);
 
         Assert.True(wizard.Instance.CanAdvance);
-        var option = Assert.Single(cut.FindAll(".pipeline-setup-option"));
+        var option = Assert.Single(cut.FindAll("[data-testid^='setup-option-']"));
         Assert.Contains("Database", option.TextContent, StringComparison.Ordinal);
-        Assert.Contains("PipelineSameProjectYesDetail", cut.Markup, StringComparison.Ordinal);
-        await cut.InvokeAsync(() => option.QuerySelector("input")!.Change(true));
+        // R2-2: the database is ticked by default.
+        Assert.Equal("true", option.GetAttribute("aria-checked"));
 
         var requests = await FinishAsync(cut, wizard);
 
         Assert.Equal(
-            ["atlas-ci", "atlas-quality", "atlas-security", "atlas-qa", "atlas-candidate", "atlas-deploy-prod"],
+            ["atlas-ci", "atlas-quality", "atlas-security", "atlas-qa", "atlas-candidate", "atlas-nightly", "atlas-deploy-prod"],
             requests.Select(request => request.Name));
         Assert.All(requests, request =>
         {
@@ -73,15 +88,139 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         });
     }
 
+    /// <summary>R2-3: under the separate tile the front-end and the back-end are ticked one by one (one,
+    /// the other or both), then the database; with neither, the step cannot go on.</summary>
     [Fact]
-    public async Task SameProjectNo_KeepsTheFrontendBackendAndDatabaseDetail()
+    public async Task Separate_TicksTheFrontendAndTheBackendApart_ThenTheDatabase()
     {
         var (cut, wizard) = await OpenArchitectureStepAsync();
 
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
 
-        Assert.Equal(3, cut.FindAll(".pipeline-setup-option").Count);
+        Assert.Equal(
+            ["frontend", "backend", "database"],
+            cut.FindAll("[data-testid='setup-parts'] [data-testid^='setup-option-']")
+                .Select(option => option.GetAttribute("data-testid")!["setup-option-".Length..]));
         Assert.True(wizard.Instance.CanAdvance);
+
+        await Toggle(cut, "frontend");
+        Assert.True(wizard.Instance.CanAdvance);
+        await Toggle(cut, "backend");
+        Assert.False(wizard.Instance.CanAdvance);
+        await Toggle(cut, "frontend");
+        Assert.True(wizard.Instance.CanAdvance);
+    }
+
+    /// <summary>R2-3: a back-end alone, without front-end nor database, is written as such.</summary>
+    [Fact]
+    public async Task Separate_WithTheBackendAlone_ClaimsNeitherFrontendNorDatabase()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
+        await Toggle(cut, "frontend");
+        await Toggle(cut, "database");
+
+        var requests = await FinishAsync(cut, wizard);
+
+        Assert.All(requests, request =>
+        {
+            Assert.Contains("APPLICATION_HAS_FRONTEND: \"false\"", request.YamlDefinition, StringComparison.Ordinal);
+            Assert.Contains("APPLICATION_HAS_BACKEND: \"true\"", request.YamlDefinition, StringComparison.Ordinal);
+            Assert.Contains("APPLICATION_HAS_DATABASE: \"false\"", request.YamlDefinition, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>R2-4 and R2-5: every option is an OE selectable card (a check box), not a hand-made label.</summary>
+    [Fact]
+    public async Task Options_AreOeSelectableCards_OfCheckBoxRole()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        var options = cut.FindAll("[data-testid^='setup-option-']");
+
+        Assert.Equal(12, options.Count);
+        Assert.All(options, option =>
+        {
+            Assert.Contains("omni-selectable-card", option.ClassName, StringComparison.Ordinal);
+            Assert.Equal("checkbox", option.GetAttribute("role"));
+        });
+        Assert.Empty(cut.FindAll(".pipeline-setup-option"));
+    }
+
+    /// <summary>R-4: on the capabilities step the check box, the icon and the title sit on the first line of
+    /// each card and the description follows below, over the card's whole width (OE 1.9.1 layout, no option
+    /// to set: the page only supplies Title, Description and Icon).</summary>
+    [Fact]
+    public async Task CapabilityCards_PutBoxIconAndTitleOnTheFirstLine_AndTheDescriptionBelow()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+
+        var options = cut.FindAll("[data-testid^='setup-option-']");
+
+        Assert.NotEmpty(options);
+        Assert.All(options, option => AssertHeadThenDescription(option, expectBox: true));
+    }
+
+    /// <summary>R-4: the architecture cards (radio) follow the same layout, without the box.</summary>
+    [Fact]
+    public async Task ArchitectureCards_PutIconAndTitleOnTheFirstLine_AndTheDescriptionBelow()
+    {
+        var (cut, _) = await OpenArchitectureStepAsync();
+
+        var cards = cut.FindAll("[data-testid^='setup-architecture-']");
+
+        Assert.Equal(3, cards.Count);
+        Assert.All(cards, card => AssertHeadThenDescription(card, expectBox: false));
+    }
+
+    private static void AssertHeadThenDescription(AngleSharp.Dom.IElement card, bool expectBox)
+    {
+        var parts = card.Children.Select(child => child.ClassName).ToList();
+        Assert.Equal("omni-selectable-card__head", parts[0]);
+        Assert.Equal("omni-selectable-card__description", parts[1]);
+
+        var head = card.Children[0];
+        Assert.Equal(expectBox ? 1 : 0, head.QuerySelectorAll(".omni-selectable-card__box").Length);
+        Assert.Single(head.QuerySelectorAll(".omni-selectable-card__icon"));
+        Assert.Single(head.QuerySelectorAll(".omni-selectable-card__title"));
+        // The description is never inside the head (a narrow column beside the box and the icon).
+        Assert.Empty(head.QuerySelectorAll(".omni-selectable-card__description"));
+        Assert.False(string.IsNullOrWhiteSpace(card.Children[1].TextContent));
+    }
+
+    /// <summary>R2-15: nothing is created that was not chosen. The package pipelines switched on by
+    /// the Package type must not stay on when the type goes back to Application.</summary>
+    [Fact]
+    public async Task SwitchingFromPackageBackToApplication_DoesNotCreateThePackagePipelines()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+
+        await Choose(cut, "package");
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
+        var requests = await FinishAsync(cut, wizard);
+
+        Assert.Equal(
+            ["atlas-ci", "atlas-quality", "atlas-security", "atlas-qa", "atlas-candidate", "atlas-nightly", "atlas-deploy-prod"],
+            requests.Select(request => request.Name));
+    }
+
+    /// <summary>R2-15: the options chosen under one type are not remembered under another, so the
+    /// application shape answered before is asked again after a detour through another type.</summary>
+    [Fact]
+    public async Task ChangingTheType_ForgetsTheApplicationShapeAndTheOptionsOfTheOtherType()
+    {
+        var (cut, wizard) = await OpenArchitectureStepAsync();
+        await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: true);
+        Assert.True(wizard.Instance.CanAdvance);
+
+        await Choose(cut, "external");
+        await Choose(cut, "application");
+
+        Assert.False(wizard.Instance.CanAdvance);
     }
 
     [Fact]
@@ -92,8 +231,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await Choose(cut, "package");
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        var titles = cut.FindAll(".pipeline-setup-option strong").Select(title => title.TextContent).ToArray();
-        Assert.Equal(["CI", "Quality", "Security", "Packages"], titles);
+        Assert.Equal(["CI", "Quality", "Security", "Packages"], OptionTitles(cut));
 
         var requests = await FinishFromCapabilitiesAsync(cut, wizard);
 
@@ -119,11 +257,10 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
 
         await Choose(cut, "external");
         Assert.True(wizard.Instance.CanAdvance);
-        Assert.Empty(cut.FindAll("[data-testid='setup-same-project']"));
+        Assert.Empty(cut.FindAll("[data-testid='setup-shape']"));
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        var titles = cut.FindAll(".pipeline-setup-option strong").Select(title => title.TextContent).ToArray();
-        Assert.Equal(["ExternalSecurityPipeline"], titles);
+        Assert.Equal(["ExternalSecurityPipeline"], OptionTitles(cut));
         Assert.True(wizard.Instance.CanAdvance);
 
         var requests = await FinishFromCapabilitiesAsync(cut, wizard);
@@ -142,7 +279,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await Choose(cut, "external");
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
-        await cut.InvokeAsync(() => OptionInput(cut, "ExternalSecurityPipeline").Change(false));
+        await Toggle(cut, "external-security");
 
         Assert.False(wizard.Instance.CanAdvance);
     }
@@ -154,7 +291,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         // Nightly chosen under an application, then the type becomes a package.
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
         await cut.InvokeAsync(wizard.Instance.NextStep);
-        await cut.InvokeAsync(() => OptionInput(cut, "Nightly").Change(true));
+        await Toggle(cut, "nightly");
         await cut.Find("button.omni-wizard__previous").ClickAsync(new MouseEventArgs());
         await Choose(cut, "package");
         await cut.InvokeAsync(wizard.Instance.NextStep);
@@ -174,8 +311,24 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         var cut = Render<PipelineSetupWizard>();
 
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindComponent<WizardDialog>().Instance.CurrentStep));
-        Assert.Contains("PipelineArchitectureApplication · PipelineSameProjectSummary · Database", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("PipelineArchitectureApplication · PipelineShapeFullStack · Database", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("atlas-nightly", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>The summary names the shape as the step 2 tiles do: Full-stack, or the front-end and
+    /// back-end apart (never the former "interface served by the server" wording).</summary>
+    [Theory]
+    [InlineData("yes", "PipelineArchitectureApplication · PipelineShapeFullStack · Database")]
+    [InlineData("no", "PipelineArchitectureApplication · PipelineShapeSeparate · Frontend · Backend · Database")]
+    public void Summary_NamesTheShapeLikeTheStepTwoTiles(string sameProject, string expected)
+    {
+        OpenSummaryAddress($"options=frontend%2Cbackend%2Cdatabase%2Cci&architecture=application&sameProject={sameProject}");
+
+        var cut = Render<PipelineSetupWizard>();
+
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindComponent<WizardDialog>().Instance.CurrentStep));
+        Assert.Contains(expected, cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("PipelineSameProjectSummary", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -221,12 +374,12 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         Assert.Null(PipelineSetupStack.Find("node"));
     }
 
-    /// <summary>The step is named after what is built and checked, and the one-project case is the
-    /// question the user chose, never a type name.</summary>
+    /// <summary>The step is named after what is built and checked, and the monolith tile is named
+    /// Full-stack (R2-3), never a type name nor the names the user refused.</summary>
     [Theory]
-    [InlineData("AppStrings.resx", "Pipeline architecture", "Is the interface served by the same project as the server? (e.g. Blazor Server)")]
-    [InlineData("AppStrings.fr-FR.resx", "Architecture du pipeline", "L’interface est servie par le même projet que le serveur ? (ex. Blazor Server)")]
-    public void StepNameAndSameProjectQuestion_AreTheChosenOnes(string file, string title, string question)
+    [InlineData("AppStrings.resx", "Pipeline architecture", "Full-stack", "Separate front-end and back-end")]
+    [InlineData("AppStrings.fr-FR.resx", "Architecture du pipeline", "Full-stack", "Front-end et Back-end séparés")]
+    public void StepNameAndShapeTiles_AreTheChosenOnes(string file, string title, string fullStack, string separate)
     {
         var document = XDocument.Load(Path.Combine(
             Aetheus.Front.Tests.Architecture.RepositoryScan.Root, "src", "Aetheus.Front", "Resources", file));
@@ -234,7 +387,8 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
             .ToDictionary(element => (string)element.Attribute("name")!, element => element.Element("value")!.Value);
 
         Assert.Equal(title, values["PipelineArchitectureTitle"]);
-        Assert.Equal(question, values["PipelineSameProjectQuestion"]);
+        Assert.Equal(fullStack, values["PipelineShapeFullStack"]);
+        Assert.Equal(separate, values["PipelineShapeSeparate"]);
         Assert.DoesNotContain(values.Values, value =>
             value.Contains("tout-en-un", StringComparison.OrdinalIgnoreCase)
             || value.Contains("all-in-one", StringComparison.OrdinalIgnoreCase));
@@ -266,10 +420,13 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
     private static Task Choose(IRenderedComponent<PipelineSetupWizard> cut, string slug) =>
         cut.Find($"[data-testid='setup-architecture-{slug}']").ClickAsync(new MouseEventArgs());
 
-    private static AngleSharp.Dom.IElement OptionInput(IRenderedComponent<PipelineSetupWizard> cut, string title) =>
-        cut.FindAll(".pipeline-setup-option")
-            .Single(option => option.QuerySelector("strong")!.TextContent == title)
-            .QuerySelector("input")!;
+    /// <summary>Clicks an option card, which switches it on or off.</summary>
+    private static Task Toggle(IRenderedComponent<PipelineSetupWizard> cut, string key) =>
+        cut.Find($"[data-testid='setup-option-{key}']").ClickAsync(new MouseEventArgs());
+
+    private static string[] OptionTitles(IRenderedComponent<PipelineSetupWizard> cut) =>
+        cut.FindAll("[data-testid^='setup-option-'] .omni-selectable-card__title")
+            .Select(title => title.TextContent).ToArray();
 
     private async Task<CreatePipelineRequest[]> FinishAsync(
         IRenderedComponent<PipelineSetupWizard> cut, IRenderedComponent<WizardDialog> wizard)

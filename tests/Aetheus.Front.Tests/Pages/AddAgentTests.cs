@@ -539,18 +539,34 @@ public class AddAgentTests : BunitContext
         // The chosen card is its accent frame; no check mark is added beside the label.
         var selected = cut.Find(".omni-selectable-card.omni-selectable-card--selected");
         Assert.Equal("true", selected.GetAttribute("aria-checked"));
-        Assert.Empty(cut.FindAll(".omni-selectable-card > :not(.omni-selectable-card__icon):not(.omni-selectable-card__text)"));
         Assert.Equal(2, cut.FindAll(".omni-selectable-card").Count);
-        Assert.All(cut.FindAll(".omni-selectable-card"), card => Assert.Equal(2, card.Children.Length));
+        Assert.All(cut.FindAll(".omni-selectable-card"), card =>
+        {
+            Assert.Empty(PageAddedElements(card));
+            Assert.Empty(card.QuerySelectorAll(".omni-selectable-card__box"));
+        });
     }
 
+    // What the page itself put inside an OE selectable card: any element that is not one of the card's own
+    // parts (omni-selectable-card__*) and does not sit in its icon slot. Read on the classes, not on OE's
+    // nesting, so a new wrapper inside the card (OE 1.9.1 groups box, icon and title in a head) changes nothing.
+    private static List<AngleSharp.Dom.IElement> PageAddedElements(AngleSharp.Dom.IElement card) =>
+        [.. card.QuerySelectorAll("*").Where(element =>
+            element.Closest(".omni-selectable-card__icon") is null
+            && !element.ClassList.Any(name => name.StartsWith("omni-selectable-card__", StringComparison.Ordinal)))];
+
     [Fact]
-    public async Task CapabilitiesStep_SelectedCards_CarryNoCheckMark()
+    public async Task CapabilitiesStep_SelectedCards_CarryOnlyOesDrawnBox()
     {
         var cut = Render<AddAgent>();
         await GoToStepAsync(cut, 1);
         Assert.NotEmpty(cut.FindAll(".omni-selectable-card.omni-selectable-card--selected"));
-        Assert.Empty(cut.FindAll(".omni-selectable-card > :not(.omni-selectable-card__icon):not(.omni-selectable-card__text)"));
+        // A check box card draws OE's own box (R2-4); the page adds no check mark of its own beside it.
+        Assert.All(cut.FindAll(".omni-selectable-card"), card =>
+        {
+            Assert.Empty(PageAddedElements(card));
+            Assert.Single(card.QuerySelectorAll(".omni-selectable-card__box"));
+        });
     }
 
     [Fact]

@@ -5,7 +5,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>generate-artifact-provenance</c> function, port of
-/// <c>deploy/scripts/generate-artifact-provenance.mjs</c>: records, per category of workspace paths, the
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-artifact-provenance.mjs</c>: records, per category of workspace paths, the
 /// number of files, their total size and a SHA-256 over each file's relative path, size and digest
 /// (<see cref="ArtifactProvenanceDigest"/>), and for the agent archives the archives the release manifest
 /// declares. The output must stay inside the workspace and symbolic links are refused, as in the script.

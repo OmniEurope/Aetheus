@@ -298,8 +298,20 @@ if (Test-Path $portsFile) {
         Write-Host "  Worktree (.ylaunch.local): $worktreeName" -ForegroundColor Magenta
     }
 }
+# A test run (any -t flag) never touches the development instance, so the user can keep using it while
+# the suites run: its E2E stack listens 1000 ports above this checkout's own (6301/6300/6401 by default),
+# runs from its own snapshots (TestResults\YLaunchE2e*), and its sweeps only stop what a test run started
+# (see Get-AetheusOwnProcessPattern). Unit and integration suites open no port.
+$script:testRun = $anyTest
+if ($script:testRun) {
+    $backHttpsPort += 1000
+    $backHttpPort  += 1000
+    $frontPort     += 1000
+    $script:portsOverridden = $true
+    Write-Host "  Test run: E2E stack on back $backHttpsPort/$backHttpPort, front $frontPort (the development instance is left running)." -ForegroundColor Magenta
+}
 $script:killPorts = @($backHttpsPort, $frontPort)
-$frontUrl     = "https://localhost:$frontPort"
+$frontUrl     ="https://localhost:$frontPort"
 $backUrl      = "https://localhost:$backHttpsPort/health/live"
 $backAspUrls  = "https://localhost:$backHttpsPort;http://localhost:$backHttpPort"
 # Agent-facing API URL baked into the Add-Agent wizard's install command, tracking the
@@ -348,7 +360,7 @@ $e2eDbCompose = Join-Path $root "deploy\compose\e2e-db.compose.yml"
 # The DB NAME is "aetheus_e2e" (not "aetheus"): the backend's reset-db endpoint refuses to drop
 # any database whose name doesn't end with "_e2e", so a fallback to the dev connection string can
 # never wipe the dev DB (fail-safe added after the 2026-06-26 dev-DB wipe incident).
-$e2eConnString = "Host=localhost;Port=15433;Database=aetheus_e2e;Username=postgres;Password=postgres"
+$e2eConnString = "Host=127.0.0.1;Port=15433;Database=aetheus_e2e;Username=postgres;Password=postgres"
 $vpssimCompose = Join-Path $root "deploy\compose\vpssim.compose.yml"
 $vpssimBlankCompose = Join-Path $root "deploy\compose\vpssim-blank.compose.yml"
 $dbSnapshotDir = Join-Path $root "TestResults\DbSnapshots"
@@ -846,7 +858,7 @@ function Invoke-TestRun {
 }
 
 function Invoke-NodeTestRun {
-    # PLAN-002 lot 9.T: the JavaScript suites (deploy/scripts/*.test.mjs, tests/js/*) run in the CI and
+    # PLAN-002 lot 9.T: the JavaScript suites (tests/js/deploy/*.test.mjs, tests/js/*) run in the CI and
     # quality pipelines but never ran locally. Runs `node --test` with the TAP reporter over the given
     # files and reads its final counters. A skipped test fails the run, like the quality stage that
     # demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
@@ -945,7 +957,7 @@ function Invoke-CoverageReport {
     Write-Step "Generating HTML coverage report..."
     # coverlet.MTP writes coverage.cobertura.<timestamp>.xml at the top of the results directory. Give
     # each report the <id>/coverage.cobertura.xml layout the CI readers expect (as
-    # deploy/scripts/normalize-coverage-report.sh does there), then merge exactly the three suites.
+    # scripts/normalize-coverage-report.sh does there), then merge exactly the three suites.
     Get-ChildItem -Path $coverageDir -Filter "coverage.cobertura.*.xml" -File -ErrorAction SilentlyContinue |
         ForEach-Object {
             $stampDirectory = Join-Path $coverageDir ($_.BaseName -replace '^coverage\.cobertura\.', '')
@@ -1257,9 +1269,13 @@ function Start-Servers {
 # $root would let the parent checkout claim its own worktrees (their paths are nested under it). The
 # source and local runtime snapshot boundaries pin it to this exact checkout.
 function Get-AetheusOwnProcessPattern {
+    $snapshotRoot = [regex]::Escape((Join-Path $root "TestResults") + [IO.Path]::DirectorySeparatorChar + "YLaunch")
+    # A test run owns only the E2E snapshots it starts: the development instance (its snapshots, or
+    # `dotnet watch` from src) belongs to the user and keeps running.
+    if ($script:testRun) { return "${snapshotRoot}E2e" }
+    # Symmetrically, a development launch leaves a test run's E2E stack alone.
     $source = [regex]::Escape((Join-Path $root "src") + [IO.Path]::DirectorySeparatorChar)
-    $snapshots = [regex]::Escape((Join-Path $root "TestResults") + [IO.Path]::DirectorySeparatorChar + "YLaunch")
-    "($source|$snapshots)"
+    "($source|$snapshotRoot(?!E2e))"
 }
 
 # True when the process is one of THIS checkout's own. The command line carries the boundary for
@@ -1680,7 +1696,7 @@ function Copy-RuntimeSnapshot([string]$name, [string]$sourceDir, [string]$entryD
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Copying Backend runtime snapshot..."
-    $backSnapshotDir = Copy-RuntimeSnapshot "YLaunchBack" (Join-Path $backDir "bin\$buildConfiguration\net10.0") "Aetheus.Back.dll"
+    $backSnapshotDir = Copy-RuntimeSnapshot $(if ($script:testRun) { "YLaunchE2eBack" } else { "YLaunchBack" }) (Join-Path $backDir "bin\$buildConfiguration\net10.0") "Aetheus.Back.dll"
 }
 if ($ModeAgent -and -not $HotReload -and -not $anyTest) {
     Write-Step "Copying Agent runtime snapshot..."
@@ -1688,7 +1704,7 @@ if ($ModeAgent -and -not $HotReload -and -not $anyTest) {
 }
 if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
     Write-Step "Publishing a stable frontend snapshot..."
-    $frontSnapshotDir = Join-Path $root "TestResults\YLaunchFront"
+    $frontSnapshotDir = Join-Path $root $(if ($script:testRun) { "TestResults\YLaunchE2eFront" } else { "TestResults\YLaunchFront" })
     $testResultsRoot = [IO.Path]::GetFullPath((Join-Path $root "TestResults") + [IO.Path]::DirectorySeparatorChar)
     $snapshotPath = [IO.Path]::GetFullPath($frontSnapshotDir)
     if (-not $snapshotPath.StartsWith($testResultsRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -1810,7 +1826,7 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
     # file sets as the `Compile` step of aetheus-ci and the JavaScript stages of aetheus-quality.
     if ($TestUnit) {
         foreach ($jsSuite in @(
-            @{ Files = @(Get-ChildItem -Path (Join-Path $root "deploy\scripts") -Filter "*.test.mjs" -File); Label = "JS deploy-scripts" },
+            @{ Files = @(Get-ChildItem -Path (Join-Path $root "tests\js\deploy") -Filter "*.test.mjs" -File); Label = "JS deploy-scripts" },
             @{ Files = @(Get-ChildItem -Path (Join-Path $root "tests\js") -File | Where-Object { $_.Name -like "*.test.cjs" -or $_.Name -like "*.test.mjs" }); Label = "JS tests" }
         )) {
             $files = @($jsSuite.Files | Sort-Object Name | ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName) })

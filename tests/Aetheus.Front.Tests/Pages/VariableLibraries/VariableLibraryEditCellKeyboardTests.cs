@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Components.Web;
 
 namespace Aetheus.Front.Tests.Pages.VariableLibraries;
 
-/// <summary>An entry's key or value cell opens the row for editing from the keyboard with Enter or
-/// Space, as a click does; any other key leaves the row as it is.</summary>
+/// <summary>An entry's key or value cell opens the row for editing (R-75, EditTrigger Cell), even when the
+/// value is empty; Enter saves and Escape cancels in the open row.</summary>
 public sealed class VariableLibraryEditCellKeyboardTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
@@ -35,33 +35,52 @@ public sealed class VariableLibraryEditCellKeyboardTests : BunitContext
     private static bool IsEditing(IRenderedComponent<VariableLibraryEdit> cut) =>
         cut.FindAll("input").Any(input => input.GetAttribute("value") == "SITE_DOMAIN");
 
+    // R-75: the grid edits a row from a single click or key anywhere in an editable cell (EditTrigger Cell).
+    // The pointer is decided by the OE grid script, which bUnit does not run; the keyboard path is the real
+    // button OE puts in every editable cell, which this drives.
+    private static AngleSharp.Dom.IElement CellButton(IRenderedComponent<VariableLibraryEdit> cut, string column) =>
+        cut.Find($"tbody td[data-omni-col='{column}'] button.omni-data-grid__edit-cell");
+
     [Theory]
-    [InlineData("SITE_DOMAIN", "Enter")]
-    [InlineData("aetheus.example", " ")]
-    [InlineData("SITE_DOMAIN", "Spacebar")]
-    public async Task EnterOrSpaceOnACell_OpensTheRowForEditing(string cell, string key)
+    [InlineData("Key")]
+    [InlineData("Value")]
+    public async Task ActivatingTheButtonOfAnEditableCell_OpensTheRowForEditing(string column)
     {
         var cut = RenderWithEntry();
 
-        await cut.FindAll(".clickable-cell").Single(span => span.TextContent == cell).KeyDownAsync(new KeyboardEventArgs { Key = key });
+        await CellButton(cut, column).ClickAsync();
 
         cut.WaitForAssertion(() => Assert.True(IsEditing(cut)));
     }
 
     [Fact]
-    public async Task AnotherKeyOnACell_LeavesTheRowAsItIs()
+    public async Task AnEmptyValueCell_CanStillBeClickedToEditIt()
     {
+        _handler.SetJsonResponse("api/variable-libraries/1/entries", new PaginatedResult<VariableEntryDto>
+        {
+            Items = [new VariableEntryDto { Id = 5, Key = "SITE_DOMAIN", Value = string.Empty, VersionCount = 1 }],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 25
+        });
         var cut = RenderWithEntry();
 
-        await cut.FindAll(".clickable-cell").Single(span => span.TextContent == "SITE_DOMAIN").KeyDownAsync(new KeyboardEventArgs { Key = "a" });
+        await CellButton(cut, "Value").ClickAsync();
 
-        Assert.False(IsEditing(cut));
+        cut.WaitForAssertion(() => Assert.True(IsEditing(cut)));
     }
+
+    [Fact]
+    public void NoCellOfTheRowIsAClickableSpanAnyMore() =>
+        Assert.Empty(RenderWithEntry().FindAll(".clickable-cell"));
+
+    [Fact]
+    public void WithoutAnyClick_TheRowStaysClosed() => Assert.False(IsEditing(RenderWithEntry()));
 
     private async Task<IRenderedComponent<VariableLibraryEdit>> RenderEditingAsync()
     {
         var cut = RenderWithEntry();
-        await cut.FindAll(".clickable-cell").Single(span => span.TextContent == "SITE_DOMAIN").KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
+        await CellButton(cut, "Value").ClickAsync();
         cut.WaitForAssertion(() => Assert.True(IsEditing(cut)));
         return cut;
     }

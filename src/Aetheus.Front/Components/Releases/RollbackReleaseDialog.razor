@@ -20,6 +20,6 @@
     }
 
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@Confirm" Disabled="@(!_pipelineId.HasValue || (_restoreDatabase && !_backupRunId.HasValue))"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /> <span>@L["Rollback"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@Confirm" Disabled="@(!_pipelineId.HasValue || (_restoreDatabase && !_backupRunId.HasValue))"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent><span>@L["Rollback"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

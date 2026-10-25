@@ -65,8 +65,28 @@ public sealed class BackupsPageActionTests : BunitContext
     private void WirePolicies(params BackupPolicyDto[] policies) =>
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/backups", policies);
 
+    /// <summary>R1-4: a policy row keeps one visible action (Run now); Runs, Edit and Delete are in its menu.</summary>
+    [Fact]
+    public void ARowShowsRunNowAsItsOnlyAction_AndKeepsTheOthersInTheMenu()
+    {
+        _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/backups", new[]
+        {
+            new BackupPolicyDto { Id = 1, Name = "nightly-db", Enabled = true, ProjectId = 1, ServerId = 2, ScheduleCron = "0 3 * * *", RetentionCount = 14 }
+        });
+        var cut = Render<BackupsPage>();
+        cut.WaitForAssertion(() => Assert.Contains("nightly-db", cut.Markup, StringComparison.Ordinal));
+
+        Assert.Single(cut.FindAll("button[title='BackupRunNow']"));
+        Assert.Empty(cut.FindAll("button[title='BackupRuns'], button[title='Edit'], button[title='Delete']"));
+        foreach (var label in new[] { "BackupRuns", "Edit", "Delete" })
+            Assert.NotNull(cut.FindMenuItem(label));
+    }
+
+    // R1-4: Run now is the row's visible action, the others are entries of its "More actions" menu.
     private static IElement Button(IRenderedComponent<BackupsPage> cut, string text) =>
-        cut.FindAll("button").First(button => button.Names().Contains(text, StringComparison.Ordinal));
+        cut.FindAll("button").FirstOrDefault(button => button.Names().Contains(text, StringComparison.Ordinal))
+        ?? cut.FindMenuItem(text)
+        ?? throw new InvalidOperationException($"No button or menu entry named {text}");
 
     private static IElement FormInput(IRenderedComponent<BackupsPage> cut, string name) =>
         name switch
@@ -330,9 +350,10 @@ public sealed class BackupsPageActionTests : BunitContext
         });
         var cut = Render<BackupsPage>();
 
-        cut.FindAll("button")
-            .Where(button => button.Names().Contains("BackupRuns", StringComparison.Ordinal))
-            .ElementAt(1)
+        // R1-4: Runs is an entry of each row's menu; open the second row's.
+        cut.FindAll(".omni-overflow-menu__trigger")[1].Click();
+        cut.FindAll(".omni-menu__item")
+            .Single(entry => entry.Names().Contains("BackupRuns", StringComparison.Ordinal))
             .Click();
 
         cut.WaitForAssertion(

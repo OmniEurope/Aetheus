@@ -32,7 +32,13 @@ public enum AetheusContainerRole
     BrowserSmoke = 2,
     /// <summary>The local VPS simulator test harness (compose service <c>vpssim</c>): privileged for systemd
     /// and the nested Docker daemon.</summary>
-    VpsSimulator = 3
+    VpsSimulator = 3,
+    /// <summary>Ryuk, the Testcontainers reaper a pipeline step's tests start (R-33): privileged with the Docker
+    /// socket by design. Recognised by the agent only for the exact <c>testcontainers/ryuk</c> image, the
+    /// Testcontainers label and the <c>testcontainers-ryuk-{session}</c> name, created while one of its own
+    /// pipeline tasks ran and no longer than shortly after that task; a look-alike outside a run stays
+    /// flagged.</summary>
+    TestcontainersReaper = 4
 }
 
 public static class DockerContainerSecurity
@@ -47,6 +53,7 @@ public static class DockerContainerSecurity
         AetheusContainerRole.BuildKitBuilder => DockerContainerRisks.Privileged,
         AetheusContainerRole.BrowserSmoke => DockerContainerRisks.HostNetwork,
         AetheusContainerRole.VpsSimulator => DockerContainerRisks.Privileged,
+        AetheusContainerRole.TestcontainersReaper => DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket,
         _ => DockerContainerRisks.None
     };
 

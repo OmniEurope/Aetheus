@@ -58,18 +58,17 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         });
         Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
         var cut = Render<PipelineSetupWizard>();
-        cut.WaitForAssertion(() => cut.FindComponent<OmniRadioButtonList<bool>>());
+        cut.WaitForAssertion(() => cut.FindComponent<PipelineSetupStartFrom>());
 
-        var start = cut.FindComponent<OmniRadioButtonList<bool>>();
-        await cut.InvokeAsync(() => start.Instance.ValueChanged.InvokeAsync(true));
-        var copy = cut.FindComponent<PipelineProjectCopyWizard>();
+        await PipelineSetupWizardTests.SelectStartFromAsync(cut, copy: true);
+        var copy = FlowOf(cut);
         // The new project and its prefix come from the page's project; the source is chosen.
-        Assert.Equal(2, copy.Instance.TargetProjectId);
-        Assert.Equal("ats", copy.Instance.Prefix);
-        await cut.InvokeAsync(() => copy.Instance.SetSourceProject(1));
-        Assert.Equal("aetheus", copy.Instance.SourcePrefix);
+        Assert.Equal(2, copy.TargetProjectId);
+        Assert.Equal("ats", copy.Prefix);
+        await cut.InvokeAsync(() => copy.SetSourceProject(1));
+        Assert.Equal("aetheus", copy.SourcePrefix);
 
-        var wizard = copy.FindComponent<WizardDialog>();
+        var wizard = cut.FindComponent<WizardDialog>();
         await cut.InvokeAsync(wizard.Instance.NextStep);
         cut.WaitForAssertion(() =>
         {
@@ -78,13 +77,13 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
             Assert.Contains("HOST, PORT", cut.Markup, StringComparison.Ordinal);
         });
         // A copy the backend will not make is offered unchecked and disabled.
-        Assert.Equal([10], copy.Instance.Selected);
+        Assert.Equal([10], copy.Selected);
 
         await cut.InvokeAsync(wizard.Instance.NextStep);
         await cut.Find(".omni-wizard__actions button.omni-wizard__finish")
             .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
 
-        cut.WaitForAssertion(() => Assert.NotNull(copy.Instance.Result));
+        cut.WaitForAssertion(() => Assert.NotNull(copy.Result));
         var body = _handler.RequestDetails.Single(request => request.Method == HttpMethod.Post.Method
             && request.Url.EndsWith("api/pipelines/setup/copy", StringComparison.OrdinalIgnoreCase)).Body!;
         var sent = JsonSerializer.Deserialize<PipelineProjectCopyRequest>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
@@ -102,7 +101,31 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         });
     }
 
-    private async Task<(IRenderedComponent<PipelineSetupWizard> Cut, IRenderedComponent<PipelineProjectCopyWizard> Copy)> CopyAsync()
+    /// <summary>R2-14: in the copy mode too, the "start from" choice is only on the first step.</summary>
+    [Fact]
+    public async Task StartFromChoice_IsGoneOnceTheCopyWizardLeavesItsFirstStep()
+    {
+        _handler.SetPaginatedJsonResponse("api/projects",
+        [
+            new ProjectDto { Id = 1, Name = "Aetheus", DefaultBranch = "main" },
+            new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = "develop" }
+        ]);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/copy-plan", Plan());
+        Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
+        var cut = Render<PipelineSetupWizard>();
+        cut.WaitForAssertion(() => cut.FindComponent<PipelineSetupStartFrom>());
+        await PipelineSetupWizardTests.SelectStartFromAsync(cut, copy: true);
+        var copy = FlowOf(cut);
+        Assert.Single(cut.FindAll("[data-testid='setup-start-from']"));
+
+        await cut.InvokeAsync(() => copy.SetSourceProject(1));
+        await cut.InvokeAsync(cut.FindComponent<WizardDialog>().Instance.NextStep);
+
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid='setup-start-from']")));
+    }
+
+    private async Task<(IRenderedComponent<PipelineSetupWizard> Cut, PipelineProjectCopyFlow Copy)> CopyAsync()
     {
         _handler.SetPaginatedJsonResponse("api/projects",
         [
@@ -122,11 +145,11 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         });
         Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
         var cut = Render<PipelineSetupWizard>();
-        cut.WaitForAssertion(() => cut.FindComponent<OmniRadioButtonList<bool>>());
-        await cut.InvokeAsync(() => cut.FindComponent<OmniRadioButtonList<bool>>().Instance.ValueChanged.InvokeAsync(true));
-        var copy = cut.FindComponent<PipelineProjectCopyWizard>();
-        await cut.InvokeAsync(() => copy.Instance.SetSourceProject(1));
-        var wizard = copy.FindComponent<WizardDialog>();
+        cut.WaitForAssertion(() => cut.FindComponent<PipelineSetupStartFrom>());
+        await PipelineSetupWizardTests.SelectStartFromAsync(cut, copy: true);
+        var copy = FlowOf(cut);
+        await cut.InvokeAsync(() => copy.SetSourceProject(1));
+        var wizard = cut.FindComponent<WizardDialog>();
         await cut.InvokeAsync(wizard.Instance.NextStep);
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='pipeline-copy-item']").Count));
         await cut.InvokeAsync(wizard.Instance.NextStep);
@@ -135,6 +158,10 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='setup-readiness']")));
         return (cut, copy);
     }
+
+    /// <summary>The copy flow behind the steps the wizard shows in the copy mode.</summary>
+    private static PipelineProjectCopyFlow FlowOf(IRenderedComponent<PipelineSetupWizard> cut) =>
+        Assert.IsType<PipelineProjectCopyFlow>(cut.FindComponents<PipelineProjectCopyStep>().First().Instance.Flow);
 
     private int ReadinessReads() =>
         _handler.Requests.Count(request => request.Method == "GET"
@@ -155,8 +182,8 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         await cut.InvokeAsync(() => cut.FindComponent<PipelineSetupReadinessPanel>().Instance.OnChanged.InvokeAsync());
 
         Assert.Equal(1, ReadinessReads());
-        Assert.False(copy.Instance.ReadinessLoading);
-        Assert.Equal("staging", Assert.Single(Assert.Single(copy.Instance.Result!.Readiness!.Checks).Items));
+        Assert.False(copy.ReadinessLoading);
+        Assert.Equal("staging", Assert.Single(Assert.Single(copy.Result!.Readiness!.Checks).Items));
         cut.WaitForAssertion(() =>
             Assert.Contains("staging", cut.Find("[data-testid='setup-readiness']").TextContent, StringComparison.Ordinal));
     }
@@ -170,8 +197,8 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         await cut.InvokeAsync(() => cut.FindComponent<PipelineSetupReadinessPanel>().Instance.OnChanged.InvokeAsync());
 
         Assert.Equal(1, ReadinessReads());
-        Assert.False(copy.Instance.ReadinessLoading);
-        Assert.Equal("prod", Assert.Single(Assert.Single(copy.Instance.Result!.Readiness!.Checks).Items));
+        Assert.False(copy.ReadinessLoading);
+        Assert.Equal("prod", Assert.Single(Assert.Single(copy.Result!.Readiness!.Checks).Items));
     }
 
     [Fact]
@@ -183,7 +210,7 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         var cut = Render<PipelineSetupWizard>();
 
         cut.WaitForAssertion(() => cut.FindComponent<WizardDialog>());
-        Assert.Empty(cut.FindComponents<PipelineProjectCopyWizard>());
+        Assert.Empty(cut.FindComponents<PipelineProjectCopyStep>());
     }
 
     [Theory]
@@ -193,5 +220,5 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
     [InlineData("ATS", false)]
     [InlineData("a--b", false)]
     public void PrefixShape_MatchesTheRequestValidation(string prefix, bool valid) =>
-        Assert.Equal(valid, PipelineProjectCopyWizard.IsPrefix(prefix));
+        Assert.Equal(valid, PipelineProjectCopyFlow.IsPrefix(prefix));
 }

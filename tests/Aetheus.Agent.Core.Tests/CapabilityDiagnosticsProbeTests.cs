@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using NSubstitute;
 
 namespace Aetheus.Agent.Core.Tests;

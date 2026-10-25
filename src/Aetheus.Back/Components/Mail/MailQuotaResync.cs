@@ -13,7 +13,7 @@ public interface IMailQuotaResync
 
 /// <summary>
 /// DEP-005 follow-up: accounts created before the quota plugin have no quota in Dovecot until it is written, so
-/// when a server's helper reaches <see cref="MailService.QuotaMinimumHelperVersion"/> each account's stored quota
+/// when a server's helper reaches <see cref="MailHelperVersions.QuotaMinimum"/> each account's stored quota
 /// is pushed once through the same <c>mail-manage set-quota</c> task a quota change uses. The "done" mark lives on
 /// the server's mail state (see <see cref="IMailRepository.TryClaimQuotaResyncAsync"/>), so a later heartbeat, or a
 /// concurrent one, queues nothing; the mark clears while the helper is older, so each upgrade resyncs once. The
@@ -25,7 +25,7 @@ public sealed class MailQuotaResync(IMailRepository repo, ITaskService taskServi
 
     public async Task<int> ResyncAsync(int serverId, int reportedHelperVersion, CancellationToken ct = default)
     {
-        if (reportedHelperVersion < MailService.QuotaMinimumHelperVersion) return 0;
+        if (reportedHelperVersion < MailHelperVersions.QuotaMinimum) return 0;
         if (!await repo.TryClaimQuotaResyncAsync(serverId, time.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false))
             return 0;
         try

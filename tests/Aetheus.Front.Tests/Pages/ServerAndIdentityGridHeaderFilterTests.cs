@@ -92,6 +92,7 @@ public sealed class ServerAndIdentityGridHeaderFilterTests : BunitContext
         _handler.SetJsonResponse($"api/servers/{server.Id}/mail/accounts", new PaginatedResult<MailAccountDto>());
         _handler.SetJsonResponse($"api/servers/{server.Id}/mail/aliases", new PaginatedResult<MailAliasDto>());
         _handler.SetJsonResponse($"api/servers/{server.Id}/mail/diagnostics", new MailDiagnosticsDto());
+        Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>(Services).NavigateTo($"/servers/{server.Id}/mail?tab=domains");
         var cut = Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
 
         await FilterAsync<ServerMailSection, MailDomainDto>(cut, "DkimSelector", "mail");

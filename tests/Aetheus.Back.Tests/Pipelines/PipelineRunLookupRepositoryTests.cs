@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Aetheus.Back.Tests.Pipelines;

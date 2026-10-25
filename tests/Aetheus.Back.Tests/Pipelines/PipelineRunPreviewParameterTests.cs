@@ -71,4 +71,24 @@ public class PipelineRunPreviewParameterTests
         Assert.Contains("VERSION", warning, StringComparison.Ordinal);
         Assert.Null(variables);
     }
+
+    /// <summary>R-20 and R-26: the launch preflight runs before the user answered. It warns about no
+    /// missing required value, and reads a declared parameter with no value as the empty string the
+    /// launch will substitute under <c>parameters.</c>, while supplied and default values stay as they are.</summary>
+    [Fact]
+    public void ThePreflight_DoesNotWarnAboutAMissingRequiredValue_AndReadsAnEmptyOptionalParameterAsEmpty()
+    {
+        Dictionary<string, string>? variables = null;
+
+        var warnings = PipelineRunService.ValidateAndApplyParameters(
+            Definition(Param("VERSION", required: true), Param("SERVER"), Param("REGION", def: "eu")),
+            ref variables, forPreflight: true);
+
+        Assert.Empty(warnings);
+        Assert.NotNull(variables);
+        Assert.Equal(string.Empty, variables["parameters.SERVER"]);
+        Assert.Equal(string.Empty, variables["parameters.VERSION"]);
+        Assert.Equal("eu", variables["parameters.REGION"]);
+        Assert.False(variables.ContainsKey("SERVER"));
+    }
 }

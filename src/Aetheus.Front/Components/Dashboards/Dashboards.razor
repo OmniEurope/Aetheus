@@ -9,9 +9,9 @@
     <Badges>
         <HelpLink PageKey="dashboards" />
     </Badges>
-    <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateDashboard"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateDashboard"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_loading)
@@ -23,18 +23,18 @@ else if (_dashboards.Count == 0)
     @* B-bis: no blue Info banner - use the shared empty state with a create action. *@
     <EmptyState Icon="dashboard" Title="@L["NoRecords"]">
         <ActionContent>
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateDashboard"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateDashboard"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
         </ActionContent>
     </EmptyState>
 }
 else
 {
-    <OmniRow Gap="OmniSpacing.Large">
+    @* R-3: the dashboards are OE cards of one OmniTileGrid (same width, same height). *@
+    <OmniTileGrid Columns="3" Gap="OmniSpacing.Large">
         @foreach (var dashboard in _dashboards)
         {
-            <OmniColumn Span="12" SmallSpan="6">
                 <OmniCard Class="omni-u-p-lg">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
                         <OmniHeading Level="OmniHeadingLevel.H5">@dashboard.Name</OmniHeading>
                         @if (dashboard.IsDefault)
                         {
@@ -44,18 +44,17 @@ else
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-mt-sm">
                         @dashboard.Widgets.Count @L["Widgets"]
                     </OmniText>
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-xs">
+                    <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-xs">
                         @dashboard.CreatedAt.ToString("g")
                     </OmniText>
                     @* STD-BTN detection 11: Edit visible, the other actions in the menu. *@
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditDashboard(dashboard))"><OmniIcon Name="OmniIconName.Edit" /> <span>@L["Edit"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => EditDashboard(dashboard))"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["Edit"]</span></ChildContent></OmniButton>
                         <OmniOverflowMenu Label="@L["MoreActions"]">
                             <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeleteDashboard(dashboard.Id))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
                         </OmniOverflowMenu>
                     </OmniStack>
                 </OmniCard>
-            </OmniColumn>
         }
-    </OmniRow>
+    </OmniTileGrid>
 }

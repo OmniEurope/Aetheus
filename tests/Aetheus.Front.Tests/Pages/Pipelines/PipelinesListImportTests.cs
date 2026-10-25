@@ -27,7 +27,7 @@ public sealed class PipelinesListImportTests : BunitContext
 
     private IRenderedComponent<Bunit.Rendering.ContainerFragment> RenderWithImporterOpen()
     {
-        var host = this.RenderWithOutlets<PipelinesList>(new Dictionary<string, object?>(), PipelinesList.HeaderActionsSection);
+        var host = this.RenderWithOutlets<PipelinesList>(new Dictionary<string, object?>(), PageHeaderActions.SectionName);
         host.WaitForAssertion(() => Assert.NotEmpty(host.FindAll(".omni-overflow-menu__trigger")));
         var import = host.FindMenuItem("Import");
         Assert.NotNull(import);

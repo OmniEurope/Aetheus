@@ -37,25 +37,28 @@ public static class PipelineSetupArchitecture
     };
 
     /// <summary>
-    /// The <c>APPLICATION_HAS_FRONTEND</c>, <c>_BACKEND</c> and <c>_DATABASE</c> values. An application
-    /// whose interface is served by its server project is one server project: no separate frontend is
-    /// claimed. A package or an external application has none of them.
+    /// The <c>APPLICATION_HAS_FRONTEND</c>, <c>_BACKEND</c> and <c>_DATABASE</c> values. The Full-stack
+    /// tile (<paramref name="fullStack"/> true) is one monolith serving the interface and the API: one
+    /// server project, no separate frontend is claimed. Under the front-end and back-end tile
+    /// (<paramref name="fullStack"/> false) each part is claimed as it was checked. A package or an
+    /// external application has none of them.
     /// </summary>
     public static (bool Frontend, bool Backend, bool Database) Parts(
-        PipelineArchitecture? architecture, bool? sameProject, bool frontend, bool backend, bool database) =>
-        (architecture, sameProject) switch
+        PipelineArchitecture? architecture, bool? fullStack, bool frontend, bool backend, bool database) =>
+        (architecture, fullStack) switch
         {
             (PipelineArchitecture.Application, true) => (false, true, database),
             (PipelineArchitecture.Application, false) => (frontend, backend, database),
             _ => (false, false, false)
         };
 
-    /// <summary>Whether the detail asked under the type is answered enough to go on.</summary>
-    public static bool IsComplete(PipelineArchitecture? architecture, bool? sameProject, bool frontend, bool backend) =>
+    /// <summary>Whether the detail asked under the type is answered enough to go on: an application
+    /// needs one of its two tiles, and the separate one at least a front-end or a back-end.</summary>
+    public static bool IsComplete(PipelineArchitecture? architecture, bool? fullStack, bool frontend, bool backend) =>
         architecture switch
         {
             null => false,
-            PipelineArchitecture.Application => sameProject switch
+            PipelineArchitecture.Application => fullStack switch
             {
                 null => false,
                 true => true,

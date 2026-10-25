@@ -5,7 +5,7 @@
 @if (Run.RunToEnd)
 {
     <OmniAlert Severity="@(FailedSteps.Count > 0 ? OmniSeverity.Warning : OmniSeverity.Info)"
-               Title="@L["RunToEndRunTitle"]" Class="omni-u-mt-sm">
+               Title="@L["RunToEndRunTitle"]">
         <div>@L["RunToEndRunDetail"]</div>
         @if (FailedSteps.Count > 0)
         {

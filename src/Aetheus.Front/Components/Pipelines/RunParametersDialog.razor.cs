@@ -26,11 +26,11 @@ public partial class RunParametersDialog
     [Parameter] public int AvailableReleaseTotal { get; set; }
 
     private RunParameterFields? _fields;
-    private string? _error;
 
     private void OnSubmit()
     {
-        if (_fields is null || !_fields.TryCollect(out var values, out _error)) return;
+        // A refused submit shows its message under the field itself; nothing more to show here.
+        if (_fields is null || !_fields.TryCollect(out var values, out _)) return;
         Dialog.Close(values);
     }
 

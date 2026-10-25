@@ -219,7 +219,7 @@ public sealed class AiRunnerProfileService(
             || SameBaseUrl(baseUrl, AiProviderCatalog.DefaultBaseUrl(provider));
         profile.BaseUrl = followsDefault ? string.Empty : baseUrl.AbsoluteUri.TrimEnd('/');
         profile.Model = request.Model.Trim();
-        profile.ReasoningEffort = AiProviderCatalog.EffortToken(request.ReasoningEffort) ?? string.Empty;
+        profile.ReasoningEffort = AiEffortTokens.Of(request.ReasoningEffort) ?? string.Empty;
         profile.MaxOutputTokens = Math.Clamp(request.MaxOutputTokens, 256, 128_000);
         profile.TimeoutSeconds = Math.Clamp(request.TimeoutSeconds, 1, 86_400);
         profile.MaxOutputBytes = Math.Clamp(request.MaxOutputBytes, 1024, 1_000_000);
@@ -276,7 +276,7 @@ public sealed class AiRunnerProfileService(
         BaseUrl = profile.BaseUrl,
         Model = profile.Model,
         HasApiKey = !string.IsNullOrWhiteSpace(profile.ApiKeyEncrypted),
-        ReasoningEffort = AiProviderCatalog.ParseEffort(profile.ReasoningEffort),
+        ReasoningEffort = AiEffortTokens.Parse(profile.ReasoningEffort),
         MaxOutputTokens = profile.MaxOutputTokens,
         TimeoutSeconds = profile.TimeoutSeconds,
         MaxOutputBytes = profile.MaxOutputBytes,

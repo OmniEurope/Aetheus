@@ -86,7 +86,10 @@ public sealed class AnalysisRunResultRepository(AppDbContext db) : IAnalysisRunR
                 NewOpen = group.Where(occurrence => occurrence.IsNew
                         && occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open)
                     .Select(occurrence => occurrence.AnalysisFindingId).Distinct().Count(),
-                Decided = group.Where(occurrence => occurrence.AnalysisFinding.Status != AnalysisFindingStatus.Open)
+                // Only what a reviewer decided; a fixed finding is no decision (recette R1-35).
+                Decided = group.Where(occurrence => occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Accepted
+                        || occurrence.AnalysisFinding.Status == AnalysisFindingStatus.FalsePositive
+                        || occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Mitigated)
                     .Select(occurrence => occurrence.AnalysisFindingId).Distinct().Count()
             })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);

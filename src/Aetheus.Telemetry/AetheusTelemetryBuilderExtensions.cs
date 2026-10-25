@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,6 +38,7 @@ public static class AetheusTelemetryBuilderExtensions
         options.Validate();
         services.AddSingleton<AetheusTelemetryMarker>();
         services.AddSingleton(options);
+        var gate = new IngestRefusalGate(TimeProvider.System);
 
         if (!options.Enabled)
             return services;
@@ -74,7 +76,7 @@ public static class AetheusTelemetryBuilderExtensions
                 builder.AddHttpClientInstrumentation();
 
             builder.AddOtlpExporter(exporter =>
-                ConfigureExporter(exporter, options.TracesEndpoint!, options));
+                ConfigureExporter(exporter, options.TracesEndpoint!, options, gate));
         });
 
         // The per-route timings Aetheus shows in each application's Performance tab: measured in
@@ -86,7 +88,7 @@ public static class AetheusTelemetryBuilderExtensions
 
         // The metrics are sent at the interval of the project's « Conservation des données »
         // setting, read from Aetheus with the ingest key, instead of the fixed periodic reader.
-        var metricReader = AddScheduledMetricExport(services, options);
+        var metricReader = AddScheduledMetricExport(services, options, gate);
 
         openTelemetry.WithMetrics(builder =>
         {
@@ -111,7 +113,7 @@ public static class AetheusTelemetryBuilderExtensions
                 logging.ParseStateValues = true;
                 logging.AddOtlpExporter((exporter, processor) =>
                 {
-                    ConfigureExporter(exporter, options.LogsEndpoint!, options);
+                    ConfigureExporter(exporter, options.LogsEndpoint!, options, gate);
                     processor.BatchExportProcessorOptions.MaxQueueSize = options.MaxExportQueueSize;
                     processor.BatchExportProcessorOptions.MaxExportBatchSize = options.MaxExportBatchSize;
                     processor.BatchExportProcessorOptions.ExporterTimeoutMilliseconds =
@@ -125,22 +127,29 @@ public static class AetheusTelemetryBuilderExtensions
 
     private static BaseExportingMetricReader AddScheduledMetricExport(
         IServiceCollection services,
-        AetheusTelemetryOptions options)
+        AetheusTelemetryOptions options,
+        IngestRefusalGate gate)
     {
         var exporterOptions = new OtlpExporterOptions();
-        ConfigureExporter(exporterOptions, options.MetricsEndpoint!, options);
+        ConfigureExporter(exporterOptions, options.MetricsEndpoint!, options, gate);
         var reader = new BaseExportingMetricReader(new OtlpMetricExporter(exporterOptions));
         var schedule = MetricExportSchedule.FromEnvironment();
         services.AddSingleton(schedule);
-        services.AddHostedService(provider => new MetricExportScheduler(
-            reader,
-            schedule,
-            new ServerConfigurationClient(
-                new HttpClient { Timeout = TimeSpan.FromMilliseconds(options.ExportTimeoutMilliseconds) },
-                ServerConfigurationClient.ConfigurationUriFor(options.MetricsEndpoint!),
-                options.IngestKey),
-            provider.GetService<TimeProvider>() ?? TimeProvider.System,
-            provider.GetService<ILogger<MetricExportScheduler>>()));
+        services.AddHostedService(provider =>
+        {
+            // The hosted services are all built before the host starts, hence before the first
+            // export: the refusal notice has its logger by the time it can be needed.
+            gate.Logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Aetheus.Telemetry.IngestKey");
+            return new MetricExportScheduler(
+                reader,
+                schedule,
+                new ServerConfigurationClient(
+                    CreateExportClient(options, gate, new SocketsHttpHandler()),
+                    ServerConfigurationClient.ConfigurationUriFor(options.MetricsEndpoint!),
+                    options.IngestKey),
+                provider.GetService<TimeProvider>() ?? TimeProvider.System,
+                provider.GetService<ILogger<MetricExportScheduler>>());
+        });
         return reader;
     }
 
@@ -235,15 +244,47 @@ public static class AetheusTelemetryBuilderExtensions
         return string.Empty;
     }
 
-    private static void ConfigureExporter(
+    /// <param name="innerHandler">The transport under the refusal handler; only tests replace it.</param>
+    internal static void ConfigureExporter(
         OtlpExporterOptions exporter,
         Uri endpoint,
-        AetheusTelemetryOptions options)
+        AetheusTelemetryOptions options,
+        IngestRefusalGate gate,
+        Func<HttpMessageHandler>? innerHandler = null)
     {
         exporter.Endpoint = endpoint;
         exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
         exporter.Headers = $"x-aetheus-ingest-key={options.IngestKey}";
         exporter.TimeoutMilliseconds = options.ExportTimeoutMilliseconds;
+        // The stock exporter is kept; only its HTTP client is built here, so that a refused ingest
+        // key is not sent again at every export interval.
+        exporter.HttpClientFactory = () => CreateExportClient(
+            options,
+            gate,
+            innerHandler?.Invoke() ?? new SocketsHttpHandler());
+    }
+
+    [SuppressMessage("Aetheus.Security", "SEC006",
+        Justification = "A package linked into the host cannot take a factory at exporter-configuration time; each client is built once per exporter, kept for the process lifetime like the SDK's own default client, and exhausts no socket.")]
+    private static HttpClient CreateExportClient(
+        AetheusTelemetryOptions options,
+        IngestRefusalGate gate,
+        HttpMessageHandler transport) =>
+        new(new IngestRefusalHandler(gate, EmitterDescription(options), transport))
+        {
+            Timeout = TimeSpan.FromMilliseconds(options.ExportTimeoutMilliseconds)
+        };
+
+    /// <summary>The <c>User-Agent</c> token that names this emitter in Aetheus' refusal log: package
+    /// version, application name and id, limited to characters a header carries safely.</summary>
+    internal static string EmitterDescription(AetheusTelemetryOptions options)
+    {
+        var name = new string(options.ApplicationName
+            .Select(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '-')
+            .Take(48)
+            .ToArray());
+        var version = typeof(AetheusTelemetryBuilderExtensions).Assembly.GetName().Version?.ToString(3) ?? "0";
+        return $"Aetheus.Telemetry/{version} (service {name}; application {options.ApplicationId})";
     }
 
     private sealed class AetheusTelemetryMarker;

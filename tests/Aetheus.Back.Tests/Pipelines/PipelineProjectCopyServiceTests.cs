@@ -3,6 +3,7 @@ using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.VariableLibraries;
 using Aetheus.Back.Components.Vaults;
 using Aetheus.Back.Exceptions;
+using Aetheus.Back.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -192,6 +193,97 @@ public sealed class PipelineProjectCopyServiceTests
         await _pipelineService.Received(1).DeletePipelineAsync(500, Arg.Any<CancellationToken>());
         await _vaults.Received(1).DeleteVaultAsync(400, Arg.Any<CancellationToken>());
         await _libraries.Received(1).DeleteLibraryAsync(300, Arg.Any<CancellationToken>());
+    }
+
+    private const string NightlyYaml = """
+        name: aetheus-nightly
+        trigger: schedule
+        schedule: "0 0 3 * * *"
+        variables:
+          COMPOSE_PROJECT_NAME: aetheus-nightly-run
+          SITE: aetheus.example.com
+        stages:
+          - name: Run
+            environment: aetheus-staging
+            steps:
+              - name: go
+                shell: sh .pipeline/scripts/nightly.sh
+        """;
+
+    private void SourceHas(string name, string yaml) =>
+        _pipelines.GetPipelineDefinitionsForProjectAsync(SourceProjectId, Arg.Any<CancellationToken>()).Returns([(20, name, yaml)]);
+
+    [Fact]
+    public async Task Copy_OfAScheduledPipeline_IsCreatedWithItsTriggerOff_AndTheResultSaysSo()
+    {
+        SourceHas("aetheus-nightly", NightlyYaml);
+        CreatePipelineRequest? created = null;
+        _pipelineService.When(service => service.CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => created = call.Arg<CreatePipelineRequest>());
+
+        var result = await _sut.CopyAsync(Request(20), null, null, null, null, Ct);
+
+        Assert.NotNull(created);
+        Assert.Contains("trigger: manual", created.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("trigger: schedule", created.YamlDefinition, StringComparison.Ordinal);
+        Assert.Equal("manual", YamlParsingHelper.ParseAndValidate(created.YamlDefinition)!.Trigger);
+        var item = Assert.Single(result.Plan.Pipelines);
+        Assert.Equal(PipelineCopyStatus.ToReview, item.Status);
+        Assert.Equal("schedule", Assert.Single(item.Issues, issue => issue.Kind == PipelineCopyIssueKind.TriggerDisabled).Detail);
+    }
+
+    [Fact]
+    public async Task Plan_RenamesTheIdentifiersItCanIdentify_AndListsWhatItLeaves()
+    {
+        SourceHas("aetheus-nightly", NightlyYaml);
+
+        var plan = await _sut.PlanAsync(Request(20), null, null, null, Ct);
+
+        var issues = Assert.Single(plan.Pipelines).Issues;
+        var renamed = Assert.Single(issues, issue => issue.Kind == PipelineCopyIssueKind.IdentifiersRenamed).Detail;
+        Assert.Contains("COMPOSE_PROJECT_NAME: aetheus-nightly-run -> ats-nightly-run", renamed, StringComparison.Ordinal);
+        Assert.Contains("environment: aetheus-staging -> ats-staging", renamed, StringComparison.Ordinal);
+        // The address is not an identifier the copy can rename safely: it stays, and is reported.
+        var remaining = Assert.Single(issues, issue => issue.Kind == PipelineCopyIssueKind.SourceProjectNameRemains).Detail;
+        Assert.Contains("aetheus.example.com", remaining, StringComparison.Ordinal);
+        Assert.DoesNotContain("aetheus-staging", remaining, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Copy_NamesTheRepositoryFilesTheCopiedPipelineNeeds()
+    {
+        SourceHas("aetheus-nightly", NightlyYaml);
+
+        var result = await _sut.CopyAsync(Request(20), null, null, null, null, Ct);
+
+        var issue = Assert.Single(Assert.Single(result.Plan.Pipelines).Issues,
+            found => found.Kind == PipelineCopyIssueKind.RepositoryFileDependency);
+        Assert.Equal(".pipeline/scripts/nightly.sh", issue.Detail);
+    }
+
+    [Fact]
+    public async Task Copy_OfAManualPipelineWhoseOnlyFindingIsARenamedIdentifier_StaysReady()
+    {
+        SourceHas("aetheus-ci", "name: aetheus-ci\ntrigger: manual\nvariables:\n  COMPOSE_PROJECT_NAME: aetheus-ci-run\nstages: []\n");
+
+        var plan = await _sut.PlanAsync(Request(20), null, null, null, Ct);
+
+        var item = Assert.Single(plan.Pipelines);
+        Assert.Equal(PipelineCopyStatus.Ready, item.Status);
+        Assert.Equal(PipelineCopyIssueKind.IdentifiersRenamed, Assert.Single(item.Issues).Kind);
+    }
+
+    [Fact]
+    public async Task Copy_WhenATriggerCannotBeSwitchedOffSafely_TheCopyIsRefused()
+    {
+        SourceHas("aetheus-flow", "{name: aetheus-flow, trigger: schedule, schedule: '0 0 3 * * *', stages: []}");
+
+        var result = await _sut.CopyAsync(Request(20), null, null, null, null, Ct);
+
+        var item = Assert.Single(result.Plan.Pipelines);
+        Assert.Equal(PipelineCopyStatus.NotCopied, item.Status);
+        Assert.Contains(item.Issues, issue => issue.Kind == PipelineCopyIssueKind.InvalidDefinition);
+        await _pipelineService.DidNotReceive().CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

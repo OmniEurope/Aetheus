@@ -48,9 +48,9 @@ else
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-md omni-u-mb-sm">@L["RewrittenPipelineYaml"]</OmniText>
             <MonacoEditor Value="@_model.RewrittenPipelineYaml" ValueChanged="@(value => _model.RewrittenPipelineYaml = value)" />
         }
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Extract"]</span></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Extract"]</span></ChildContent></OmniButton>
         </OmniStack>
     </EditForm>
 }

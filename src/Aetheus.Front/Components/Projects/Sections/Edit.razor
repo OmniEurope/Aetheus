@@ -27,12 +27,12 @@ else
        project deletion already has its dialog (R2-122: what goes with the project, its name typed, refused
        while a run is in progress), so the OE tile would ask twice. *@
     <OmniSettingsDangerZone Class="omni-u-mt-lg">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.Between" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Wrap="true">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.Between" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Wrap="true">
             <OmniStack Gap="OmniSpacing.XSmall">
                 <OmniText Element="OmniTextElement.Strong">@L["ProjectDeletionTitle"]</OmniText>
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["ProjectDeletionZoneHint"]</OmniText>
             </OmniStack>
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniSettingsDangerZone>
 }

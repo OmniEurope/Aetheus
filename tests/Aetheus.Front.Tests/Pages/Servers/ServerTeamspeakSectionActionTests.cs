@@ -44,21 +44,21 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
         }
     };
 
-    private IRenderedComponent<ServerTeamspeakSection> RenderSection(ServerDetailDto? server = null)
+    private IRenderedComponent<PageHeaderOutletHost> RenderSection(ServerDetailDto? server = null)
     {
         var s = server ?? Server();
         _handler.SetJsonResponse($"api/servers/{s.Id}/teamspeak", s.Teamspeak);
         _handler.SetPaginatedJsonResponse($"api/servers/{s.Id}/teamspeak/clients", Array.Empty<TeamspeakClientDto>());
         _handler.SetPaginatedJsonResponse($"api/servers/{s.Id}/teamspeak/channels", Array.Empty<TeamspeakChannelDto>());
         _handler.SetPaginatedJsonResponse($"api/servers/{s.Id}/teamspeak/bans", Array.Empty<TeamspeakBanDto>());
-        return Render<ServerTeamspeakSection>(p => p
+        return this.RenderWithPageHeader<ServerTeamspeakSection>(p => p
             .Add(x => x.Server, s)
             .Add(x => x.ServerId, s.Id));
     }
 
     // R3-42: only Restart is a button of the bar; the other actions are entries of the "More actions" menu,
     // which this opens when no button carries the name.
-    private static IElement? TryButton(IRenderedComponent<ServerTeamspeakSection> cut, string label) =>
+    private static IElement? TryButton(IRenderedComponent<PageHeaderOutletHost> cut, string label) =>
         cut.FindAll("button:not([role='menuitem'])").FirstOrDefault(b => b.Names().Contains(label, StringComparison.Ordinal))
         ?? cut.FindMenuItem(label);
 
@@ -79,13 +79,15 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
         // Recette R3-41/R3-42: never several action buttons in a row.
         var cut = RenderSection();
 
-        var barButtons = cut.FindAll(".omni-row > .omni-button");
+        // Recette R-29: the bar is the page header now; the status row keeps only the badges.
+        Assert.Empty(cut.Find(".omni-row").QuerySelectorAll("button"));
+        var barButtons = cut.FindAll(".test-outlet > .omni-button");
         var restart = Assert.Single(barButtons);
         Assert.Contains("Restart", restart.TextContent, StringComparison.Ordinal);
         Assert.Contains("omni-button--primary", restart.ClassName, StringComparison.Ordinal);
-        Assert.Single(cut.FindAll(".omni-row > .omni-overflow-menu"));
+        Assert.Single(cut.FindAll(".test-outlet > .omni-overflow-menu"));
 
-        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        cut.Find(".test-outlet > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
         var entries = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Select(e => e.TextContent.Trim()).ToList();
         string[] expected =
             ["Start", "Stop", "EditServer", "Send", "CopyCredentials", "GracefulRestart", "TeamspeakStats", "Snapshot",
@@ -98,7 +100,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
     {
         var cut = RenderSection();
 
-        cut.Find(".omni-row > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
+        cut.Find(".test-outlet > .omni-overflow-menu .omni-overflow-menu__trigger").Click();
         var items = cut.FindAll(".omni-overflow-menu__popup .omni-menu__item");
         var stop = items.Single(e => e.TextContent.Trim() == "Stop");
         Assert.Contains("omni-menu__item--danger", stop.ClassName, StringComparison.Ordinal);
@@ -128,7 +130,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
             new[] { new TeamspeakClientDto { ClientId = 7, Nickname = "Alice", ChannelId = 1, Platform = "Windows" } });
         _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/channels", Array.Empty<TeamspeakChannelDto>());
         _handler.SetPaginatedJsonResponse($"api/servers/{server.Id}/teamspeak/bans", Array.Empty<TeamspeakBanDto>());
-        var cut = Render<ServerTeamspeakSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
+        var cut = this.RenderWithPageHeader<ServerTeamspeakSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
 
         cut.WaitForState(() => cut.FindAll("tbody .omni-overflow-menu__trigger").Count > 0);
         var cell = cut.Find("tbody .omni-overflow-menu__trigger").ParentElement!.ParentElement!;
@@ -294,7 +296,7 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
     }
 
     [Fact]
-    public void EachConfirmedActionTargetsItsOwnEndpoint_NotASharedOne()
+    public async Task EachConfirmedActionTargetsItsOwnEndpoint_NotASharedOne()
     {
         // A single generic endpoint would mean the dialog choice does not decide what happens.
         _handler.SetJsonResponse(
@@ -308,6 +310,8 @@ public sealed class ServerTeamspeakSectionActionTests : BunitContext
             () => Assert.Contains(_handler.Requests, r =>
                 r.Url.Contains("graceful-restart", StringComparison.Ordinal)));
 
+        // One page header per page: the first page leaves before the second renders its own actions.
+        await DisposeComponentsAsync();
         _dialog.OpenResult = Confirmed(TeamspeakDialogMode.Message);
         var message = RenderSection();
         TryButton(message, "SendMessage")!.Click();

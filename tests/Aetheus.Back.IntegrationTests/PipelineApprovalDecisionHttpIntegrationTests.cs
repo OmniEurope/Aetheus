@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Http.Json;
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;

@@ -12,7 +12,7 @@ public static class PipelineFunctionCatalog
     public const string StepType = "aetheus";
 
     /// <summary>Detects which language toolchains the repository contains, so later steps can be
-    /// conditioned on them. Port of <c>deploy/scripts/detect-project-languages.sh</c>, with the same
+    /// conditioned on them. Port of the former <c>detect-project-languages.sh</c> script, with the same
     /// outputs.</summary>
     public static readonly PipelineFunctionDescriptor DetectProjectLanguages = new(
         "detect-project-languages",
@@ -23,7 +23,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Resolves the exact .NET SDK <c>global.json</c> pins, installing it in a non-root,
     /// version-isolated cache when the host does not resolve it. Port of
-    /// <c>deploy/scripts/ensure-dotnet-sdk.sh</c>; the path the script printed is the <c>DOTNET</c>
+    /// <c>scripts/ensure-dotnet-sdk.sh</c>; the path the script printed is the <c>DOTNET</c>
     /// output.</summary>
     public static readonly PipelineFunctionDescriptor EnsureDotnetSdk = new(
         "ensure-dotnet-sdk",
@@ -34,7 +34,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Restores the workspace's JavaScript dependencies from the committed root
     /// <c>package-lock.json</c> with the pinned Node.js. Port of
-    /// <c>deploy/scripts/restore-javascript-analysis-dependencies.sh</c>, which publishes
+    /// the former <c>restore-javascript-analysis-dependencies.sh</c> script, which publishes
     /// nothing.</summary>
     public static readonly PipelineFunctionDescriptor RestoreJavaScriptAnalysisDependencies = new(
         "restore-javascript-analysis-dependencies",
@@ -45,7 +45,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Checks the formatting of the C# and Razor files changed since the delivery baseline
     /// (the whole solution whenever narrowing is not provably safe) and writes a SARIF log. Port of
-    /// <c>deploy/scripts/run-affected-dotnet-format.sh</c>, with the solution as a parameter instead of
+    /// the former <c>run-affected-dotnet-format.sh</c> script, with the solution as a parameter instead of
     /// <c>Aetheus.slnx</c> and the same outputs.</summary>
     public static readonly PipelineFunctionDescriptor RunAffectedDotnetFormat = new(
         "run-affected-dotnet-format",
@@ -63,7 +63,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Composes the application version from the major and minor of the single
     /// <c>&lt;VersionPrefix&gt;</c> of <c>Directory.Build.props</c>, the release number and an
-    /// environment suffix. Port of <c>deploy/scripts/app-version.sh</c>; the version the script printed
+    /// environment suffix. Port of the former <c>app-version.sh</c> script; the version the script printed
     /// is the <c>APP_VERSION</c> output.</summary>
     public static readonly PipelineFunctionDescriptor AppVersion = new(
         "app-version",
@@ -77,7 +77,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Derives the deployment identity from the owning project and agent: the image
     /// repositories named after the project and the agent's root-owned helper directory. Port of
-    /// <c>deploy/scripts/deploy-identity.sh</c>, whose shell variables become outputs.</summary>
+    /// <c>deploy-identity.sh</c> (the heredoc program of the .pipeline YAML), whose shell variables become outputs.</summary>
     public static readonly PipelineFunctionDescriptor DeployIdentity = new(
         "deploy-identity",
         PipelineFunctionAccess.Build,
@@ -90,7 +90,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Requires the checkout to be the requested immutable revision and, in full Gitleaks
     /// mode, to hold the complete history (unshallowing it first). Port of
-    /// <c>deploy/scripts/security/verify-immutable-source.sh</c>, which publishes nothing.</summary>
+    /// the former <c>verify-immutable-source.sh</c> script, which publishes nothing.</summary>
     public static readonly PipelineFunctionDescriptor VerifyImmutableSource = new(
         "verify-immutable-source",
         PipelineFunctionAccess.Build,
@@ -103,7 +103,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Verifies restored image archives against the source revision and the digests of their
     /// delivery contract, then unpacks them into <c>.analysis-image/</c> for the image scanners. Port of
-    /// <c>deploy/scripts/security/prepare-image-inputs.sh</c>, with the archive names as a parameter
+    /// the former <c>prepare-image-inputs.sh</c> script, with the archive names as a parameter
     /// instead of the Aetheus images.</summary>
     public static readonly PipelineFunctionDescriptor PrepareImageInputs = new(
         "prepare-image-inputs",
@@ -120,7 +120,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Refuses a candidate that has no rollback-capable deployed baseline unless the bootstrap
     /// is explicitly allowed, before qualification. Port of
-    /// <c>deploy/scripts/candidate/authorize-baseline-bootstrap.sh</c>, which publishes nothing.</summary>
+    /// the former <c>authorize-baseline-bootstrap.sh</c> script, which publishes nothing.</summary>
     public static readonly PipelineFunctionDescriptor AuthorizeBaselineBootstrap = new(
         "authorize-baseline-bootstrap",
         PipelineFunctionAccess.Build,
@@ -133,7 +133,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Publishes the source revision and the schema state of the deployed baseline from its
     /// restored delivery contract, or attests a bootstrap when none was restored. Port of
-    /// <c>deploy/scripts/candidate/export-baseline-identity.sh</c>, with the same outputs and the
+    /// the former <c>export-baseline-identity.sh</c> script, with the same outputs and the
     /// migrations directory as a parameter instead of the Aetheus one.</summary>
     public static readonly PipelineFunctionDescriptor ExportBaselineIdentity = new(
         "export-baseline-identity",
@@ -147,7 +147,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Seals the analysis grades and the test gate outcomes of a qualification into the
     /// candidate assurance contract and publishes its overall grade. Port of
-    /// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c>, writing the same contract and
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c>, writing the same contract and
     /// evidence files byte for byte.</summary>
     public static readonly PipelineFunctionDescriptor GenerateAssuranceContract = new(
         "generate-assurance-contract",
@@ -172,7 +172,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Verifies a candidate assurance contract against its artifact: seal, source commit,
     /// evidence hashes, grade consistency and the deployment threshold. Port of
-    /// <c>deploy/scripts/verify-candidate-assurance-contract.mjs</c>, with the same refusals.</summary>
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-candidate-assurance-contract.mjs</c>, with the same refusals.</summary>
     public static readonly PipelineFunctionDescriptor VerifyAssuranceContract = new(
         "verify-assurance-contract",
         PipelineFunctionAccess.Build,
@@ -187,7 +187,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>The production deployment gate on the delivery contract: sealed identity, release
     /// version, artifact digests and the live schema state. Port of
-    /// <c>deploy/scripts/verify-delivery-promotion.mjs</c>, with the same refusals.</summary>
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-delivery-promotion.mjs</c>, with the same refusals.</summary>
     public static readonly PipelineFunctionDescriptor VerifyDeliveryPromotion = new(
         "verify-delivery-promotion",
         PipelineFunctionAccess.Build,
@@ -201,7 +201,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Writes the deterministic SPDX 2.3 SBOM of a package from its dependency list. Port of
-    /// <c>deploy/scripts/generate-package-sbom.mjs</c>, writing the same document byte for byte.</summary>
+    /// the former <c>generate-package-sbom.mjs</c> script, writing the same document byte for byte.</summary>
     public static readonly PipelineFunctionDescriptor GeneratePackageSbom = new(
         "generate-package-sbom",
         PipelineFunctionAccess.Build,
@@ -219,7 +219,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Issues or renews every requested certificate through the agent's root-owned certbot
     /// helpers, then requires each to name all its hosts and to stay valid for the minimum number of
-    /// days. Port of <c>deploy/scripts/ensure-tls-certificates.sh</c>, with the certificate groups as a
+    /// days. Port of the former <c>ensure-tls-certificates.sh</c> script, with the certificate groups as a
     /// parameter instead of arguments.</summary>
     public static readonly PipelineFunctionDescriptor EnsureTlsCertificates = new(
         "ensure-tls-certificates",
@@ -235,7 +235,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Lets Apache traverse to an ACME challenge web root kept under the agent work
-    /// directory. Port of <c>deploy/scripts/deploy-prod/grant-acme-challenge-traversal.sh</c>.</summary>
+    /// directory. Port of the former <c>grant-acme-challenge-traversal.sh</c> script.</summary>
     public static readonly PipelineFunctionDescriptor GrantAcmeChallengeTraversal = new(
         "grant-acme-challenge-traversal",
         PipelineFunctionAccess.Deployment,
@@ -245,7 +245,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Removes every container, volume and network of a disposable blue-green project and its
     /// deployment state, refusing anything that names production. Port of
-    /// <c>deploy/scripts/bluegreen-host-reset.sh</c>.</summary>
+    /// the former <c>bluegreen-host-reset.sh</c> script.</summary>
     public static readonly PipelineFunctionDescriptor BlueGreenHostReset = new(
         "bluegreen-host-reset",
         PipelineFunctionAccess.Deployment,
@@ -261,7 +261,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Removes the unprotected, older tags of managed image repositories after a deployment,
     /// keeping every image a container references and the most recent ones. Port of
-    /// <c>deploy/scripts/retain-docker-images.sh</c>, with the repositories as a parameter instead of
+    /// the former <c>retain-docker-images.sh</c> script, with the repositories as a parameter instead of
     /// arguments.</summary>
     public static readonly PipelineFunctionDescriptor RetainDockerImages = new(
         "retain-docker-images",
@@ -275,21 +275,21 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Bounds a named Buildx builder's cache. Port of
-    /// <c>deploy/scripts/prune-qa-buildx-cache.sh</c>.</summary>
+    /// the former <c>prune-qa-buildx-cache.sh</c> script.</summary>
     public static readonly PipelineFunctionDescriptor PruneQaBuildxCache = new(
         "prune-qa-buildx-cache",
         PipelineFunctionAccess.Build,
         "Runs docker buildx prune on one named builder with a reserved space, a maximum used space and a minimum free space, never unscoped.",
         [
             new PipelineFunctionParameter("builder", Required: false, "Buildx builder to prune. Defaults to AETHEUS_BUILDX_BUILDER, else BUILDX_BUILDER."),
-            new PipelineFunctionParameter("max_cache_gib", Required: false, "Maximum cache size in GiB. Defaults to AETHEUS_QA_BUILDX_MAX_CACHE_GIB, else 32."),
-            new PipelineFunctionParameter("reserved_cache_gib", Required: false, "Cache kept in any case, in GiB. Defaults to AETHEUS_QA_BUILDX_RESERVED_CACHE_GIB, else 20."),
-            new PipelineFunctionParameter("min_free_gib", Required: false, "Free disk space to keep, in GiB. Defaults to AETHEUS_QA_BUILDX_MIN_FREE_GIB, else 20.")
+            new PipelineFunctionParameter("max_cache_gib", Required: false, "Maximum cache size in Go. Defaults to AETHEUS_QA_BUILDX_MAX_CACHE_GIB, else 32."),
+            new PipelineFunctionParameter("reserved_cache_gib", Required: false, "Cache kept in any case, in Go. Defaults to AETHEUS_QA_BUILDX_RESERVED_CACHE_GIB, else 20."),
+            new PipelineFunctionParameter("min_free_gib", Required: false, "Free disk space to keep, in Go. Defaults to AETHEUS_QA_BUILDX_MIN_FREE_GIB, else 20.")
         ],
         []);
 
     /// <summary>Removes the Compose resources left by earlier runs' per-run stacks. Port of
-    /// <c>deploy/scripts/prune-stale-qa-compose.sh</c>, with the project prefix as a parameter instead
+    /// the former <c>prune-stale-qa-compose.sh</c> script, with the project prefix as a parameter instead
     /// of <c>aetheus-qa</c>.</summary>
     public static readonly PipelineFunctionDescriptor PruneStaleQaCompose = new(
         "prune-stale-qa-compose",
@@ -306,7 +306,7 @@ public static class PipelineFunctionCatalog
     /// <summary>Records the host's storage after a successful QA (Buildx cache, root filesystem) in a
     /// ledger of the agent's work directory, refuses to record while a QA Compose stack of this run or an
     /// older one survives, and verifies the cache plateau once five samples exist. Port of
-    /// <c>deploy/scripts/record-storage-evidence.sh</c>, with the QA stacks named after the project
+    /// the former <c>record-storage-evidence.sh</c> script, with the QA stacks named after the project
     /// instead of <c>aetheus-qa-</c>; it publishes nothing.</summary>
     public static readonly PipelineFunctionDescriptor RecordStorageEvidence = new(
         "record-storage-evidence",
@@ -317,14 +317,14 @@ public static class PipelineFunctionCatalog
             new PipelineFunctionParameter("run_id", Required: false, "Run the sample belongs to ([a-zA-Z0-9_.-]); a numeric id also tells newer QA runs apart. Defaults to BUILD_BUILDID."),
             new PipelineFunctionParameter("builder", Required: false, "Buildx builder to inventory. Defaults to AETHEUS_BUILDX_BUILDER, then BUILDX_BUILDER."),
             new PipelineFunctionParameter("project_name", Required: false, "Project the QA Compose stacks are named after (<slug>-qa-[rollback-]<n>). Defaults to BUILD_PROJECTNAME."),
-            new PipelineFunctionParameter("max_cache_gib", Required: false, "Cache budget in GiB, a non-negative integer. Defaults to AETHEUS_STORAGE_MAX_CACHE_GIB, else 80."),
-            new PipelineFunctionParameter("plateau_growth_gib", Required: false, "Largest cache variation over the last three samples, in GiB. Defaults to AETHEUS_STORAGE_PLATEAU_GROWTH_GIB, else 5.")
+            new PipelineFunctionParameter("max_cache_gib", Required: false, "Cache budget in Go, a non-negative integer. Defaults to AETHEUS_STORAGE_MAX_CACHE_GIB, else 80."),
+            new PipelineFunctionParameter("plateau_growth_gib", Required: false, "Largest cache variation over the last three samples, in Go. Defaults to AETHEUS_STORAGE_PLATEAU_GROWTH_GIB, else 5.")
         ],
         []);
 
     /// <summary>Publishes the compatibility attestation of a QA run (mode, V-1 tested, verdict) and the
     /// five N/N-1 gate statuses it is graded from, normalized to 0 or 1. Port of
-    /// <c>deploy/scripts/qa/persist-compatibility-mode.sh</c>, with the same inputs; its three
+    /// the former <c>persist-compatibility-mode.sh</c> script, with the same inputs; its three
     /// attestation outputs, PascalCase in the script, are renamed in upper snake case.</summary>
     public static readonly PipelineFunctionDescriptor PersistCompatibilityMode = new(
         "persist-compatibility-mode",
@@ -342,17 +342,17 @@ public static class PipelineFunctionCatalog
     /// <summary>Refuses an idle frontend that is not safe to put behind Apache: no HTML, unresolved
     /// asset placeholders, a Blazor bootstrap script it names but does not serve, missing or
     /// incompatible OmniEurope.Blazor assets, a cacheable index. Port of the idle-frontend checks of
-    /// <c>deploy/scripts/release-fast-deploy.sh</c> (incident 2247).</summary>
+    /// <c>release-fast-deploy.sh</c> (the heredoc program of the .pipeline YAML) (incident 2247).</summary>
     public static readonly PipelineFunctionDescriptor VerifyIdleFrontend = new(
         "verify-idle-frontend",
         PipelineFunctionAccess.Deployment,
-        "Fetches the idle frontend's index and fails unless it is HTML without unresolved '#[' asset placeholders, names a Blazor bootstrap script it serves, references a compatible OmniEurope.Blazor stylesheet and interop script, and is sent with Cache-Control no-store.",
+        "Fetches the idle frontend's index and fails unless it is HTML without unresolved '#[' asset placeholders, names a Blazor bootstrap script it serves, references a compatible OmniEurope.Blazor stylesheet and interop script, and is sent with Cache-Control no-cache and not no-store (revalidated on every use, still eligible for the browser's back/forward cache).",
         [new PipelineFunctionParameter("url", Required: true, "Base URL of the idle frontend, for instance http://127.0.0.1:<idle front port>/.")],
         []);
 
     /// <summary>Closes a fast deployment transaction that went live but was never closed, and refuses
     /// any other leftover transaction. Port of the leftover-transaction guard of
-    /// <c>deploy/scripts/release-fast-deploy.sh</c> (run 2240).</summary>
+    /// <c>release-fast-deploy.sh</c> (the heredoc program of the .pipeline YAML) (run 2240).</summary>
     public static readonly PipelineFunctionDescriptor SettleFastReleaseTransaction = new(
         "settle-fast-release-transaction",
         PipelineFunctionAccess.Deployment,
@@ -362,7 +362,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Refuses a production state directory of the wrong shape and every secret-zero state the
     /// preparation would refuse, before it touches anything. Port of the state-directory and
-    /// secret-zero refusals of <c>deploy/scripts/prod-deploy-prepare.sh</c>.</summary>
+    /// secret-zero refusals of <c>prod-deploy-prepare.sh</c> (the heredoc program of the .pipeline YAML).</summary>
     public static readonly PipelineFunctionDescriptor VerifyProductionState = new(
         "verify-production-state",
         PipelineFunctionAccess.Deployment,
@@ -377,7 +377,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Requires the prepared production environment to hold every listed key with a value and
     /// a dated recovery copy. Port of the required-secret check of
-    /// <c>deploy/scripts/prod-deploy-prepare.sh</c>.</summary>
+    /// <c>prod-deploy-prepare.sh</c> (the heredoc program of the .pipeline YAML).</summary>
     public static readonly PipelineFunctionDescriptor VerifyProductionSecrets = new(
         "verify-production-secrets",
         PipelineFunctionAccess.Deployment,
@@ -385,6 +385,82 @@ public static class PipelineFunctionCatalog
         [
             new PipelineFunctionParameter("keys", Required: true, "Keys that must have a value, separated by spaces."),
             new PipelineFunctionParameter("env_file", Required: false, "Production environment file. Defaults to ENV_FILE.")
+        ],
+        []);
+
+    // The programs of the production preparation, the nightly and demo preparations and the vitrine
+    // publication that lived as heredocs of the .pipeline YAML, tested in C# like any other function.
+
+    /// <summary>Gives the environment file a key it lacks: 32 random bytes as hexadecimal, drawn once and
+    /// never replaced. Port of the <c>DEPLOYMENT_BOOTSTRAP_IDENTITY_KEY</c> and <c>GIT_RUN_TOKEN_KEY</c>
+    /// (R-464) back-fill blocks of <c>prod-deploy-prepare.sh</c>.</summary>
+    public static readonly PipelineFunctionDescriptor BackfillEnvSecret = new(
+        "backfill-env-secret",
+        PipelineFunctionAccess.Deployment,
+        "When the environment file has no non-empty KEY= line, draws 32 random bytes as 64 lowercase hexadecimal characters, keeps a dated copy <file name>-YYYYMMDDTHHMMSSZ next to the file and writes every other line plus KEY=value through a mode 600 temporary copy (an empty KEY= line is dropped, not duplicated). A value already present is never replaced.",
+        [
+            new PipelineFunctionParameter("key", Required: true, "Environment key to back-fill: upper case, digits and underscores, starting with a letter."),
+            new PipelineFunctionParameter("env_file", Required: false, "Production environment file. Defaults to ENV_FILE.")
+        ],
+        []);
+
+    /// <summary>Refreshes the public URL lines of an environment file without touching a secret. Port of
+    /// <c>reconcile-env-urls.sh</c>.</summary>
+    public static readonly PipelineFunctionDescriptor ReconcileEnvUrls = new(
+        "reconcile-env-urls",
+        PipelineFunctionAccess.Deployment,
+        "Validates every KEY=URL pair (upper case key, https://host[:port] with nothing else), then rewrites the lines of those keys in place or appends them, keeping a dated copy <file name>-YYYYMMDDTHHMMSSZ of the file as it was and replacing it with mode 600. A pair already holding the value changes nothing; when no pair changes the file and its directory are left as they are.",
+        [
+            new PipelineFunctionParameter("urls", Required: true, "KEY=URL pairs, separated by spaces, for instance API_BASE_URL=https://api.example.org."),
+            new PipelineFunctionParameter("env_file", Required: false, "Production environment file. Defaults to ENV_FILE.")
+        ],
+        []);
+
+    /// <summary>Creates the production environment file on the first deploy from the versioned template.
+    /// Port of the first-deploy block of <c>prod-deploy-prepare.sh</c> and of
+    /// <c>render-env-sample.sh</c>.</summary>
+    public static readonly PipelineFunctionDescriptor RenderEnvSample = new(
+        "render-env-sample",
+        PipelineFunctionAccess.Deployment,
+        "Does nothing when the environment file exists: its secrets are never regenerated. Otherwise renders the versioned template (KEY=VALUE lines; #{PUBLIC_API_URL}#, #{PUBLIC_APP_URL}#, #{APP_VERSION}# and #{SECRET_HEX_<N>}# as N random bytes in hexadecimal, N at least 16) and writes the result with mode 600 without overwriting a file another deployment created meanwhile. A refused template writes nothing.",
+        [
+            new PipelineFunctionParameter("sample", Required: true, "Environment template, relative to the workspace, for instance deploy/env/prod.env.sample."),
+            new PipelineFunctionParameter("env_file", Required: false, "Environment file to create. Defaults to ENV_FILE."),
+            new PipelineFunctionParameter("public_api_url", Required: false, "Value of #{PUBLIC_API_URL}#. Defaults to PUBLIC_API_URL."),
+            new PipelineFunctionParameter("public_app_url", Required: false, "Value of #{PUBLIC_APP_URL}#. Defaults to PUBLIC_APP_URL."),
+            new PipelineFunctionParameter("app_version", Required: false, "Value of #{APP_VERSION}#. Defaults to APP_VERSION.")
+        ],
+        []);
+
+    /// <summary>Renders the versioned blue-green Apache upstream template. Port of
+    /// <c>render-apache-upstream.sh</c>.</summary>
+    public static readonly PipelineFunctionDescriptor RenderApacheUpstream = new(
+        "render-apache-upstream",
+        PipelineFunctionAccess.Deployment,
+        "Renders .pipeline/configs/apache/aetheus-upstream.conf. With define_only it resolves only the Define name into a copy local to the run, which must keep its port placeholders. Otherwise it fills the ports and the colour and writes the file named by UPSTREAM_CONF (a file of a sites-available directory, no traversal); any token left, any invalid colour or port, or a destination other than UPSTREAM_CONF is refused and writes nothing.",
+        [
+            new PipelineFunctionParameter("template", Required: true, "Template path (relative to the workspace); it must end with /.pipeline/configs/apache/aetheus-upstream.conf."),
+            new PipelineFunctionParameter("output", Required: true, "File to write; in full mode it must equal UPSTREAM_CONF."),
+            new PipelineFunctionParameter("define_only", Required: false, "true to resolve only the Define name. Defaults to false."),
+            new PipelineFunctionParameter("front_port", Required: false, "Frontend port, 1 to 65535. Required unless define_only is true."),
+            new PipelineFunctionParameter("back_port", Required: false, "Backend port, 1 to 65535. Required unless define_only is true."),
+            new PipelineFunctionParameter("active_color", Required: false, "blue or green. Required unless define_only is true."),
+            new PipelineFunctionParameter("define", Required: false, "Apache Define name: upper case, digits and underscores, starting with a letter. Defaults to UPSTREAM_DEFINE."),
+            new PipelineFunctionParameter("upstream_conf", Required: false, "Destination the environment expects in full mode. Defaults to UPSTREAM_CONF.")
+        ],
+        []);
+
+    /// <summary>Publishes a static site into a dedicated web root under /var/www. Port of
+    /// <c>publish-vitrine.sh</c>.</summary>
+    public static readonly PipelineFunctionDescriptor PublishVitrine = new(
+        "publish-vitrine",
+        PipelineFunctionAccess.Deployment,
+        "Refuses a missing domain, a web root that is not one directory under /var/www (traversal, links resolved, or itself a symbolic link) and a missing or symbolic-link source, writes the domain over the placeholder in every .html, .xml, .txt and .json file, refuses a source that still holds the placeholder, then swaps the site in beside a backup that is put back if the swap fails.",
+        [
+            new PipelineFunctionParameter("domain", Required: true, "Public domain written over the placeholder."),
+            new PipelineFunctionParameter("web_root", Required: true, "Web root, exactly one directory under /var/www."),
+            new PipelineFunctionParameter("placeholder", Required: true, "Placeholder text to replace with the domain, for instance aetheus.example."),
+            new PipelineFunctionParameter("source_dir", Required: false, "Directory holding the site, relative to the workspace. Defaults to site.")
         ],
         []);
 
@@ -407,7 +483,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Resolves the exact Node.js the toolchain pins, installing it under
     /// <c>$HOME/.aetheus</c> when the host does not provide it. Port of
-    /// <c>deploy/scripts/ensure-node-runtime.sh</c>; the path the script printed is the <c>NODE</c>
+    /// <c>ensure-node-runtime.sh</c> (the heredoc program of the .pipeline YAML); the path the script printed is the <c>NODE</c>
     /// output and its directory <c>NODE_BIN_DIR</c>.</summary>
     public static readonly PipelineFunctionDescriptor EnsureNodeRuntime = new(
         "ensure-node-runtime",
@@ -417,7 +493,7 @@ public static class PipelineFunctionCatalog
         ["NODE", "NODE_BIN_DIR"]);
 
     /// <summary>Names the disposable QA stack and its database after the owning project and the run.
-    /// Port of <c>deploy/scripts/qa/qa-stack-identity.sh</c>, whose shell variables and
+    /// Port of the former <c>qa-stack-identity.sh</c> script, whose shell variables and
     /// <c>qa_stack</c> helper become outputs.</summary>
     public static readonly PipelineFunctionDescriptor QaStackIdentity = new(
         "qa-stack-identity",
@@ -431,7 +507,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Copies the agent release a backend image serves out of the image and verifies its
     /// manifest (commit, protocol policy, <c>ai.run</c> capability) and every archive's size and
-    /// SHA-256. Port of <c>deploy/scripts/extract-agent-release-from-image.sh</c>, with the directory
+    /// SHA-256. Port of the former <c>extract-agent-release-from-image.sh</c> script, with the directory
     /// inside the image as an optional parameter.</summary>
     public static readonly PipelineFunctionDescriptor ExtractAgentRelease = new(
         "extract-agent-release",
@@ -448,7 +524,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Proves the schema path a delivery contract declares against the migration histories
-    /// read from a live database. Port of <c>deploy/scripts/verify-schema-contract.mjs</c> (and the
+    /// read from a live database. Port of the former <c>verify-schema-contract.mjs</c> script (and the
     /// fingerprint of <c>schema-fingerprint.mjs</c>).</summary>
     public static readonly PipelineFunctionDescriptor VerifySchemaContract = new(
         "verify-schema-contract",
@@ -463,7 +539,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Runs a retained N-1 agent release against the deployed backend: enrollment and
     /// heartbeat, task claim and start, result publication, with a JSON attestation. Port of
-    /// <c>deploy/scripts/verify-nminus1-agent-contract.sh</c>; its exit code 10 (a compatibility
+    /// the former <c>verify-nminus1-agent-contract.sh</c> script; its exit code 10 (a compatibility
     /// finding) is the status 1 of <c>AGENT_CONTRACT_STATUS</c>.</summary>
     public static readonly PipelineFunctionDescriptor VerifyNMinusOneAgentContract = new(
         "verify-nminus1-agent-contract",
@@ -479,7 +555,7 @@ public static class PipelineFunctionCatalog
         ["AGENT_CONTRACT_STATUS"]);
 
     /// <summary>Runs a prebuilt .NET integration test project of a restored source tree and grades it
-    /// from its TRX. Port of <c>deploy/scripts/run-qa-integration-suite.sh</c>; its exit code 10 (the
+    /// from its TRX. Port of the former <c>run-qa-integration-suite.sh</c> script; its exit code 10 (the
     /// suite ran and recorded failures) is the status 1 of <c>INTEGRATION_SUITE_STATUS</c>.</summary>
     public static readonly PipelineFunctionDescriptor RunQaIntegrationSuite = new(
         "run-qa-integration-suite",
@@ -496,7 +572,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Proves that a deployed backend authenticates and reads through its migrated database:
     /// health, admin login, permissions and one page of projects. Port of
-    /// <c>deploy/scripts/run-qa-deployed-integration-suite.sh</c>; its exit code 10 is the status 1 of
+    /// the former <c>run-qa-deployed-integration-suite.sh</c> script; its exit code 10 is the status 1 of
     /// <c>DEPLOYED_PROBE_STATUS</c>.</summary>
     public static readonly PipelineFunctionDescriptor RunQaDeployedProbes = new(
         "run-qa-deployed-probes",
@@ -511,7 +587,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Runs a browser test suite from an immutable image against a QA stack's front and back
     /// containers and grades it from its TRX. Port of the immutable-image path of
-    /// <c>deploy/scripts/run-qa-e2e-suite.sh</c>; its exit code 10 is the status 1 of
+    /// the former <c>run-qa-e2e-suite.sh</c> script; its exit code 10 is the status 1 of
     /// <c>E2E_SUITE_STATUS</c>.</summary>
     public static readonly PipelineFunctionDescriptor RunQaE2eSuite = new(
         "run-qa-e2e-suite",
@@ -534,7 +610,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Rebases the source roots of the restored Cobertura reports onto this workspace's
     /// <c>src</c> directory, in copies. Port of
-    /// <c>deploy/scripts/rebase-quality-coverage-sources.mjs</c>; the report list it printed is the
+    /// the former <c>rebase-quality-coverage-sources.mjs</c> script; the report list it printed is the
     /// <c>COVERAGE_REPORTS</c> output.</summary>
     public static readonly PipelineFunctionDescriptor RebaseCoverageSources = new(
         "rebase-coverage-sources",
@@ -546,7 +622,7 @@ public static class PipelineFunctionCatalog
     // PLAN-002 lot 1.10: the delivery tooling aetheus-ci called as scripts.
 
     /// <summary>Merges the per-project Roslyn SARIF reports of a build into one report holding only the
-    /// open security findings. Port of <c>deploy/scripts/merge-roslyn-security-sarif.mjs</c>.</summary>
+    /// open security findings. Port of the former <c>merge-roslyn-security-sarif.mjs</c> script.</summary>
     public static readonly PipelineFunctionDescriptor MergeRoslynSecuritySarif = new(
         "merge-roslyn-security-sarif",
         PipelineFunctionAccess.Build,
@@ -558,7 +634,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Publishes, beside a gate status, the names of the tests that made it non-zero. Port of
-    /// <c>deploy/scripts/publish-failed-tests.sh</c> and of the publish mode of
+    /// the former <c>publish-failed-tests.sh</c> script and of the publish mode of
     /// <c>list-failed-tests.mjs</c>: a diagnostic, never a verdict, so it never fails the step.</summary>
     public static readonly PipelineFunctionDescriptor PublishFailedTests = new(
         "publish-failed-tests",
@@ -576,7 +652,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Writes the integration manifest the delivery contract seals: the source commit and the
     /// optional packages a consumer declares. Port of
-    /// <c>deploy/scripts/write-integration-manifest.mjs</c>.</summary>
+    /// <c>write-integration-manifest.mjs</c> (the heredoc program of the .pipeline YAML).</summary>
     public static readonly PipelineFunctionDescriptor WriteIntegrationManifest = new(
         "write-integration-manifest",
         PipelineFunctionAccess.Build,
@@ -590,7 +666,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Seals the delivery contract of a candidate: its source, adapter, schema states,
     /// injected packages and artifact digests, with the candidate id derived from them. Port of
-    /// <c>deploy/scripts/generate-delivery-contract.mjs</c>, whose environment inputs become parameters
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-delivery-contract.mjs</c>, whose environment inputs become parameters
     /// defaulting to the same variables.</summary>
     public static readonly PipelineFunctionDescriptor GenerateDeliveryContract = new(
         "generate-delivery-contract",
@@ -612,7 +688,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Records the provenance of the artifacts a CI run produced: per category, the file
     /// count, total size and a digest over every file. Port of
-    /// <c>deploy/scripts/generate-artifact-provenance.mjs</c>.</summary>
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-artifact-provenance.mjs</c>.</summary>
     public static readonly PipelineFunctionDescriptor GenerateArtifactProvenance = new(
         "generate-artifact-provenance",
         PipelineFunctionAccess.Build,
@@ -625,7 +701,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Refuses a deployment whose deploy branch does not contain the release commit, after
-    /// deepening a shallow checkout. Port of <c>deploy/scripts/verify-release-ancestry.sh</c>, with the
+    /// deepening a shallow checkout. Port of the former <c>verify-release-ancestry.sh</c> script, with the
     /// same Git commands and messages; publishes nothing.</summary>
     public static readonly PipelineFunctionDescriptor VerifyReleaseAncestry = new(
         "verify-release-ancestry",
@@ -638,7 +714,7 @@ public static class PipelineFunctionCatalog
         []);
 
     /// <summary>Creates or verifies the independent evidence of a payload: the name, size and SHA-256 of
-    /// each artifact for one source commit. Port of <c>deploy/scripts/nightly-evidence.mjs</c>, writing
+    /// each artifact for one source commit. Port of <c>nightly-evidence.mjs</c> (the heredoc program of the .pipeline YAML), writing
     /// the same file byte for byte, so the script's verify mode accepts what the function creates.</summary>
     public static readonly PipelineFunctionDescriptor PayloadEvidence = new(
         "payload-evidence",
@@ -655,7 +731,7 @@ public static class PipelineFunctionCatalog
 
     /// <summary>Records the nightly qualification verdict: the security, quality, security history and
     /// extended dynamic security summaries, the assurance grade and a SHA-256 seal. Port of
-    /// <c>deploy/scripts/record-nightly-qualification.mjs</c>, writing the same document.</summary>
+    /// the former <c>record-nightly-qualification.mjs</c> script, writing the same document.</summary>
     public static readonly PipelineFunctionDescriptor RecordNightlyQualification = new(
         "record-nightly-qualification",
         PipelineFunctionAccess.Build,
@@ -671,6 +747,21 @@ public static class PipelineFunctionCatalog
         ],
         []);
 
+    /// <summary>Tells which recent commit of an internal branch a public checkout is the distribution of.
+    /// Port of the <c>--verify</c> mode of <c>scripts/export-public-distribution.mjs</c>. Unlike the
+    /// script, which exited 1, the function succeeds when the public repository is refused: the caller
+    /// branches on <c>PUBLIC_VERIFIED</c>.</summary>
+    public static readonly PipelineFunctionDescriptor VerifyPublicDistribution = new(
+        "verify-public-distribution",
+        PipelineFunctionAccess.Build,
+        "Compares the files of the public checkout's HEAD, byte for byte, with the distribution that each of the last depth commits of the branch made before its publication would export (the boundary.json of that commit, documentation left out per compareIgnore), and logs the verdict. Succeeds even when no commit matches: PUBLIC_VERIFIED is then false and PUBLIC_MATCHED_COMMIT empty. Fails only for an unusable input (not a git checkout, bad depth, Git error, no commit before the publication).",
+        [
+            new PipelineFunctionParameter("public_checkout", Required: true, "Git checkout of the public repository, relative to the workspace; the workspace is the internal checkout."),
+            new PipelineFunctionParameter("branch", Required: false, "Internal branch or ref whose commits are the candidates, for instance HEAD. Defaults to main."),
+            new PipelineFunctionParameter("depth", Required: false, "How many commits before the publication are tried, a positive integer. Defaults to 20.")
+        ],
+        ["PUBLIC_VERIFIED", "PUBLIC_MATCHED_COMMIT"]);
+
     /// <summary>All functions, in declaration order.</summary>
     public static IReadOnlyList<PipelineFunctionDescriptor> All { get; } =
     [
@@ -685,6 +776,8 @@ public static class PipelineFunctionCatalog
         VerifyDeliveryPromotion, GeneratePackageSbom,
         // PLAN-002 lot 1.8, option c
         VerifyIdleFrontend, SettleFastReleaseTransaction, VerifyProductionState, VerifyProductionSecrets,
+        // The heredoc programs of the production, nightly and demo preparations and of the vitrine publication
+        BackfillEnvSecret, ReconcileEnvUrls, RenderEnvSample, RenderApacheUpstream, PublishVitrine,
         // PLAN-002 lot 8
         OpenGrepRuleTests,
         // PLAN-002 lot 1.10
@@ -692,7 +785,7 @@ public static class PipelineFunctionCatalog
         VerifyNMinusOneAgentContract, RunQaIntegrationSuite, RunQaDeployedProbes, RunQaE2eSuite,
         RebaseCoverageSources, MergeRoslynSecuritySarif, PublishFailedTests, WriteIntegrationManifest,
         GenerateDeliveryContract, GenerateArtifactProvenance, VerifyReleaseAncestry, PayloadEvidence,
-        RecordNightlyQualification
+        RecordNightlyQualification, VerifyPublicDistribution
     ];
 
     /// <summary>The function with that exact name, or <c>null</c>. Names are case-sensitive: the YAML
@@ -701,14 +794,6 @@ public static class PipelineFunctionCatalog
         string.IsNullOrEmpty(name)
             ? null
             : All.FirstOrDefault(function => string.Equals(function.Name, name, StringComparison.Ordinal));
-
-    /// <summary>The task kind a function of that access level is dispatched as.</summary>
-    public static OperationKind OperationFor(PipelineFunctionAccess access) => access switch
-    {
-        PipelineFunctionAccess.Build => OperationKind.PipelineFunction,
-        PipelineFunctionAccess.Deployment => OperationKind.PipelineDeploymentFunction,
-        _ => throw new ArgumentOutOfRangeException(nameof(access), access, "Unknown pipeline function access.")
-    };
 
     /// <summary>Whether <paramref name="target"/> names a catalog function dispatchable as
     /// <paramref name="kind"/>. A deployment function sent as a build task is refused, so the access

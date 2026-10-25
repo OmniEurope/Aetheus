@@ -12,11 +12,11 @@
                  TriggerTitle="@string.Format(L["NotificationBellTooltip"], Feed.UnreadCount)"
                  Label="@string.Format(L["NotificationBellTooltip"], Feed.UnreadCount)"
                  PopupLabel="@L["MyNotifications"]">
+        <TriggerIcon><OmniIcon Name="OmniIconName.Bell" Class="header-icon" /></TriggerIcon>
         <TriggerContent>
-            <OmniIcon Name="OmniIconName.Bell" Class="header-icon" />
             @if (Feed.UnreadCount > 0)
             {
-                <span class="task-tracker-count notification-bell-count">@(Feed.UnreadCount > 99 ? "99+" : Feed.UnreadCount.ToString(System.Globalization.CultureInfo.CurrentCulture))</span>
+                <span class="task-tracker-count notification-bell-count">@DisplayFormatting.BadgeCount(Feed.UnreadCount)</span>
             }
         </TriggerContent>
         <ChildContent>
@@ -35,16 +35,15 @@
                     <OmniEmptyState Class="notification-bell-no-subscription" Title="@L["NotificationSubscriptionsEmpty"]"
                                     Description="@L["NotificationNoSubscriptionHint"]">
                         <Icon><OmniIcon Name="OmniIconName.BellSlash" /></Icon>
-                        <Actions>
+                        <ActionsContent>
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="FollowAllAsync" Busy="@_followingAll"
                                         Class="notification-bell-follow-all" title="@L["NotificationFollowAllProjects"]">
-                                <OmniIcon Name="OmniIconName.Bell" />
-                                <span>@L["NotificationFollowAll"]</span>
+                                <Icon><OmniIcon Name="OmniIconName.Bell" /></Icon><ChildContent><span>@L["NotificationFollowAll"]</span></ChildContent>
                             </OmniButton>
                             @* Settings is a link beside the one action (user decision, 2026-10-17). *@
                             <OmniLink Href="/settings?tab=notifications" OnClick="@ClosePopover"
                                       Class="notification-bell-preferences">@L["Settings"]</OmniLink>
-                        </Actions>
+                        </ActionsContent>
                     </OmniEmptyState>
                 }
                 <div class="task-tracker-list">
@@ -80,8 +79,7 @@
                     @if (Feed.UnreadCount > 0)
                     {
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="MarkAllReadAsync" Busy="@_busy" Class="@(_busy ? "notification-bell-mark-all btn-busy" : "notification-bell-mark-all")">
-                            <OmniIcon Name="OmniIconName.CheckCircle" />
-                            <span>@L["NotificationsMarkAllRead"]</span>
+                            <Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent><span>@L["NotificationsMarkAllRead"]</span></ChildContent>
                         </OmniButton>
                     }
                     @* "Mark all read" is the footer's action, "See all" a link (user decision, 2026-10-17). *@

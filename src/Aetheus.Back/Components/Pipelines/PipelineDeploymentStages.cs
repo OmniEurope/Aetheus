@@ -22,6 +22,17 @@ internal static class PipelineDeploymentStages
     public static bool UndoesDeployment(PipelineStageDefinition stage) =>
         RunsStep(stage, "bluegreen-rollback") || HasRole(stage, PipelineDeploymentRoles.Rollback);
 
+    /// <summary>The names of the stages that start the new colour (a <c>bluegreen-up</c> step, or
+    /// <c>deployment_role: start</c>).</summary>
+    public static List<string> StartNames(PipelineYamlDefinition definition) =>
+        [.. YamlParsingHelper.FlattenJobs(definition).Where(IsStart).Select(stage => stage.Name)];
+
+    /// <summary>The names of the failure handlers that undo the deployment (<see cref="IsRollback"/>): recognised by
+    /// what they do rather than by a name, so a failure handler that only notifies never turns a failed run into a
+    /// rolled-back one.</summary>
+    public static List<string> RollbackNames(PipelineYamlDefinition definition) =>
+        [.. YamlParsingHelper.FlattenJobs(definition).Where(IsRollback).Select(stage => stage.Name)];
+
     private static bool IsFailureHandler(PipelineStageDefinition stage) =>
         string.Equals(stage.Condition?.Trim(), "failed()", StringComparison.OrdinalIgnoreCase);
 

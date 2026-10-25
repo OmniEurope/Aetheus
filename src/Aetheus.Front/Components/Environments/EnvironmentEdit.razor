@@ -13,12 +13,12 @@
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["ServersCount"], _detail.Servers.Count)</OmniBadge>
         }
     </Badges>
-    <Actions>
+    <ActionsContent>
         @if (!_isNew)
         {
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["Delete"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
         }
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (!_isNew && _notFound)
@@ -43,7 +43,7 @@ else
                 <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center">
                     <OmniColumn Span="12" MediumSpan="5">
                         <OmniStack Gap="OmniSpacing.XSmall">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                                 <OmniIcon Name="OmniIconName.Copy" Class="environment-copy-source__icon" />
                                 <OmniHeading Level="OmniHeadingLevel.H2">@L["StartFromExistingEnvironment"]</OmniHeading>
                             </OmniStack>
@@ -125,8 +125,13 @@ else
                          Placeholder="@L["SelectServers"]"
                          Class="omni-u-w-100" />
 
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /> <span>@(_isNew ? L["Create"] : L["Save"])</span></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniTemplateForm>
+    @* R-18: only a production environment carries the database's expand/contract tracking. *@
+    @if (!_isNew && _detail is { Type: EnvironmentType.Production } production)
+    {
+        <EnvironmentSchemaTracking EnvironmentId="@production.Id" />
+    }
 }

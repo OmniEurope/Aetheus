@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/pipelines/runs/{RunId:int}"
-@using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
+@using static Aetheus.Front.Components.Shared.PipelineRunFormatting
 @using static Aetheus.Front.Components.Pipelines.PipelineRunLogView
 
 <PageTitle>@(L["PipelineRun"]) #@RunId - Aetheus</PageTitle>
@@ -15,6 +15,8 @@ else if (_run is null)
 }
 else
 {
+    @* R-14: the blocks of the page (header, approval, alerts, tabs) are separated only by this stack's gap. *@
+    <OmniStack Class="pipeline-run-page">
     <PipelineRunHeader Run="@_run" PipelineHref="@PipelineHref" GitBranch="@GitBranch"
         WaitingReasonCount="@WaitViews.Count" GateIncomplete="@_gateState.IsIncomplete"
         BlockingWarningCount="@BlockingWarnings.Count" InfoWarningCount="@InfoWarnings.Count"
@@ -24,11 +26,12 @@ else
         CancelRequested="@CancelRunAsync" RerunRequested="@OnRerunClick" RetryFailedRequested="@RetryFailedAsync" />
     @* F2: the approval region - the decision when there is one, and why there is none when there is not. *@
     <PipelineRunApprovalPanel Approval="_approval" />
+    <PipelineRunResumePanel Run="@_run" Changed="@ReloadRunAsync" />
 
     @* Alerts *@
     @if (BlockingWarningViews.Count > 0)
     {
-            <OmniAlert Severity="OmniSeverity.Danger" Title="@L["RunBlockedTitle"]" Class="omni-u-mt-sm">
+            <OmniAlert Severity="OmniSeverity.Danger" Title="@L["RunBlockedTitle"]">
             @foreach (var item in BlockingWarningViews)
             {
                 <div class="run-warning-line">
@@ -43,13 +46,24 @@ else
     }
     @if (InfoWarnings.Count > 0)
     {
-        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-sm"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>
+        <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>
             @foreach (var warning in InfoWarnings) { <div class="run-warning-line">@warning</div> }
         </ChildContent></OmniAlert>
     }
+    @* Recette R-16: information about the run (no baseline on a first release), in blue, with a "?" saying what it implies. *@
+    @foreach (var noticeCode in RunNoticeCodes)
+    {
+        <OmniAlert Severity="OmniSeverity.Info" data-testid="run-notice">
+            <span class="run-warning-line">@RunNoticeText(noticeCode)</span>
+            @if (RunNoticeHelp(noticeCode) is { } noticeHelp)
+            {
+                <PipelineInfoTip Text="@noticeHelp" />
+            }
+        </OmniAlert>
+    }
     @if (_run.CancellationRequested && RunInProgress)
     {
-            <OmniAlert Severity="OmniSeverity.Info" Title="@L["CancellationAcceptedTitle"]" Class="omni-u-mt-sm">
+            <OmniAlert Severity="OmniSeverity.Info" Title="@L["CancellationAcceptedTitle"]">
             @L["CancellationAcceptedDetail"]
             @if (PipelineRunPresentation.CancelledByText(_run, L) is { } cancelledBy)
             {
@@ -60,7 +74,7 @@ else
     else if (_run.Status == PipelineStatus.Cancelled && PipelineRunPresentation.CancelledByText(_run, L) is { } cancelledBy)
     {
         @* Who stopped the run, once it is over. *@
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-sm"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
+        <OmniAlert Severity="OmniSeverity.Info"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
             <div class="run-cancelled-by">@cancelledBy</div>
         </ChildContent></OmniAlert>
     }
@@ -73,7 +87,7 @@ else
     {
         var rolledBack = _run.Status == PipelineStatus.RolledBack;
             <OmniAlert Severity="@(rolledBack ? OmniSeverity.Warning : OmniSeverity.Danger)"
-                Title="@L[rolledBack ? "RunRolledBackTitle" : "RunFailedTitle"]" Class="omni-u-mt-sm">
+                Title="@L[rolledBack ? "RunRolledBackTitle" : "RunFailedTitle"]">
             @string.Format(L["RunFailedStepsLabel"], FailedRunReason)
             </OmniAlert>
     }
@@ -86,11 +100,12 @@ else
     }
     else
     {
-    <UrlSyncedTabs class="pipeline-run-tabs omni-u-mt-lg" Slugs="@TabSlugs()" @bind-SelectedIndex="_selectedTab">
+    <UrlSyncedTabs class="pipeline-run-tabs"Slugs="@TabSlugs()" @bind-SelectedIndex="_selectedTab">
         <Tabs>
             @* Tab 1: Overview *@
             <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dashboard"))" /></Icon><ChildContent>
-                <div class="run-overview omni-u-mt-md">
+                @* One vertical stack: its gap is the only space between the overview's blocks (R-14). *@
+                <OmniStack Class="run-overview">
                     @{
                         var envNames = _run.Steps
                             .SelectMany(s => s.OutputVariables)
@@ -106,83 +121,81 @@ else
                                 .ToList();
                         var stepProgress = PipelineRunPresentation.StepProgress(_run);
                     }
-                    @* All run facts + produced outputs (release/artifact/env) share ONE responsive, equal-height
-                       grid so every tile sits on the same line and only wraps when the viewport narrows. *@
-                    <div class="run-overview-tiles omni-u-mb-lg">
+                    @* All run facts + produced outputs (release/artifact/env) share ONE OE tile grid: every
+                       tile has the same width and height (recette R1-20) and a tile that leads somewhere is
+                       itself the link or the button (OmniCard.Href / OnClick), never wrapped. *@
+                    @* R-15: up to four tiles, fewer when the area is narrow: the column count follows the width of
+                       the grid itself (MinColumnWidth), sidebar included, never below this width per tile. *@
+                    <OmniTileGrid Columns="4" MinColumnWidth="@RunTileMinColumnWidth" EqualHeights="false" Class="run-overview-tiles">
+                        @* R-28: every tile is an OmniFactTile (OE): a title, then rows of icon, term and value on
+                           columns shared by all the tiles; the clickable ones are themselves the link or the button. *@
                         @* Recette R1-64: the pipeline's id first; the run's own number is in the page title. *@
-                        <OmniCard Class="run-overview-card run-pipeline-id-tile">
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Tag" Class="run-tile-icon" /> @L["PipelineIdTile"]</OmniText>
-                            <div class="run-tile-main"><OmniText Element="OmniTextElement.Strong">@_run.PipelineId</OmniText></div>
-                            <div class="run-tile-foot"><span class="run-tile-sublabel">@_run.PipelineName</span></div>
-                        </OmniCard>
+                        <OmniFactTile Title="@L["PipelineRun"]" Class="run-id-tile">
+                            <Icon><OmniIcon Name="OmniIconName.Tag" /></Icon>
+                            <ChildContent>
+                                <OmniFactTileRow Term="@L["RunIdTile"]"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent>@_run.Id</ChildContent></OmniFactTileRow>
+                                <OmniFactTileRow Term="@L["Pipeline"]"><Icon><OmniIcon Name="OmniIconName.Path" /></Icon><ChildContent>@_run.PipelineName</ChildContent></OmniFactTileRow>
+                            </ChildContent>
+                        </OmniFactTile>
                         @* Status and step progress answer the same question ("where does the run stand?"),
-                           so they share one tile that jumps to the step logs. *@
-                        <div class="run-tile-link" role="button" tabindex="0" @onclick="GoToLogsTab"
-                             @onkeydown="@(e => { if (e.Key == "Enter" || e.Key == " ") GoToLogsTab(); })">
-                            <OmniCard Class="run-overview-card">
-                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Info" Class="run-tile-icon" /> @L["Status"]</OmniText>
-                                @* Every tile is label, value, footer, in three fixed slots. *@
-                                <div class="run-tile-main">
-                                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Start" Class="run-status-badges">
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetRunBadge(_run.Status)">@L.Localize(_run.Status)</OmniBadge>
-                                        @* 2026-10-06: live updates down for more than a few seconds are said here, with
-                                           since when; meanwhile the page reloads a running run by itself. *@
-                                        @if (RunInProgress && _live?.InterruptedSince is { } interruptedSince)
-                                        {
-                                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
-                                                       title="@L["RunLiveInterruptedTitle"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</ChildContent></OmniBadge>
-                                        }
-                                        @* The grade is the Quality tile's; the candidate verdict
-                                           sits here, in short words (its full sentence is the
-                                           tooltip). Deployable is tri-state: only a decided
-                                           verdict is stated, so an undecided seal never reads as a
-                                           refusal. *@
-                                        @* A Rejected run already says the candidate was refused;
-                                           the badge stays for a deployable one. *@
-                                        @if (AssuranceVerdict is { Deployable: not null } verdict && !(verdict.Deployable == false && _run.Status == PipelineStatus.Rejected))
-                                        {
-                                            <OmniBadge Fill="OmniFill.Solid" Tone="@(verdict.Deployable == true ? OmniTone.Success : OmniTone.Warning)" Class="run-candidate-verdict-badge"
-                                                       title="@L[verdict.Deployable == true ? "CandidateDeployableTitle" : "CandidateNotDeployableTitle"]"><Icon><OmniIcon Name="@(verdict.Deployable == true ? OmniIconName.ShieldCheck : OmniIconName.Prohibit)" /></Icon><ChildContent>@L[verdict.Deployable == true ? "CandidateDeployableShort" : "CandidateNotDeployableShort"]</ChildContent></OmniBadge>
-                                        }
-                                    </OmniStack>
-                                </div>
-                                <div class="run-tile-foot">
-                                    <span class="run-tile-subrow">
-                                        <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.Rows" Class="run-tile-icon" /> @L["Steps"]</span>
-                                        <span class="run-tile-value">@stepProgress.Completed / @stepProgress.Total</span>
-                                    </span>
-                                </div>
-                            </OmniCard>
-                        </div>
+                           so they share one tile that links to the step logs. *@
+                        <OmniFactTile Title="@L["Status"]" Href="@TabHref("logs")" Class="run-status-tile">
+                            <Icon><OmniIcon Name="OmniIconName.Info" /></Icon>
+                            <ChildContent>
+                                <OmniFactTileRow Term="@L["Status"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent><PipelineRunStatusBadge Status="_run.Status" /></ChildContent></OmniFactTileRow>
+                                @* 2026-10-06: live updates down for more than a few seconds are said here, with
+                                   since when; meanwhile the page reloads a running run by itself. *@
+                                @if (RunInProgress && _live?.InterruptedSince is { } interruptedSince)
+                                {
+                                    <OmniFactTileRow Term="@L["RunLiveUpdates"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
+                                               title="@L["RunLiveInterruptedTitle"]">@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</OmniBadge></ChildContent></OmniFactTileRow>
+                                }
+                                @* R1-12: an analysis report takes seconds to publish; say so while it lasts
+                                   (the timeline below is veiled too). *@
+                                @if (_live?.AnalysisPublishing == true)
+                                {
+                                    <OmniFactTileRow Term="@L["Quality"]"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info" Class="run-analysis-publishing-badge"
+                                               title="@L["AnalysisPublishingTitle"]">@L["AnalysisPublishing"]</OmniBadge></ChildContent></OmniFactTileRow>
+                                }
+                                @* The grade is the Quality tile's; a refused
+                                   candidate (Deployable false) is stated here in short
+                                   words (its full sentence is the tooltip); a cleared or
+                                   undecided one shows nothing (R1-33). A Rejected run already says the
+                                   candidate was refused. *@
+                                @if (AssuranceVerdict is { Deployable: false } && _run.Status != PipelineStatus.Rejected)
+                                {
+                                    <OmniFactTileRow Term="@L["Candidate"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-candidate-verdict-badge"
+                                               title="@L["CandidateNotDeployableTitle"]">@L["CandidateNotDeployableShort"]</OmniBadge></ChildContent></OmniFactTileRow>
+                                }
+                                <OmniFactTileRow Term="@L["Steps"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>@stepProgress.Completed / @stepProgress.Total</ChildContent></OmniFactTileRow>
+                                @* R1-30: a deploy run has no Quality tile, so the Gate grade of the candidate it deployed is read here. *@
+                                @if (PipelineRunGatePresentation.DeployedCandidateGrade(_run, ShowGateTab && _gateState.Result is not null) is { } deployedGrade)
+                                {
+                                    <OmniFactTileRow Term="@L["RunDeployedCandidateGate"]" data-testid="run-deployed-candidate-gate"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><GradeBadge Value="@deployedGrade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" /></ChildContent></OmniFactTileRow>
+                                }
+                            </ChildContent>
+                        </OmniFactTile>
                         @* Start instant and elapsed time are one timing fact, read together. *@
-                        <OmniCard Class="run-overview-card">
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.CalendarBlank" Class="run-tile-icon" /> @L["Started"]</OmniText>
-                            <div class="run-tile-main">
-                                <OmniText Element="OmniTextElement.Paragraph" title="@_run.StartedAt.ToString("F")">@_run.StartedAt.ToString("g")</OmniText>
-                            </div>
-                            <div class="run-tile-foot">
-                                <span class="run-tile-subrow">
-                                    <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.Timer" Class="run-tile-icon" /> @L["Duration"]</span>
-                                    <span><PipelineRunLiveDuration StartedAt="@_run.StartedAt" CompletedAt="@_run.CompletedAt" IsRunning="@RunInProgress" /></span>
-                                </span>
-                            </div>
-                        </OmniCard>
+                        <OmniFactTile Title="@L["RunTiming"]">
+                            <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+                            <ChildContent>
+                                <OmniFactTileRow Term="@L["Started"]" title="@_run.StartedAt.ToString("F")"><Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon><ChildContent>@_run.StartedAt.ToString("g")</ChildContent></OmniFactTileRow>
+                                <OmniFactTileRow Term="@L["Duration"]"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent><PipelineRunLiveDuration StartedAt="@_run.StartedAt" CompletedAt="@_run.CompletedAt" IsRunning="@RunInProgress" /></ChildContent></OmniFactTileRow>
+                            </ChildContent>
+                        </OmniFactTile>
                         @if (ShowGateTab && _gateState.Result is { } gate)
                         {
-                            <PipelineRunGateOverview Gate="@gate" RunGrade="@_run.GateGrade" GateRequested="@(() => NavigateToTab("gate"))" />
+                            <PipelineRunGateOverview Gate="@gate" RunGrade="@_run.GateGrade" Href="@TabHref("gate")" />
                         }
                         @if (_run.Parameters.Count > 0)
                         {
-                            <div class="run-tile-link run-parameters-tile" role="button" tabindex="0" @onclick="ShowParameters"
-                                 @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await ShowParameters(); })">
-                                <OmniCard Class="run-overview-card">
-                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Sliders" Class="run-tile-icon" /> @L["RunParameters"]</OmniText>
-                                    <div class="run-tile-main">
-                                        <OmniText Element="OmniTextElement.Paragraph">@string.Format(L["RunParametersCount"], _run.Parameters.Count)</OmniText>
-                                    </div>
-                                    <div class="run-tile-foot"></div>
-                                </OmniCard>
-                            </div>
+                            @* A button (it opens a dialog), so its content is phrasing content only. *@
+                            <OmniFactTile Title="@L["RunParameters"]" OnClick="@ShowParameters" Class="run-parameters-tile">
+                                <Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon>
+                                <ChildContent>
+                                    <OmniFactTileRow Term="@L["RunTileCount"]"><Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon><ChildContent>@_run.Parameters.Count</ChildContent></OmniFactTileRow>
+                                </ChildContent>
+                            </OmniFactTile>
                         }
                         <PipelineRunSourceTile Run="@_run" RepoId="@_repoId" />
                         @* Parent run or the person who launched, and the runs this one started. *@
@@ -191,85 +204,71 @@ else
                            tab gives its detail and the project's Quality page its trend. *@
                         @* Produced outputs - same grid as the run facts so all tiles share the row and wrap together. *@
                         @foreach (var release in _releases)
-                            {
-                                <a href="/releases/@release.Id" class="run-tile-link">
-                                    <OmniCard Class="run-overview-card">
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Sparkle" Class="run-tile-icon omni-u-text-success" /> @L["Release"]</OmniText>
-                                        <div class="run-tile-main">
-                                            <OmniRow Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                                @* A commit-derived release name is a full 40-char sha; shorten it so the tile keeps
-                                                   its column width. No Href: the whole tile is already the link to the release. *@
-                                                <ShortId Value="@release.Version" Copyable="false" Class="run-tile-value run-release-version release-version" />
-                                                <ReleaseStatusBadge Status="@release.Status" />
-                                            </OmniRow>
-                                        </div>
-                                        <div class="run-tile-foot">
-                                            @if (AppVersion is { Length: > 0 } appVersion)
-                                            {
-                                                <span class="run-tile-subrow">
-                                                    <span class="run-tile-sublabel"><OmniIcon Name="OmniIconName.Tag" Class="run-tile-icon" /> @L["Version"]</span>
-                                                    <span class="run-release-app-version" title="@appVersion">@appVersion</span>
-                                                </span>
-                                            }
-                                        </div>
-                                    </OmniCard>
-                                </a>
-                            }
-                            @if (_run.Artifacts.Count > 0)
-                            {
-                                <div class="run-tile-link run-artifacts-tile" role="button" tabindex="0" @onclick="GoToArtifactsTab"
-                                     @onkeydown="@(e => { if (e.Key == "Enter" || e.Key == " ") GoToArtifactsTab(); })">
-                                    <OmniCard Class="run-overview-card">
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Archive" Class="run-tile-icon omni-u-text-accent" /> @L["Artifacts"]</OmniText>
-                                        <div class="run-tile-main">
-                                            @* A single artifact reads by its name, several by
-                                               their count. *@
-                                            @if (_run.Artifacts.Count == 1)
-                                            {
-                                                <span class="run-tile-value run-artifact-name" title="@_run.Artifacts[0].Name">@_run.Artifacts[0].Name</span>
-                                            }
-                                            else
-                                            {
-                                                <OmniText Element="OmniTextElement.Paragraph">@_run.Artifacts.Count</OmniText>
-                                            }
-                                        </div>
-                                        <div class="run-tile-foot"></div>
-                                    </OmniCard>
-                                </div>
-                            }
-                            @foreach (var env in envNames)
-                            {
-                                <OmniCard Class="run-overview-card">
-                                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Cloud" Class="run-tile-icon omni-u-text-warning" /> @L["Environment"]</OmniText>
-                                    <div class="run-tile-main">
-                                        <OmniText Element="OmniTextElement.Paragraph" title="@env">@env</OmniText>
-                                    </div>
-                                    <div class="run-tile-foot"></div>
-                                </OmniCard>
-                            }
-                    </div>
+                        {
+                            <OmniFactTile Title="@L["Release"]" Href="@($"/releases/{release.Id}")">
+                                <Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon>
+                                <ChildContent>
+                                    @* A commit-derived release name is a full 40-char sha; shorten it so the tile keeps
+                                       its column width. No Href: the whole tile is already the link to the release. *@
+                                    <OmniFactTileRow Term="@L["Release"]"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent><ShortId Value="@release.Version" Copyable="false" Class="run-release-version release-version" /> <ReleaseStatusBadge Status="@release.Status" /></ChildContent></OmniFactTileRow>
+                                    @if (AppVersion is { Length: > 0 } appVersion)
+                                    {
+                                        <OmniFactTileRow Term="@L["Version"]" title="@appVersion"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent><span class="run-release-app-version">@appVersion</span></ChildContent></OmniFactTileRow>
+                                    }
+                                </ChildContent>
+                            </OmniFactTile>
+                        }
+                        @if (_run.Artifacts.Count > 0)
+                        {
+                            @* A single artifact reads by its name, several by their count. *@
+                            <OmniFactTile Title="@L["Artifacts"]" Href="@TabHref("artifacts")" Class="run-artifacts-tile">
+                                <Icon><OmniIcon Name="OmniIconName.Archive" /></Icon>
+                                <ChildContent>
+                                    @if (_run.Artifacts.Count == 1)
+                                    {
+                                        <OmniFactTileRow Term="@L["Name"]"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent><span class="run-artifact-name">@_run.Artifacts[0].Name</span></ChildContent></OmniFactTileRow>
+                                    }
+                                    else
+                                    {
+                                        <OmniFactTileRow Term="@L["RunTileCount"]"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@_run.Artifacts.Count</ChildContent></OmniFactTileRow>
+                                    }
+                                </ChildContent>
+                            </OmniFactTile>
+                        }
+                        @foreach (var env in envNames)
+                        {
+                            <OmniFactTile Title="@L["Environment"]">
+                                <Icon><OmniIcon Name="OmniIconName.Cloud" /></Icon>
+                                <ChildContent>
+                                    <OmniFactTileRow Term="@L["Name"]"><Icon><OmniIcon Name="OmniIconName.Cloud" /></Icon><ChildContent>@env</ChildContent></OmniFactTileRow>
+                                </ChildContent>
+                            </OmniFactTile>
+                        }
+                    </OmniTileGrid>
 
                     @* The stage timeline precedes secondary details so the run's progress is
                        visible first. *@
+                    @* R1-12: OE's veil lies over the timeline while a report is published; it stays mounted. *@
+                    <div class="@(_live?.AnalysisPublishing == true ? "run-timeline-zone omni-busy" : "run-timeline-zone")" aria-busy="@(_live?.AnalysisPublishing == true ? "true" : "false")"
+                         title="@(_live?.AnalysisPublishing == true ? L["AnalysisPublishingTitle"].Value : null)">
                     <RunTimelineTree Run="_run!" Depth="0" SelectedStepId="_selectedStep?.Id" OnSelectStep="SelectStep"
                                      PreloadedChildren="ChildRuns" Baselines="_baselines.Runs"
                                      ProjectId="ProjectId" ServerId="ServerId" />
-                    <PipelineRunCompatibilityAttestation Run="_run" RepoId="_repoId" />
-                    <PipelineRunMigrationGate Run="_run" />
+                    </div>
                     <PipelineRunAiResultsCard Results="@_aiResults" OnView="@OpenAiResultAsync" />
                     @* S-UX-28: inline error logs for failed steps, surfaced directly on the Overview *@
                     @if (FailedSteps.Count > 0)
                     {
-                        <OmniCard Class="omni-u-p-md omni-u-mb-lg run-failed-card">
-                            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm omni-u-text-danger">
+                        <OmniCard Class="omni-u-p-md run-failed-card">
+                            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm omni-u-text-danger">
                                 <OmniIcon Name="OmniIconName.Error" Class="run-tile-icon" /> @L["FailedSteps"]
                             </OmniText>
                             @foreach (var failed in FailedSteps)
                             {
-                                <div class="run-failed-step">
+                                <OmniStack Class="run-failed-step">
                                     @* OE removed OmniStack.OnClick (a stack is not a button): the row is the interactive element. *@
                                     <div class="clickable-cell" role="button" tabindex="0" @onclick="@(() => SelectStep(failed))" @onkeydown="@(async e => { if (e.Key == "Enter" || e.Key == " ") await SelectStep(failed); })">
-                                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+                                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                                             <StepStatusBadge Step="@failed" Class="run-status-badge" />
                                             <span class="run-tl-name">@failed.StepName</span>
                                             @if (failed.ExitCode is { } code)
@@ -279,6 +278,7 @@ else
                                             <OmniIcon Name="OmniIconName.ChevronRight" Class="run-failed-open-hint" />
                                         </OmniStack>
                                     </div>
+                                    <PipelineStepStopAlert Step="@failed" />
                                     @{ var errLines = ErrorLinesFor(failed, _stepLogsCache); }
                                     @if (errLines.Count > 0)
                                     {
@@ -286,12 +286,12 @@ else
                                             <div class="run-logs-lines">
                                                 @foreach (var log in errLines)
                                                 {
-                                                    <div class="run-log-line @(log.Level == TaskLogLevel.Error ? "step-log-error" : "")">@log.Message</div>
+                                                    <div class="run-log-line @(log.Level == TaskLogLevel.Error ? "step-log-error" : "")"><OmniAnsiText Text="@log.Message" /></div>
                                                 }
                                             </div>
                                         </div>
                                     }
-                                </div>
+                                </OmniStack>
                             }
                         </OmniCard>
                     }
@@ -304,29 +304,29 @@ else
                     <PipelineRunWaitingAlert Waits="WaitViews" />
                     @if (_gateState.IsIncomplete)
                     {
-                <OmniAlert Severity="OmniSeverity.Warning" Title="@L["AnalysisGateIncompleteTitle"]" Class="omni-u-mt-sm">
+                <OmniAlert Severity="OmniSeverity.Warning" Title="@L["AnalysisGateIncompleteTitle"]">
                             @string.Format(L["AnalysisGateIncompleteDetail"], string.Join(", ", _gateState.FailedRunIds))
                 </OmniAlert>
                     }
                     @* Test Results Summary *@
                     @if (_run.TestResultSummary is not null)
                     {
-                        <OmniCard Class="omni-u-p-md omni-u-mb-lg">
-                            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["TestResults"]</OmniText>
+                        <OmniCard Class="omni-u-p-md">
+                            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["TestResults"]</OmniText>
                             <OmniRow Gap="OmniSpacing.Large">
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_run.TestResultSummary.TotalTests.ToString()</OmniBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Total"]</OmniText>
                                 </OmniStack>
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@_run.TestResultSummary.Passed.ToString()</OmniBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Passed"]</OmniText>
                                 </OmniStack>
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@_run.TestResultSummary.Failed.ToString()</OmniBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Failed"]</OmniText>
                                 </OmniStack>
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@_run.TestResultSummary.Skipped.ToString()</OmniBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Skipped"]</OmniText>
                                 </OmniStack>
@@ -337,14 +337,14 @@ else
                     @* The shared time axis shows actual stage overlap, which the ordered list
                        alone cannot show. *@
                     <RunGanttStrip Run="_run" Baselines="@(_run is null ? null : _baselines.Runs.GetValueOrDefault(_run.Id))" />
-                </div>
+                </OmniStack>
             </ChildContent></OmniTabsItem>
 
             @* Tab 2: Logs *@
             <OmniTabsItem Key="logs" Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("terminal"))" /></Icon><ChildContent>
                 @* Side-by-side split: run tree left, logs right. Orchestration runs get a wider left
                    column so the stage label + child-pipeline chip + description fit on one line. *@
-                <div class="run-split-layout @(IsOrchestration ? "run-split-wide" : "") omni-u-mt-md">
+                <div class="run-split-layout @(IsOrchestration ? "run-split-wide" : "")">
                     @* Left panel: compact timeline *@
                     <div class="run-split-timeline">
                         @* A1-A4: recursive, collapsible run tree. Trigger steps are child-run nodes that
@@ -401,18 +401,26 @@ else
                                     {
                                         @* The framed toggle buttons are filled while their content
                                            is visible. *@
-                                        <OmniButton Variant="@(_showCommand ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showCommand ? "true" : "false")" OnClick="@(() => _showCommand = !_showCommand)" title="@(_showCommand ? L["HideCommand"] : L["ShowCommand"])"><OmniIcon Name="@MaterialIconMap.Resolve((_showCommand ? "code_off" : "code"))" /> <span>@L["Command"]</span></OmniButton>
+                                        <OmniButton Variant="@(_showCommand ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showCommand ? "true" : "false")" OnClick="@(() => _showCommand = !_showCommand)" title="@(_showCommand ? L["HideCommand"] : L["ShowCommand"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_showCommand ? "code_off" : "code"))" /></Icon><ChildContent><span>@L["Command"]</span></ChildContent></OmniButton>
                                     }
-                                    <OmniButton Variant="@(_showResults ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showResults ? "true" : "false")" OnClick="@(() => _showResults = !_showResults)" title="@(_showResults ? L["HideOutput"] : L["ShowOutput"])"><OmniIcon Name="@MaterialIconMap.Resolve((_showResults ? "visibility" : "visibility_off"))" /> <span>@L["Output"]</span></OmniButton>
+                                    <OmniButton Variant="@(_showResults ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showResults ? "true" : "false")" OnClick="@(() => _showResults = !_showResults)" title="@(_showResults ? L["HideOutput"] : L["ShowOutput"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_showResults ? "visibility" : "visibility_off"))" /></Icon><ChildContent><span>@L["Output"]</span></ChildContent></OmniButton>
                                     <OmniTextBox @bind-Value="_logSearch" Placeholder="@L["SearchLogs"]" aria-label="@L["SearchLogs"]" Class="run-logs-search" />
                                     <div class="run-step-logs-actions">
-                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyLogsAsync" title="@L["CopyLogs"]"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
-                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ScrollLogsToTopAsync" title="@L["ScrollToTop"]" Label="@L["ScrollToTop"]"><OmniIcon Name="OmniIconName.ArrowLineUp" /></OmniButton>
-                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ScrollLogsToBottomAsync" title="@L["ScrollToBottom"]" Label="@L["ScrollToBottom"]"><OmniIcon Name="OmniIconName.ArrowLineDown" /></OmniButton>
-                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleFollowLogs" title="@L["FollowLogs"]" Label="@L["FollowLogs"]"><OmniIcon Name="OmniIconName.ArrowDown" /></OmniButton>
+                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyLogsAsync" title="@L["CopyLogs"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
+                                        @* STD-BTN detection 11: Copy visible, the other actions in the menu (R-2). *@
+                                        <OmniOverflowMenu Label="@L["MoreActions"]">
+                                            <OmniMenuItem OnClick="@ScrollLogsToTopAsync"><Icon><OmniIcon Name="OmniIconName.ArrowLineUp" /></Icon><ChildContent>@L["ScrollToTop"]</ChildContent></OmniMenuItem>
+                                            <OmniMenuItem OnClick="@ScrollLogsToBottomAsync"><Icon><OmniIcon Name="OmniIconName.ArrowLineDown" /></Icon><ChildContent>@L["ScrollToBottom"]</ChildContent></OmniMenuItem>
+                                            <OmniMenuItem OnClick="@ToggleFollowLogs"><Icon><OmniIcon Name="OmniIconName.ArrowDown" /></Icon><ChildContent>@L["FollowLogs"]</ChildContent></OmniMenuItem>
+                                        </OmniOverflowMenu>
                                     </div>
                                 </div>
                             </div>
+                            @* The stop reason sits in its own padded zone: the panel's blocks are not separated by a margin on the alert. *@
+                            @if (PipelineStepStopReason.For(_selectedStep, L) is not null)
+                            {
+                                <div class="run-step-stop-zone"><PipelineStepStopAlert Step="@_selectedStep" /></div>
+                            }
                             @if (_showCommand && !string.IsNullOrEmpty(_selectedStep.Command))
                             {
                                 <div class="run-cmd" title="@L["ExecutedCommand"]">
@@ -476,12 +484,12 @@ else
                                                    logs are fetched on demand, page by page. *@
                                                 <OmniAlert Severity="OmniSeverity.Info">
                                                     <span>@L["EarlierLogLinesHidden"]</span>
-                                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ShowCompleteLogAsync" Busy="@_completeLogLoading"><OmniIcon Name="OmniIconName.ArrowLineUp" /> <span>@L["ShowCompleteLog"]</span></OmniButton>
+                                                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ShowCompleteLogAsync" Busy="@_completeLogLoading"><Icon><OmniIcon Name="OmniIconName.ArrowLineUp" /></Icon><ChildContent><span>@L["ShowCompleteLog"]</span></ChildContent></OmniButton>
                                                 </OmniAlert>
                                             }
                                             <div class="run-logs-lines">
                                                 <AetheusVirtualList Items="@filteredLogs" ItemSize="21" OverscanCount="20" Context="entry">
-                                                    <div class="run-log-line @(entry.Log.Level == TaskLogLevel.Error ? "step-log-error" : "")"><span class="run-log-num">@entry.Num</span>@HighlightLogVariables(entry.Log.Message, _logVarRegex)</div>
+                                                    <div class="run-log-line @(entry.Log.Level == TaskLogLevel.Error ? "step-log-error" : "")"><span class="run-log-num">@entry.Num</span>@if (AnsiLine.HasSequences(entry.Log.Message)) { <OmniAnsiText Text="@entry.Log.Message" /> } else { @HighlightLogVariables(entry.Log.Message, _logVarRegex) }</div>
                                                 </AetheusVirtualList>
                                             </div>
                                         }
@@ -507,14 +515,14 @@ else
                 <OmniTabsItem Key="yaml" Title="YAML"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("data_object"))" /></Icon><ChildContent>
                     @* Definition left, full-height; `pipeline: <name>` refs are clickable and open the
                        referenced pipeline's live definition in a right peek pane (one at a time). *@
-                    <div class="run-yaml-split omni-u-mt-md">
+                    <div class="run-yaml-split">
                         <div class="run-yaml-pane">
                             <div class="run-logs-header">
                                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Definition"]</OmniText>
                                 <span class="omni-u-text-muted run-yaml-subtitle">@_run.PipelineName</span>
                                 <div class="pipeline-list-spacer"></div>
                                 @* STD-BTN detection 11: Wrap visible, the other actions in the menu. *@
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _yamlWrap = !_yamlWrap)" title="@L["WrapLinesHint"]"><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /> <span>@L["WrapLines"]</span></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _yamlWrap = !_yamlWrap)" title="@L["WrapLinesHint"]"><Icon><OmniIcon Name="OmniIconName.ArrowElbowDownLeft" /></Icon><ChildContent><span>@L["WrapLines"]</span></ChildContent></OmniButton>
                                 <OmniOverflowMenu Label="@L["MoreActions"]">
                                     <OmniMenuItem OnClick="@CopyYamlAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["Copy"]</ChildContent></OmniMenuItem>
                                 </OmniOverflowMenu>
@@ -534,6 +542,14 @@ else
                 </ChildContent></OmniTabsItem>
             }
 
+            @* R-18: the database's expand/contract tracking, only for a run a migrate step reported on. *@
+            @if (_schemaState.HasGate && _schemaState.Schema is { } schema)
+            {
+                <OmniTabsItem Key="schema" Title="@L["SchemaTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("storage"))" /></Icon><ChildContent>
+                    <PipelineRunSchemaTab Schema="@schema" />
+                </ChildContent></OmniTabsItem>
+            }
+
             <PipelineRunResultsTabs Run="@_run" Metrics="@_metrics" StepLogs="@_stepLogsCache"
                 LintSteps="@LintSteps" HasLintTab="@HasLintTab"
                 ArtifactDownloadRequested="@DownloadArtifactAsync"
@@ -541,4 +557,5 @@ else
        </Tabs>
     </UrlSyncedTabs>
     }
+    </OmniStack>
 }

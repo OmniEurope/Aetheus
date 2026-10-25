@@ -1,0 +1,293 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# JavaScript and TypeScript rules for secrets, transport and the browser trust boundary: predictable
+# random numbers, switched-off TLS verification, broken hashes and ciphers, weak token handling,
+# window.postMessage, cookies, web storage and cleartext sockets.
+# Tests: tests/security-rules/aetheus-js-crypto.js and aetheus-js-crypto.ts.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP cheat sheets, the Node.js crypto and
+# tls documentation, the MDN security documentation), not from any third-party rule set.
+rules:
+  - id: aetheus.javascript.math-random-secret
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Math.random is not a cryptographic generator: its output can be predicted from a few values. A
+      token, key, salt, nonce, session id or one-time code must come from crypto.randomBytes,
+      crypto.randomUUID or crypto.getRandomValues.
+    metadata:
+      cwe: CWE-338
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern: Math.random()
+          - pattern-inside: |
+              function $NAME(...) { ... }
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^.*(token|secret|passw|nonce|salt|otp|csrf|session|apikey|api_key|passcode|uuid|guid)
+      - patterns:
+          - pattern: Math.random()
+          - pattern-inside: |
+              const $NAME = (...) => { ... }
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^.*(token|secret|passw|nonce|salt|otp|csrf|session|apikey|api_key|passcode|uuid|guid)
+      - patterns:
+          - pattern-either:
+              - pattern: const $NAME = <... Math.random() ...>
+              - pattern: let $NAME = <... Math.random() ...>
+              - pattern: var $NAME = <... Math.random() ...>
+              - pattern: $NAME = <... Math.random() ...>
+              - pattern: $OBJ.$NAME = <... Math.random() ...>
+          - metavariable-regex:
+              metavariable: $NAME
+              regex: (?i)^.*(token|secret|passw|nonce|salt|otp|csrf|session|apikey|api_key|passcode|uuid|guid)
+
+  - id: aetheus.javascript.tls-verification-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Certificate verification is switched off, so the connection is encrypted but the server it
+      reaches could be anyone on the path. Trust the right CA (the ca option) instead.
+    metadata:
+      cwe: CWE-295
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-either:
+      - pattern: '{ ..., rejectUnauthorized: false, ... }'
+      - pattern: '{ ..., strictSSL: false, ... }'
+      - pattern: '{ ..., NODE_TLS_REJECT_UNAUTHORIZED: "0", ... }'
+      - pattern: $O.rejectUnauthorized = false
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+
+  - id: aetheus.javascript.weak-hash
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      MD5 and SHA-1 are broken for collisions and far too fast for passwords. Use SHA-256 or stronger
+      for integrity and signatures, and a password hash (bcrypt, scrypt, argon2) for secrets.
+    metadata:
+      cwe: CWE-328
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $C.createHash($ALGORITHM, ...)
+          - pattern: createHash($ALGORITHM, ...)
+          - pattern: $C.createHmac($ALGORITHM, ...)
+          - pattern: crypto.subtle.digest($ALGORITHM, ...)
+      - metavariable-regex:
+          metavariable: $ALGORITHM
+          regex: (?i)^["'`](?:md4|md5|sha1|sha-1|ripemd160)["'`]$
+
+  - id: aetheus.javascript.weak-password-hash-cost
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      The work factor is too low to slow down a guessing attack: bcrypt below 10 rounds, or PBKDF2
+      below 100000 iterations. Use bcrypt with 12 rounds or more, or PBKDF2-SHA256 with 600000.
+    metadata:
+      cwe: CWE-916
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $B.hash($PASSWORD, $ROUNDS)
+              - pattern: $B.hashSync($PASSWORD, $ROUNDS)
+              - pattern: $B.genSalt($ROUNDS)
+              - pattern: $B.genSaltSync($ROUNDS)
+          - metavariable-regex:
+              metavariable: $B
+              regex: ^(?:bcrypt|bcryptjs)$
+          - metavariable-regex:
+              metavariable: $ROUNDS
+              regex: ^[0-9]$
+      - patterns:
+          - pattern-either:
+              - pattern: $C.pbkdf2Sync($PASSWORD, $SALT, $ITERATIONS, ...)
+              - pattern: $C.pbkdf2($PASSWORD, $SALT, $ITERATIONS, ...)
+          - metavariable-regex:
+              metavariable: $ITERATIONS
+              regex: ^[0-9]{1,5}$
+
+  - id: aetheus.javascript.weak-cipher
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      DES, Triple DES, RC2, RC4 and Blowfish are broken or have too small a block, and ECB mode
+      reveals the structure of the data. Use aes-256-gcm with a random IV for every message.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $C.createCipheriv($ALGORITHM, ...)
+          - pattern: $C.createDecipheriv($ALGORITHM, ...)
+          - pattern: createCipheriv($ALGORITHM, ...)
+          - pattern: createDecipheriv($ALGORITHM, ...)
+      - metavariable-regex:
+          metavariable: $ALGORITHM
+          regex: (?i)^["'`](?:des|des3|des-[a-z0-9-]*|rc2[a-z0-9-]*|rc4[a-z0-9-]*|bf[a-z0-9-]*|blowfish[a-z0-9-]*|[a-z0-9-]*-ecb)["'`]$
+
+  - id: aetheus.javascript.crypto-create-cipher
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      createCipher and createDecipher derive the key with a single MD5 round and use no IV, so equal
+      messages give equal ciphertext. They are removed from current Node.js. Use createCipheriv with a
+      random IV.
+    metadata:
+      cwe: CWE-329
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    pattern-either:
+      - pattern: $C.createCipher(...)
+      - pattern: $C.createDecipher(...)
+
+  - id: aetheus.javascript.jwt-weak-verification
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The token is accepted without the checks that make it trustworthy: the "none" algorithm needs
+      no signature, and ignoring the expiry accepts a token for ever. Pin the algorithms to the one
+      you sign with, and keep the expiry check.
+    metadata:
+      cwe: CWE-347
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-either:
+      - pattern: '$JWT.verify(..., { ..., ignoreExpiration: true, ... }, ...)'
+      - pattern: '$JWT.verify(..., { ..., algorithms: [..., "none", ...], ... }, ...)'
+      - pattern: '$JWT.sign(..., { ..., algorithm: "none", ... }, ...)'
+
+  - id: aetheus.javascript.jwt-hard-coded-secret
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The key that signs or verifies tokens is written in the source, so everyone who can read the
+      code can mint a valid token. Read the key from the environment or a secret store.
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $JWT.sign($PAYLOAD, "...", ...)
+          - pattern: $JWT.verify($TOKEN, "...", ...)
+      - metavariable-regex:
+          metavariable: $JWT
+          regex: ^(?:jwt|jsonwebtoken)$
+
+  - id: aetheus.javascript.postmessage-no-origin-check
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      This message listener never reads event.origin, so any page that can open or embed this one can
+      send it a message and have it acted on. Compare event.origin to the expected origin first.
+    metadata:
+      cwe: CWE-346
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $W.addEventListener("message", ($E) => { ... }, ...)
+          - pattern: $W.addEventListener("message", function ($E) { ... }, ...)
+          - pattern: addEventListener("message", ($E) => { ... }, ...)
+          - pattern: addEventListener("message", function ($E) { ... }, ...)
+          - pattern: $W.onmessage = ($E) => { ... }
+          - pattern: $W.onmessage = function ($E) { ... }
+      - pattern-not: $W.addEventListener("message", ($E) => { ... <... $E.origin ...>; ... }, ...)
+      - pattern-not: $W.addEventListener("message", function ($E) { ... <... $E.origin ...>; ... }, ...)
+      - pattern-not: addEventListener("message", ($E) => { ... <... $E.origin ...>; ... }, ...)
+      - pattern-not: addEventListener("message", function ($E) { ... <... $E.origin ...>; ... }, ...)
+      - pattern-not: $W.onmessage = ($E) => { ... <... $E.origin ...>; ... }
+      - pattern-not: $W.onmessage = function ($E) { ... <... $E.origin ...>; ... }
+
+  - id: aetheus.javascript.postmessage-wildcard-target
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      postMessage with the target origin "*" delivers the message to whatever page is in that window
+      at that moment, including one that navigated away to a hostile site. Name the exact origin.
+    metadata:
+      cwe: CWE-345
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-either:
+      - pattern: $W.postMessage($MESSAGE, "*")
+      - pattern: $W.postMessage($MESSAGE, "*", ...)
+
+  - id: aetheus.javascript.cookie-without-secure
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A cookie written from script without the Secure attribute is also sent over plain HTTP, where
+      it can be read on the network. Add "; Secure" (and SameSite), or set the cookie from the server
+      with HttpOnly.
+    metadata:
+      cwe: CWE-614
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern: document.cookie = $VALUE
+      # A cookie that is being deleted (expired or max-age=0) carries nothing worth protecting.
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: (?s)^(?!.*(?i:secure|max-age=0|1970)).*$
+
+  - id: aetheus.javascript.cookie-flags-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The cookie is created with Secure or HttpOnly switched off. Without HttpOnly any script on the
+      page can read it, and without Secure it travels over plain HTTP.
+    metadata:
+      cwe: CWE-1004
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: '$RES.cookie($NAME, $VALUE, { ..., httpOnly: false, ... })'
+      - pattern: '$RES.cookie($NAME, $VALUE, { ..., secure: false, ... })'
+      - pattern: '{ ..., cookie: { ..., httpOnly: false, ... }, ... }'
+      - pattern: '{ ..., cookie: { ..., secure: false, ... }, ... }'
+
+  - id: aetheus.javascript.web-storage-secret
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A token, password or key is stored in localStorage, which any script on the origin can read and
+      which never expires. A single cross-site scripting flaw then leaks it. Keep session tokens in an
+      HttpOnly cookie.
+    metadata:
+      cwe: CWE-922
+      owasp: A04:2021 Insecure Design
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: window.localStorage.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^["'`].*(token|secret|passw|jwt|apikey|api_key|credential).*["'`]$
+
+  - id: aetheus.javascript.cleartext-websocket
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A WebSocket to a host other than the local machine uses ws://, so everything it carries,
+      including any token, travels in clear text. Use wss://.
+    metadata:
+      cwe: CWE-319
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    patterns:
+      - pattern: new WebSocket($URL, ...)
+      - metavariable-regex:
+          metavariable: $URL
+          regex: (?i)^["'`]ws://(?!localhost|127\.0\.0\.1|\[::1\])

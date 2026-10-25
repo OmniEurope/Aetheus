@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Mail;
+using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;

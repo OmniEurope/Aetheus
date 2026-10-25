@@ -9,7 +9,7 @@
     {
         <OmniBadge Id="nav-notification-count" Fill="OmniFill.Solid" Tone="OmniTone.Success" Class="nav-alert-count"
                    title="@string.Format(L["NotificationBellTooltip"], Feed.UnreadCount)">
-            @(Feed.UnreadCount > 99 ? "99+" : Feed.UnreadCount.ToString(System.Globalization.CultureInfo.CurrentCulture))
+            @DisplayFormatting.BadgeCount(Feed.UnreadCount)
         </OmniBadge>
     }
 </div>

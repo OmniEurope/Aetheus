@@ -82,7 +82,7 @@ internal sealed class DailyRecapCollector(
 
     internal static RecapDisk? Disk(RecapServerFacts server, double warningPercent, double criticalPercent)
     {
-        // A server that never reported a disk size has no free space to show, rather than a fake 0 GB.
+        // A server that never reported a disk size has no free space to show, rather than a fake 0 Go.
         if (server is not { DiskUsedGb: { } used, DiskTotalGb: { } total, DiskMeasuredAtUtc: { } measured } || total <= 0)
             return null;
         var usedPercent = Math.Clamp(used / total * 100d, 0d, 100d);

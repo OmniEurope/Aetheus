@@ -37,5 +37,9 @@ internal sealed class PortsentryWhitelistIpConfiguration : IEntityTypeConfigurat
     {
         builder.Property(e => e.IpAddress).HasMaxLength(45);
         builder.Property(e => e.Description).HasMaxLength(500);
+        builder.HasOne(e => e.Server)
+               .WithMany(s => s.PortsentryWhitelistIps)
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.Cascade);
     }
 }

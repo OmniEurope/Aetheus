@@ -3,6 +3,7 @@ using Aetheus.Agent.Core.Collectors;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Extensions;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Aetheus.Agent.Linux.Collectors;
 using Aetheus.Agent.Linux.Executors;
 using Aetheus.Agent.Linux.Services;

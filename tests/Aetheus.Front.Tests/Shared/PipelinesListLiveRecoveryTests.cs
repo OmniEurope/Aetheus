@@ -54,7 +54,7 @@ public sealed class PipelinesListLiveRecoveryTests : BunitContext
         _host = Render(builder =>
         {
             builder.OpenComponent<SectionOutlet>(0);
-            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PipelinesList.HeaderActionsSection);
+            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PageHeaderActions.SectionName);
             builder.CloseComponent();
             builder.OpenComponent<PipelinesList>(2);
             builder.CloseComponent();

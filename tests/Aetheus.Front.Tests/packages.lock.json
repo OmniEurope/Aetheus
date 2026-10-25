@@ -651,7 +651,7 @@
       "aetheus.front": {
         "type": "Project",
         "dependencies": {
-          "Aetheus.Shared": "[1.3.0, )",
+          "Aetheus.Shared": "[1.5.0, )",
           "Cronos": "[0.13.0, )",
           "Markdig": "[1.4.0, )",
           "Microsoft.AspNetCore.Components.WebAssembly": "[10.0.13, )",
@@ -661,7 +661,7 @@
           "Microsoft.Extensions.Http": "[10.0.13, )",
           "Microsoft.Extensions.Http.Resilience": "[10.10.0, )",
           "Microsoft.Extensions.Localization": "[10.0.13, )",
-          "OmniEurope.Blazor": "[1.8.2, )",
+          "OmniEurope.Blazor": "[1.9.1, )",
           "YamlDotNet": "[18.1.0, )"
         }
       },
@@ -812,9 +812,9 @@
       },
       "OmniEurope.Blazor": {
         "type": "CentralTransitive",
-        "requested": "[1.8.2, )",
-        "resolved": "1.8.2",
-        "contentHash": "VYgMFnuMpHoCuiq7Tr0ncY+Nwc/0WI0LrcaQ+0qT0jSqKD7H5P4W0ARSmDLAnUvk3uGyiRJjidxO+PJFIlbwSQ==",
+        "requested": "[1.9.1, )",
+        "resolved": "1.9.1",
+        "contentHash": "D8MitU2Mid3xPitvUWKTRnNS3qjf0hEQCCUt8NiM0jj0+KWzqPSAEipE3I3z5THZuezTudTu89Vfnz63tDOCMg==",
         "dependencies": {
           "HtmlSanitizer": "9.2.1039",
           "Microsoft.AspNetCore.Components.Web": "10.0.13",

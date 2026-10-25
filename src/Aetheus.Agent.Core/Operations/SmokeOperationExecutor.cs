@@ -195,7 +195,8 @@ public sealed class SmokeOperationExecutor(
         return new ReadinessEvidence(true, true);
     }
 
-    /// <summary>Requires a real, non-cacheable frontend HTML shell so deployment swaps cannot leave
+    /// <summary>Requires a real, always-revalidated frontend HTML shell (<c>no-cache</c>, never
+    /// <c>no-store</c>: see <see cref="HtmlShellCachePolicy"/>) so deployment swaps cannot leave
     /// browsers requesting runtime assets from a retired colour.</summary>
     private async Task<bool> ProbeFrontendContractAsync(
         string origin, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
@@ -215,10 +216,11 @@ public sealed class SmokeOperationExecutor(
                 await onOutput("Frontend did not return an HTML shell.", TaskLogLevel.Warning).ConfigureAwait(false);
                 return false;
             }
-            if (!IsNoStore(response.Headers.CacheControl))
+            if (!HtmlShellCachePolicy.IsRevalidated(
+                    response.Headers.CacheControl is { } cacheControl ? [cacheControl.ToString()] : []))
             {
                 await onOutput(
-                    "Frontend shell is cacheable; a cached shell strands the app on retired runtime hashes.",
+                    "Frontend shell is not revalidated on every use; a cached shell strands the app on retired runtime hashes.",
                     TaskLogLevel.Warning).ConfigureAwait(false);
                 return false;
             }
@@ -229,11 +231,9 @@ public sealed class SmokeOperationExecutor(
             await onOutput($"Frontend probe failed: {ex.Message}", TaskLogLevel.Warning).ConfigureAwait(false);
             return false;
         }
-        await onOutput("Frontend contract passed (HTML shell, no-store).", TaskLogLevel.Info).ConfigureAwait(false);
+        await onOutput("Frontend contract passed (HTML shell, no-cache).", TaskLogLevel.Info).ConfigureAwait(false);
         return true;
     }
-
-    private static bool IsNoStore(CacheControlHeaderValue? cacheControl) => cacheControl?.NoStore == true;
 
     /// <summary>
     /// Runs the authenticated browser suite from an immutable image. Returns whether the suite ran

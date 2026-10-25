@@ -48,6 +48,29 @@ public sealed class AnalysisGradeEngineTests
     }
 
     [Fact]
+    public void R1_38_Aggregate_KeepsTheUnitOfTheObservedMeasure_WhateverTheOrderOfTheReports()
+    {
+        // The duplication report evaluates the coverage rule too, finds no coverage metric (category
+        // mismatch) and so carries the measure with no value and no unit. Taking that first measure as
+        // the template lost the percent unit of the coverage report, and the Gate showed "88.64" bare.
+        var duplication = AnalysisGradeEngine.Evaluate(
+            Report(AnalysisCategory.Duplication, Metric("duplication.percentage", 4, "percent")),
+            Context(QualityYaml),
+            EvaluatedAt);
+        var coverage = AnalysisGradeEngine.Evaluate(
+            Report(AnalysisCategory.Coverage, Metric("coverage.line.percent", 88.64, "percent")),
+            Context(QualityYaml),
+            EvaluatedAt);
+
+        var summary = AnalysisGradeEngine.Aggregate([duplication.SnapshotJson, coverage.SnapshotJson]);
+
+        var measure = summary!.Domains.SelectMany(domain => domain.Measures)
+            .Single(item => item.Key == "grade.coverage");
+        Assert.Equal(88.64, measure.ObservedValue);
+        Assert.Equal("percent", measure.Unit);
+    }
+
+    [Fact]
     public void Aggregate_ArchitectureMetricsRemainCompleteWhenFindingsReportHasNoMetric()
     {
         var metrics = AnalysisGradeEngine.Evaluate(

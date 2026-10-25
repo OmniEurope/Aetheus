@@ -6,21 +6,21 @@
     <PageTitle>@L["Backups"] - Aetheus</PageTitle>
     <OmniPageHeader Title="@L["Backups"]" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("backup")" /></Icon>
-        <Actions>
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPolicy"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-        </Actions>
+        <ActionsContent>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPolicy"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        </ActionsContent>
     </OmniPageHeader>
 }
 else
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.End" Class="omni-u-mb-md">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPolicy"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.End" Class="omni-u-mb-md">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPolicy"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </OmniStack>
 }
 
 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-mb-lg">@L["BackupPageDescription"]</OmniText>
 
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+<OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
     <OmniTextBox aria-label="@L["Search"]" @bind-Value="_policySearch" @bind-Value:after="ResetPoliciesAsync"
         Placeholder="@L["Search"]" Class="pipeline-list-search" />
 </OmniStack>
@@ -30,7 +30,7 @@ else
     <OmniCard Class="omni-u-mb-lg">
         <OmniTemplateForm TModel="PolicyForm" Model="@_form" OnValidSubmit="@SaveAsync">
             <OmniDataAnnotationsValidator Localizer="@L" />
-            <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@(_form.Id == 0 ? L["BackupNewPolicy"] : L["BackupEditPolicy"])</OmniHeading>
                 <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Start">
                     <OmniFormField For="oe-pages-backups-backups-1"><LabelContent>@L["BackupName"]</LabelContent><ChildContent>
@@ -91,9 +91,9 @@ else
                     }
                 </OmniRow>
 
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                    <OmniButton Busy="@_saving" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelForm"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                    <OmniButton Busy="@_saving" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelForm"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
                 </OmniStack>
             </OmniStack>
         </OmniTemplateForm>
@@ -109,7 +109,7 @@ else
         <EmptyState Icon="backup" Title="@L["BackupEmptyTitle"]" Description="@L["BackupEmptyDescription"]" />
     </EmptyTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="BackupPolicyDto" Property="Name" Title="@L["BackupName"]" MinWidth="10rem" Filterable="true" />
+        <OmniDataGridColumn Frozen="true" TItem="BackupPolicyDto" Property="Name" Title="@L["BackupName"]" Filterable="true" />
         @if (!ProjectId.HasValue)
         {
             <OmniDataGridColumn TItem="BackupPolicyDto" Key="ProjectName" ExportValue="@ProjectExport" Title="@L["Project"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_projectNames" FilterSearchable="true" >
@@ -132,14 +132,16 @@ else
                 <OmniBadge Fill="OmniFill.Solid" Tone="@(p.Enabled ? OmniTone.Success : OmniTone.Neutral)">@(p.Enabled ? L["BackupEnabledYes"] : L["BackupEnabledNo"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="BackupPolicyDto" Title="@L["Actions"]" MinWidth="32rem" Sortable="false" Filterable="false" >
+        <OmniDataGridColumn TItem="BackupPolicyDto" Title="@L["Actions"]" Sortable="false" Filterable="false" >
             <Template Context="p">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowRunsAsync(p))" title="@L["BackupRuns"]" Label="@L["BackupRuns"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunNowAsync(p))" title="@L["BackupRunNow"]" Label="@L["BackupRunNow"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Success" OnClick="@(() => EditPolicy(p))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeletePolicyAsync(p))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => RunNowAsync(p))" title="@L["BackupRunNow"]" Label="@L["BackupRunNow"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
+                    <OmniOverflowMenu Label="@L["MoreActions"]">
+                        <OmniMenuItem OnClick="@(() => ShowRunsAsync(p))"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["BackupRuns"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem OnClick="@(() => EditPolicy(p))"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeletePolicyAsync(p))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
+                    </OmniOverflowMenu>
                 </OmniStack>
                 </span>
             </Template>
@@ -150,7 +152,7 @@ else
 @if (_runsFor is not null)
 {
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@string.Format(L["BackupRunsFor"], _runsFor.Name)</OmniHeading>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
         <OmniTextBox aria-label="@L["Search"]" @bind-Value="_runsSearch" @bind-Value:after="ResetRunsAsync"
             Placeholder="@L["Search"]" Class="pipeline-list-search" />
     </OmniStack>
@@ -165,13 +167,13 @@ else
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="BackupRunDto" Property="StartedAt" Title="@L["BackupStartedAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="BackupRunDto" Property="Status" Title="@L["BackupStatus"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@RunStatusText" >
-                <Template Context="r"><OmniBadge Fill="OmniFill.Solid" Tone="@RunStatusStyle(r.Status)">@L.Localize(r.Status)</OmniBadge></Template>
+                <Template Context="r"><OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@RunStatusStyle(r.Status)">@L.Localize(r.Status)</OmniBadge></Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="BackupRunDto" Property="RestoreCheckStatus" Title="@L["BackupRestoreCheck"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@RestoreText" >
-                <Template Context="r"><OmniBadge Fill="OmniFill.Solid" Tone="@RestoreStyle(r.RestoreCheckStatus)">@RestoreLabel(r.RestoreCheckStatus)</OmniBadge></Template>
+                <Template Context="r"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@RestoreStyle(r.RestoreCheckStatus)">@RestoreLabel(r.RestoreCheckStatus)</OmniBadge></Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="BackupRunDto" Property="SizeBytes" Title="@L["BackupSize"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-            <OmniDataGridColumn TItem="BackupRunDto" Property="Message" Title="@L["BackupMessage"]" Filterable="true" />
+            <OmniDataGridColumn TItem="BackupRunDto" Property="Message" Truncate="true" Title="@L["BackupMessage"]" Filterable="true" />
         </Columns>
     </AetheusDataGrid>
 }

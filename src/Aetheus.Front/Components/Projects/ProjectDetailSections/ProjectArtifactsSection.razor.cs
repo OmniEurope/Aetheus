@@ -176,13 +176,7 @@ public partial class ProjectArtifactsSection : IAsyncDisposable
         await Js.InvokeVoidAsync("downloadFileFromStream", $"{artifact.Name}.zip", streamRef);
     }
 
-    private static string FormatSize(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-        < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1} MB",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):F2} GB"
-    };
+    private static string FormatSize(long bytes) => DisplayFormatting.Size(bytes);
 
     private static OmniTone GetPolicyBadge(ArtifactRetentionPolicy policy) => policy switch
     {

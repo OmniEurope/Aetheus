@@ -8,7 +8,7 @@ namespace Aetheus.Agent.Core.Tests;
 /// What the real scripts produced, committed under <c>TestData/</c> so the equivalence proof does not
 /// need node. Both files were written once with node v24.7.0 (the version is recorded in each file) by a
 /// throwaway driver that, for every case, laid the case's files out in an empty temporary directory, ran
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c> there (working directory = that
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c> there (working directory = that
 /// directory, arguments = the case's parameters in the script's order, environment = PATH and SystemRoot
 /// plus the case's variables only) and recorded every file under <c>.pipeline-artifacts</c> with the
 /// script's console lines or its error (<c>kind: message</c> from stderr).
@@ -17,7 +17,7 @@ namespace Aetheus.Agent.Core.Tests;
 /// input files, expected outputs). <c>assurance-contract-verifier-cases.json</c>: contracts the generator
 /// sealed (some then edited and resealed with <c>JSON.stringify</c>, as <c>assurance-contract.test.mjs</c>
 /// does, or edited as text) with their evidence and source-commit files, and the verdict
-/// <c>deploy/scripts/verify-candidate-assurance-contract.mjs</c> gave for each threshold and requirement.
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-candidate-assurance-contract.mjs</c> gave for each threshold and requirement.
 /// A file content is the text when its bytes are valid UTF-8, else <c>{ "base64": ... }</c>.
 /// </summary>
 internal static class AssuranceReferenceData

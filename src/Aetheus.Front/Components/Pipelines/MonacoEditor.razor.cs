@@ -35,6 +35,10 @@ public partial class MonacoEditor : IAsyncDisposable
 
     public MonacoEditor() => _lifetime = _lifetimeCts.Token;
 
+    // A host call that resumes after the page was left (a YAML validation awaiting the API) finds the
+    // frame already removed with the DOM: the editor is no longer there to update.
+    private bool IsLive => _initialized && !_disposed;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -68,7 +72,7 @@ public partial class MonacoEditor : IAsyncDisposable
 
     public async Task SetValidationErrorsAsync(List<MonacoValidationError> errors)
     {
-        if (_initialized)
+        if (IsLive)
         {
             await Js.InvokeVoidAsync("monacoInterop.setValidationErrors", ElementId, errors);
         }
@@ -76,7 +80,7 @@ public partial class MonacoEditor : IAsyncDisposable
 
     public async Task ClearValidationErrorsAsync()
     {
-        if (_initialized)
+        if (IsLive)
         {
             await Js.InvokeVoidAsync("monacoInterop.clearValidationErrors", ElementId);
         }
@@ -84,7 +88,7 @@ public partial class MonacoEditor : IAsyncDisposable
 
     public async Task UpdateSuggestionsAsync(MonacoSuggestions suggestions)
     {
-        if (_initialized)
+        if (IsLive)
         {
             await Js.InvokeVoidAsync("monacoInterop.updateSuggestions", suggestions);
         }
@@ -92,7 +96,7 @@ public partial class MonacoEditor : IAsyncDisposable
 
     public async Task FormatDocumentAsync()
     {
-        if (_initialized)
+        if (IsLive)
         {
             await Js.InvokeVoidAsync("monacoInterop.formatDocument", ElementId);
         }

@@ -10,13 +10,13 @@ using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>
-/// What a step dispatch did: the task was handled, or the attempt finalized the whole run because the
-/// step definition could not be honoured. Top-level so the step factories can return it.
+/// What a step dispatch did: the task was handled, or the step definition could not be honoured and the
+/// whole stage is refused (the planner then fails the run). Top-level so the step factories can return it.
 /// </summary>
 public enum StepDispatchResult
 {
     Handled,
-    RunFinalized
+    StageRefused
 }
 
 /// <summary>The security-scanner step: manifest compatibility, DAST dispatch policy, execution lease.</summary>

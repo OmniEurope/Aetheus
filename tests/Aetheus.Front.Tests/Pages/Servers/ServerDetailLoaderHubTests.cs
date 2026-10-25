@@ -81,6 +81,67 @@ public sealed class ServerDetailLoaderHubTests : BunitContext
         Assert.Equal([7, 8], Servers.IntArguments("JoinServerGroup"));
     }
 
+    // R-16: leaving the server pages closes the live connection, which asks the hub to leave the group. A hub
+    // slow to answer (a proxy, a mobile link) must not hold back the page of the same server the reader
+    // returns to: the old connection is closed on its own, the new load does not wait for it.
+    [Fact]
+    public async Task ReturningToTheServer_DoesNotWaitForTheOldConnectionToLeaveItsGroup()
+    {
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/servers/7/services");
+        await using var loader = NewLoader();
+        var changed = new StateSignal();
+        loader.OnChanged += changed.Pulse;
+        await loader.EnsureLoadedAsync(7, Xunit.TestContext.Current.CancellationToken);
+        await AdoptedAsync(loader, changed, hub => hub is { State: HubConnectionState.Connected });
+
+        using var slowLeave = Servers.Hold("LeaveServerGroup");
+        nav.NavigateTo("/tasks/22358");
+        await Servers.WhenInvokedAsync("LeaveServerGroup");
+        nav.NavigateTo("/servers/7/services");
+
+        await loader.EnsureLoadedAsync(7, Xunit.TestContext.Current.CancellationToken)
+            .WaitAsync(HangGuard.Limit, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(7, loader.Server?.Id);
+        Assert.True(loader.InitialLoadCompleted);
+        Assert.Equal(2, _handler.RequestsSnapshot().Count(r => r.Method == "GET" && r.Url.EndsWith("api/servers/7", StringComparison.Ordinal)));
+    }
+
+    // R-16: the old connection is closed in the background, so it can still deliver events for a while. Its
+    // events are for the server that was left: they must neither change the server now shown nor reach the
+    // sections listening to the loader.
+    [Fact]
+    public async Task TheOldConnection_StillOpen_DoesNotFeedTheNextServer()
+    {
+        await using var loader = NewLoader();
+        var changed = new StateSignal();
+        loader.OnChanged += changed.Pulse;
+        var completed = 0;
+        loader.OnTaskCompleted += _ =>
+        {
+            Interlocked.Increment(ref completed);
+            return Task.CompletedTask;
+        };
+        await loader.EnsureLoadedAsync(7, Xunit.TestContext.Current.CancellationToken);
+        await AdoptedAsync(loader, changed, hub => hub is { State: HubConnectionState.Connected });
+
+        // The old connection stays open (its leave is held) and the next one cannot open: the only
+        // connection that can still speak is the one of the server that was left.
+        using var slowLeave = Servers.Hold("LeaveServerGroup");
+        Servers.RefuseConnections = true;
+        await loader.EnsureLoadedAsync(8, Xunit.TestContext.Current.CancellationToken);
+        await Servers.WhenInvokedAsync("LeaveServerGroup");
+
+        await Servers.PushAsync("ServerOffline", 7);
+        await Servers.PushAsync("TaskCompleted", new TaskCompletedNotification { TaskId = 1, ServerId = 7 });
+
+        Assert.Equal(8, loader.Server?.Id);
+        Assert.Equal(ServerStatus.Online, loader.Server?.Status);
+        Assert.Equal(0, Volatile.Read(ref completed));
+        Assert.Equal(1, _handler.RequestsSnapshot().Count(r => r.Method == "GET" && r.Url.EndsWith("api/servers/7", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public async Task AfterAReconnect_TheServerGroupIsJoinedAgain()
     {

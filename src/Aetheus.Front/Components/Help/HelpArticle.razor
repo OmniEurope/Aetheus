@@ -12,22 +12,23 @@ else
     <OmniPageHeader Title="@_article.Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()" Icon="@MaterialIconMap.HeaderIcon(_article.Icon)">
     </OmniPageHeader>
 
-    <OmniStack Gap="OmniSpacing.XLarge">
+    <OmniStack Gap="OmniSpacing.ExtraLarge">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@_article.Description</OmniText>
 
         @foreach (var helpSection in _article.Sections)
         {
             <OmniCard>
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@helpSection.Title</OmniHeading>
+                @* nosemgrep: aetheus.razor.markupstring-dynamic - RenderContent renders Markdown with raw HTML disabled *@
                 <div class="markdown-content help-section-content">@((MarkupString)RenderContent(helpSection.Content))</div>
             </OmniCard>
         }
 
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
             <Aetheus.Front.Components.Shared.BrowserBackButton Text="@L["BackToHelp"]" Title="@L["GoBack"]" />
             @if (_pageRoute is not null)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo(_pageRoute))" title="@L["GoToPage"]"><OmniIcon Name="OmniIconName.OpenExternal" /> <span>@L["Open"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo(_pageRoute))" title="@L["GoToPage"]"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Open"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
     </OmniStack>

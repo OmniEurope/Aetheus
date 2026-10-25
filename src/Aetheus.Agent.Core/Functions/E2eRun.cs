@@ -23,6 +23,25 @@ internal sealed record E2eRun(
 
     internal const string ContainerResults = "/tmp/aetheus-e2e-results";
 
+    /// <summary>The suite container's script, verbatim from the script's <c>sh -c</c>. A raw string keeps the
+    /// source file's line endings, CRLF in a Windows checkout, and <c>sh</c> reads the carriage return after
+    /// <c>set -u</c> as an illegal option (QA run 1278, agent built from a Windows tree): the text is
+    /// normalized to LF.</summary>
+    internal static readonly string RunnerScript = """
+        set -u
+            RESULTS=/tmp/aetheus-e2e-results
+            rm -rf "$RESULTS"
+            mkdir -p "$RESULTS"
+            TRX="$RESULTS/e2e.trx"
+            RAW_EXIT=0
+            if [ -n "$E2E_TEST_FILTER" ]; then set -- --filter "$E2E_TEST_FILTER"; else set --; fi
+            dotnet test "$E2E_TEST_PROJECT" -c Release --no-build --no-restore "$@" \
+              --logger "console;verbosity=minimal" --logger "trx;LogFileName=e2e.trx" \
+              --results-directory "$RESULTS" --nologo \
+              -- NUnit.NumberOfTestWorkers="$E2E_WORKERS" || RAW_EXIT=$?
+            printf "%s\n" "$RAW_EXIT" > "$RESULTS/raw-exit-code"
+        """.ReplaceLineEndings("\n");
+
     public string ReadyContainer => $"aetheus-{Label}-ready";
 
     public string RunnerContainer => $"aetheus-{Label}-tests";
@@ -96,7 +115,7 @@ internal sealed record E2eRun(
         "-e", $"AETHEUS_E2E_RESULTS_DIR={ContainerResults}",
         "-e", "DOTNET_CLI_TELEMETRY_OPTOUT=1", "-e", "DOTNET_NOLOGO=1",
         Image,
-        "sh", "-c", RunQaE2eSuiteFunction.RunnerScript
+        "sh", "-c", RunnerScript
     ];
 
     /// <summary>The readiness container's loop, with the front spliced in as the script spliced it.</summary>

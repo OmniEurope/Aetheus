@@ -24,7 +24,7 @@ else if (_loadFailed || _preview is null)
 {
     <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadError"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadPreviewAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadPreviewAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 else
@@ -40,9 +40,9 @@ else
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-md omni-u-mb-sm">@L["NewTemplateYaml"]</OmniText>
         <MonacoEditor Value="@_model.YamlContent" ValueChanged="@(value => _model.YamlContent = value)" />
         <OmniCheckBox @bind-Value="_model.RebaseSourcePipeline" Class="omni-u-mt-md">@L["RebaseSourcePipeline"]</OmniCheckBox>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Upload" /> <span>@L["PublishVersion"]</span></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent><span>@L["PublishVersion"]</span></ChildContent></OmniButton>
         </OmniStack>
     </EditForm>
 }

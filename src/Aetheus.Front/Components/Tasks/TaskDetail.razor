@@ -25,12 +25,12 @@ else
                 <OmniBadge Fill="OmniFill.Solid" Tone="@TaskListView.GetFailureBadge(_task.FailureCode)"><Icon><OmniIcon Name="@TaskListView.GetFailureIcon(_task.FailureCode)" /></Icon><ChildContent>@L[_task.FailureCode]</ChildContent></OmniBadge>
             }
         </Badges>
-        <Actions>
+        <ActionsContent>
             @if (CanCancel)
             {
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@CancelTaskAsync"><OmniIcon Name="OmniIconName.Prohibit" /> <span>@L["CancelTask"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@CancelTaskAsync"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><span>@L["CancelTask"]</span></ChildContent></OmniButton>
             }
-        </Actions>
+        </ActionsContent>
     </OmniPageHeader>
 
     @if (!string.IsNullOrWhiteSpace(_task.FailureReason))
@@ -40,22 +40,22 @@ else
         </OmniAlert>
     }
 
-    <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
-        <OmniColumn Span="12" MediumSpan="6">
+    @* R-5: the two panels are OE tiles of one OmniTileGrid (same width, same height). *@
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
             <OmniCard>
                 <div class="detail-panel-title">
-                    <OmniIcon Name="OmniIconName.Info" Class="run-tile-icon omni-u-text-accent" />
+                    <OmniIcon Name="OmniIconName.Info"Class="run-tile-icon omni-u-text-accent" />
                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Details"]</OmniText>
                 </div>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Name"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@_task.Name</OmniText>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Server"]</OmniText>
                     <a href="@($"/servers/{_task.ServerId}/overview")" class="detail-value-link">@_task.ServerName</a>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Source"]</OmniText>
                     @if (_task.PipelineRunId is { } pipelineRunId)
                     {
@@ -66,41 +66,38 @@ else
                         <span>@($"{L["Server"]}: {_task.ServerName}")</span>
                     }
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Executor"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@_task.Executor</OmniText>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["TimeoutSeconds"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@_task.TimeoutSeconds</OmniText>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Exit"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@(_task.ExitCode?.ToString() ?? "-")</OmniText>
                 </OmniStack>
             </OmniCard>
-        </OmniColumn>
-        <OmniColumn Span="12" MediumSpan="6">
             <OmniCard>
                 <div class="detail-panel-title">
-                    <OmniIcon Name="OmniIconName.Timer" Class="run-tile-icon omni-u-text-accent" />
+                    <OmniIcon Name="OmniIconName.Timer"Class="run-tile-icon omni-u-text-accent" />
                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Duration"]</OmniText>
                 </div>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Created"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@_task.CreatedAt.ToString("g")</OmniText>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Started"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@FormatDate(_task.StartedAt)</OmniText>
                 </OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Completed"]</OmniText>
                     <OmniText Element="OmniTextElement.Paragraph">@FormatDate(_task.CompletedAt)</OmniText>
                 </OmniStack>
             </OmniCard>
-        </OmniColumn>
-    </OmniRow>
+    </OmniTileGrid>
 
     @if (!string.IsNullOrWhiteSpace(_task.Command))
     {
@@ -129,7 +126,7 @@ else
                 {
                     <div class="log-entry log-level-@log.Level.ToString().ToLowerInvariant()">
                         <span class="log-timestamp">[@log.Timestamp.ToString("HH:mm:ss")]</span>
-                        <span>[@L.Localize(log.Level)]</span> @log.Message
+                        <span>[@L.Localize(log.Level)]</span> <OmniAnsiText Text="@log.Message" />
                     </div>
                 }
             }

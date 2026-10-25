@@ -69,6 +69,7 @@ public sealed class PipelineRunLauncher(
     IPipelineRunParameterResolver parameterResolver,
     IPipelineRunPreparationService preparations,
     IPipelineRunPreflightService preflight,
+    IPipelineConfigTemplatePreflight configTemplates,
     IPipelinePortRegistryGuard portGuard,
     PipelineRefusedLaunchRecorder refusals,
     TimeProvider timeProvider,
@@ -136,7 +137,16 @@ public sealed class PipelineRunLauncher(
             runtimePreparation.Definition, preLaunchVariables,
             organizationId, runtimePreparation.EffectiveProjectId, ct)
             .ConfigureAwait(false);
-        var preflightProblems = preflightOutcome.Problems;
+        // R-32: a template a later stage renders is read now, so a token nothing defines refuses the
+        // launch before any stage runs (aetheus-demo had already reset the demo when it was refused).
+        var templateProblems = await configTemplates.FindProblemsAsync(
+            runtimePreparation.Definition, preLaunchVariables, runtimePreparation.EffectiveProjectId,
+            preparation.DefinitionCommitHash ?? preparation.CommitHash, preparation.Pipeline.SourceRepositoryId, ct)
+            .ConfigureAwait(false);
+        // R-20: read on the definition as declared, before the parameters were substituted into it.
+        var emptyTargetProblems = preflight.FindEmptyTargetParameterProblems(
+            preparation.Definition, preLaunchVariables, effectiveParams);
+        List<string> preflightProblems = [.. emptyTargetProblems, .. preflightOutcome.Problems, .. templateProblems];
         if (preflightProblems.Count > 0)
         {
             // Automated launch refusal is audited before throwing because no run row exists yet.

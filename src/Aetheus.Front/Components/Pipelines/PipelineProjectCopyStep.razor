@@ -19,7 +19,7 @@
                     @foreach (var resource in resources)
                     {
                         <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-resource">
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
                                 <span>@resource.NewName</span>
                                 @if (resource.AlreadyExists)
                                 {
@@ -43,6 +43,7 @@
 @if (Step == 0)
 {
     <OmniStack Gap="OmniSpacing.Large" Class="pipeline-setup-step">
+        @StartFrom
         <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineCopyProjectsTitle"]</OmniHeading>
         <OmniFormField Label="@L["PipelineCopyTargetProject"]" Class="omni-u-w-100" For="pipeline-copy-target">
             <OmniDropDown Id="pipeline-copy-target" TValue="int?" Options="@(Flow.Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
@@ -87,7 +88,7 @@ else if (Step == 1)
             {
                 var selected = Flow.Selected.Contains(item.SourcePipelineId);
                 <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-item">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
                         <OmniCheckBox TValue="bool" Value="@selected" ValueExpression="@(() => selected)"
                                       Disabled="@(item.Status == PipelineCopyStatus.NotCopied)"
                                       ValueChanged="@((bool value) => Flow.Toggle(item.SourcePipelineId, value))">
@@ -109,7 +110,7 @@ else if (Flow.Result is { } result)
         @foreach (var item in result.Plan.Pipelines)
         {
             <OmniStack Gap="OmniSpacing.XSmall" data-testid="pipeline-copy-result-item">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Wrap="true">
                     <strong>@item.NewName</strong>
                     @StatusBadge(item.CreatedPipelineId is null ? PipelineCopyStatus.NotCopied : item.Status)
                 </OmniStack>

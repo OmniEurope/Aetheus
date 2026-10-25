@@ -18,7 +18,7 @@
         </ChildContent></OmniFormField>
 
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_submitting ? "btn-busy" : null)" Busy="@(_submitting)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_submitting ? "btn-busy" : null)" Busy="@(_submitting)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

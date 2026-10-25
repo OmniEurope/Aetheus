@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 
-using System.Linq.Expressions;
 using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Components.Pipelines;
@@ -10,6 +9,8 @@ public partial class PipelineSetupWizardStep
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter] public int Step { get; set; }
+    /// <summary>The "start from" choice, drawn at the top of the Project step.</summary>
+    [Parameter] public RenderFragment? StartFrom { get; set; }
     [Parameter] public IReadOnlyList<ProjectDto> Projects { get; set; } = [];
     [Parameter] public int? ProjectId { get; set; }
     [Parameter] public EventCallback<int?> ProjectIdChanged { get; set; }
@@ -22,8 +23,8 @@ public partial class PipelineSetupWizardStep
     /// <summary>The key of the chosen <see cref="PipelineSetupStack"/>.</summary>
     [Parameter] public string Stack { get; set; } = PipelineSetupStack.DotNet.Key;
     [Parameter] public EventCallback<string> StackChanged { get; set; }
-    /// <summary>Whether the same project serves the server and interface remains null until
-    /// explicitly answered.</summary>
+    /// <summary>The application shape, null until a tile is chosen: true is the Full-stack tile (one
+    /// monolith serving the interface and the API), false the front-end and back-end apart.</summary>
     [Parameter] public bool? SameProject { get; set; }
     [Parameter] public EventCallback<bool?> SameProjectChanged { get; set; }
 
@@ -68,6 +69,9 @@ public partial class PipelineSetupWizardStep
     [Parameter] public PipelineSetupReadinessDto? Readiness { get; set; }
     [Parameter] public bool ReadinessLoading { get; set; }
 
+    /// <summary>The production setup of the summary, set only while the production pipeline is selected (ADR-057).</summary>
+    [Parameter] public PipelineSetupProduction? ProductionSetup { get; set; }
+
     /// <summary>Raised once the project changed from the summary (required libraries and vaults
     /// created, a repository created), so the wizard can re-run its readiness check and drop the
     /// findings that no longer hold.</summary>
@@ -77,6 +81,13 @@ public partial class PipelineSetupWizardStep
     /// to.</summary>
     [Parameter] public string? ReturnUrl { get; set; }
 
+    /// <summary>The selected pipelines that would fail at their first run with the templates' default
+    /// commands, from what the branch holds (R-10 to R-13); empty when nothing is wrong or nothing was read.</summary>
+    [Parameter] public IReadOnlyList<string> DetectionWarnings { get; set; } = [];
+
+    /// <summary>Why the QA option is unticked by default (no test project on the branch); null otherwise.</summary>
+    [Parameter] public string? QaNoTestsTip { get; set; }
+
     private static OmniIconName ArchitectureIcon(PipelineArchitecture architecture) => architecture switch
     {
         PipelineArchitecture.Application => OmniIconName.Monitor,
@@ -84,44 +95,40 @@ public partial class PipelineSetupWizardStep
         _ => OmniIconName.Link
     };
 
-    private IReadOnlyList<OmniOption<bool?>> YesNoOptions =>
-    [
-        new OmniOption<bool?>(true, L["Yes"].Value),
-        new OmniOption<bool?>(false, L["No"].Value)
-    ];
-
     private bool Proposes(string capability) => PipelineSetupArchitecture.Proposes(Architecture, capability);
 
     private IReadOnlyList<OmniOption<string>> StackOptions => PipelineSetupStack.All
         .Select(stack => new OmniOption<string>(stack.Key, L[stack.LabelKey].Value))
         .ToList();
 
+    /// <summary>An option the user switches on or off: an OE selectable card that stands for a check box
+    /// (<c>Multiple</c>), identified by the option's name in the wizard's address.</summary>
     private static RenderFragment Option(
+        string key,
         OmniIconName icon,
         string title,
         string description,
         bool value,
-        EventCallback<bool> changed) => builder =>
+        EventCallback<bool> changed,
+        RenderFragment? note = null) => builder =>
     {
-        builder.OpenElement(0, "label");
-        builder.AddAttribute(1, "class", "pipeline-setup-option");
-        builder.OpenComponent<OmniCheckBox<bool>>(2);
-        builder.AddAttribute(3, "Value", value);
-        builder.AddAttribute(4, "ValueChanged", changed);
-        builder.AddAttribute(5, "ValueExpression", (Expression<Func<bool>>)(() => value));
+        builder.OpenComponent<OmniSelectableCard>(0);
+        builder.SetKey(key);
+        builder.AddAttribute(1, nameof(OmniSelectableCard.Multiple), true);
+        builder.AddAttribute(2, nameof(OmniSelectableCard.Title), title);
+        builder.AddAttribute(3, nameof(OmniSelectableCard.Description), description);
+        builder.AddAttribute(4, nameof(OmniSelectableCard.Value), value);
+        builder.AddAttribute(5, nameof(OmniSelectableCard.ValueChanged), changed);
+        builder.AddAttribute(6, nameof(OmniSelectableCard.Icon), (RenderFragment)(iconBuilder =>
+        {
+            iconBuilder.OpenComponent<OmniIcon>(0);
+            iconBuilder.AddAttribute(1, nameof(OmniIcon.Name), icon);
+            iconBuilder.CloseComponent();
+        }));
+        builder.AddAttribute(7, "data-testid", $"setup-option-{key}");
+        if (note is not null)
+            builder.AddAttribute(8, nameof(OmniSelectableCard.ChildContent), note);
         builder.CloseComponent();
-        builder.OpenComponent<OmniIcon>(6);
-        builder.AddAttribute(7, "Name", icon);
-        builder.CloseComponent();
-        builder.OpenElement(8, "span");
-        builder.OpenElement(9, "strong");
-        builder.AddContent(10, title);
-        builder.CloseElement();
-        builder.OpenElement(11, "small");
-        builder.AddContent(12, description);
-        builder.CloseElement();
-        builder.CloseElement();
-        builder.CloseElement();
     };
 }
 

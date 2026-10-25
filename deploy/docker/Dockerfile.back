@@ -81,9 +81,6 @@ FROM build-source AS aetheus-fn-build
 COPY src/Aetheus.Shared/ Aetheus.Shared/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Functions.Cli/ Aetheus.Agent.Functions.Cli/
-COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
 ARG APP_VERSION
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
     for rid in linux-x64 linux-musl-x64; do \
@@ -101,12 +98,9 @@ FROM build-source AS agent-linux-build
 COPY src/Aetheus.Shared/ Aetheus.Shared/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ Aetheus.Agent.Linux/
-COPY deploy/scripts/install-agent-linux.sh deploy/scripts/install-agent-linux.sh
+COPY deploy/agent-installer/install-agent-linux.sh deploy/agent-installer/install-agent-linux.sh
 # Ships host-configuration templates beside the installer so it can render the agent configuration.
 COPY deploy/agent-host-config/ deploy/agent-host-config/
-COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
 ARG APP_VERSION
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
     dotnet publish Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj \
@@ -114,9 +108,9 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
         -o /tmp/agent-linux \
         /p:Version=${APP_VERSION} /p:RunAnalyzers=false
 COPY --from=aetheus-fn-build /aetheus-fn/ /tmp/agent-linux/aetheus-fn/
-RUN sed -i 's/\r$//' deploy/scripts/install-agent-linux.sh \
-    && chmod +x deploy/scripts/install-agent-linux.sh \
-    && cp deploy/scripts/install-agent-linux.sh /tmp/agent-linux/install-agent-linux.sh \
+RUN sed -i 's/\r$//' deploy/agent-installer/install-agent-linux.sh \
+    && chmod +x deploy/agent-installer/install-agent-linux.sh \
+    && cp deploy/agent-installer/install-agent-linux.sh /tmp/agent-linux/install-agent-linux.sh \
     && find deploy/agent-host-config -type f -exec sed -i 's/\r$//' {} + \
     && cp -R deploy/agent-host-config /tmp/agent-linux/agent-host-config \
     && mkdir -p /agent-release \
@@ -127,10 +121,7 @@ FROM build-source AS agent-windows-build
 COPY src/Aetheus.Shared/ Aetheus.Shared/
 COPY src/Aetheus.Agent.Core/ Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Windows/ Aetheus.Agent.Windows/
-COPY deploy/scripts/install-agent-windows.ps1 deploy/scripts/install-agent-windows.ps1
-COPY deploy/scripts/zap-active-automation.sh /deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh /deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh /deploy/scripts/promote-observability-packages.sh
+COPY deploy/agent-installer/install-agent-windows.ps1 deploy/agent-installer/install-agent-windows.ps1
 ARG APP_VERSION
 RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sharing=locked \
     dotnet publish Aetheus.Agent.Windows/Aetheus.Agent.Windows.csproj \
@@ -141,7 +132,7 @@ RUN --mount=type=cache,id=nuget-${CACHE_COHORT},target=/root/.nuget/packages,sha
 COPY --from=aetheus-fn-build /aetheus-fn/ /tmp/agent-windows/aetheus-fn/
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    cp deploy/scripts/install-agent-windows.ps1 /tmp/agent-windows/install-agent-windows.ps1 \
+    cp deploy/agent-installer/install-agent-windows.ps1 /tmp/agent-windows/install-agent-windows.ps1 \
     && apt-get update && apt-get install -y --no-install-recommends zip \
     && mkdir -p /agent-release \
     && (cd /tmp/agent-windows && zip -r /agent-release/aetheus-agent-win-x64-v${APP_VERSION}.zip .) \
@@ -150,7 +141,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 FROM build-source AS agent-release
 COPY --from=agent-linux-build /agent-release/ /agent-release/
 COPY --from=agent-windows-build /agent-release/ /agent-release/
-COPY deploy/scripts/generate-agent-release-manifest.sh /generate-agent-release-manifest.sh
+COPY deploy/agent-installer/generate-agent-release-manifest.sh /generate-agent-release-manifest.sh
 ARG APP_VERSION
 ARG SOURCE_COMMIT
 RUN chmod +x /generate-agent-release-manifest.sh \
@@ -161,7 +152,7 @@ COPY --from=agent-release /agent-release/ /
 
 # The backend publish is NOT built here any more. The pipeline has already compiled the whole
 # solution in Release before this image is built, and rebuilding the same sources from a cold obj/
-# inside the container cost 88.6 s (measured 2026-09-07). deploy/scripts/publish-application.sh
+# inside the container cost 88.6 s (measured 2026-09-07). scripts/publish-application.sh
 # produces it on the host, into .pipeline-publish/backend/, and it is copied in below.
 #
 # The EF migrations bundle stays here, deliberately. `dotnet ef migrations bundle --runtime linux-x64
@@ -178,12 +169,6 @@ COPY deploy/pipelines/toto-vulnerable-fixture/ /deploy/pipelines/toto-vulnerable
 COPY deploy/pipelines/toto-*.yaml /deploy/pipelines/
 COPY deploy/pipeline-templates/*.yaml /deploy/pipeline-templates/
 COPY deploy/pipeline-templates/generic/*.yaml /deploy/pipeline-templates/generic/
-COPY deploy/scripts/generate-delivery-contract.mjs /deploy/scripts/generate-delivery-contract.mjs
-COPY deploy/scripts/verify-delivery-promotion.mjs /deploy/scripts/verify-delivery-promotion.mjs
-COPY deploy/scripts/resolve-injected-nuget-packages.mjs /deploy/scripts/resolve-injected-nuget-packages.mjs
-COPY deploy/scripts/generate-artifact-provenance.mjs /deploy/scripts/generate-artifact-provenance.mjs
-COPY deploy/scripts/generate-candidate-assurance-contract.mjs /deploy/scripts/generate-candidate-assurance-contract.mjs
-COPY deploy/scripts/verify-candidate-assurance-contract.mjs /deploy/scripts/verify-candidate-assurance-contract.mjs
 # Pass the non-routable placeholder directly to the design-time factory. Arguments after
 # `--` are forwarded by dotnet-ef to IDesignTimeDbContextFactory, avoiding environment
 # propagation differences between Docker engines. This value is never used at runtime.

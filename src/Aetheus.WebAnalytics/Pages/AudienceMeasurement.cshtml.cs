@@ -24,7 +24,7 @@ public sealed class AudienceMeasurementModel(AetheusWebAnalyticsOptions options)
         else
         {
             Response.Cookies.Append(
-                AetheusWebAnalyticsEndpointExtensions.OptOutCookieName,
+                AnalyticsPrivacyPolicy.OptOutCookieName,
                 "1",
                 AetheusWebAnalyticsEndpointExtensions.PreferenceCookieOptions());
         }

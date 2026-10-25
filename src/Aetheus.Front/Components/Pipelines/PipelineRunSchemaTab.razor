@@ -1,0 +1,40 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+
+@* Recette R-18: the database's expand/contract tracking on a deploy run. The gate verdict card, the migrations the
+   gate inspected on this run (expand or contract) and the contractions the plan still owes. *@
+<OmniStack data-testid="run-schema-tab" Class="omni-u-mt-md">
+    <PipelineRunMigrationGate Gates="@Schema.Gates" />
+
+    @if (Schema.Migrations.Count > 0)
+    {
+        <OmniStack data-testid="run-schema-migrations">
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["SchemaRunMigrationsTitle"]</OmniHeading>
+            <OmniDataGrid TItem="RunSchemaMigrationDto" Items="@Schema.Migrations" Class="schema-migrations-grid"
+                          ExportTitle="@ExportContext.Title(L["SchemaRunMigrationsTitle"])" ExportFields="@ExportContext.Fields()"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MinHeight="12rem" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+                <Columns>
+                    <OmniDataGridColumn TItem="RunSchemaMigrationDto" Property="MigrationId" Title="@L["SchemaMigrationName"]" Key="name">
+                        <Template Context="migration">
+                            <code title="@migration.MigrationId">@migration.MigrationId</code>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="RunSchemaMigrationDto" Title="@L["SchemaMigrationKind"]" Width="10rem" Sortable="false" Filterable="false" Key="kind"
+                                        ExportValue="@(migration => L.Localize(migration.Kind))">
+                        <Template Context="migration">
+                            <OmniBadge Fill="OmniFill.Tonal" Tone="@KindTone(migration.Kind)">@L.Localize(migration.Kind)</OmniBadge>
+                        </Template>
+                    </OmniDataGridColumn>
+                    <OmniDataGridColumn TItem="RunSchemaMigrationDto" Title="@L["SchemaMigrationResult"]" Width="10rem" Sortable="false" Filterable="false" Key="result"
+                                        ExportValue="@(migration => L[migration.Applied ? "SchemaMigrationApplied" : "SchemaMigrationNotApplied"].Value)">
+                        <Template Context="migration">
+                            <OmniBadge Fill="OmniFill.Tonal" Tone="@(migration.Applied ? OmniTone.Success : OmniTone.Danger)">@L[migration.Applied ? "SchemaMigrationApplied" : "SchemaMigrationNotApplied"]</OmniBadge>
+                        </Template>
+                    </OmniDataGridColumn>
+                </Columns>
+            </OmniDataGrid>
+        </OmniStack>
+    }
+
+    <SchemaPendingContractions Contractions="@Schema.PendingContractions" />
+</OmniStack>

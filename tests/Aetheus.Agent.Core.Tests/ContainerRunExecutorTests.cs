@@ -263,7 +263,7 @@ public class ContainerRunExecutorTests
             .Select(static _ => ContainerRunExecutor.CreateScriptName())
             .ToArray();
 
-        Assert.All(names, name => Assert.True(ContainerRunExecutor.IsShellSafeScriptName(name), name));
+        Assert.All(names, name => Assert.True(ContainerWorkspaceMaterializer.IsShellSafeScriptName(name), name));
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
     }
 

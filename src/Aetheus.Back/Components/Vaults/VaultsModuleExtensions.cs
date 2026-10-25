@@ -8,7 +8,6 @@ public static class VaultsModuleExtensions
     {
         services.AddScoped<IVaultRepository, VaultRepository>();
         services.AddScoped<IVaultService, VaultService>();
-        services.AddHostedService<SecretExpirationService>();
         return services;
     }
 }

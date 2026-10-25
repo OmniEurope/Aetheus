@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using System.Globalization;
 
 namespace Aetheus.Agent.Core.Operations;
 
@@ -163,73 +162,6 @@ public sealed class ScannerProcessRunner(
         return process.ExitCode == 0 ? output : null;
     }
 
-    internal static bool TryParseUsage(string value, out double cpuPercent, out long memoryBytes)
-    {
-        cpuPercent = 0;
-        memoryBytes = 0;
-        var parts = value.Trim().Split('|', 2);
-        if (parts.Length != 2
-            || !double.TryParse(parts[0].TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out cpuPercent))
-            return false;
-        var memory = parts[1].Split('/', 2)[0].Trim();
-        return TryParseBytes(memory, out memoryBytes);
-    }
-
-    internal static bool TryParseUsage(
-        string value,
-        out double cpuPercent,
-        out long memoryBytes,
-        out long diskReadBytes,
-        out long diskWrittenBytes,
-        out long networkReceivedBytes,
-        out long networkSentBytes)
-    {
-        cpuPercent = 0;
-        memoryBytes = 0;
-        diskReadBytes = 0;
-        diskWrittenBytes = 0;
-        networkReceivedBytes = 0;
-        networkSentBytes = 0;
-        var parts = value.Trim().Split('|', 4);
-        return parts.Length == 4
-               && TryParseUsage($"{parts[0]}|{parts[1]}", out cpuPercent, out memoryBytes)
-               && TryParseIoPair(parts[2], out diskReadBytes, out diskWrittenBytes)
-               && TryParseIoPair(parts[3], out networkReceivedBytes, out networkSentBytes);
-    }
-
-    private static bool TryParseIoPair(string value, out long first, out long second)
-    {
-        first = 0;
-        second = 0;
-        var parts = value.Split('/', 2, StringSplitOptions.TrimEntries);
-        return parts.Length == 2
-               && TryParseBytes(parts[0], out first)
-               && TryParseBytes(parts[1], out second);
-    }
-
-    private static bool TryParseBytes(string value, out long bytes)
-    {
-        bytes = 0;
-        var unitStart = value.TakeWhile(character => char.IsDigit(character) || character is '.' or ',').Count();
-        if (unitStart == 0 || !double.TryParse(value[..unitStart].Replace(',', '.'), NumberStyles.Float,
-                CultureInfo.InvariantCulture, out var amount)) return false;
-        var unit = value[unitStart..].Trim().ToUpperInvariant();
-        var factor = unit switch
-        {
-            "B" => 1d,
-            "KB" => 1_000d,
-            "KIB" => 1_024d,
-            "MB" => 1_000_000d,
-            "MIB" => 1_048_576d,
-            "GB" => 1_000_000_000d,
-            "GIB" => 1_073_741_824d,
-            _ => 0d
-        };
-        if (factor == 0) return false;
-        bytes = checked((long)Math.Round(amount * factor));
-        return true;
-    }
-
     private static async Task PublishUsageAsync(
         TimeSpan elapsed,
         ContainerUsage usage,
@@ -270,7 +202,7 @@ public sealed class ScannerProcessRunner(
         /// <summary>This usage raised to the figures of one <c>docker stats</c> line; unchanged when the
         /// line does not parse.</summary>
         public ContainerUsage WithPeakOf(string statsLine) =>
-            TryParseUsage(statsLine, out var cpu, out var memory, out var readBytes, out var writtenBytes,
+            DockerStatsParser.TryParseUsage(statsLine, out var cpu, out var memory, out var readBytes, out var writtenBytes,
                 out var receivedBytes, out var sentBytes)
                 ? new ContainerUsage(
                     Math.Max(PeakCpuPercent, cpu),

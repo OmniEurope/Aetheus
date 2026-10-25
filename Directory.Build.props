@@ -36,12 +36,18 @@
          Release-canonical packages.lock.json files and make CI locked mode fail with NU1004. -->
     <NuGetLockFilePath Condition="'$(Configuration)' != 'Release'">$(MSBuildProjectDirectory)\obj\packages.$(Configuration).lock.json</NuGetLockFilePath>
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
-    <!-- Recette R1-57 (2026-10-12): OE 1.8.0 is published, so every build uses the package again. Building the
-         front against the OE sources next to this repository is now opt-in (-p:UseLocalOmniEurope=true), to try
-         an unpublished OE change; that graph has its own lock file under obj/ so it never rewrites the
-         Release-canonical ones. -->
-    <OmniEuropeBlazorLocalProject>$(MSBuildThisFileDirectory)..\OmniEurope\OmniEurope.Blazor\src\OmniEurope.Blazor\OmniEurope.Blazor.csproj</OmniEuropeBlazorLocalProject>
-    <OmniEuropeBlazorLocalAnalyzers>$(MSBuildThisFileDirectory)..\OmniEurope\OmniEurope.Blazor\src\OmniEurope.Blazor.Analyzers\OmniEurope.Blazor.Analyzers.csproj</OmniEuropeBlazorLocalAnalyzers>
+    <!-- Recette 2026-10-23: OE 1.9.0 is on disk but not published on nuget.org yet, so a developer machine
+         builds against the OE sources again (like R1-57 did for 1.8): UseLocalOmniEurope defaults to true when
+         it is empty, CI is not set and the OE project exists. The OE checkout is searched in the nearest
+         ancestor directory that holds OmniEurope/OmniEurope.Blazor, so it also resolves from a worktree under
+         .claude/worktrees/<name> (a path relative to the repository root only worked from the main checkout).
+         CI and Docker builds never have that path and keep the package; -p:UseLocalOmniEurope=false forces the
+         package locally (needed to refresh the tracked lock files). The local graph has its own lock file
+         under obj/ so it never rewrites the Release-canonical ones. -->
+    <OmniEuropeBlazorRoot>$([MSBuild]::GetDirectoryNameOfFileAbove('$(MSBuildThisFileDirectory)', 'OmniEurope/OmniEurope.Blazor/src/OmniEurope.Blazor/OmniEurope.Blazor.csproj'))</OmniEuropeBlazorRoot>
+    <OmniEuropeBlazorLocalProject Condition="'$(OmniEuropeBlazorRoot)' != ''">$(OmniEuropeBlazorRoot)/OmniEurope/OmniEurope.Blazor/src/OmniEurope.Blazor/OmniEurope.Blazor.csproj</OmniEuropeBlazorLocalProject>
+    <OmniEuropeBlazorLocalAnalyzers Condition="'$(OmniEuropeBlazorRoot)' != ''">$(OmniEuropeBlazorRoot)/OmniEurope/OmniEurope.Blazor/src/OmniEurope.Blazor.Analyzers/OmniEurope.Blazor.Analyzers.csproj</OmniEuropeBlazorLocalAnalyzers>
+    <UseLocalOmniEurope Condition="'$(UseLocalOmniEurope)' == '' and '$(CI)' != 'true' and '$(OmniEuropeBlazorLocalProject)' != '' and Exists('$(OmniEuropeBlazorLocalProject)')">true</UseLocalOmniEurope>
     <NuGetLockFilePath Condition="'$(UseLocalOmniEurope)' == 'true'">$(MSBuildProjectDirectory)\obj\packages.local-oe.$(Configuration).lock.json</NuGetLockFilePath>
     <!-- Product conventions must fail builds, not merely disappear into warning logs. -->
     <WarningsAsErrors>$(WarningsAsErrors);PRM001;PRM002;PRM003</WarningsAsErrors>

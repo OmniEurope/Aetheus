@@ -22,7 +22,7 @@
             <OmniAlert Severity="OmniSeverity.Danger" Live="true">@_refusal</OmniAlert>
         }
         <DialogFooter OnCancel="@(() => Dialog.Close())">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving"><OmniIcon Name="OmniIconName.Check" /> <span>@L["Apply"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["Apply"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

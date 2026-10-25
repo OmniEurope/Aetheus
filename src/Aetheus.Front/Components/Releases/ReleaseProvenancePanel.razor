@@ -1,8 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* The runs that used the release after its creation, and what its build consumed. Both are kept
    apart from the Source card (creation) and the Deliverables (what it ships). *@
-<OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
-    <OmniColumn Span="12" MediumSpan="6">
+<OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
         <OmniCard>
             <div class="detail-panel-title">
                 <OmniIcon Name="OmniIconName.RocketLaunch" Class="run-tile-icon omni-u-text-accent" />
@@ -14,20 +13,18 @@
             }
             @foreach (var use in Provenance.Uses)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
                         <a href="/pipelines/@use.Run.PipelineId" class="detail-value-link">@use.Run.PipelineName</a>
                         <a href="/pipelines/runs/@use.Run.RunId" class="detail-value-link">#@use.Run.RunId</a>
                     </OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(use.Kind)</OmniBadge>
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(use.Run.Status)">@L.Localize(use.Run.Status)</OmniBadge>
+                        <PipelineRunStatusBadge Status="use.Run.Status" />
                     </OmniStack>
                 </OmniStack>
             }
         </OmniCard>
-    </OmniColumn>
-    <OmniColumn Span="12" MediumSpan="6">
         <OmniCard>
             <div class="detail-panel-title">
                 <OmniIcon Name="OmniIconName.Download" Class="run-tile-icon omni-u-text-accent" />
@@ -40,8 +37,8 @@
             }
             @foreach (var input in Provenance.ArtifactInputs)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None" Class="release-provenance-cell">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None" Class="release-provenance-cell">
                         @if (input.ArtifactId is { } artifactId)
                         {
                             <a href="/artifacts/@artifactId" class="detail-value-link"><OmniIcon Name="OmniIconName.Archive" Class="run-tile-icon omni-u-text-accent" /> @input.ArtifactName</a>
@@ -62,7 +59,7 @@
                             }
                         </OmniText>
                     </OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
                         <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@input.StepName">@L.Localize(input.Kind)</OmniBadge>
                         @if (input.IsDeliverable)
                         {
@@ -71,7 +68,7 @@
                     </OmniStack>
                 </OmniStack>
             }
-            <OmniText Element="OmniTextElement.Small" Class="omni-u-text-muted omni-u-mt-md">@L["ReleaseInputPackages"]</OmniText>
+            <OmniText Element="OmniTextElement.Caption" Class="omni-u-text-muted omni-u-mt-md">@L["ReleaseInputPackages"]</OmniText>
             @if (Provenance.Packages.Count == 0)
             {
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["ReleaseInputPackagesEmpty"]</OmniText>
@@ -82,15 +79,15 @@
             }
             @foreach (var package in Provenance.Packages)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.None" Class="release-provenance-cell">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row release-provenance-row">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None" Class="release-provenance-cell">
                         <OmniText Element="OmniTextElement.Paragraph"><OmniIcon Name="OmniIconName.Package" Class="run-tile-icon" /> @package.Name <span class="text-mono">@package.Version</span></OmniText>
                         @if (!string.IsNullOrEmpty(package.PackageUrl))
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted text-mono release-provenance-id">@package.PackageUrl</OmniText>
                         }
                     </OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         @if (package.IsDirect)
                         {
                             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["ReleaseInputPackageDirect"]</OmniBadge>
@@ -100,5 +97,4 @@
                 </OmniStack>
             }
         </OmniCard>
-    </OmniColumn>
-</OmniRow>
+</OmniTileGrid>

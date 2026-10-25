@@ -3,6 +3,6 @@
     <OmniText Element="OmniTextElement.Paragraph">@L["PasteJsonBelow"]</OmniText>
     <OmniTextArea aria-label="@L["PasteJsonBelow"]" @bind-Value="_json" Rows="12" Class="w-100" />
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(_json))" Disabled="@string.IsNullOrWhiteSpace(_json)"><OmniIcon Name="OmniIconName.Upload" /> <span>@L["Import"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(_json))" Disabled="@string.IsNullOrWhiteSpace(_json)"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent><span>@L["Import"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

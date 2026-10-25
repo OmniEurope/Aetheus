@@ -2,7 +2,7 @@
 namespace Aetheus.Back.Data.Entities;
 
 /// <summary>An immutable published version of an organization-scoped pipeline template.</summary>
-public sealed class PipelineTemplateVersion
+public sealed class PipelineTemplateVersion : IPipelineTemplateVersionContent
 {
     public int Id { get; set; }
     public int TemplateId { get; set; }

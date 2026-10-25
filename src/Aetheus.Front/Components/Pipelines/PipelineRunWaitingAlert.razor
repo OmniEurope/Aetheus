@@ -4,7 +4,7 @@
    records why it could not dispatch, here and in every triggered child. *@
 @if (Waits.Count > 0)
 {
-<OmniAlert Severity="OmniSeverity.Info" Title="@L["RunWaitingTitle"]" Class="omni-u-mt-sm">
+<OmniAlert Severity="OmniSeverity.Info" Title="@L["RunWaitingTitle"]">
         @foreach (var wait in Waits)
         {
             <div>

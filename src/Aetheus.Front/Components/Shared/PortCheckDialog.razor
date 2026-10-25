@@ -30,18 +30,18 @@
     @if (_result is not null)
     {
         <OmniStack Gap="OmniSpacing.Small">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@_result.ServerName</OmniText>
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@ScanCaption</OmniText>
                 @if (_result.ObservationAvailable)
                 {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RefreshScanAsync" Disabled="@_busy" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)"><OmniIcon name="OmniIconName.Refresh" /> <span>@L["PortScanRefresh"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RefreshScanAsync" Disabled="@_busy" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)"><Icon><OmniIcon name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
                 }
             </OmniStack>
 
             @foreach (var entry in _result.Entries)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                     <PortVerdictBadge Entry="@entry" />
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@entry.Port</OmniText>
 
@@ -54,6 +54,6 @@
     }
 
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CheckAsync" Disabled="@(_scanning || EffectiveServerId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon name="OmniIconName.Check" /> <span>@L["CheckPorts"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CheckAsync" Disabled="@(_scanning || EffectiveServerId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Check" /></Icon><ChildContent><span>@L["CheckPorts"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

@@ -142,6 +142,9 @@ public class RouteAccessPolicyTests
     [InlineData("tasks/42", ResourceType.Project, false)]
     [InlineData("monitoring", ResourceType.Project, true)]
     [InlineData("monitoring", ResourceType.Server, false)]
+    // R-52: one alert (/alerts/{id}) follows Server Read, like the alerts list.
+    [InlineData("alerts/4242", ResourceType.Server, true)]
+    [InlineData("alerts/4242", ResourceType.Project, false)]
     public void TaskDetailAndSupervision_FollowTheReadPermissionTheirApiChecks(
         string route, ResourceType granted, bool expected)
     {

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Localization;
 namespace Aetheus.Front.Tests.Pages.Servers;
 
 /// <summary>
-/// PLAN-010 lot 1: the disk tile shows the fullest inode table, or says it is unknown. The texts are
+/// PLAN-010 lot 1, R-47: the disk tile shows the fullest file table as a number of files (never the word inode), or says it is unknown. The texts are
 /// read from the real English resources so the test sees what an operator reads.
 /// </summary>
 public sealed class ServerOverviewInodeUsageTests : BunitContext
@@ -40,14 +40,14 @@ public sealed class ServerOverviewInodeUsageTests : BunitContext
             .Add(x => x.MetricsReceived, true));
 
     private static AngleSharp.Dom.IElement InodeLine(IRenderedComponent<ServerOverviewSection> cut) =>
-        cut.FindAll("small").Single(element => element.TextContent.StartsWith("Inodes", StringComparison.Ordinal));
+        cut.FindAll("small").Single(element => element.TextContent.StartsWith("Number of files", StringComparison.Ordinal));
 
     [Fact]
     public void MeasuredInodes_AreShownUnderTheDisk()
     {
         var line = InodeLine(RenderSection(42.5));
 
-        Assert.Equal(string.Format(CultureInfo.CurrentCulture, "Inodes: {0}% used", 42.5.ToString("0.#", CultureInfo.CurrentCulture)),
+        Assert.Equal(string.Format(CultureInfo.CurrentCulture, "Number of files: {0}% used", 42.5.ToString("0.#", CultureInfo.CurrentCulture)),
             line.TextContent.Trim());
         Assert.Contains("omni-text--muted", line.ClassList);
     }
@@ -55,13 +55,24 @@ public sealed class ServerOverviewInodeUsageTests : BunitContext
     [Fact]
     public void UnmeasuredInodes_ReadAsUnknown_NotZero()
     {
-        Assert.Equal("Inodes: unknown", InodeLine(RenderSection(null)).TextContent.Trim());
+        Assert.Equal("Number of files: unknown", InodeLine(RenderSection(null)).TextContent.Trim());
     }
 
     [Fact]
     public void NearlyFullInodeTable_IsShownInDanger()
     {
         Assert.Contains("omni-text--danger", InodeLine(RenderSection(97)).ClassList);
+    }
+
+    [Fact]
+    public void TheDiskTile_ShowsTheFreeSpaceAndAHelpMarkInPlainWords()
+    {
+        var cut = RenderSection(42.5);
+
+        Assert.Contains("60 Go free of 100 Go", cut.Markup);
+        var help = cut.Find("[data-testid='file-count-help']");
+        Assert.Contains("full of small files even when space is free", help.GetAttribute("aria-label"), StringComparison.Ordinal);
+        Assert.DoesNotContain("inode", cut.Markup, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class EnglishResourceLocalizer : IStringLocalizer<AppStrings>

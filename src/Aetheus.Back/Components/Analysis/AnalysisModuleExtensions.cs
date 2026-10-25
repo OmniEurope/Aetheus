@@ -33,6 +33,7 @@ public static class AnalysisModuleExtensions
         services.AddScoped<IDependencyTrackOutbox, DependencyTrackOutbox>();
         services.AddScoped<IDependencyTrackSubmissionProcessor, AnalysisContinuousTracker>();
         services.AddSingleton<AnalysisIngestGate>();
+        services.AddSingleton<IAnalysisPublicationSignal, PipelineHubAnalysisPublicationSignal>();
         services.AddSingleton<AnalysisReportAdmissionGate>();
         services.AddScoped<AnalysisReportAdmissionFilter>();
         services.AddHttpClient<IDependencyTrackClient, DependencyTrackClient>((provider, client) =>

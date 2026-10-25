@@ -6,8 +6,11 @@ namespace Aetheus.Agent.Core.Collectors;
 
 /// <param name="storage">Names the agent's own Buildx builder so its BuildKit container is shown as
 /// Aetheus's; null where the builder is not needed.</param>
+/// <param name="runtimeHealth">The agent's record of its pipeline tasks, the only evidence that attributes a
+/// Testcontainers reaper to a run (R-33); null recognises none.</param>
 public sealed class DockerCollector(
-    ILogger<DockerCollector> logger, IShellRunner shell, IDockerStorageMaintenance? storage = null)
+    ILogger<DockerCollector> logger, IShellRunner shell, IDockerStorageMaintenance? storage = null,
+    AgentRuntimeHealth? runtimeHealth = null)
     : BaseShellCollector<DockerCollector>(logger, shell), IDockerCollector
 {
     public async Task<DockerDataDto> CollectAllAsync(CancellationToken ct = default)
@@ -134,7 +137,9 @@ public sealed class DockerCollector(
             var res = await Shell.RunExecAsync("docker",
                 DockerContainerSecurityInspector.BuildArguments(containers.Select(c => c.ContainerId)),
                 ct).ConfigureAwait(false);
-            return DockerContainerSecurityInspector.Apply(containers, res.StdOut, storage?.BuilderName);
+            return DockerContainerSecurityInspector.Apply(
+                containers, res.StdOut, storage?.BuilderName,
+                runtimeHealth is null ? null : runtimeHealth.CreatedDuringLivePipelineTask);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

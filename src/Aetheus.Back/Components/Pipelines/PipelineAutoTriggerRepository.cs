@@ -38,7 +38,7 @@ internal sealed class PipelineAutoTriggerRepository(AppDbContext db) : IPipeline
     {
         return await db.PipelineRuns
             .AnyAsync(r => r.PipelineId == pipelineId &&
-                           (r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval), ct)
+                           (r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval || r.Status == PipelineStatus.AwaitingResume), ct)
             .ConfigureAwait(false);
     }
 
@@ -62,7 +62,8 @@ internal sealed class PipelineAutoTriggerRepository(AppDbContext db) : IPipeline
             .Where(run => run.PipelineId == pipelineId
                           && (run.Status == PipelineStatus.Running
                               || run.Status == PipelineStatus.Pending
-                              || run.Status == PipelineStatus.WaitingForApproval))
+                              || run.Status == PipelineStatus.WaitingForApproval
+                              || run.Status == PipelineStatus.AwaitingResume))
             .OrderBy(run => run.Id)
             .Select(run => run.Id)
             .ToListAsync(ct).ConfigureAwait(false);
@@ -71,7 +72,7 @@ internal sealed class PipelineAutoTriggerRepository(AppDbContext db) : IPipeline
     public async Task<HashSet<int>> GetPipelineIdsWithActiveRunsAsync(CancellationToken ct = default)
     {
         var ids = await db.PipelineRuns
-            .Where(r => r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval)
+            .Where(r => r.Status == PipelineStatus.Running || r.Status == PipelineStatus.Pending || r.Status == PipelineStatus.WaitingForApproval || r.Status == PipelineStatus.AwaitingResume)
             .Select(r => r.PipelineId)
             .Distinct()
             .ToListAsync(ct).ConfigureAwait(false);

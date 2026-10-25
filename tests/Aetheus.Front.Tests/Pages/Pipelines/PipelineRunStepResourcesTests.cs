@@ -53,14 +53,14 @@ public sealed class PipelineRunStepResourcesTests
     {
         var line = PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(75, 480 * 1_048_576, 2_048));
 
-        Assert.Equal($"cpu 1m 15s · {PipelineRunFormatting.FormatSize(480 * 1_048_576)} · io 2 KB", line);
+        Assert.Equal($"cpu 1min · {PipelineRunFormatting.FormatSize(480 * 1_048_576)} · io 2 Ko", line);
     }
 
     [Fact]
     public void Describe_LeavesOutWhatWasNotMeasured_AndAnIdleDisk()
     {
         Assert.Equal("cpu 9s", PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(9, null, 0)));
-        Assert.Equal("512 B", PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(null, 512, null)));
-        Assert.Equal("io 3 KB", PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(null, null, 3_072)));
+        Assert.Equal("512 o", PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(null, 512, null)));
+        Assert.Equal("io 3 Ko", PipelineRunStepResources.Describe(new PipelineRunStepResources.Usage(null, null, 3_072)));
     }
 }

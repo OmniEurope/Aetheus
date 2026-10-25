@@ -160,6 +160,105 @@ public class PipelineApprovalScopeTests
         Assert.Equal(valid, !errors.Any(error => error.Contains("approval_timeout_minutes", StringComparison.Ordinal)));
     }
 
+    /// <summary>R-39: the wait for a resume after a missed confirmation is capped at a week; 0 turns it
+    /// off; a stage that does not set it (every existing definition) stays valid.</summary>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(0, true)]
+    [InlineData(24, true)]
+    [InlineData(168, true)]
+    [InlineData(169, false)]
+    [InlineData(-1, false)]
+    public void R39_TheValidator_CapsTheResumeWindow(int? hours, bool valid)
+    {
+        var definition = new PipelineYamlDefinition
+        {
+            Name = "deploy",
+            Stages =
+            [
+                new PipelineStageDefinition
+                {
+                    Name = "Confirm",
+                    Agent = "linux-01",
+                    ApprovalTimeoutMinutes = 10,
+                    ResumeWindowHours = hours,
+                    Steps = [new PipelineStepDefinition { Name = "noop", Shell = "true" }]
+                }
+            ]
+        };
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        PipelineDefinitionValidator.ValidateStages(definition, errors, warnings);
+
+        Assert.Equal(valid, !errors.Any(error => error.Contains("resume_window_hours", StringComparison.Ordinal)));
+        Assert.DoesNotContain(warnings, warning => warning.Contains("resume_window_hours", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void R39_AResumeWindowWithoutAConfirmation_IsAccepted_WithAWarning()
+    {
+        var definition = new PipelineYamlDefinition
+        {
+            Name = "deploy",
+            Stages =
+            [
+                new PipelineStageDefinition
+                {
+                    Name = "Deploy",
+                    Agent = "linux-01",
+                    ResumeWindowHours = 12,
+                    Steps = [new PipelineStepDefinition { Name = "noop", Shell = "true" }]
+                }
+            ]
+        };
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        PipelineDefinitionValidator.ValidateStages(definition, errors, warnings);
+
+        Assert.Empty(errors);
+        Assert.Contains(warnings, warning => warning.Contains("resume_window_hours", StringComparison.Ordinal));
+    }
+
+    /// <summary>R-39: a confirmation that only ever timed out is asked again once its stage is ready again
+    /// (a resume reset it): a fresh decision, with the stage's own delay.</summary>
+    [Fact]
+    public async Task R39_AConfirmationThatOnlyTimedOut_IsAskedAgainWhenItsStageIsReadyAgain()
+    {
+        var (gate, repo) = Harness(approvals:
+        [
+            Approval(ApprovalScope.Environment, "Deploy", ApprovalStatus.Approved),
+            Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.TimedOut, timeout: 10),
+            Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.TimedOut, timeout: 10)
+        ]);
+
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+
+        Assert.True(held);
+        await repo.Received(1).AddApprovalAsync(
+            Arg.Is<PipelineApproval>(a => a.Scope == ApprovalScope.Pipeline && a.StageName == "Confirm" && a.TimeoutMinutes == 10),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>R-39: once the new window is confirmed, the stage goes on; the earlier timeout does not
+    /// hold it.</summary>
+    [Fact]
+    public async Task R39_AConfirmationGivenAfterATimeout_LetsTheStageGoOn()
+    {
+        var (gate, repo) = Harness(approvals:
+        [
+            Approval(ApprovalScope.Environment, "Deploy", ApprovalStatus.Approved),
+            Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.TimedOut, timeout: 10),
+            Approval(ApprovalScope.Pipeline, "Confirm", ApprovalStatus.Approved, timeout: 10)
+        ]);
+
+        var held = await gate.CheckAndCreateApprovalAsync(RunId, null, ConfirmProd.Name, ConfirmProd, [ConfirmProd], CancellationToken.None);
+
+        Assert.False(held);
+        await repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
+    }
+
     private static PipelineApproval Approval(
         ApprovalScope scope, string stageName, ApprovalStatus status, int? timeout = null, int? environmentId = ProdEnvironmentId) => new()
         {

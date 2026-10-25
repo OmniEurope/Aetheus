@@ -20,21 +20,20 @@ public sealed class LinkRowKeyboardTests : BunitContext
 
     private NavigationManager Nav => Services.GetRequiredService<NavigationManager>();
 
-    [Theory]
-    [InlineData("Enter", true)]
-    [InlineData(" ", true)]
-    [InlineData("Tab", false)]
-    public async Task HelpCard_OpensTheArticleOnEnterOrSpaceOnly(string key, bool navigates)
+    [Fact]
+    public void HelpCard_IsARealLinkToTheArticle_SoTheBrowserOpensItOnEnter()
     {
+        // The card is itself the link (OmniCard.Href): a real, focusable anchor the browser opens on Enter,
+        // not a div acting as a button with a key handler of its own.
         _handler.SetJsonResponse("help/help-", new List<HelpArticle> { new("servers", "Servers", "Manage servers", "rzi-server", []) });
         var cut = Render<HelpCenterPage>();
-        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("div[role='button']")));
-        var before = Nav.Uri;
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("a.help-card")));
 
-        await cut.Find("div[role='button']").KeyDownAsync(new KeyboardEventArgs { Key = key });
-
-        if (navigates) Assert.EndsWith("/help/servers", Nav.Uri, StringComparison.Ordinal);
-        else Assert.Equal(before, Nav.Uri);
+        var card = cut.Find("a.help-card");
+        Assert.Equal("/help/servers", card.GetAttribute("href"));
+        Assert.Empty(cut.FindAll("div[role='button']"));
+        Assert.Null(card.GetAttribute("role"));
+        Assert.Contains("Servers", card.TextContent, StringComparison.Ordinal);
     }
 
     [Theory]

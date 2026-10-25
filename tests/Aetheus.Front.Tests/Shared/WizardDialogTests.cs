@@ -51,6 +51,22 @@ public class WizardDialogTests : BunitContext
         Assert.DoesNotContain(cut.FindAll(".omni-steps__panel"), panel => panel.TextContent.Contains("Content of step"));
     }
 
+    /// <summary>R2-23 / R2-16: the page-height rules of app.css address the wizard through its root class and
+    /// OE's own body and foot; the body takes its height from the stylesheet, never from an inline style, and
+    /// the foot is OE's single band of actions.</summary>
+    [Fact]
+    public void Renders_TheClassesThePageHeightRulesAddress_WithNoFixedBodyHeight()
+    {
+        var cut = Render<WizardDialog>(p => p.Add(x => x.Steps, CreateSteps(3)));
+
+        var root = cut.Find(".wizard-dialog");
+        Assert.Single(root.QuerySelectorAll(":scope > .omni-wizard"));
+        var body = root.QuerySelector(".omni-wizard > .omni-wizard__body");
+        Assert.NotNull(body);
+        Assert.Null(body.GetAttribute("style"));
+        Assert.Single(cut.FindAll(".omni-wizard > .omni-wizard__foot > .omni-wizard__actions"));
+    }
+
     [Fact]
     public void Renders_NoAetheusActionBarOrProgressTrackOverride()
     {

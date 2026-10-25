@@ -57,6 +57,8 @@ public sealed class ServerSshConfigCardTests : BunitContext
     {
         Services.GetRequiredService<IStringLocalizer<AppStrings>>()["SshUnreadableConfigFiles"]
             .Returns(new LocalizedString("SshUnreadableConfigFiles", "Unreadable: {0}"));
+        Services.GetRequiredService<IStringLocalizer<AppStrings>>()["SshUnknownSourceFiles"]
+            .Returns(new LocalizedString("SshUnknownSourceFiles", "Cannot read {0}"));
         var cut = Render<ServerSshConfigCard>(p => p.Add(x => x.Status, Status(new SshConfigDataDto
         {
             Collected = true,
@@ -70,7 +72,8 @@ public sealed class ServerSshConfigCardTests : BunitContext
         })));
 
         Assert.Contains("SshUnknown", cut.Find(".ssh-setting-permitrootlogin").TextContent, StringComparison.Ordinal);
-        Assert.Contains("SshUnknownSource", cut.Find(".ssh-setting-permitrootlogin").TextContent, StringComparison.Ordinal);
+        // R-50: the unknown value names the file the agent cannot read, not a bare "Unknown".
+        Assert.Contains("Cannot read /etc/ssh/sshd_config.d/50-cloud-init.conf", cut.Find(".ssh-setting-permitrootlogin").TextContent, StringComparison.Ordinal);
         Assert.Contains("50-cloud-init.conf", cut.Find(".ssh-unreadable-files").TextContent, StringComparison.Ordinal);
         var file = Assert.Single(cut.FindAll(".ssh-keys-file"));
         Assert.Contains("/root/.ssh/authorized_keys", file.TextContent, StringComparison.Ordinal);
@@ -111,9 +114,64 @@ public sealed class ServerSshConfigCardTests : BunitContext
         Assert.Empty(cut.FindAll(".ssh-no-change"));
     }
 
+    // R-48, R-49: three blocks stacked (state, keys per account, changes); a phone gets no fixed side-by-side columns.
+    [Fact]
+    public void R48_KeysAreGroupedPerAccount_InThreeStackedBlocks()
+    {
+        static AuthorizedKeysFileDto File(string user, string path) => new()
+        {
+            User = user,
+            Path = path,
+            State = AuthorizedKeysFileState.Read,
+            Keys = [new AuthorizedKeyDto { KeyType = "ssh-ed25519", Fingerprint = "SHA256:" + user }]
+        };
+        var cut = Render<ServerSshConfigCard>(p => p.Add(x => x.Status, Status(
+            new SshConfigDataDto
+            {
+                Collected = true,
+                PermitRootLogin = new SshSettingDto { Value = "no", Source = "default" },
+                AuthorizedKeys =
+                [
+                    File("alice", "/home/alice/.ssh/authorized_keys"),
+                    File("alice", "/home/alice/.ssh/authorized_keys2"),
+                    File("bob", "/home/bob/.ssh/authorized_keys")
+                ]
+            })));
+
+        var sections = cut.FindAll("section.ssh-section");
+        Assert.Equal(3, sections.Count);
+        Assert.Contains("SshConfigurationState", sections[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("SshAuthorizedKeys", sections[1].TextContent, StringComparison.Ordinal);
+        Assert.Contains("SshRecentChanges", sections[2].TextContent, StringComparison.Ordinal);
+        var accounts = cut.FindAll(".ssh-account");
+        Assert.Equal(["alice", "bob"], accounts.Select(a => a.QuerySelector(".ssh-account-name")!.TextContent.Trim()));
+        Assert.Equal(2, accounts[0].QuerySelectorAll(".ssh-keys-file").Length);
+        Assert.Single(accounts[1].QuerySelectorAll(".ssh-keys-file"));
+        // Phone: the rows wrap (no nowrap stack) and the long values break instead of widening the card.
+        Assert.All(cut.FindAll(".ssh-keys-file .omni-stack, .ssh-change .omni-stack"), s => Assert.Contains("wrap", s.ClassName, StringComparison.OrdinalIgnoreCase));
+        Assert.NotEmpty(cut.FindAll(".ssh-wrap"));
+    }
+
+    // R-50: the card says when the agent last reported, and says so plainly when the date was never recorded.
+    [Fact]
+    public void LastReport_ShowsItsDate_AndAnOldStateSaysItIsNotRecorded()
+    {
+        Services.GetRequiredService<IStringLocalizer<AppStrings>>()["SshLastReport"]
+            .Returns(new LocalizedString("SshLastReport", "Last report {0} ({1})"));
+        var snapshot = new SshConfigDataDto { Collected = true, PermitRootLogin = new SshSettingDto { Value = "no", Source = "default" } };
+        var reportedAt = new DateTime(2026, 10, 22, 14, 43, 0, DateTimeKind.Local);
+
+        var known = Render<ServerSshConfigCard>(p => p.Add(x => x.Status, Status(snapshot) with { LastReportedAt = reportedAt }));
+        Assert.Contains("Last report " + reportedAt.ToString("g"), known.Find(".ssh-last-report").TextContent, StringComparison.Ordinal);
+
+        var legacy = Render<ServerSshConfigCard>(p => p.Add(x => x.Status, Status(snapshot)));
+        Assert.Contains("SshLastReportUnknown", legacy.Find(".ssh-last-report").TextContent, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Overview_HostsTheSshCard()
     {
+        ServerOverviewTabsTests.OpenTab(this, "ssh");
         var cut = Render<ServerOverviewSection>(p => p
             .Add(x => x.Server, new ServerDetailDto { Id = 1, Name = "web-1", Status = ServerStatus.Online })
             .Add(x => x.MetricsLoadCompleted, true));

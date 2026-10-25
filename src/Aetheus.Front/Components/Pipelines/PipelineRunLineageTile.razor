@@ -1,45 +1,38 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* The lineage tile links to the parent run or initiating user and to subsequent follow-up runs.
-   Trigger-stage children belong in the timeline. *@
-<OmniCard Class="@TileClass">
-    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Path" Class="run-tile-icon" /> @L["RunLineage"]</OmniText>
-    <div class="run-tile-main run-tile-main-rows">
-        <span class="run-tile-subrow">
-            @if (ParentPipeline is { } parentPipeline)
-            {
-                <span class="run-tile-sublabel">@L["ParentPipeline"]</span>
+   Trigger-stage children belong in the timeline. R-28: an OmniFactTile (OE); a run is an OmniLink in the
+   value of its row, the tile itself being a plain group. *@
+<OmniFactTile Title="@L["RunLineage"]" Class="@TileClass" DoubleWidth="@IsWide">
+    <Icon><OmniIcon Name="OmniIconName.Path" /></Icon>
+    <ChildContent>
+        @if (ParentPipeline is { } parentPipeline)
+        {
+            <OmniFactTileRow Term="@L["ParentPipeline"]"><Icon><OmniIcon Name="OmniIconName.Path" /></Icon><ChildContent>
                 @if (ParentRunId is { } parentRunId)
                 {
-                    <a href="@PipelineRunPresentation.Href(parentRunId, ProjectId, ServerId)" class="pipeline-name-link run-tile-value run-lineage-parent" title="@parentPipeline">@parentPipeline #@parentRunId</a>
+                    <OmniLink Href="@PipelineRunPresentation.Href(parentRunId, ProjectId, ServerId)" Class="run-lineage-parent">@parentPipeline #@parentRunId</OmniLink>
                 }
                 else
                 {
-                    <span class="run-tile-value run-lineage-parent" title="@parentPipeline">@parentPipeline</span>
+                    <span class="run-lineage-parent">@parentPipeline</span>
                 }
-            }
-            else
-            {
-                <span class="run-tile-sublabel">@L["RunLaunchedBy"]</span>
-                <span class="run-tile-value run-lineage-actor" title="@ActorText">@ActorText</span>
-            }
-        </span>
-    </div>
-    <div class="run-tile-foot">
+            </ChildContent></OmniFactTileRow>
+        }
+        else
+        {
+            <OmniFactTileRow Term="@L["RunLaunchedBy"]"><Icon><OmniIcon Name="OmniIconName.User" /></Icon><ChildContent><span class="run-lineage-actor">@ActorText</span></ChildContent></OmniFactTileRow>
+        }
         @if (_lineage is { Downstream.Count: > 0 } lineage)
         {
-            <span class="run-tile-sublabel">@L["RunStarted"]</span>
             @* The first follow-ups only, the full list behind "See all". *@
-            @foreach (var child in lineage.Downstream.Take(MaxShown))
+            @foreach (var (child, index) in lineage.Downstream.Take(MaxShown).Select((child, index) => (child, index)))
             {
-                <span class="run-tile-subrow">
-                    <a href="@PipelineRunPresentation.Href(child.RunId, child.ProjectId ?? ProjectId, ServerId)" class="pipeline-name-link run-tile-value run-lineage-child" title="@child.PipelineName">@child.PipelineName #@child.BuildNumber</a>
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunPresentation.Badge(child.Status)">@L.Localize(child.Status)</OmniBadge>
-                </span>
+                <OmniFactTileRow Term="@(index == 0 ? L["RunStarted"].Value : string.Empty)"><Icon>@if (index == 0) { <OmniIcon Name="OmniIconName.Play" /> }</Icon><ChildContent>@* The status first: a long pipeline name is cut by the row, never the status. *@<PipelineRunStatusBadge Status="child.Status" /> <OmniLink Href="@PipelineRunPresentation.Href(child.RunId, child.ProjectId ?? ProjectId, ServerId)" Class="run-lineage-child">@child.PipelineName #@child.BuildNumber</OmniLink></ChildContent></OmniFactTileRow>
             }
             @if (lineage.Downstream.Count > MaxShown)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" Size="OmniControlSize.Small" Class="run-lineage-see-all" OnClick="@ShowAllAsync"><OmniIcon Name="OmniIconName.ListBullets" /> <span>@L["SeeAll"] (@lineage.Downstream.Count)</span></OmniButton>
+                <OmniFactTileRow Term="@string.Empty"><ChildContent><OmniButton Variant="OmniButtonVariant.Secondary" Size="OmniControlSize.Small" Class="run-lineage-see-all" OnClick="@ShowAllAsync"><Icon><OmniIcon Name="OmniIconName.ListBullets" /></Icon><ChildContent><span>@L["SeeAll"] (@lineage.Downstream.Count)</span></ChildContent></OmniButton></ChildContent></OmniFactTileRow>
             }
         }
-    </div>
-</OmniCard>
+    </ChildContent>
+</OmniFactTile>

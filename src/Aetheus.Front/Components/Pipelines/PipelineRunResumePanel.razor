@@ -1,0 +1,18 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@*
+    Recette R-39: a deployment whose confirmation was not given in time rolled back to the previous
+    version and waits here for a resume. Resume replays the switch with a fresh confirmation window
+    (same build, nothing rebuilt); cancelling closes the run. Without either, the run ends at the
+    deadline shown. One main action, the other in its menu (STD-BTN).
+*@
+@if (Run is { Status: PipelineStatus.AwaitingResume })
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["RunAwaitingResumeTitle"]" data-testid="run-awaiting-resume">
+        <div>@DetailText</div>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="omni-u-mt-md">
+            <OmniSplitButton Text="@L["ResumeRun"]" Variant="OmniButtonVariant.Primary" OnClick="@ResumeAsync" Busy="@Working" MenuLabel="@L["MoreActions"]" Class="run-resume-actions"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
+                <OmniMenuItem Tone="OmniTone.Danger" OnClick="@CancelAsync" Class="run-resume-cancel"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["CancelRun"]</ChildContent></OmniMenuItem>
+            </ChildContent></OmniSplitButton>
+        </OmniStack>
+    </OmniAlert>
+}

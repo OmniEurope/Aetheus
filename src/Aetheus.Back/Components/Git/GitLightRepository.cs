@@ -17,6 +17,16 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
             .ConfigureAwait(false);
     }
 
+    public async Task ClearConfigurationFlagAsync(int projectId, int exceptId, CancellationToken ct = default)
+    {
+        var flagged = await db.GitInternalRepos
+            .Where(r => r.ProjectId == projectId && r.Id != exceptId && r.IsConfiguration)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        foreach (var repository in flagged)
+            repository.IsConfiguration = false;
+    }
+
     public async Task<List<GitInternalRepo>> GetAccessibleAsync(List<int>? projectIds, CancellationToken ct = default)
     {
         IQueryable<GitInternalRepo> query = db.GitInternalRepos.AsNoTracking();

@@ -7,7 +7,7 @@ namespace Aetheus.Back.Components.AppMonitoring;
 /// <summary>
 /// Backend black-box prober for off-fleet apps (<c>ServerId == null</c>): apps hosted outside the
 /// managed fleet whose public URL the backend probes directly. On-fleet apps are probed by their agent.
-/// Probes only public URLs - the <see cref="AppMonitoringModuleExtensions.ProbeHttpClientName"/> client
+/// Probes only public URLs - the <see cref="ProbeHttpClientName"/> client
 /// enforces the SSRF guard at connect time.
 /// </summary>
 public sealed class AppProbeService(
@@ -18,6 +18,9 @@ public sealed class AppProbeService(
     TimeProvider timeProvider,
     IPostgresLeaderLease? leaderLease = null) : BackgroundService
 {
+    /// <summary>Named HttpClient for backend black-box probing of off-fleet apps (public URLs only).</summary>
+    public const string ProbeHttpClientName = "app-probe";
+
     // Only the live colour runs it (decision of 2026-10-02, PostgresLeaderLease).
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         leaderLease is null
@@ -100,7 +103,7 @@ public sealed class AppProbeService(
 
     private async Task<AppProbeResultDto> ProbeOneAsync(int appId, string url, int expectedStatus, int timeoutSeconds, CancellationToken ct)
     {
-        var client = httpClientFactory.CreateClient(AppMonitoringModuleExtensions.ProbeHttpClientName);
+        var client = httpClientFactory.CreateClient(ProbeHttpClientName);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(
             timeoutSeconds,

@@ -12,12 +12,30 @@ public sealed record PipelineRequirementOutcome(string Kind, string Name, string
     public bool Satisfied => Problem is null;
 }
 
+/// <param name="Kind"><see cref="PipelineRequirementsChecker.LibraryKind"/> or
+/// <see cref="PipelineRequirementsChecker.VaultKind"/>.</param>
+/// <param name="Key">The variable or secret name whose value is empty.</param>
+/// <param name="OwnerId">The id of the library or vault holding that value, when it could be told.</param>
+/// <param name="OwnerName">The name of that library or vault, when it could be told.</param>
+public sealed record PipelineEmptyValue(string Kind, string Key, int? OwnerId = null, string? OwnerName = null);
+
 public interface IPipelineRequirementsChecker
 {
     Task<IReadOnlyList<PipelineRequirementOutcome>> CheckAsync(
         PipelineRequiresDefinition? requires,
         int? projectId,
         int? organizationId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// The variables and secrets, among the libraries and vaults a project's pipelines read, whose value
+    /// is EMPTY as a run of that project would resolve them (same precedence, same cross-project access).
+    /// A library or vault that does not exist contributes nothing: <see cref="CheckAsync"/> reports it.
+    /// </summary>
+    Task<IReadOnlyList<PipelineEmptyValue>> FindEmptyValuesAsync(
+        IReadOnlyCollection<string> libraryNames,
+        IReadOnlyCollection<string> vaultNames,
+        int projectId,
         CancellationToken ct = default);
 }
 
@@ -58,6 +76,58 @@ public sealed class PipelineRequirementsChecker(
         await CheckCapabilitiesAsync(requires, organizationId, outcomes, ct).ConfigureAwait(false);
         return outcomes;
     }
+
+    public async Task<IReadOnlyList<PipelineEmptyValue>> FindEmptyValuesAsync(
+        IReadOnlyCollection<string> libraryNames,
+        IReadOnlyCollection<string> vaultNames,
+        int projectId,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(libraryNames);
+        ArgumentNullException.ThrowIfNull(vaultNames);
+        var empty = new List<PipelineEmptyValue>();
+        if (libraryNames.Count > 0)
+        {
+            var (variables, _) = await libraries
+                .ResolveLibrariesWithCrossAccessAndNamesAsync([.. libraryNames], projectId, ct).ConfigureAwait(false);
+            var owners = await libraries
+                .ResolveEntryOwnersWithCrossAccessAsync([.. libraryNames], projectId, ct).ConfigureAwait(false);
+            var emptyKeys = variables.Where(pair => string.IsNullOrEmpty(pair.Value)).Select(pair => pair.Key).ToList();
+            var names = await NamesOfAsync(emptyKeys.Select(key => OwnerOf(owners, key)),
+                async id => (await libraries.GetLibraryDetailAsync(id, ct).ConfigureAwait(false))?.Name).ConfigureAwait(false);
+            empty.AddRange(emptyKeys.Select(key => OwnedValue(LibraryKind, key, OwnerOf(owners, key), names)));
+        }
+        if (vaultNames.Count > 0)
+        {
+            var (secrets, _) = await vaults
+                .ResolveVaultSecretsWithCrossAccessAndNamesAsync([.. vaultNames], projectId, ct).ConfigureAwait(false);
+            var owners = await vaults
+                .ResolveSecretOwnersWithCrossAccessAsync([.. vaultNames], projectId, ct).ConfigureAwait(false);
+            var emptyKeys = secrets.Where(pair => string.IsNullOrEmpty(pair.Value)).Select(pair => pair.Key).ToList();
+            var names = await NamesOfAsync(emptyKeys.Select(key => OwnerOf(owners, key)),
+                async id => (await vaults.GetVaultDetailAsync(id, ct).ConfigureAwait(false))?.Name).ConfigureAwait(false);
+            empty.AddRange(emptyKeys.Select(key => OwnedValue(VaultKind, key, OwnerOf(owners, key), names)));
+        }
+        return empty;
+    }
+
+    /// <summary>The name of each distinct owner, read once, so a table of empty values can say the library
+    /// or vault by name (R-10).</summary>
+    private static async Task<Dictionary<int, string>> NamesOfAsync(
+        IEnumerable<int?> ownerIds, Func<int, Task<string?>> nameOf)
+    {
+        var names = new Dictionary<int, string>();
+        foreach (var id in ownerIds.OfType<int>().Distinct())
+            if (await nameOf(id).ConfigureAwait(false) is { Length: > 0 } name)
+                names[id] = name;
+        return names;
+    }
+
+    private static PipelineEmptyValue OwnedValue(string kind, string key, int? ownerId, Dictionary<int, string> names) =>
+        new(kind, key, ownerId, ownerId is { } id && names.TryGetValue(id, out var name) ? name : null);
+
+    private static int? OwnerOf(Dictionary<string, int>? owners, string key) =>
+        owners is not null && owners.TryGetValue(key, out var id) ? id : null;
 
     private async Task CheckLibrariesAsync(
         PipelineRequiresDefinition requires, int? projectId,

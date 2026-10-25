@@ -39,78 +39,66 @@ else
                         </div>
                         @* Linked commit, date, analysis-run and release tiles align beside the
                            grade; the breakdown highlights limiting domains. *@
-                        <div class="analysis-grade-meta-tiles">
+                        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
                             @if (GradeCommitHref is { } commitHref)
                             {
-                                <OmniStatTile Value="@ShortHash(_summary.Grade?.CommitHash)" Label="@L["Commit"]" OnClick="@(() => Navigation.NavigateTo(commitHref))" />
+                                <OmniStatTile Value="@ShortHash(_summary.Grade?.CommitHash)" Title="@L["Commit"]" Href="@commitHref" />
                             }
                             else
                             {
-                                <OmniStatTile Value="@(ShortHash(_summary.Grade?.CommitHash) ?? L["NotAvailable"])" Label="@L["Commit"]" />
+                                <OmniStatTile Value="@(ShortHash(_summary.Grade?.CommitHash) ?? L["NotAvailable"])" Title="@L["Commit"]" />
                             }
-                            <OmniStatTile Value="@(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])" Label="@L["Date"]" />
+                            <OmniStatTile Value="@(_summary.Grade?.EvaluatedAt?.ToString("g") ?? L["NotAvailable"])" Title="@L["Date"]" />
                             @if (_summary.LastAnalysisRunId is { } lastRunId)
                             {
-                                <OmniStatTile Value="@($"#{lastRunId}")" Label="@L["LastRun"]" OnClick="@(() => Navigation.NavigateTo($"/pipelines/runs/{lastRunId}"))" />
+                                <OmniStatTile Value="@($"#{lastRunId}")" Title="@L["LastRun"]" Href="@($"/pipelines/runs/{lastRunId}")" />
                             }
                             @if (_summary.LatestReleaseId is { } latestReleaseId)
                             {
-                                <OmniStatTile Value="@_summary.LatestReleaseVersion" Label="@L["LatestRelease"]" OnClick="@(() => Navigation.NavigateTo($"/releases/{latestReleaseId}"))" />
+                                <OmniStatTile Value="@_summary.LatestReleaseVersion" Title="@L["LatestRelease"]" Href="@($"/releases/{latestReleaseId}")" />
                             }
-                        </div>
+                        </OmniTileGrid>
                     </div>
                     @* The breakdown is shared with a run's Quality tab. *@
                     <AnalysisGradeBreakdown Grade="@_summary.Grade" CrapScore="@_complexity.LastOrDefault()?.Crap" />
                 </OmniCard>
 
                 @* A count card shows only when its count is at least one. *@
-                <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mb-lg analysis-summary-row">
+                <OmniTileGrid Columns="6" Gap="OmniSpacing.Small" Class="omni-u-mb-lg analysis-summary-row">
                     @if (_summary.OpenCount > 0)
                     {
-                        <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))" Class="analysis-summary-card analysis-summary-action" title="@L["AnalysisOpenFindings"]" Label="@L["AnalysisOpenFindings"]" data-quality-shortcut="open">
-                                <OmniIcon Name="OmniIconName.Bug" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure">@_summary.OpenCount</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["AnalysisOpenFindings"]</OmniText>
-                            </OmniButton>
-                        </OmniColumn>
+                        <OmniStatTile Value="@($"{_summary.OpenCount}")" Title="@L["AnalysisOpenFindings"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))" data-quality-shortcut="open">
+                            <Icon><OmniIcon Name="OmniIconName.Bug" /></Icon>
+                        </OmniStatTile>
                     }
                     @if (_summary.NewCount > 0)
                     {
-                        <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenFindingsAsync(isNew: true))" Class="analysis-summary-card analysis-summary-action" title="@L["AnalysisNewFindings"]" Label="@L["AnalysisNewFindings"]" data-quality-shortcut="new">
-                                <OmniIcon Name="OmniIconName.Sparkle" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure">@_summary.NewCount</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["AnalysisNewFindings"]</OmniText>
-                            </OmniButton>
-                        </OmniColumn>
+                        <OmniStatTile Value="@($"{_summary.NewCount}")" Title="@L["AnalysisNewFindings"]" OnClick="@(() => OpenFindingsAsync(isNew: true))" data-quality-shortcut="new">
+                            <Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon>
+                        </OmniStatTile>
                     }
                     @if (_summary.CriticalCount > 0)
                     {
-                        <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.Critical))" Class="analysis-summary-card analysis-summary-action analysis-critical" title="@L["Critical"]" Label="@L["Critical"]" data-quality-shortcut="critical">
-                                <OmniIcon Name="OmniIconName.ShieldWarning" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure">@_summary.CriticalCount</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["Critical"]</OmniText>
-                            </OmniButton>
-                        </OmniColumn>
+                        <OmniStatTile Class="analysis-critical" Value="@($"{_summary.CriticalCount}")" Title="@L["Critical"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.Critical))" data-quality-shortcut="critical">
+                            <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
+                        </OmniStatTile>
                     }
                     @if (_summary.HighCount > 0)
                     {
-                        <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.High))" Class="analysis-summary-card analysis-summary-action analysis-high" title="@L["High"]" Label="@L["High"]" data-quality-shortcut="high">
-                                <OmniIcon Name="OmniIconName.Warning" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure">@_summary.HighCount</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["High"]</OmniText>
-                            </OmniButton>
-                        </OmniColumn>
+                        <OmniStatTile Class="analysis-high" Value="@($"{_summary.HighCount}")" Title="@L["High"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open, severity: AnalysisSeverity.High))" data-quality-shortcut="high">
+                            <Icon><OmniIcon Name="OmniIconName.Warning" /></Icon>
+                        </OmniStatTile>
                     }
                     @if (_summary.FixedCount > 0)
                     {
-                        <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Fixed))" Class="analysis-summary-card analysis-summary-action" title="@L["Fixed"]" Label="@L["Fixed"]" data-quality-shortcut="fixed">
-                                <OmniIcon Name="OmniIconName.ShieldCheck" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure">@_summary.FixedCount</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["Fixed"]</OmniText>
-                            </OmniButton>
-                        </OmniColumn>
+                        <OmniStatTile Value="@($"{_summary.FixedCount}")" Title="@L["Fixed"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Fixed))" data-quality-shortcut="fixed">
+                            <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
+                        </OmniStatTile>
                     }
-                    <OmniColumn Span="6" MediumSpan="4" LargeSpan="2">
-                        <div class="analysis-summary-card analysis-summary-static" aria-label="@L["AnalysisLastRun"]">
-                            <OmniIcon Name="OmniIconName.Timer" Size="OmniControlSize.Large" /><OmniText Element="OmniTextElement.Strong" Class="analysis-summary-figure" title="@LastAnalysisText">@LastAnalysisText</OmniText><OmniText Element="OmniTextElement.Span" Class="analysis-summary-label">@L["AnalysisLastRun"]</OmniText>
-                        </div>
-                    </OmniColumn>
-                </OmniRow>
+                    <OmniStatTile Class="analysis-summary-static" Value="@LastAnalysisText" Title="@L["AnalysisLastRun"]">
+                        <Icon><OmniIcon Name="OmniIconName.Timer" /></Icon>
+                    </OmniStatTile>
+                </OmniTileGrid>
 
                 @if (!HasAny)
                 {
@@ -118,22 +106,23 @@ else
                 }
                 else
                 {
-                    <OmniRow Gap="OmniSpacing.Large">
+                    @* R-3: the trend charts are OE cards of one OmniTileGrid (same width, same height). *@
+                    <OmniTileGrid Columns="@(ChartLargeSpan == 12 ? 1 : 2)" Gap="OmniSpacing.Large">
                         @if (_tests.Count >= 2)
                         {
-                            <OmniColumn Span="12" LargeSpan="@ChartLargeSpan"><OmniCard Class="analysis-chart-card">
+                            <OmniCard>
                                 <OmniText Element="OmniTextElement.Strong">@L["TestTrend"]</OmniText>
-                                <OmniChart Title="@L["TestTrend"]" AspectRatio="@ChartAspectRatio"><OmniLineSeries Data="@TestPassedPoints" Title="@L["Passed"]" ColorIndex="2" /><OmniLineSeries Data="@TestFailedPoints" Title="@L["Failed"]" ColorIndex="3" /><OmniCategoryAxis Labels="@OmniChartData.Labels(TestPassedPoints)" /><OmniLegend Items="@(new[] { L["Passed"].Value, L["Failed"].Value })" /></OmniChart>
-                            </OmniCard></OmniColumn>
+                                <OmniChart Label="@L["TestTrend"]" AspectRatio="@ChartAspectRatio"><OmniLineSeries Data="@TestPassedPoints" Title="@L["Passed"]" ColorIndex="2" /><OmniLineSeries Data="@TestFailedPoints" Title="@L["Failed"]" ColorIndex="3" /><OmniCategoryAxis Labels="@OmniChartData.Labels(TestPassedPoints)" /><OmniLegend Items="@(new[] { L["Passed"].Value, L["Failed"].Value })" /></OmniChart>
+                            </OmniCard>
                         }
                         @if (_complexity.Count >= 2)
                         {
-                            <OmniColumn Span="12" LargeSpan="@ChartLargeSpan"><OmniCard Class="analysis-chart-card">
+                            <OmniCard>
                                 <OmniText Element="OmniTextElement.Strong">@L["ComplexityTrend"]</OmniText>
-                                <OmniChart Title="@L["ComplexityTrend"]" AspectRatio="@ChartAspectRatio"><OmniLineSeries Data="@ComplexityCrapPoints" Title="@L["Crap"]" ColorIndex="3" /><OmniLineSeries Data="@ComplexityAveragePoints" Title="@L["AvgCyclomatic"]" ColorIndex="0" /><OmniCategoryAxis Labels="@OmniChartData.Labels(ComplexityCrapPoints)" /><OmniLegend Items="@(new[] { L["Crap"].Value, L["AvgCyclomatic"].Value })" /></OmniChart>
-                            </OmniCard></OmniColumn>
+                                <OmniChart Label="@L["ComplexityTrend"]" AspectRatio="@ChartAspectRatio"><OmniLineSeries Data="@ComplexityCrapPoints" Title="@L["Crap"]" ColorIndex="3" /><OmniLineSeries Data="@ComplexityAveragePoints" Title="@L["AvgCyclomatic"]" ColorIndex="0" /><OmniCategoryAxis Labels="@OmniChartData.Labels(ComplexityCrapPoints)" /><OmniLegend Items="@(new[] { L["Crap"].Value, L["AvgCyclomatic"].Value })" /></OmniChart>
+                            </OmniCard>
                         }
-                    </OmniRow>
+                    </OmniTileGrid>
                 }
         }
         else
@@ -152,7 +141,7 @@ else
                 <div class="analysis-findings-export" role="group" aria-label="@L["AnalysisExportAllAiPrompt"]">
                     <OmniButton Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small" Class="analysis-findings-export-button"
                                 Busy="@_exportingPrompt" Disabled="@(_findingCount == 0 || _exportingPrompt)" OnClick="@ExportAllAiPromptAsync">
-                        <OmniIcon Name="OmniIconName.FileMd" /> <span>@L["AnalysisExportAllAiPrompt"]</span>
+                        <Icon><OmniIcon Name="OmniIconName.FileMd" /></Icon><ChildContent><span>@L["AnalysisExportAllAiPrompt"]</span></ChildContent>
                     </OmniButton>
                 </div>
         }

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Razor markup (.razor). The C# rules never see a .razor file, so the Blazor rule that matters most
+# there is written over the text. Tests: tests/security-rules/aetheus-razor.razor.
+rules:
+  - id: aetheus.razor.markupstring-dynamic
+    languages: [generic]
+    paths:
+      include:
+        - "*.razor"
+    severity: WARNING
+    message: >-
+      A MarkupString written from a value that is not a literal is rendered as raw HTML, so any
+      script in it runs in the page. Encode the value, or make sure the HTML comes from a renderer
+      that drops raw HTML and scripts.
+    metadata:
+      cwe: CWE-79
+      owasp: A03:2021 Injection
+      category: security
+    # A cast whose operand is not a string literal. A literal ("...") or a verbatim literal is a
+    # constant and cannot carry data.
+    pattern-regex: \(\s*MarkupString\s*\)\s*(?!@?")[A-Za-z_(]

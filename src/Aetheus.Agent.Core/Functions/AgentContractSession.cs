@@ -81,6 +81,9 @@ internal sealed record AgentEvidence(AgentProof Proof, string ArchiveName, strin
 /// </summary>
 internal sealed class AgentContractSession(FunctionHttp http, string backendUrl, IPipelineFunctionTools tools)
 {
+    /// <summary>How many times the enrollment and the update confirmation are polled, a second apart.</summary>
+    internal const int Polls = 60;
+
     private static readonly HashSet<string> FailedTaskStatuses = new(StringComparer.Ordinal)
     {
         "4", "5", "6", "Failed", "Timeout", "Cancelled"
@@ -137,7 +140,7 @@ internal sealed class AgentContractSession(FunctionHttp http, string backendUrl,
     /// <summary>The server the registration token was used by, or empty after the last poll.</summary>
     private async Task<string> WaitForEnrollmentAsync(CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < VerifyNMinusOneAgentContractFunction.Polls; attempt++)
+        for (var attempt = 0; attempt < Polls; attempt++)
         {
             var token = await http.GetAsync(backendUrl + "/api/auth/registration-tokens/" + RegistrationTokenId, _adminToken, cancellationToken)
                 .ConfigureAwait(false);
@@ -153,7 +156,7 @@ internal sealed class AgentContractSession(FunctionHttp http, string backendUrl,
     private async Task<string> WaitForTaskAsync(string taskId, CancellationToken cancellationToken)
     {
         var status = string.Empty;
-        for (var attempt = 0; attempt < VerifyNMinusOneAgentContractFunction.Polls; attempt++)
+        for (var attempt = 0; attempt < Polls; attempt++)
         {
             var task = await http.GetAsync(backendUrl + "/api/tasks/" + taskId, _adminToken, cancellationToken).ConfigureAwait(false);
             status = Text(task, "status");

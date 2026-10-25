@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Services.DomainEvents;
 
 namespace Aetheus.Back.Components.Servers;
@@ -26,22 +27,23 @@ public static class ServersModuleExtensions
         services.AddScoped<IServerReachabilityRepository, ServerReachabilityRepository>();
         services.AddScoped<ServerReachabilityProbe>();
         services.AddHostedService<ServerTimeoutService>();
+        services.AddHostedService<MetricsCleanupService>();
         // Audit observer and admin toast of this module's ServerWentOffline event (moved from the Shared
         // module, 2026-09-25).
         services.AddScoped<IDomainEventHandler<Events.ServerWentOfflineEvent>, DomainEventAuditHandler<Events.ServerWentOfflineEvent>>();
-        services.AddScoped<IDomainEventHandler<Events.ServerWentOfflineEvent>, Handlers.ServerOfflineNotificationHandler>();
+        services.AddScoped<IDomainEventHandler<Events.ServerWentOfflineEvent>, ServerOfflineNotificationHandler>();
         // Persist sudoers drift in the audit trail and administrator notifications so it remains
         // visible beyond connected browser sessions.
         services.AddScoped<IDomainEventHandler<Events.SudoersDriftDetectedEvent>, DomainEventAuditHandler<Events.SudoersDriftDetectedEvent>>();
-        services.AddScoped<IDomainEventHandler<Events.SudoersDriftDetectedEvent>, Handlers.SudoersDriftNotificationHandler>();
+        services.AddScoped<IDomainEventHandler<Events.SudoersDriftDetectedEvent>, SudoersDriftNotificationHandler>();
         // PLAN-010 lot 1: an OOM kill is kept in the audit trail and the administrators' notifications.
         services.AddScoped<IDomainEventHandler<Events.OomKillDetectedEvent>, DomainEventAuditHandler<Events.OomKillDetectedEvent>>();
-        services.AddScoped<IDomainEventHandler<Events.OomKillDetectedEvent>, Handlers.OomKillNotificationHandler>();
+        services.AddScoped<IDomainEventHandler<Events.OomKillDetectedEvent>, OomKillNotificationHandler>();
         // Same durable trail for containers with host-escape settings (PLAN-010 lot 1).
         services.AddScoped<IDomainEventHandler<Events.DockerContainerRiskDetectedEvent>, DomainEventAuditHandler<Events.DockerContainerRiskDetectedEvent>>();
-        services.AddScoped<IDomainEventHandler<Events.DockerContainerRiskDetectedEvent>, Handlers.DockerContainerRiskNotificationHandler>();
+        services.AddScoped<IDomainEventHandler<Events.DockerContainerRiskDetectedEvent>, DockerContainerRiskNotificationHandler>();
         services.AddScoped<IDomainEventHandler<Events.SshConfigChangedEvent>, DomainEventAuditHandler<Events.SshConfigChangedEvent>>();
-        services.AddScoped<IDomainEventHandler<Events.SshConfigChangedEvent>, Handlers.SshConfigChangeNotificationHandler>();
+        services.AddScoped<IDomainEventHandler<Events.SshConfigChangedEvent>, SshConfigChangeNotificationHandler>();
         return services;
     }
 }

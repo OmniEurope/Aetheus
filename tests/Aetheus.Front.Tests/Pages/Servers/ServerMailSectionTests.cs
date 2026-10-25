@@ -41,9 +41,12 @@ public class ServerMailSectionTests : BunitContext
         _handler.SetJsonResponse("api/servers/10/mail/diagnostics", new MailDiagnosticsDto());
     }
 
-    private IRenderedComponent<ServerMailSection> RenderSection(ServerDetailDto? server = null)
+    // The accounts tab opens first (R1-29); another tab is reached through ?tab=, the way a link does.
+    private IRenderedComponent<ServerMailSection> RenderSection(ServerDetailDto? server = null, string? tab = null)
     {
         SetupMailApiResponses();
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>()
+            .NavigateTo(tab is null ? "/servers/10/mail" : $"/servers/10/mail?tab={tab}");
         var s = server ?? MakeMailServer();
         return Render<ServerMailSection>(p => p
             .Add(x => x.Server, s)
@@ -67,7 +70,7 @@ public class ServerMailSectionTests : BunitContext
     [Fact]
     public void Renders_DomainList_ShowsDomainNames()
     {
-        var cut = RenderSection();
+        var cut = RenderSection(tab: "domains");
 
         cut.WaitForAssertion(() =>
         {
@@ -84,13 +87,13 @@ public class ServerMailSectionTests : BunitContext
     {
         var cut = RenderSection();
 
-        // The installed-server path re-runs LoadDataAsync, which re-GETs the mail domains list.
+        // The shown tab (the accounts, which open first) re-GETs its list; the tabs not shown yet read theirs when shown.
         // Clear the initial-render requests so we observe only the refresh-triggered fetch.
         _handler.Requests.Clear();
         cut.InvokeAsync(() => cut.Instance.HandleTaskCompleted(new TaskCompletedNotification { TaskId = 1, ServerId = 10 }));
 
         cut.WaitForAssertion(() =>
-            Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/servers/10/mail/domains")));
+            Assert.Contains(_handler.Requests, r => r.Method == "GET" && r.Url.Contains("api/servers/10/mail/accounts")));
     }
 
     [Fact]
@@ -171,16 +174,16 @@ public class ServerMailSectionTests : BunitContext
     }
 
     [Fact]
-    public void R2_090_AConfiguredStack_OpensOnItsStatus_AboveTheTabs_AndHasNoDiagnosticsTab()
+    public void R2_090_AConfiguredStack_OpensOnItsAccounts_WithTheStatusInItsOwnTab_AndNoDiagnosticsTab()
     {
         var cut = RenderSection();
 
-        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<ServerMailStatusList>()));
+        // R1-29: the status moved from above the tabs to the State tab, built when that tab is shown.
+        cut.WaitForAssertion(() => Assert.Contains("admin@example.com", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindComponents<ServerMailSetupAssistant>());
-        var markup = cut.Markup;
-        Assert.True(markup.IndexOf("mail-status", StringComparison.Ordinal) < markup.IndexOf("MailDomains", StringComparison.Ordinal));
+        Assert.Empty(cut.FindComponents<ServerMailStatusList>());
         Assert.DoesNotContain(cut.FindComponents<OmniTabsItem>(), tab => tab.Instance.Key == "diagnostics");
-        Assert.Equal(["domains", "accounts", "aliases", "spam", "queue", "logs", "relations"],
+        Assert.Equal(["accounts", "domains", "status", "aliases", "spam", "queue", "logs", "relations"],
             cut.FindComponents<OmniTabsItem>().Select(tab => tab.Instance.Key).Distinct().ToArray());
     }
 
@@ -216,7 +219,7 @@ public class ServerMailSectionTests : BunitContext
         var retry = cut.FindAll(".mail-counts-failed button").Single(b => b.TextContent.Contains("Retry", StringComparison.Ordinal));
         await cut.InvokeAsync(() => retry.Click());
 
-        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<ServerMailStatusList>()));
+        cut.WaitForAssertion(() => Assert.Contains("admin@example.com", cut.Markup, StringComparison.Ordinal));
         Assert.Empty(cut.FindAll(".mail-counts-failed"));
     }
 }

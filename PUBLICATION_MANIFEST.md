@@ -14,7 +14,7 @@ Boundary last reviewed on 2026-08-28.
 | `src/` | Product source code |
 | `tests/` | Unit, architecture, integration and E2E suites that apply to this distribution |
 | `deploy/docker/`, `deploy/compose/`, `deploy/apache/` | Container and reverse-proxy assets. Apache files are templates using `example.com`. |
-| `deploy/scripts/` | Build, deployment and agent-installation scripts |
+| `deploy/agent-installer/`, `deploy/remote-deploy/` | Agent installers and the remote deployment script |
 | `deploy/pipeline-templates/` | Reusable pipeline templates, referenced by `Aetheus.Back.csproj` and `Dockerfile.back` |
 | `deploy/pipelines/` | Cross-agent conformance pipeline catalogue used as test fixtures |
 | `deploy/tools/Aetheus.PackageNormalizer/` | Build tool that is part of the solution |
@@ -46,7 +46,7 @@ Boundary last reviewed on 2026-08-28.
 
 ## Adapted
 
-- The Apache vhost templates and the default Git remote of `deploy/scripts/deploy.sh` use
+- The Apache vhost templates and the default Git remote of `deploy/remote-deploy/deploy.sh` use
   `example.com` and this repository instead of the private infrastructure host names.
 - The remote-agent example in `launch-linux.sh` uses `root@example.com:2222` instead of the private
   server address. Re-apply this on every synchronisation: the private launcher still carries the real

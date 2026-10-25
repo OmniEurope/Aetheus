@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# C# rules for data the program parses: unsafe deserialisation, XML external entities, XSLT and
+# reflection on a type name. Tests: tests/security-rules/aetheus-csharp-data.cs.
+#
+# BinaryFormatter is covered by aetheus.csharp.binary-formatter (aetheus-delivery.yml) and is not
+# repeated here.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP Deserialization and XXE Prevention
+# cheat sheets, the .NET security guidance for serialisers), not from any third-party rule set.
+rules:
+  - id: aetheus.csharp.unsafe-formatter
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      This formatter instantiates the types named in its input, so a crafted payload runs code while
+      it is read. Microsoft marks all of them as not safe for untrusted data. Use System.Text.Json or
+      another schema-bound serializer.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021 Software and Data Integrity Failures
+      category: security
+    pattern-either:
+      - pattern: new NetDataContractSerializer(...)
+      - pattern: new SoapFormatter(...)
+      - pattern: new LosFormatter(...)
+      - pattern: new ObjectStateFormatter(...)
+      - pattern: new JavaScriptSerializer(new SimpleTypeResolver())
+      - pattern: new JavaScriptSerializer(new SimpleTypeResolver(), ...)
+
+  - id: aetheus.csharp.newtonsoft-type-name-handling
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Json.NET reads the type to create from a "$type" property when TypeNameHandling is anything but
+      None, so the payload picks the class that is instantiated. Keep TypeNameHandling.None, or
+      restrict the types with a SerializationBinder that allow-lists them.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021 Software and Data Integrity Failures
+      category: security
+    patterns:
+      - pattern: TypeNameHandling.$MEMBER
+      - metavariable-regex:
+          metavariable: $MEMBER
+          regex: ^(?:All|Auto|Objects|Arrays)$
+
+  - id: aetheus.csharp.xxe-dtd-parse
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      DTD processing is switched on for XML that can come from outside. Entity declarations can read
+      local files, reach internal hosts or expand into gigabytes (CWE-776). Use DtdProcessing.Prohibit.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern: DtdProcessing.Parse
+
+  - id: aetheus.csharp.xxe-url-resolver
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      An XmlUrlResolver lets the document load external entities and schemas from any file or URL the
+      process can reach. Leave XmlResolver null.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern: new XmlUrlResolver(...)
+
+  - id: aetheus.csharp.xxe-xml-text-reader
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      XmlTextReader processes DTDs unless it is told not to, so entity expansion and external
+      entities are open. Use XmlReader.Create with XmlReaderSettings { DtdProcessing = Prohibit }.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern: new XmlTextReader(...)
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... DtdProcessing.Prohibit ...>;
+            ...
+          }
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... DtdProcessing.Ignore ...>;
+            ...
+          }
+
+  - id: aetheus.csharp.xslt-script-enabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      XSLT with the document() function or embedded script enabled runs code and reads files named by
+      the stylesheet. Use XsltSettings.Default for any stylesheet that is not entirely your own.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: new XsltSettings(true, true)
+      - pattern: new XsltSettings(false, true)
+      - pattern: new XsltSettings(true, false)
+      - pattern: XsltSettings.TrustedXslt
+      - pattern: $S.EnableScript = true;
+      - pattern: $S.EnableDocumentFunction = true;
+
+  - id: aetheus.csharp.reflection-request-input
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A type or assembly name taken from the HTTP request is loaded or instantiated. The caller picks
+      the code that runs. Map the request value to a type through a fixed allow-list.
+    metadata:
+      cwe: CWE-470
+      owasp: A03:2021 Injection
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.Query[...]
+          - pattern: $REQ.Form[...]
+          - pattern: $REQ.Headers[...]
+          - pattern: $REQ.RouteValues[...]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromBody] $T $INPUT, ...) { ... }
+              - focus-metavariable: $INPUT
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Type.GetType($NAME, ...)
+              - pattern: Assembly.Load($NAME)
+              - pattern: Assembly.LoadFrom($NAME)
+              - pattern: Assembly.LoadFile($NAME)
+              - pattern: Activator.CreateInstance($ASSEMBLY, $NAME)
+              - pattern: $ASM.GetType($NAME, ...)
+          - focus-metavariable: $NAME
+    pattern-sanitizers:
+      - pattern: $ALLOWED.Contains(...)
+      - pattern: $MAP[...]

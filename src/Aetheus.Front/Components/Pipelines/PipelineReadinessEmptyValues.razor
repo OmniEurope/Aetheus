@@ -1,0 +1,48 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+
+@* R-10: the values to fill as a table, one row per value and pipeline that reads it. Each cell is a link to
+   where the fix is: the library or vault, the entry in it (its Key column opens filtered on it), the pipeline. *@
+<OmniDataGrid TItem="PipelineSetupReadinessEmptyValueDto" Items="@Rows" Class="pipeline-readiness-empty-values"
+              ExportTitle="@ExportContext.Title(L[TitleKey])" ExportFields="@ExportContext.Fields()"
+              ScrollMode="OmniDataGridScrollMode.All" MinHeight="0" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+              data-testid="setup-readiness-empty-values">
+    <Columns>
+        <OmniDataGridColumn TItem="PipelineSetupReadinessEmptyValueDto" Key="owner" Title="@L[OwnerTitleKey]" Property="OwnerName">
+            <Template Context="row">
+                @if (PipelineReadinessText.EmptyValueOwnerHref(IsVault, row, ReturnUrl) is { } href)
+                {
+                    <OmniLink Href="@href" data-testid="setup-readiness-empty-owner">@row.OwnerName</OmniLink>
+                }
+                else
+                {
+                    @row.OwnerName
+                }
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="PipelineSetupReadinessEmptyValueDto" Key="key" Title="@L[KeyTitleKey]" Property="Key">
+            <Template Context="row">
+                @if (PipelineReadinessText.EmptyValueKeyHref(IsVault, row, ReturnUrl) is { } href)
+                {
+                    <OmniLink Href="@href" data-testid="setup-readiness-empty-key"><code>@row.Key</code></OmniLink>
+                }
+                else
+                {
+                    <code>@row.Key</code>
+                }
+            </Template>
+        </OmniDataGridColumn>
+        <OmniDataGridColumn TItem="PipelineSetupReadinessEmptyValueDto" Key="pipeline" Title="@L["Pipeline"]" Property="PipelineName">
+            <Template Context="row">
+                @if (PipelineReadinessText.EmptyValuePipelineHref(row, ReturnUrl) is { } href)
+                {
+                    <OmniLink Href="@href" data-testid="setup-readiness-empty-pipeline">@row.PipelineName</OmniLink>
+                }
+                else
+                {
+                    @row.PipelineName
+                }
+            </Template>
+        </OmniDataGridColumn>
+    </Columns>
+</OmniDataGrid>

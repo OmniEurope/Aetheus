@@ -22,7 +22,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["TaskCompleted", "AgentUpdateConfirmed", "AgentUpdateFailed", "RejoinOnReconnect"],
             ["Components/Shared/ServerDetailLoader.cs"] =
                 ["Heartbeat", "TaskCompleted", "RejoinOnReconnect"],
-            ["Components/Shared/PipelinesList.razor.cs"] =
+            ["Components/Pipelines/PipelinesList.razor.cs"] =
                 ["PipelineRunStarted", "PipelineRunCompleted", "EntityChanged", "RejoinOnReconnect"],
             ["Components/Pipelines/PipelineRunLiveConnection.cs"] =
                 ["PipelineRunCompleted", "StepCompleted", "RejoinOnReconnect"],
@@ -30,7 +30,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["TaskQueued", "TaskCompleted", "RejoinOnReconnect"],
             ["Components/Alerts/Alerts.razor.cs"] =
                 ["AlertRuleChanged", "RejoinOnReconnect"],
-            ["Components/Shared/ReleasesList.razor.cs"] =
+            ["Components/Releases/ReleasesList.razor.cs"] =
                 ["ReleaseCreated", "ReleaseStatusChanged", "RejoinOnReconnect"],
             ["Components/Shared/PendingApprovalsService.cs"] =
                 ["ApprovalRequired", "ApprovalResolved", "PipelineRunCompleted", "RejoinOnReconnect"],
@@ -105,7 +105,7 @@ public sealed class OperationalRealtimeSurfaceAuditTests
                 ["ServiceLogAutoRefresh", "LogReceived", "RejoinOnReconnect"],
             ["Components/Shared/AppErrorsView.razor.cs"] =
                 ["EntityOperationalFeed", "OperationalRealtimeEvents.AppTelemetryChanged"],
-            ["Components/Shared/AppLogsView.razor.cs"] =
+            ["Components/Logs/AppLogsView.razor.cs"] =
                 ["EntityOperationalFeed", "OperationalRealtimeEvents.AppTelemetryChanged"],
             ["Components/Logs/Performance.razor.cs"] =
                 ["AdminEntitySubscription", "AdminEntities.ApiPerformance", "TrailingReloadCoalescer"]

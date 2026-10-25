@@ -87,16 +87,16 @@ public sealed class StorageAlertProvisioningService(
                 $"Stockage ≥ {criticalPercent:0.#} % - {server.Name}",
                 MetricType.Disk, ComparisonOperator.GreaterThanOrEqual, criticalPercent, 60, AlertSeverity.Critical);
             AddCandidate(provisioningKeys, candidateRules, $"storage-disk-free:{server.Id}", server.Id,
-                $"Stockage libre < {minimumFreeGiB:0.#} Gio - {server.Name}",
+                $"Stockage libre < {minimumFreeGiB:0.#} Go - {server.Name}",
                 MetricType.DiskFree, ComparisonOperator.LessThan, minimumFreeGiB, 60, AlertSeverity.Critical);
             // PLAN-010 lot 1: a filesystem out of inodes refuses writes with free space left, so the
             // inode table gets the same two thresholds as the disk. A server whose agent does not
             // report inodes never triggers them (unknown is not a breach).
             AddCandidate(provisioningKeys, candidateRules, $"storage-inodes-warning:{server.Id}", server.Id,
-                $"Inodes ≥ {inodeWarningPercent:0.#} % - {server.Name}",
+                $"Nombre de fichiers ≥ {inodeWarningPercent:0.#} % - {server.Name}",
                 MetricType.Inodes, ComparisonOperator.GreaterThanOrEqual, inodeWarningPercent, 300, AlertSeverity.Warning);
             AddCandidate(provisioningKeys, candidateRules, $"storage-inodes-critical:{server.Id}", server.Id,
-                $"Inodes ≥ {inodeCriticalPercent:0.#} % - {server.Name}",
+                $"Nombre de fichiers ≥ {inodeCriticalPercent:0.#} % - {server.Name}",
                 MetricType.Inodes, ComparisonOperator.GreaterThanOrEqual, inodeCriticalPercent, 60, AlertSeverity.Critical);
         }
 

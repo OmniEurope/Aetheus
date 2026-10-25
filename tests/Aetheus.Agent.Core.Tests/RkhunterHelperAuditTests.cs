@@ -82,7 +82,7 @@ public sealed partial class RkhunterHelperAuditTests
     private static string Helper() => LinuxHostConfigTemplates.Read("rkhunter/aetheus-rkhunter");
 
     private static string InstallScript() =>
-        File.ReadAllText(Path.Combine(RepositoryScan.Root, "deploy", "scripts", "install-agent-linux.sh"));
+        File.ReadAllText(Path.Combine(RepositoryScan.Root, "deploy", "agent-installer", "install-agent-linux.sh"));
 
     private static string Variable(string script, string name)
     {

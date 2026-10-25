@@ -5,11 +5,11 @@
  Class="run-params-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Parameter"]" Width="40%" Filterable="true" />
-        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Property="Value" Title="@L["Value"]" Filterable="true">
+        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true">
             <Template Context="parameter"><code>@parameter.Value</code></Template>
         </OmniDataGridColumn>
     </Columns>
 </OmniDataGrid>
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
     <Aetheus.Front.Components.Servers.DialogCloseButton />
 </OmniStack>

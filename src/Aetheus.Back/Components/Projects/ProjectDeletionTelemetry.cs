@@ -30,24 +30,24 @@ internal static class ProjectDeletionTelemetry
     }
 
     internal static async Task DeleteAsync(
-        ProjectDeletionRepository repository, AppDbContext db, IReadOnlyList<int> appIds, CancellationToken ct)
+        AppDbContext db, IReadOnlyList<int> appIds, CancellationToken ct)
     {
         if (appIds.Count == 0) return;
-        await repository.DeleteInBatchesAsync(db.AppHealthSamples.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppHealthHourly.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppMetricSamples.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppMetricHourly.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppMetricThresholds.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppMetricNames.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppLogEntries.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppErrorEvents.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsEvents.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsSessions.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsAggregates.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsPageAggregates.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsIngestVolumes.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsPeriodIdentities.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppAnalyticsRejections.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
-        await repository.DeleteInBatchesAsync(db.AppVisitorIdentities.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppHealthSamples.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppHealthHourly.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppMetricSamples.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppMetricHourly.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppMetricThresholds.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppMetricNames.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppLogEntries.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppErrorEvents.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsEvents.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsSessions.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsAggregates.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsPageAggregates.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsIngestVolumes.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsPeriodIdentities.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppAnalyticsRejections.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
+        await ProjectDeletionBatches.DeleteInBatchesAsync(db, db.AppVisitorIdentities.Where(item => appIds.Contains(item.MonitoredAppId)), item => item.Id, ct).ConfigureAwait(false);
     }
 }

@@ -7,7 +7,6 @@ namespace Aetheus.WebAnalytics;
 
 public static class AetheusWebAnalyticsServiceExtensions
 {
-    internal const string HttpClientName = "aetheus-web-analytics";
     private const string EnabledEnvironmentVariable = "AETHEUS_WEB_ANALYTICS_ENABLED";
 
     public static IServiceCollection AddAetheusWebAnalytics(
@@ -35,7 +34,7 @@ public static class AetheusWebAnalyticsServiceExtensions
         services.AddSingleton<AnalyticsPseudonymizer>();
         services.AddSingleton<AnalyticsExportQueue>();
         services.AddHostedService<AnalyticsExportService>();
-        services.AddHttpClient(HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(3));
+        services.AddHttpClient(AnalyticsExportService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(3));
         services.AddRazorPages().AddApplicationPart(typeof(AetheusWebAnalyticsServiceExtensions).Assembly);
         return services;
     }

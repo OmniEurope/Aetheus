@@ -4,6 +4,7 @@ using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;

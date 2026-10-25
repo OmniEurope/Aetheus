@@ -4,7 +4,7 @@ using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
-/// <summary>Failure badges are red; nonblocking failures are outlined and explain that execution
+/// <summary>Failure badges are red and filled (R-24); nonblocking failures explain that execution
 /// continued.</summary>
 public sealed class StepStatusBadgeTests : BunitContext
 {
@@ -14,13 +14,13 @@ public sealed class StepStatusBadgeTests : BunitContext
         Render<StepStatusBadge>(parameters => parameters.Add(badge => badge.Step, step));
 
     [Fact]
-    public void ANonBlockingFailure_IsRedOutlined_AndSaysItDidNotBlock()
+    public void ANonBlockingFailure_IsRedFilled_AndSaysItDidNotBlock()
     {
         var badge = RenderFor(new PipelineStepRunDto { Status = TaskExecutionStatus.Failed, ContinueOnError = true })
             .Find(".omni-badge");
 
         Assert.Contains("omni-badge--danger", badge.ClassName, StringComparison.Ordinal);
-        Assert.Contains("omni-badge--outline", badge.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge--outline", badge.ClassName, StringComparison.Ordinal);
         Assert.Equal("StepFailedNonBlocking", badge.GetAttribute("title"));
     }
 
@@ -104,7 +104,7 @@ public sealed class StepStatusBadgeTests : BunitContext
     }
 
     [Fact]
-    public void AFailedAdvisoryStep_StaysRedOutlined_AndExplainsItIsAdvisory()
+    public void AFailedAdvisoryStep_IsRedFilled_AndExplainsItIsAdvisory()
     {
         var badge = RenderFor(new PipelineStepRunDto
         {
@@ -114,7 +114,7 @@ public sealed class StepStatusBadgeTests : BunitContext
         }).Find(".omni-badge");
 
         Assert.Contains("omni-badge--danger", badge.ClassName, StringComparison.Ordinal);
-        Assert.Contains("omni-badge--outline", badge.ClassName, StringComparison.Ordinal);
+        Assert.DoesNotContain("omni-badge--outline", badge.ClassName, StringComparison.Ordinal);
         Assert.Equal("StepAdvisoryHint", badge.GetAttribute("title"));
     }
 

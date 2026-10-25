@@ -15,6 +15,7 @@ public partial class NavMenu : IDisposable
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private AppDialogs Dialog { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private ServerDetailLoader ServerLoader { get; set; } = default!;
 
 
     private string _currentPath = string.Empty;
@@ -29,6 +30,7 @@ public partial class NavMenu : IDisposable
         UserNotify.OnPermissionsChanged += OnPermissionsChanged;
         Permissions.OnPermissionsChanged += OnEffectivePermissionsChanged;
         ProjectNav.OnChanged += OnProjectCtxChanged;
+        ServerLoader.OnChanged += OnServerLoaderChanged;
         await AlertNotify.StartAsync();
         await UserNotify.StartAsync();
     }
@@ -78,6 +80,12 @@ public partial class NavMenu : IDisposable
     };
 
     private void OnProjectCtxChanged() => InvokeAsync(StateHasChanged);
+
+    // The server loader refreshes on every heartbeat, which can install or remove the mail stack.
+    private void OnServerLoaderChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>The mail entry of a server's menu: the open server has a mail stack (R1-28).</summary>
+    private bool HasServerMail(int serverId) => ServerLoader.Server?.Id == serverId && ServerLoader.HasMail;
 
     private void OnEffectivePermissionsChanged() => InvokeAsync(StateHasChanged);
 
@@ -172,5 +180,6 @@ public partial class NavMenu : IDisposable
         UserNotify.OnPermissionsChanged -= OnPermissionsChanged;
         Permissions.OnPermissionsChanged -= OnEffectivePermissionsChanged;
         ProjectNav.OnChanged -= OnProjectCtxChanged;
+        ServerLoader.OnChanged -= OnServerLoaderChanged;
     }
 }

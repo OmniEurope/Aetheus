@@ -7,6 +7,12 @@ namespace Aetheus.Back.Components.Certbot;
 
 public class CertbotService(ICertbotRepository repo, IAuditService audit, ITaskService taskService) : ICertbotService
 {
+    private const int DefaultTimeoutSeconds = 120;
+
+    /// <summary>Recette R1-7: a rehearsal walks every lineage and the weekly one was seen running about ten
+    /// minutes, so the 120 s of the other actions bounded the on-demand one far below that.</summary>
+    internal const int RenewalCheckTimeoutSeconds = 1500;
+
     private Task QueueTaskAsync(ServerTask task, CancellationToken ct = default)
         => TaskQueuePersistence.PersistAndNotifyAsync(repo.AddTaskAsync, taskService, task, ct);
 
@@ -28,6 +34,12 @@ public class CertbotService(ICertbotRepository repo, IAuditService audit, ITaskS
 
     public async Task ExecuteActionAsync(int serverId, CertbotActionRequest request, CancellationToken ct = default)
     {
+        if (request.Action == CertbotAction.RemoveDomain)
+        {
+            await RemoveDomainAsync(serverId, request, ct).ConfigureAwait(false);
+            return;
+        }
+
         // F-32 / GTFOBins: certbot is never run as a free-form `sudo certbot` shell string (the agent's
         // CommandValidator rejects it). Each action is a typed operation the agent dispatches to the
         // root-owned aetheus-certbot-manage helper argv-exact (re-validates the lineage name).
@@ -53,7 +65,8 @@ public class CertbotService(ICertbotRepository repo, IAuditService audit, ITaskS
         }
 
         var name = $"Certbot {request.Action}{(request.CertificateName is not null ? $" - {request.CertificateName}" : "")}";
-        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, name, operation, target, 120), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, name, operation, target,
+            request.Action == CertbotAction.RenewalCheck ? RenewalCheckTimeoutSeconds : DefaultTimeoutSeconds), ct).ConfigureAwait(false);
 
         await audit.LogAsync($"Certbot{request.Action}", "Certbot", serverId,
             request.CertificateName ?? request.Action.ToString(), ct).ConfigureAwait(false);
@@ -80,6 +93,35 @@ public class CertbotService(ICertbotRepository repo, IAuditService audit, ITaskS
             OperationKind.CertbotObtain, domains[0], env, 180), ct).ConfigureAwait(false);
 
         await audit.LogAsync("CertbotCreate", "Certbot", serverId, request.Domains, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Recette R-12: reissues a certificate without one of its names. Only a name the server reported
+    /// for that certificate can be taken out, and never its last one; the helper checks both again against
+    /// the certificate on disk before certbot runs. The certificate itself is kept.</summary>
+    private async Task RemoveDomainAsync(int serverId, CertbotActionRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.CertificateName) || !CertbotCommandHelper.IsValidCertName(request.CertificateName))
+            throw new BadRequestException("Invalid certificate name.");
+        if (string.IsNullOrWhiteSpace(request.DomainName) || !CertbotCommandHelper.IsValidDomainList(request.DomainName)
+            || request.DomainName.Contains(',', StringComparison.Ordinal) || request.DomainName.Any(char.IsControl))
+            throw new BadRequestException("Invalid domain name.");
+
+        var certificates = await repo.GetCertificatesAsync(serverId, ct).ConfigureAwait(false);
+        var certificate = certificates.FirstOrDefault(c => string.Equals(c.Name, request.CertificateName, StringComparison.Ordinal))
+            ?? throw new BadRequestException($"Unknown certificate: {request.CertificateName}.");
+        var domains = DeserializeDomains(certificate.Domains);
+        if (!domains.Contains(request.DomainName, StringComparer.OrdinalIgnoreCase))
+            throw new BadRequestException($"The certificate {request.CertificateName} does not cover {request.DomainName}.");
+        if (domains.Count < 2)
+            throw new BadRequestException("A certificate keeps at least one name: delete it instead.");
+
+        var env = new Dictionary<string, string> { [CertbotTaskVariables.RemoveDomain] = request.DomainName };
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId,
+            $"Certbot {request.Action} - {request.CertificateName} - {request.DomainName}",
+            OperationKind.CertbotRemoveDomain, request.CertificateName, env, 180), ct).ConfigureAwait(false);
+
+        await audit.LogAsync($"Certbot{request.Action}", "Certbot", serverId,
+            $"{request.CertificateName}: {request.DomainName}", ct).ConfigureAwait(false);
     }
 
     private static List<string> DeserializeDomains(string json)

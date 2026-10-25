@@ -31,7 +31,7 @@ public class PipelineEnvironmentRestCheckTests
             .Returns([new EnvironmentCheck { Name = "ready", Type = EnvironmentCheckType.RestCallback, Configuration = configuration, TimeoutSeconds = 30 }]);
 
     private void Answer(HttpMessageHandler handler) =>
-        _http.CreateClient(PipelinesModuleExtensions.EnvironmentCheckHttpClient).Returns(new HttpClient(handler));
+        _http.CreateClient(PipelineEnvironmentCheckGuard.EnvironmentCheckHttpClient).Returns(new HttpClient(handler));
 
     private PipelineEnvironmentCheckGuard Guard(params string[] addresses) =>
         new(_reader, _http, NullLogger<PipelineEnvironmentCheckGuard>.Instance,

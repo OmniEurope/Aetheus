@@ -70,6 +70,21 @@ public class CertbotServiceTests
     }
 
     [Fact]
+    public async Task R1_7_ExecuteActionAsync_RenewalCheck_GetsMoreTimeThanTheTwoMinutesOfTheOtherActions()
+    {
+        await _sut.ExecuteActionAsync(1, new CertbotActionRequest { Action = CertbotAction.RenewalCheck }, ct: TestContext.Current.CancellationToken);
+        await _sut.ExecuteActionAsync(1, new CertbotActionRequest { Action = CertbotAction.RenewAll }, ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
+            t.Operation == OperationKind.CertbotRenewalCheck && t.TimeoutSeconds == CertbotService.RenewalCheckTimeoutSeconds),
+            Arg.Any<CancellationToken>());
+        await _repoMock.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
+            t.Operation == OperationKind.CertbotRenewAll && t.TimeoutSeconds == 120),
+            Arg.Any<CancellationToken>());
+        Assert.InRange(CertbotService.RenewalCheckTimeoutSeconds, 900, 3600);
+    }
+
+    [Fact]
     public async Task ExecuteActionAsync_RenewAll_CreatesTask()
     {
         var request = new CertbotActionRequest { Action = CertbotAction.RenewAll };

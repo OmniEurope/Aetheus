@@ -2,8 +2,8 @@
 @inject GridExportContext ExportContext
 <OmniStack Gap="OmniSpacing.Large">
     @* STD-BTN detection 11: Export visible, the other actions in the menu. *@
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ExportConfigAsync" Class="@(_configExporting ? "btn-busy" : null)" Busy="@(_configExporting)" title="@L["ExportYaml"]"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Export"]</span></OmniButton>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ExportConfigAsync" Class="@(_configExporting ? "btn-busy" : null)" Busy="@(_configExporting)" title="@L["ExportYaml"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Export"]</span></ChildContent></OmniButton>
         <OmniOverflowMenu Label="@L["MoreActions"]">
             <OmniMenuItem OnClick="@(() => _configImportVisible = true)" title="@L["ImportYaml"]"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
@@ -18,16 +18,16 @@
     @if (_configImportVisible)
     {
         <OmniCard>
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["ImportYamlConfiguration"]</OmniText>
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["ImportYamlConfiguration"]</OmniText>
             <OmniTextArea aria-label="@L["ImportYamlConfiguration"]" @bind-Value="_configImportYaml" Rows="15" Class="config-yaml-editor" />
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
                 @* STD-BTN detection 11: Deploy visible, the other actions in the menu. *@
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_configImportYaml))" title="@(AgentOffline ? L["AgentOfflineActionBlocked"].Value : null)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_configImportYaml))" title="@(AgentOffline ? L["AgentOfflineActionBlocked"].Value : null)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["Deploy"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@ValidateConfigAsync" Disabled="@_configValidating"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ValidateYaml"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@PreviewConfigAsync" Disabled="@_configPreviewing"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["Preview"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
             </OmniStack>
 
             @if (_configValidation is not null)
@@ -53,7 +53,7 @@
             @if (_configPreview is not null)
             {
                 <OmniCard Class="omni-u-mt-md">
-                    <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">
+                    <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">
                         @string.Format(L["TasksPlanned"], _configPreview.TaskCount)
                     </OmniText>
                     <OmniDataGrid FillAvailableHeight="true" Items="@_configPreview.Changes" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="ServerConfigChange" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
@@ -65,7 +65,7 @@
                                         Tone="@GetChangeBadgeStyle(change.Action)">@change.Action</OmniBadge>
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="ServerConfigChange" Property="Description" Title="@L["Description"]"  Filterable="true"/>
+                            <OmniDataGridColumn TItem="ServerConfigChange" Property="Description" Truncate="true" Title="@L["Description"]"  Filterable="true"/>
                         </Columns>
                     </OmniDataGrid>
                 </OmniCard>

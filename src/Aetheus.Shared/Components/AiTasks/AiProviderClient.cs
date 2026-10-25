@@ -59,7 +59,7 @@ public sealed class AiProviderClient(HttpClient http, Func<TimeSpan, Cancellatio
         var warnings = new List<string>();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(timeout);
-        var sendEffort = AiProviderCatalog.EffortToken(request.Effort) is not null;
+        var sendEffort = AiEffortTokens.Of(request.Effort) is not null;
         var attempt = 0;
         try
         {
@@ -74,7 +74,7 @@ public sealed class AiProviderClient(HttpClient http, Func<TimeSpan, Cancellatio
                 {
                     sendEffort = false;
                     warnings.Add(
-                        $"The model refused the reasoning effort '{AiProviderCatalog.EffortToken(request.Effort)}'; sent again without it.");
+                        $"The model refused the reasoning effort '{AiEffortTokens.Of(request.Effort)}'; sent again without it.");
                     continue;
                 }
                 var problem = Describe(exchange, settings.ApiKey);

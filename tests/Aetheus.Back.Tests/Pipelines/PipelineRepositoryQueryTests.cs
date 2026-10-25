@@ -505,7 +505,7 @@ public class PipelineRepositoryQueryTests : IDisposable
     public async Task GetStalledCancellationRunIdsAsync_ReturnsOnlyOldRequestedRunsWithoutInflightWork()
     {
         var now = new DateTime(2026, 8, 8, 20, 0, 0, DateTimeKind.Utc);
-        var cancellationJson = $"{{\"{PipelineRunService.CancellationRequestedVariable}\":\"true\"}}";
+        var cancellationJson = $"{{\"{PipelineRunHelpers.CancellationRequestedVariable}\":\"true\"}}";
         var stalled = new PipelineRun
         {
             Id = 10,
@@ -862,7 +862,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         var systemCleanupStep = new PipelineStepRun
         {
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "workspace",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -921,19 +921,19 @@ public class PipelineRepositoryQueryTests : IDisposable
 
         await _repo.CancelPendingStepRunsExceptStagesAsync(
             1,
-            ["Teardown", PipelineRunService.SystemCleanupStage],
+            ["Teardown", PipelineRunHelpers.SystemCleanupStage],
             TestContext.Current.CancellationToken);
 
         Assert.Equal(TaskExecutionStatus.Running, orphanStep.Status);
 
         await _repo.CancelOrphanedRunningStepRunsExceptStagesAsync(
             1,
-            ["Teardown", PipelineRunService.SystemCleanupStage],
+            ["Teardown", PipelineRunHelpers.SystemCleanupStage],
             TestContext.Current.CancellationToken);
 
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(
             (await _db.PipelineRuns.FindAsync([1], TestContext.Current.CancellationToken))!.AdditionalVariablesJson);
-        Assert.Equal("true", variables[PipelineRunService.CancellationRequestedVariable]);
+        Assert.Equal("true", variables[PipelineRunHelpers.CancellationRequestedVariable]);
         var steps = await _db.PipelineStepRuns
             .OrderBy(step => step.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
@@ -947,7 +947,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         Assert.Equal(TaskExecutionStatus.Pending, steps.Single(step => step.StageName == "Teardown").Status);
         Assert.Equal(
             TaskExecutionStatus.Pending,
-            steps.Single(step => step.StageName == PipelineRunService.SystemCleanupStage).Status);
+            steps.Single(step => step.StageName == PipelineRunHelpers.SystemCleanupStage).Status);
         var tasks = await _db.Tasks.OrderBy(task => task.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
         Assert.Equal(TaskExecutionStatus.Cancelled, tasks.Single(task => task.Name == "work").Status);
@@ -1215,7 +1215,7 @@ public class PipelineRepositoryQueryTests : IDisposable
         // approval carries no delay of its own, so the run fails without its scheduler being involved.
         var runService = Substitute.For<IPipelineRunService>();
         var control = new PipelineRunControlService(
-            _repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>());
+            _repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>(), TimeProvider.System);
         runService.ApplyRefusalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(call => control.ApplyRefusalAsync(
                 call.Arg<int>(), Substitute.For<IPipelineRunScheduler>(), Substitute.For<IPipelineChildRunLauncher>(),

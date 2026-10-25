@@ -13,6 +13,7 @@ internal sealed class GitInternalRepoConfiguration : IEntityTypeConfiguration<Gi
         builder.Property(r => r.Slug).HasMaxLength(200).IsRequired();
         builder.Property(r => r.Description).HasMaxLength(1000);
         builder.Property(r => r.DefaultBranch).HasMaxLength(200).IsRequired();
+        builder.Property(r => r.IsConfiguration).HasDefaultValue(false);
         builder.HasOne(r => r.Project)
             .WithMany()
             .HasForeignKey(r => r.ProjectId)

@@ -97,12 +97,7 @@ public partial class ServerMailQueueTab
         await InvokeAsync(StateHasChanged);
     }
 
-    internal static string FormatBytes(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
-    };
+    internal static string FormatBytes(long bytes) => DisplayFormatting.Size(bytes);
 
     /// <summary>The export writes the size as the cell does.</summary>
     private static readonly Func<MailQueueItemDto, object?> SizeExport = item => FormatBytes(item.SizeBytes);

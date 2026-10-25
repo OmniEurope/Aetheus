@@ -35,7 +35,7 @@ public class PipelineInlineLogicWarningTests
         var warnings = WarningsFor("""
             set -eu
             export APP_VERSION="1.2.3"
-            sh deploy/scripts/publish-application.sh .pipeline-publish
+            sh scripts/publish-application.sh .pipeline-publish
             """);
 
         Assert.DoesNotContain(warnings, warning => warning.Contains("inlines", StringComparison.Ordinal));
@@ -48,7 +48,7 @@ public class PipelineInlineLogicWarningTests
 
         var warning = Assert.Single(warnings, item => item.Contains("inlines", StringComparison.Ordinal));
         Assert.Contains("31 lines", warning, StringComparison.Ordinal);
-        Assert.Contains("deploy/scripts/", warning, StringComparison.Ordinal);
+        Assert.Contains("tested script of the repository", warning, StringComparison.Ordinal);
     }
 
     [Fact]

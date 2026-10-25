@@ -93,7 +93,7 @@ public sealed record AgentUpdateProgressDto
     [Range(0, 100)]
     public int Percent { get; init; }
 
-    /// <summary>Optional free-form context (e.g. "Downloaded 4500 KB", "tar exit code 2: …").
+    /// <summary>Optional free-form context (e.g. "Downloaded 4500 Ko", "tar exit code 2: …").
     /// Bounded so a misbehaving agent cannot flood the hub channel.</summary>
     [StringLength(500)]
     public string? Message { get; init; }

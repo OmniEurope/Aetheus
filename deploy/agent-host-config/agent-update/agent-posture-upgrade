@@ -18,6 +18,16 @@ target_sha="unknown"
 target_commit="unknown"
 enable_capabilities=""
 enable_patch_manage=0
+enable_package_manage=0
+enable_service_enable=0
+enable_cron_manage=0
+enable_rkhunter_manage=0
+enable_apache_manage=0
+enable_certbot_manage=0
+enable_portsentry_manage=0
+enable_firewall_manage=0
+enable_mail_setup=0
+enable_teamspeak_setup=0
 
 write_result() {
     result_tmp="$result_file.tmp.$$"
@@ -100,6 +110,16 @@ if [ -n "${enable_capabilities:-}" ]; then
     for capability in $enable_capabilities; do
         case "$capability" in
             patch-manage) enable_patch_manage=1 ;;
+            package-manage) enable_package_manage=1 ;;
+            service-enable) enable_service_enable=1 ;;
+            cron-manage) enable_cron_manage=1 ;;
+            rkhunter-manage) enable_rkhunter_manage=1 ;;
+            apache-manage) enable_apache_manage=1 ;;
+            certbot-manage) enable_certbot_manage=1 ;;
+            portsentry-manage) enable_portsentry_manage=1 ;;
+            firewall-manage) enable_firewall_manage=1 ;;
+            mail-setup) enable_mail_setup=1 ;;
+            teamspeak-setup) enable_teamspeak_setup=1 ;;
             *) IFS="$old_ifs"; phase="invalid-capabilities"; exit 20 ;;
         esac
     done
@@ -145,11 +165,21 @@ fi
 rollback_ready=1
 
 phase="install"
-if [ "$enable_patch_manage" -eq 1 ]; then
-    sh "$payload/install-agent-linux.sh" --upgrade --yes --enable-patch-manage
-else
-    sh "$payload/install-agent-linux.sh" --upgrade --yes
-fi
+# Each accepted token adds its one literal installer flag (R1-5, ADR-055); nothing from the request
+# reaches the argv.
+set -- --upgrade --yes
+[ "$enable_patch_manage" -eq 0 ] || set -- "$@" --enable-patch-manage
+[ "$enable_package_manage" -eq 0 ] || set -- "$@" --enable-package-manage
+[ "$enable_service_enable" -eq 0 ] || set -- "$@" --enable-service-enable
+[ "$enable_cron_manage" -eq 0 ] || set -- "$@" --enable-cron-manage
+[ "$enable_rkhunter_manage" -eq 0 ] || set -- "$@" --enable-rkhunter-manage
+[ "$enable_apache_manage" -eq 0 ] || set -- "$@" --enable-apache-manage
+[ "$enable_certbot_manage" -eq 0 ] || set -- "$@" --enable-certbot-manage
+[ "$enable_portsentry_manage" -eq 0 ] || set -- "$@" --enable-portsentry-manage
+[ "$enable_firewall_manage" -eq 0 ] || set -- "$@" --enable-firewall-manage
+[ "$enable_mail_setup" -eq 0 ] || set -- "$@" --enable-mail-setup
+[ "$enable_teamspeak_setup" -eq 0 ] || set -- "$@" --enable-teamspeak-setup
+sh "$payload/install-agent-linux.sh" "$@"
 phase="service-health"
 systemctl is-active --quiet aetheus-agent
 outcome="success"

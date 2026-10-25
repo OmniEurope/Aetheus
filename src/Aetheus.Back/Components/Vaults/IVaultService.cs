@@ -28,6 +28,9 @@ public interface IVaultService
     Task<Dictionary<string, string>> ResolveVaultSecretsWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
     Task<(Dictionary<string, string> Vars, HashSet<string> FoundNames)> ResolveVaultSecretsWithNamesAsync(List<string> names, int? projectId, CancellationToken ct = default);
     Task<(Dictionary<string, string> Vars, HashSet<string> FoundNames)> ResolveVaultSecretsWithCrossAccessAndNamesAsync(List<string> names, int projectId, CancellationToken ct = default);
+    /// <summary>For each secret name of the named vaults, the id of the vault whose value a run of the project
+    /// would read (same precedence and cross-project access as <see cref="ResolveVaultSecretsWithCrossAccessAndNamesAsync"/>).</summary>
+    Task<Dictionary<string, int>> ResolveSecretOwnersWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default);
     Task<List<string>> ExportSecretKeysAsync(int vaultId, CancellationToken ct = default);
     Task<int> ImportSecretsAsync(int vaultId, List<CreateVaultSecretRequest> secrets, CancellationToken ct = default);
 }

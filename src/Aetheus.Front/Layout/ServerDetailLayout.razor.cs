@@ -86,6 +86,8 @@ public partial class ServerDetailLayout : IDisposable
             "ports" => "lan",
             "tasks" => "task_alt",
             "logs" => "receipt_long",
+            "mail" => "mail",
+            "updates" => "system_update",
             _ => "dns",
         };
     }
@@ -135,16 +137,10 @@ public partial class ServerDetailLayout : IDisposable
     }
 
     private bool CanEnableAgentCapabilities =>
-        Loader.Server is { } server && OsTypeHelper.FromDescription(server.OsDescription) != OsType.Windows;
+        Loader.Server is { } server && AgentCapabilitiesDialog.IsAvailableFor(server);
 
-    private Task OpenAgentCapabilitiesDialog()
-    {
-        if (Loader.Server is null) return Task.CompletedTask;
-        return Dialog.OpenAsync<AgentCapabilitiesDialog>(
-            L["EnableAgentCapabilities"],
-            new Dictionary<string, object?> { { "Server", Loader.Server } },
-            new OmniDialogOptions { Width = "560px", CloseDialogOnOverlayClick = false, AutoFocusFirstElement = false });
-    }
+    private Task OpenAgentCapabilitiesDialog() =>
+        Loader.Server is null ? Task.CompletedTask : AgentCapabilitiesDialog.OpenAsync(Dialog, L, Loader.Server);
 
     private async Task UpdateAgentAsync()
     {

@@ -40,8 +40,8 @@
         </div>
     </DetailTemplate>
     <Columns>
-        <OmniDataGridColumn TItem="SupervisionRow" Property="ProjectName" Title="@L["Project"]" MinWidth="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
-        <OmniDataGridColumn TItem="SupervisionRow" Property="ApplicationName" Title="@L["Application"]" MinWidth="10rem" Filterable="true">
+        <OmniDataGridColumn TItem="SupervisionRow" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="SupervisionRow" Property="ApplicationName" Title="@L["Application"]" Filterable="true">
             <Template Context="row">
                 @if (row.App is not null)
                 {
@@ -55,7 +55,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="StatusKey" Title="@L["Status"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="row">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@StatusTone(row)">@StatusText(row.StatusKey)</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@StatusTone(row)">@StatusText(row.StatusKey)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="OnlineVisitors" Title="@L["CurrentVisitors"]" Width="8rem"
@@ -84,7 +84,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="SupervisionRow" Property="UsedBytes" Title="@L["ProjectStorageUsed"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+        <OmniDataGridColumn TItem="SupervisionRow" Property="UsedBytes" Title="@L["ProjectStorageUsed"]" Width="9rem" TextAlign="OmniAlignment.End" Filterable="false">
             <Template Context="row">
                 @if (row.ShowsStorage && row.Usage is { } usage)
                 {
@@ -92,7 +92,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="SupervisionRow" Property="BudgetBytes" Title="@L["ProjectStorageBudget"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+        <OmniDataGridColumn TItem="SupervisionRow" Property="BudgetBytes" Title="@L["ProjectStorageBudget"]" Width="9rem" TextAlign="OmniAlignment.End" Filterable="false">
             <Template Context="row">
                 @if (row.ShowsStorage && row.Usage is { } usage)
                 {
@@ -100,7 +100,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="SupervisionRow" Property="UsedPercent" Title="@L["ProjectStorageShare"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Filterable="false">
+        <OmniDataGridColumn TItem="SupervisionRow" Property="UsedPercent" Title="@L["ProjectStorageShare"]" Width="8rem" TextAlign="OmniAlignment.End" Filterable="false">
             <Template Context="row">
                 @if (row.ShowsStorage && row.Usage is { } usage)
                 {

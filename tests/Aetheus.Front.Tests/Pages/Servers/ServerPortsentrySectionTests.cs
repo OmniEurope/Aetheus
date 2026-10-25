@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -32,7 +33,7 @@ public class ServerPortsentrySectionTests : BunitContext
         _handler.SetJsonResponse("api/servers/50/portsentry/logs", true);
     }
 
-    private IRenderedComponent<ServerPortsentrySection> RenderInstalled(PortsentryDataDto? ps = null)
+    private IRenderedComponent<PageHeaderOutletHost> RenderInstalled(PortsentryDataDto? ps = null)
     {
         SetupPortsentryApi();
         var data = ps ?? new PortsentryDataDto
@@ -43,7 +44,7 @@ public class ServerPortsentrySectionTests : BunitContext
             Mode = "atcp",
             BlockedCount = 0
         };
-        return Render<ServerPortsentrySection>(p => p
+        return this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 50)
             .Add(x => x.Ps, data));
     }
@@ -80,7 +81,7 @@ public class ServerPortsentrySectionTests : BunitContext
     {
         _handler.SetJsonResponse("api/servers/50/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
         var ps = new PortsentryDataDto { IsInstalled = false };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 50)
             .Add(x => x.Ps, ps));
         Assert.Contains("NotInstalled", cut.Markup, StringComparison.Ordinal);
@@ -107,9 +108,9 @@ public class ServerPortsentrySectionTests : BunitContext
         var cut = RenderInstalled();
 
         var method = typeof(ServerPortsentrySection).GetMethod("ExecuteActionAsync", Priv)!;
-        await (Task)method.Invoke(cut.Instance, [PortsentryAction.Start])!;
+        await (Task)method.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [PortsentryAction.Start])!;
 
-        var running = (bool)typeof(ServerPortsentrySection).GetField("_actionRunning", Priv)!.GetValue(cut.Instance)!;
+        var running = (bool)typeof(ServerPortsentrySection).GetField("_actionRunning", Priv)!.GetValue(cut.FindComponent<ServerPortsentrySection>().Instance)!;
         Assert.False(running);
     }
 
@@ -119,7 +120,7 @@ public class ServerPortsentrySectionTests : BunitContext
         var cut = RenderInstalled();
 
         var method = typeof(ServerPortsentrySection).GetMethod("GetLogsAsync", Priv)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
+        await (Task)method.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [])!;
         // GetLogsAsync issues a request to the portsentry logs endpoint.
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/50/portsentry/logs"));
     }
@@ -129,12 +130,12 @@ public class ServerPortsentrySectionTests : BunitContext
     {
         var cut = RenderInstalled();
 
-        typeof(ServerPortsentrySection).GetField("_whitelistIp", Priv)!.SetValue(cut.Instance, "");
+        typeof(ServerPortsentrySection).GetField("_whitelistIp", Priv)!.SetValue(cut.FindComponent<ServerPortsentrySection>().Instance, "");
         var method = typeof(ServerPortsentrySection).GetMethod("AddWhitelistIpAsync", Priv)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
+        await (Task)method.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [])!;
 
         var whitelist = (List<PortsentryWhitelistIpDto>)typeof(ServerPortsentrySection)
-            .GetField("_whitelist", Priv)!.GetValue(cut.Instance)!;
+            .GetField("_whitelist", Priv)!.GetValue(cut.FindComponent<ServerPortsentrySection>().Instance)!;
         Assert.Empty(whitelist);
     }
 
@@ -160,15 +161,15 @@ public class ServerPortsentrySectionTests : BunitContext
     {
         SetupPortsentryApi([new PortsentryWhitelistIpDto { Id = 1, IpAddress = "192.168.1.1", Description = "Office" }]);
         var ps = new PortsentryDataDto { IsInstalled = true, IsRunning = true, Version = "2.0", BlockedCount = 0 };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 50)
             .Add(x => x.Ps, ps));
         var load = typeof(ServerPortsentrySection).GetMethod("LoadWhitelistAsync", Priv)!;
         await cut.InvokeAsync(async () =>
-            await (Task)load.Invoke(cut.Instance, [new GridLoadArgs { Skip = 0, Top = 25 }])!);
+            await (Task)load.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [new GridLoadArgs { Skip = 0, Top = 25 }])!);
         var whitelist = (List<PortsentryWhitelistIpDto>)typeof(ServerPortsentrySection)
             .GetField("_whitelist", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!;
+            .GetValue(cut.FindComponent<ServerPortsentrySection>().Instance)!;
         Assert.Contains(whitelist, ip => ip.IpAddress == "192.168.1.1");
     }
 

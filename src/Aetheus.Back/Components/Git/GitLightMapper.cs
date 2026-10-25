@@ -26,7 +26,8 @@ internal static partial class GitLightMapper
         CloneUrl = cloneUrl,
         CreatedAt = r.CreatedAt,
         LastPushAt = r.LastPushAt,
-        IsAdditionalSource = IsAdditionalSource(r)
+        IsAdditionalSource = IsAdditionalSource(r),
+        IsConfiguration = r.IsConfiguration
     };
 
     /// <summary>Maps an additional external mirror alongside the project source for pipelines that

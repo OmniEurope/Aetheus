@@ -179,6 +179,31 @@ public class NuGetRegistryControllerTests
         Assert.IsType<NotFoundResult>(result);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARegistrationLeaf_CarriesTheDeprecationEntryOnlyForADeprecatedVersion(bool deprecated)
+    {
+        // R1-18: the NuGet client reads catalogEntry.deprecation to warn on restore.
+        _registry.GetRegistrationVersionAsync("pkg", "1.0.0", Arg.Any<CancellationToken>())
+            .Returns(new NuGetRegistration("Pkg", null, null, null,
+                [new NuGetRegistrationVersion("1.0.0", true, new DateTime(2026, 1, 1), [], deprecated)]));
+
+        var result = await Build().GetRegistrationLeaf("pkg", "1.0.0", TestContext.Current.CancellationToken);
+
+        var catalogEntry = System.Text.Json.Nodes.JsonNode.Parse(
+            System.Text.Json.JsonSerializer.Serialize(Value<object>(result)))!["catalogEntry"]!;
+        var deprecation = catalogEntry["deprecation"];
+        if (!deprecated)
+        {
+            Assert.Null(deprecation);
+            return;
+        }
+
+        Assert.Equal("Other", deprecation!["reasons"]![0]!.GetValue<string>());
+        Assert.Equal(Aetheus.Back.Components.PackageRegistry.PackageRegistryDefaults.DeprecationMessage, deprecation["message"]!.GetValue<string>());
+    }
+
     // --- search -------------------------------------------------------------
 
     [Fact]

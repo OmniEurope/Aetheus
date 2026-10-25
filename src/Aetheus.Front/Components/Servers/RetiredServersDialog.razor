@@ -1,13 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-<OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm">
+<OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md">
     @L["RetiredServersHint"]
 </OmniAlert>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniAlert>
 }
@@ -16,8 +16,8 @@
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<RetiredServerDto>(_servers, _totalCount))">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="RetiredServerDto" Property="Name" Title="@L["Name"]" MinWidth="160px" Filterable="true" />
-        <OmniDataGridColumn TItem="RetiredServerDto" Property="Hostname" Title="@L["Hostname"]" MinWidth="150px" Filterable="true" />
+        <OmniDataGridColumn Frozen="true" TItem="RetiredServerDto" Property="Name" Title="@L["Name"]" Filterable="true" />
+        <OmniDataGridColumn TItem="RetiredServerDto" Property="Hostname" Title="@L["Hostname"]" Filterable="true" />
         <OmniDataGridColumn TItem="RetiredServerDto" Property="RetiredAt" Title="@L["RetiredAt"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
         <OmniDataGridColumn TItem="RetiredServerDto" Property="HasMachineIdentity" Title="@L["MachineIdentity"]" Width="150px" Sortable="false" Filterable="false">
             <Template Context="server">
@@ -31,11 +31,11 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="RetiredServerDto" Title="" Width="80px" Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
+        <OmniDataGridColumn TItem="RetiredServerDto" Title="" Width="80px" Sortable="false" Filterable="false" TextAlign="OmniAlignment.Center">
             <Template Context="server">
                 @if (Permissions.CanAdmin(ResourceType.Server, server.Id))
                 {
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnPurgeServer(server))" Class="@(_purgingIds.Contains(server.Id) ? "btn-busy" : null)" Busy="@(_purgingIds.Contains(server.Id))" title="@L["PurgeServer"]" Label="@L["PurgeServer"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnPurgeServer(server))" Class="@(_purgingIds.Contains(server.Id) ? "btn-busy" : null)" Busy="@(_purgingIds.Contains(server.Id))" title="@L["PurgeServer"]" Label="@L["PurgeServer"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 }
             </Template>
         </OmniDataGridColumn>

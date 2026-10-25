@@ -28,7 +28,8 @@ internal static class DirectoryLinks
         using var mklink = Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            ArgumentList = { "/c", "mklink", "/J", link, target },
+            // cmd reads "/" as an option prefix: hand it backslash paths.
+            ArgumentList = { "/c", "mklink", "/J", Path.GetFullPath(link), Path.GetFullPath(target) },
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,

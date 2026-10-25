@@ -10,7 +10,7 @@
     }
     <div class="blade-content-spacer"></div>
     @* STD-BTN detection 11: Load visible, the other actions in the menu. *@
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadAsync" Disabled="@(_pendingTaskId is not null)"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["MailQueueLoad"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadAsync" Disabled="@(_pendingTaskId is not null)"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent><span>@L["MailQueueLoad"]</span></ChildContent></OmniButton>
     @if (CanManage)
     {
         <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -38,7 +38,7 @@ else
             {
                 <OmniDataGridColumn TItem="MailQueueItemDto" Title="@L["Actions"]" Width="7.5rem" Sortable="false">
                     <Template Context="q">
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(q.Id))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(q.Id))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </Template>
                 </OmniDataGridColumn>
             }

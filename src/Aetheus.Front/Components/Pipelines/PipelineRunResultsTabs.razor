@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
-@using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
+@using static Aetheus.Front.Components.Shared.PipelineRunFormatting
 
 @if (Run.Artifacts.Count > 0)
 {
@@ -10,12 +10,12 @@
             <OmniDataGrid Items="@Run.Artifacts" ExportTitle="@ExportContext.Title(L["Artifacts"])" ExportFields="@ExportContext.Fields()" TItem="PipelineArtifactDto"
  Class="run-artifacts-grid" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="PipelineArtifactDto" Property="Name" Title="@L["Name"]" Filterable="true">
+                    <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="PipelineArtifactDto" Property="Name" Title="@L["Name"]" Filterable="true">
                         <Template Context="artifact">
                             <a href="/artifacts/@artifact.Id" class="pipeline-name-link">@artifact.Name</a>
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="PipelineArtifactDto" Property="StageName" Title="@L["Stage"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
+                    <OmniDataGridColumn TItem="PipelineArtifactDto" Property="StageName" Title="@L["Stage"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                     <OmniDataGridColumn TItem="PipelineArtifactDto" Property="SizeBytes" Title="@L["Size"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
                         <Template Context="artifact">@FormatSize(artifact.SizeBytes)</Template>
                     </OmniDataGridColumn>
@@ -38,7 +38,7 @@
                         <Template Context="artifact">
                             @* Download uses a blue row action as the project's explicit STD-BTN
                                exception. *@
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ArtifactDownloadRequested.InvokeAsync(artifact))" title="@L["Download"]" Label="@L["Download"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ArtifactDownloadRequested.InvokeAsync(artifact))" title="@L["Download"]" Label="@L["Download"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon></OmniButton>
                         </Template>
                     </OmniDataGridColumn>
                 </Columns>
@@ -50,10 +50,10 @@
 {
     <OmniTabsItem Key="coverage" Title="@L["Coverage"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("bar_chart"))" /></Icon><ChildContent>
         <OmniCard Class="omni-u-mt-md omni-u-p-md">
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["Coverage"]</OmniText>
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["Coverage"]</OmniText>
             @if (Run.CoverageSummary is { } coverage)
             {
-                <OmniRow Gap="OmniSpacing.XLarge" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
+                <OmniRow Gap="OmniSpacing.ExtraLarge" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
                     <div class="coverage-gauge-wrap">
                         <OmniArcGauge Label="@L["LineCoverage"]" Class="coverage-gauge">
                             <OmniArcGaugeScale Minimum="0" Maximum="100">
@@ -80,12 +80,12 @@
                     </div>
                     @if (Metrics.CoverageTrend.Count >= 2)
                     {
-                        <OmniChart Title="@L["CoverageTrend"]" Class="coverage-trend-chart" AspectRatio="TrendChartAspectRatio">
+                        <OmniChart Label="@L["CoverageTrend"]" Class="coverage-trend-chart" AspectRatio="TrendChartAspectRatio">
                             <OmniLineSeries Data="@CoverageLinePoints" Title="@L["LineCoverage"]" ColorIndex="0" /><OmniMarkers Data="@CoverageLinePoints" ColorIndex="0" />
                             <OmniLineSeries Data="@CoverageBranchPoints" Title="@L["BranchCoverage"]" ColorIndex="1" />
-                            <OmniValueAxis Minimum="0" Maximum="100" /><OmniAxisTitle Text="%" Vertical="true" />
+                            <OmniValueAxis Minimum="0" Maximum="100" /><OmniAxisTitle Text="%" Orientation="OmniOrientation.Vertical" />
                             <OmniCategoryAxis Labels="@OmniChartData.Labels(CoverageLinePoints)" />
-                            <OmniLegend Items="@(new[] { L["LineCoverage"].Value, L["BranchCoverage"].Value })" Position="OmniLegendPosition.Bottom" />
+                            <OmniLegend Items="@(new[] { L["LineCoverage"].Value, L["BranchCoverage"].Value })" Placement="OmniLegendPlacement.Bottom" />
                         </OmniChart>
                     }
                 </OmniRow>
@@ -99,7 +99,7 @@
                 var coverageStep = Run.Steps.FirstOrDefault(s => s.StageName.Contains("Coverage", StringComparison.OrdinalIgnoreCase) && !s.IsSystem);
                 if (coverageStep is not null)
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                         <StepStatusBadge Step="@coverageStep" />
                         <OmniText Element="OmniTextElement.Paragraph">@coverageStep.StepName</OmniText>
                         @if (coverageStep.ServerName is not null) { <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@coverageStep.ServerName</OmniText> }
@@ -109,7 +109,7 @@
                     if (coverageStep.TaskId is { } coverageTaskId)
                     {
                         var logs = StepLogs.GetValueOrDefault(coverageTaskId);
-                        if (logs is null) { <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CoverageLogsRequested.InvokeAsync(coverageTaskId))"><OmniIcon Name="OmniIconName.TerminalWindow" /> <span>@L["Logs"]</span></OmniButton> }
+                        if (logs is null) { <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CoverageLogsRequested.InvokeAsync(coverageTaskId))"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent><span>@L["Logs"]</span></ChildContent></OmniButton> }
                         else if (logs.Count > 0) { <PipelineRunLogLines Logs="@logs" Compact="true" /> }
                         else { <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NoCoverageData"]</OmniText> }
                     }
@@ -124,12 +124,12 @@
 {
     <OmniTabsItem Key="tests" Title="@L["TestResults"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("science"))" /></Icon><ChildContent>
         <OmniCard Class="omni-u-mt-md omni-u-p-md">
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["TestResults"]</OmniText>
-            <OmniRow Gap="OmniSpacing.XLarge">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@tests.TotalTests.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Total"]</OmniText></OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@tests.Passed.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Passed"]</OmniText></OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@tests.Failed.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Failed"]</OmniText></OmniStack>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@tests.Skipped.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Skipped"]</OmniText></OmniStack>
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["TestResults"]</OmniText>
+            <OmniRow Gap="OmniSpacing.ExtraLarge">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@tests.TotalTests.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Total"]</OmniText></OmniStack>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@tests.Passed.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Passed"]</OmniText></OmniStack>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@tests.Failed.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Failed"]</OmniText></OmniStack>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@tests.Skipped.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Skipped"]</OmniText></OmniStack>
             </OmniRow>
         </OmniCard>
     </ChildContent></OmniTabsItem>
@@ -139,19 +139,19 @@
 {
     <OmniTabsItem Key="lint" Title="@L["Lint"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
         <OmniCard Class="omni-u-mt-md omni-u-p-md">
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["Lint"]</OmniText>
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["Lint"]</OmniText>
             @if (Run.LintSummary is { } lint)
             {
-                <OmniRow Gap="OmniSpacing.XLarge" Class="omni-u-mb-lg">
-                    @if (!string.IsNullOrEmpty(lint.Tool)) { <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LintTool"]</OmniText><OmniText Element="OmniTextElement.Paragraph">@lint.Tool</OmniText></OmniStack> }
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.ErrorCount > 0 ? OmniTone.Danger : OmniTone.Success)">@lint.ErrorCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintErrors"]</OmniText></OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.WarningCount > 0 ? OmniTone.Warning : OmniTone.Neutral)">@lint.WarningCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintWarnings"]</OmniText></OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.InfoCount > 0 ? OmniTone.Accent : OmniTone.Neutral)">@lint.InfoCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintInfo"]</OmniText></OmniStack>
+                <OmniRow Gap="OmniSpacing.ExtraLarge" Class="omni-u-mb-lg">
+                    @if (!string.IsNullOrEmpty(lint.Tool)) { <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LintTool"]</OmniText><OmniText Element="OmniTextElement.Paragraph">@lint.Tool</OmniText></OmniStack> }
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.ErrorCount > 0 ? OmniTone.Danger : OmniTone.Success)">@lint.ErrorCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintErrors"]</OmniText></OmniStack>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.WarningCount > 0 ? OmniTone.Warning : OmniTone.Neutral)">@lint.WarningCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintWarnings"]</OmniText></OmniStack>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center"><OmniBadge Fill="OmniFill.Solid" Tone="@(lint.InfoCount > 0 ? OmniTone.Accent : OmniTone.Neutral)">@lint.InfoCount.ToString()</OmniBadge><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["LintInfo"]</OmniText></OmniStack>
                 </OmniRow>
             }
             @foreach (var lintStep in LintSteps)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                     <StepStatusBadge Step="@lintStep" /><OmniText Element="OmniTextElement.Paragraph">@lintStep.StepName</OmniText>
                     @if (lintStep.ServerName is not null) { <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@lintStep.ServerName</OmniText> }
                     @{ var duration = FormatDuration(lintStep.StartedAt, lintStep.CompletedAt); }
@@ -160,7 +160,7 @@
                 @if (lintStep.TaskId is { } lintTaskId)
                 {
                     var logs = StepLogs.GetValueOrDefault(lintTaskId);
-                    if (logs is null) { <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => LintLogsRequested.InvokeAsync(lintTaskId))" Class="omni-u-mb-md"><OmniIcon Name="OmniIconName.TerminalWindow" /> <span>@L["Logs"]</span></OmniButton> }
+                    if (logs is null) { <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => LintLogsRequested.InvokeAsync(lintTaskId))" Class="omni-u-mb-md"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent><span>@L["Logs"]</span></ChildContent></OmniButton> }
                     else if (logs.Count > 0) { <PipelineRunLogLines Logs="@logs" HighlightLintWarnings="true" /> }
                     else { <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-md">@L["NoLogs"]</OmniText> }
                 }
@@ -173,8 +173,9 @@
 {
     <OmniTabsItem Key="quality" Title="@L["CodeQuality"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("code"))" /></Icon><ChildContent>
         <OmniCard Class="omni-u-mt-md omni-u-p-md">
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-md">@L["CodeQuality"]</OmniText>
-            <OmniRow Gap="OmniSpacing.XLarge">
+            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-md">@L["CodeQuality"]</OmniText>
+            @* R-5: the metrics are OE tiles of one OmniTileGrid (same width, same height). *@
+            <OmniTileGrid Columns="3" Gap="OmniSpacing.Medium">
                 @{ var averageComplexity = PipelineRunMetrics.Metric(Run, "complexity.cyclomatic.avg") ?? 0; }
                 <OmniCard Class="omni-u-p-md coverage-card"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["AvgComplexity"]</OmniText><OmniHeading Level="OmniHeadingLevel.H4" Class="@ComplexityColorClass(averageComplexity)">@averageComplexity.ToString("0.0")</OmniHeading></OmniCard>
                 <OmniCard Class="omni-u-p-md coverage-card"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["MaxComplexity"]</OmniText><OmniHeading Level="OmniHeadingLevel.H4">@((PipelineRunMetrics.Metric(Run, "complexity.cyclomatic.max") ?? 0).ToString("0"))</OmniHeading></OmniCard>
@@ -182,15 +183,15 @@
                 <OmniCard Class="omni-u-p-md coverage-card"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["HighComplexity"]</OmniText><OmniHeading Level="OmniHeadingLevel.H4" Class="@((PipelineRunMetrics.Metric(Run, "complexity.high") ?? 0) > 0 ? "omni-u-text-warning" : "omni-u-text-success")">@((PipelineRunMetrics.Metric(Run, "complexity.high") ?? 0).ToString("0"))</OmniHeading><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">CC &gt; @PipelineRunMetrics.ComplexityHighThreshold</OmniText></OmniCard>
                 <OmniCard Class="omni-u-p-md coverage-card"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["Methods"]</OmniText><OmniHeading Level="OmniHeadingLevel.H4">@((PipelineRunMetrics.Metric(Run, "complexity.methods") ?? 0).ToString("N0"))</OmniHeading></OmniCard>
                 <OmniCard Class="omni-u-p-md coverage-card"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LinesOfCode"]</OmniText><OmniHeading Level="OmniHeadingLevel.H4">@((PipelineRunMetrics.Metric(Run, "loc.total") ?? 0).ToString("N0"))</OmniHeading></OmniCard>
-            </OmniRow>
+            </OmniTileGrid>
             @if (Metrics.ComplexityTrend.Count >= 2)
             {
-                <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-sm">@L["ComplexityTrend"]</OmniText>
-                <OmniChart Title="@L["ComplexityTrend"]" Class="coverage-trend-chart" AspectRatio="TrendChartAspectRatio">
+                <OmniText Element="OmniTextElement.Title" Class="omni-u-mt-lg omni-u-mb-sm">@L["ComplexityTrend"]</OmniText>
+                <OmniChart Label="@L["ComplexityTrend"]" Class="coverage-trend-chart" AspectRatio="TrendChartAspectRatio">
                     <OmniLineSeries Data="@ComplexityAveragePoints" Title="@L["AvgComplexity"]" ColorIndex="0" /><OmniMarkers Data="@ComplexityAveragePoints" ColorIndex="0" />
                     <OmniLineSeries Data="@ComplexityMaximumPoints" Title="@L["MaxComplexity"]" ColorIndex="1" />
                     @if (Metrics.ComplexityTrend.All(point => point.Crap.HasValue)) { <OmniLineSeries Data="@ComplexityCrapPoints" Title="@L["Crap"]" ColorIndex="2" /> }
-                    <OmniAxisTitle Text="@L["ComplexityAxisTitle"]" Vertical="true" /><OmniCategoryAxis Labels="@OmniChartData.Labels(ComplexityAveragePoints)" /><OmniLegend Items="@(new[] { L["AvgComplexity"].Value, L["MaxComplexity"].Value, L["Crap"].Value })" Position="OmniLegendPosition.Bottom" />
+                    <OmniAxisTitle Text="@L["ComplexityAxisTitle"]" Orientation="OmniOrientation.Vertical" /><OmniCategoryAxis Labels="@OmniChartData.Labels(ComplexityAveragePoints)" /><OmniLegend Items="@(new[] { L["AvgComplexity"].Value, L["MaxComplexity"].Value, L["Crap"].Value })" Placement="OmniLegendPlacement.Bottom" />
                 </OmniChart>
             }
         </OmniCard>

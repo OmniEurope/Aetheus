@@ -579,6 +579,11 @@ public partial class GitRepositoryDetail : IAsyncDisposable
         }
         finally { _downloadingArchive = false; }
     }
+    private async Task ToggleConfigurationAsync()
+    {
+        if (_repo is null || !_canWrite) return;
+        if (await Actions.SetConfigurationAsync(Id, !_repo.IsConfiguration)) await LoadData();
+    }
     /// <summary> The clone URL field copies itself (OE's Copyable) and its button shows the check;
     /// a copy the browser refused shows nothing visible on the button, so it gets the app's
     /// warning. </summary>

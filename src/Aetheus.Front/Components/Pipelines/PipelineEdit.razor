@@ -9,6 +9,7 @@
     @* Run is the main page action; Edit opens the edit tab through the header menu. *@
     RenderFragment pipelineMenu = @<text>
         <OmniMenuItem OnClick="@(() => _selectedTab = 1)"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+        <OmniMenuItem OnClick="@OnRunWithOptionsAsync"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["RunWithOptions"]</ChildContent></OmniMenuItem>
         <OmniMenuItem OnClick="@OnDryRun"><Icon><OmniIcon Name="OmniIconName.Flask" /></Icon><ChildContent>@L["DryRun"]</ChildContent></OmniMenuItem>
         @if (_fleetItem is { Freshness: PipelineFleetFreshness.Outdated, LatestVersion: not null }
             && Permissions.CanWrite(ResourceType.Pipeline, Id))
@@ -30,14 +31,14 @@
     </text>;
     <OmniPageHeader Title="@(_isNew ? L["NewPipeline"] : _pipeline?.Name ?? "")" ShowBack="@(!string.IsNullOrWhiteSpace(BackHref))" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@(_isNew ? null : pipelineMenu)">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
-        <Actions>
+        @* R-40: Run is pinned (never folded, on a row of its own on a phone) and has no chevron;
+           its variants (run with options) are in the page menu. *@
+        <PinnedActionsContent>
             @if (!_isNew)
             {
-                <OmniSplitButton Class="@(_running ? "btn-busy" : null)" aria-busy="@(_running ? "true" : null)" Text="@L["Run"]" OnClick="@OnRun" Variant="OmniButtonVariant.Primary" Busy="@_running"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
-                    <OmniMenuItem OnClick="@OnRunWithOptionsAsync">@L["RunWithOptions"]</OmniMenuItem>
-                </ChildContent></OmniSplitButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnRun" Class="@(_running ? "btn-busy" : null)" Busy="@_running"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Run"]</span></ChildContent></OmniButton>
             }
-        </Actions>
+        </PinnedActionsContent>
     </OmniPageHeader>
 
     @* The definition was changed elsewhere while this page holds unsaved edits. *@
@@ -45,15 +46,15 @@
     {
         <OmniAlert Severity="OmniSeverity.Info" Class="pipeline-changed-elsewhere">
             @L["PipelineChangedElsewhere"]
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRefresh"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["ReloadNow"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRefresh"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["ReloadNow"]</span></ChildContent></OmniButton>
         </OmniAlert>
     }
 
     @if (HasLegacyTemplateReference)
     {
-        <OmniAlert Severity="OmniSeverity.Warning">
+        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-md">
             @L["LegacyTemplateReferenceWarning"]
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@PinLegacyTemplateAsync"><OmniIcon Name="OmniIconName.Save" /> <span>@L["PinTemplateVersion"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@PinLegacyTemplateAsync"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["PinTemplateVersion"]</span></ChildContent></OmniButton>
         </OmniAlert>
     }
 }
@@ -66,7 +67,7 @@
             <OmniDataAnnotationsValidator Localizer="@L" />
             <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-sm">
                 <OmniColumn Span="12" MediumSpan="6">
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                         <OmniFormField Label="@L["Name"]" For="Name">
                             <OmniTextBox @bind-Value="_model.Name" Id="Name" />
                             <ValidationMessage For="@(() => _model.Name)" />
@@ -87,7 +88,7 @@
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-xs">@L["YamlDefinition"]</OmniText>
             @if (_templates.Count > 0)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Template"]:</OmniText>
                     <OmniDropDown aria-label="@L["SelectTemplate"]" TValue="int?" Options="@(_templates.ToOptions(item => (int?)item.Id, item => item.Name))"
                         Placeholder="@L["SelectTemplate"]" AllowEmpty="true" @bind-Value="_selectedTemplateId"
@@ -97,7 +98,7 @@
             @if (_templateParameters.Selection?.Parameters.Count > 0)
             {
                 <OmniCard Class="omni-u-mb-md">
-                    <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">@L["TemplateParameters"]</OmniText>
+                    <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["TemplateParameters"]</OmniText>
                     <OmniRow Gap="OmniSpacing.Large">
                         @foreach (var parameter in _templateParameters.Selection.Parameters)
                         {
@@ -138,9 +139,9 @@
                     </OmniRow>
                 </OmniCard>
             }
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 @* STD-BTN detection 11: Create visible, the other actions in the menu. *@
-                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@OnValidateYaml" Disabled="@(_validating)"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ValidateYaml"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@OnFormatYaml"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@L["FormatYaml"]</ChildContent></OmniMenuItem>
@@ -161,6 +162,16 @@ else if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Large" Class="omni-u-mt-lg" />
 }
+else if (_notFound)
+{
+    @* R-34: a pipeline that no longer exists (deleted, or a wrong address) says so and leads back to the list. *@
+    <OmniEmptyState Class="omni-u-mt-md" Title="@L["PipelineNotFound"]" Description="@L["PipelineNotFoundHint"]" data-testid="pipeline-not-found">
+        <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
+        <ActionsContent>
+            <OmniLink Href="/pipelines" data-testid="pipeline-not-found-back"><OmniIcon Name="OmniIconName.ArrowRight" /> @L["BackToPipelineList"]</OmniLink>
+        </ActionsContent>
+    </OmniEmptyState>
+}
 else
 {
     <div class="pipeline-detail-page">
@@ -168,84 +179,59 @@ else
         <Tabs>
             <OmniTabsItem Key="runs" Title="@L["Runs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
                 @* Tiles summarize the loaded page of runs, with a label and a separate value line
-                   for consistent scanning. *@
-                <OmniRow Gap="OmniSpacing.Medium" Class="pipeline-runs-summary">
-                    <OmniColumn Span="12" SmallSpan="6" MediumSpan="3">
-                        @{
-                            RenderFragment latestGradeCard =
-                                @<OmniCard Class="@SummaryCardClass(RunsSummary.LatestGradeRunId)">
-                                    <span class="pipeline-runs-summary-label">
-                                        <OmniIcon Name="OmniIconName.Medal" />
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LatestGrade"]</OmniText>
-                                    </span>
-                                    <div class="pipeline-runs-summary-value">
-                                        @if (RunsSummary.LatestGrade is { } grade)
-                                        {
-                                            <GradeBadge Value="@grade" />
-                                        }
-                                        else
-                                        {
-                                            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NotAvailableShort"]</OmniText>
-                                        }
-                                    </div>
-                                </OmniCard>;
-                        }
-                        @* The tile opens the graded run on its Gate tab, where its findings are. *@
-                        @if (RunsSummary.LatestGradeRunId is { } gradedRunId)
-                        {
-                            <a href="@PipelineRunPresentation.GateHref(gradedRunId, ProjectId, ServerId)" class="tile-link" title="@L["LatestGradeOpenFindings"]">@latestGradeCard</a>
-                        }
-                        else
-                        {
-                            @latestGradeCard
-                        }
-                    </OmniColumn>
-                    <OmniColumn Span="12" SmallSpan="6" MediumSpan="3">
-                        <OmniCard Class="analysis-summary-card pipeline-runs-summary-card">
-                            <span class="pipeline-runs-summary-label">
-                                <OmniIcon Name="OmniIconName.CheckCircle" />
-                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["SuccessRate"]</OmniText>
-                            </span>
-                            <div class="pipeline-runs-summary-value">
-                                <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.SuccessRateLabel(L["NotAvailableShort"])</OmniHeading>
-                            </div>
-                        </OmniCard>
-                    </OmniColumn>
-                    <OmniColumn Span="12" SmallSpan="6" MediumSpan="3">
-                        <OmniCard Class="analysis-summary-card pipeline-runs-summary-card">
-                            <span class="pipeline-runs-summary-label">
-                                <OmniIcon Name="OmniIconName.Timer" />
-                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["AverageDuration"]</OmniText>
-                            </span>
-                            <div class="pipeline-runs-summary-value">
-                                <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.AverageDurationLabel(L["NotAvailableShort"])</OmniHeading>
-                            </div>
-                        </OmniCard>
-                    </OmniColumn>
-                    <OmniColumn Span="12" SmallSpan="6" MediumSpan="3">
-                        @{
-                            RenderFragment lastSuccessCard =
-                                @<OmniCard Class="@SummaryCardClass(RunsSummary.LastSuccessRunId)">
-                                    <span class="pipeline-runs-summary-label">
-                                        <OmniIcon Name="OmniIconName.CalendarCheck" />
-                                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LastSuccess"]</OmniText>
-                                    </span>
-                                    <div class="pipeline-runs-summary-value">
-                                        <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.LastSuccessLabel(L["NotAvailableShort"])</OmniHeading>
-                                    </div>
-                                </OmniCard>;
-                        }
-                        @* The tile opens the last successful run. *@
-                        @if (RunsSummary.LastSuccessRunId is { } successRunId)
-                        {
-                            <a href="@PipelineRunPresentation.Href(successRunId, ProjectId, ServerId)" class="tile-link" title="@L["LastSuccessOpenRun"]">@lastSuccessCard</a>
-                        }
-                        else
-                        {
-                            @lastSuccessCard
-                        }
-                    </OmniColumn>
-                </OmniRow>
+                   for consistent scanning. They sit in one OE tile grid (same size, recette R1-20); the two
+                   that open a run are themselves the link (OmniCard.Href), never wrapped. *@
+                <OmniTileGrid Columns="4" Class="pipeline-runs-summary">
+                    @* The tile opens the graded run on its Gate tab, where its findings are. *@
+                    <OmniCard Class="analysis-summary-card pipeline-runs-summary-card"
+                              Href="@(RunsSummary.LatestGradeRunId is { } gradedRunId ? PipelineRunPresentation.GateHref(gradedRunId, ProjectId, ServerId) : null)"
+                              title="@(RunsSummary.LatestGradeRunId is null ? null : L["LatestGradeOpenFindings"].Value)">
+                        <span class="pipeline-runs-summary-label">
+                            <OmniIcon Name="OmniIconName.Medal" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LatestGrade"]</OmniText>
+                        </span>
+                        <div class="pipeline-runs-summary-value">
+                            @if (RunsSummary.LatestGrade is { } grade)
+                            {
+                                <GradeBadge Value="@grade" />
+                            }
+                            else
+                            {
+                                <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NotAvailableShort"]</OmniText>
+                            }
+                        </div>
+                    </OmniCard>
+                    <OmniCard Class="analysis-summary-card pipeline-runs-summary-card">
+                        <span class="pipeline-runs-summary-label">
+                            <OmniIcon Name="OmniIconName.CheckCircle" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["SuccessRate"]</OmniText>
+                        </span>
+                        <div class="pipeline-runs-summary-value">
+                            <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.SuccessRateLabel(L["NotAvailableShort"])</OmniHeading>
+                        </div>
+                    </OmniCard>
+                    <OmniCard Class="analysis-summary-card pipeline-runs-summary-card">
+                        <span class="pipeline-runs-summary-label">
+                            <OmniIcon Name="OmniIconName.Timer" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["AverageDuration"]</OmniText>
+                        </span>
+                        <div class="pipeline-runs-summary-value">
+                            <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.AverageDurationLabel(L["NotAvailableShort"])</OmniHeading>
+                        </div>
+                    </OmniCard>
+                    @* The tile opens the last successful run. *@
+                    <OmniCard Class="analysis-summary-card pipeline-runs-summary-card"
+                              Href="@(RunsSummary.LastSuccessRunId is { } successRunId ? PipelineRunPresentation.Href(successRunId, ProjectId, ServerId) : null)"
+                              title="@(RunsSummary.LastSuccessRunId is null ? null : L["LastSuccessOpenRun"].Value)">
+                        <span class="pipeline-runs-summary-label">
+                            <OmniIcon Name="OmniIconName.CalendarCheck" />
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["LastSuccess"]</OmniText>
+                        </span>
+                        <div class="pipeline-runs-summary-value">
+                            <OmniHeading Level="OmniHeadingLevel.H6">@RunsSummary.LastSuccessLabel(L["NotAvailableShort"])</OmniHeading>
+                        </div>
+                    </OmniCard>
+                </OmniTileGrid>
                 @if (_runs.Count == 0 && !RunsFiltered)
                 {
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mt-lg">@L["NoRunsYet"]</OmniText>
@@ -261,16 +247,16 @@ else
                         <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="PipelineRunDto" Property="Id" Title="@L["ID"]" Width="@PipelineRunPresentation.IdColumnWidth(_runs.Concat(_firstRunsPage))" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                                 <Template Context="run">
-                                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                         <NavLink href="@PipelineRunPresentation.Href(run.Id, ProjectId, ServerId)" class="pipeline-name-link">#@run.Id</NavLink>
                                         @if (PipelineRunPresentation.CanCancel(run))
                                         {
-                                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnCancelRunAsync(run))" title="@L["CancelRun"]" Label="@L["CancelRun"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton>
+                                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnCancelRunAsync(run))" title="@L["CancelRun"]" Label="@L["CancelRun"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton>
                                         }
                                         @if (PipelineRunPresentation.IsFailed(run))
                                         {
                                             @* Rerun is the main action of a failed run's row. *@
-                                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnRun" Class="@(_running ? "btn-busy" : null)" Busy="@(_running)" title="@L["Rerun"]" Label="@L["Rerun"]"><OmniIcon Name="OmniIconName.Reset" /></OmniButton>
+                                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnRun" Class="@(_running ? "btn-busy" : null)" Busy="@(_running)" title="@L["Rerun"]" Label="@L["Rerun"]"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon></OmniButton>
                                         }
                                     </OmniStack>
                                 </Template>
@@ -284,14 +270,14 @@ else
                                            step in place of the badge is more useful than a static label. *@
                                         @if (cur is not null)
                                         {
-                                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="pipeline-run-current-step">
+                                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="pipeline-run-current-step">
                                                 <div class="run-tl-dot run-timeline-dot-running"><span class="run-timeline-pulse"></span></div>
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@cur</OmniText>
                                             </OmniStack>
                                         }
                                         else
                                         {
-                                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="pipeline-run-current-step">
+                                            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="pipeline-run-current-step">
                                                 <AetheusLoader Size="OmniControlSize.Small" />
                                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["PreparingRun"]</OmniText>
                                             </OmniStack>
@@ -299,8 +285,8 @@ else
                                     }
                                     else
                                     {
-                                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                            <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunPresentation.Badge(run.Status)">@L.Localize(run.Status)</OmniBadge>
+                                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
                                             @* The gate letter rides with the status because it qualifies it: a
                                                green run that scored D is not the same result as a green run. *@
                                             @if (run.GateGrade.HasValue)
@@ -320,7 +306,7 @@ else
                             @* Duration is computed from (CompletedAt ?? now) - StartedAt and has
                                no DTO property. Its server-side sort key must use the same
                                expression. *@
-                            <OmniDataGridColumn TItem="PipelineRunDto" ExportValue="@RunDurationExport" Title="@L["Duration"]" Width="120px"
+                            <OmniDataGridColumn TItem="PipelineRunDto" ExportValue="@PipelineRunExports.Duration" Title="@L["Duration"]" Width="120px"
                                 SortProperty="Duration" Filterable="false">
                                 <Template Context="run">
                                     @* FormatDuration returns an em dash while CompletedAt is null, so a running
@@ -346,7 +332,7 @@ else
                                     }
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PipelineRunDto" Property="BranchName" Title="@L["SourceBranch"]" Width="150px" Filterable="true" >
+                            <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PipelineRunDto" Property="BranchName" Title="@L["SourceBranch"]" Filterable="true" >
                                 <Template Context="run">
                                     @if (!string.IsNullOrWhiteSpace(run.BranchName))
                                     {
@@ -368,7 +354,7 @@ else
                                     }
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PipelineRunDto" ExportValue="@RunServerExport" Title="@L["Server"]" Width="160px" Sortable="false" Filterable="false">
+                            <OmniDataGridColumn TItem="PipelineRunDto" ExportValue="@PipelineRunExports.Server" Title="@L["Server"]" Width="160px" Sortable="false" Filterable="false">
                                 <Template Context="run">
                                     @{ var runServer = run.Steps.FirstOrDefault(s => !s.IsSystem && s.ServerName is not null); }
                                     @if (runServer is not null)
@@ -407,7 +393,7 @@ else
                     <div class="pipeline-edit-toolbar">
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 omni-u-me-sm">@L["YamlDefinition"]</OmniText>
                         @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
-                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                         <OmniOverflowMenu Label="@L["MoreActions"]">
                             <OmniMenuItem OnClick="@OnValidateYaml" Disabled="@(_validating)"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ValidateYaml"]</ChildContent></OmniMenuItem>
                             <OmniMenuItem OnClick="@OnFormatYaml"><Icon><OmniIcon Name="OmniIconName.TextAlignLeft" /></Icon><ChildContent>@L["FormatYaml"]</ChildContent></OmniMenuItem>
@@ -452,7 +438,7 @@ else
                                       AvailableVaults="@_vaultNames" />
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="settings" Title="@L["Settings"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("settings"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large" Class="omni-u-mt-sm">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="omni-u-mt-sm">
                     <OmniRow Gap="OmniSpacing.Large">
                         <OmniColumn Span="12" MediumSpan="6">
                             <OwnerTypeSelector Projects="@_projects"
@@ -503,8 +489,8 @@ else
                             </OmniStack>
                         </OmniColumn>
                     </OmniRow>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["SaveSettings"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["SaveSettings"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniStack>
             </ChildContent></OmniTabsItem>

@@ -5,7 +5,7 @@
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-0">@L["MonitoredApps"]</OmniHeading>
     @if (_canWrite)
     {
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["AddMonitoredApp"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddMonitoredApp"]</span></ChildContent></OmniButton>
     }
 </OmniRow>
 
@@ -16,7 +16,7 @@
             <ActionContent>
                 @if (_canWrite)
                 {
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["AddMonitoredApp"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddMonitoredApp"]</span></ChildContent></OmniButton>
                 }
             </ActionContent>
         </EmptyState>
@@ -27,21 +27,21 @@
             <Template Context="app">
                 @if (app.CurrentStatus == AppHealthStatus.Unknown && app.LastCheckedAt is null)
                 {
-                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline">@L["AppHealthNeverProbed"]</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Tone="OmniTone.Neutral" Fill="OmniFill.Outline">@L["AppHealthNeverProbed"]</OmniBadge>
                 }
                 else
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@MonitoredAppsStatusGrid.HealthBadge(app.CurrentStatus)">@StatusLabel(app.CurrentStatus)</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@MonitoredAppsStatusGrid.HealthBadge(app.CurrentStatus)">@StatusLabel(app.CurrentStatus)</OmniBadge>
                 }
                 @if (app.IngestDroppedCount > 0)
                 {
                     <span title="@L["AppThrottledHint"]" class="omni-u-ms-xs">
-                        <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Outline">@L["AppThrottled"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Tone="OmniTone.Warning" Fill="OmniFill.Outline">@L["AppThrottled"]</OmniBadge>
                     </span>
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppDto" Property="Name" Title="@L["Name"]" Filterable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="MonitoredAppDto" Property="Name" Title="@L["Name"]" Filterable="true" >
             <Template Context="app">
                 @* R-467: the name opens this page's telemetry on that application, not a second page. *@
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/projects/{ProjectId}/monitoring?app={app.Id}")">@app.Name</OmniLink></span>
@@ -66,7 +66,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppDto" Title="@L["Uptime24h"]" ExportValue="@Uptime24hExport" Width="150px" Sortable="false" Filterable="false" >
             <Template Context="app">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <AvailabilitySparkline Samples="@SamplesFor(app.Id)" />
                     <span>@FormatUptime(app.Uptime24h)</span>
                 </OmniStack>
@@ -84,8 +84,8 @@
                 <Template Context="app">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     @* R-505 (2026-09-30): Edit is the main action of a monitored application's row, blue. *@
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(app))" Class="omni-u-me-xs" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAppAsync(app))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(app))" Class="omni-u-me-xs" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAppAsync(app))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>

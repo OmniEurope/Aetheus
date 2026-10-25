@@ -10,7 +10,6 @@ namespace Aetheus.Front.Components.Monitoring;
 /// refuses a start while a pipeline runs or another table is being processed. </summary>
 public partial class ReclaimSpaceView
 {
-    private const double Megabyte = 1024d * 1024d;
 
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -56,9 +55,7 @@ public partial class ReclaimSpaceView
         await LoadAsync();
     }
 
-    internal string Megabytes(long? bytes) => bytes is { } value
-        ? string.Format(CultureInfo.CurrentCulture, L["SizeMegabytes"], (value / Megabyte).ToString("N1", CultureInfo.CurrentCulture))
-        : "-";
+    internal static string Megabytes(long? bytes) => bytes is { } value ? DisplayFormatting.Size(value) : "-";
 
     private string ResultText(ReclaimSpaceResultDto result) =>
         result.CompletedAt is null ? L["ReclaimSpaceInProgress"] : result.Succeeded ? L["ReclaimSpaceDone"] : L["ReclaimSpaceFailedShort"];

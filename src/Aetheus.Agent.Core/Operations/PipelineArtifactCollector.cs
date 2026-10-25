@@ -67,7 +67,7 @@ internal static class PipelineArtifactCollector
             var zipHash = await HashFileAsync(temporaryZip, ct).ConfigureAwait(false);
             hash.Stop();
             await onOutput(
-                $"Artifact zip created: {fileInfo.Length / 1024}KB from {sourceBytes} bytes " +
+                $"Artifact zip created: {fileInfo.Length / 1024} Ko from {sourceBytes} bytes " +
                 $"({matchingFiles.Count} files, compression={DescribeCompression(compressionText, compressionLevels)}).",
                 TaskLogLevel.Info).ConfigureAwait(false);
             await EmitCollectionMetricsAsync(

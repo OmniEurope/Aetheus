@@ -8,7 +8,7 @@ namespace Aetheus.Back.Components.Pipelines;
 public static class PipelineRunGradeHydration
 {
     /// <summary>Output variable carrying the sealed contract's letter, published by
-    /// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c>.</summary>
+    /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c>.</summary>
     private const string AssuranceGradeVariable = "CANDIDATE_ASSURANCE_GRADE";
 
     /// <summary>

@@ -47,8 +47,10 @@ internal static class AnalysisDefaultPolicyCatalog
         // catch-all degradation policy below for this metric (one alert, not two).
         Metric(-15, "quality.complexity.high-methods", null, "complexity.methods.high",
             AnalysisPolicyOperator.Degraded, 0),
-        Metric(-16, "quality.architecture.cycles", null, "architecture.cycles*",
-            AnalysisPolicyOperator.GreaterThan, 0),
+        // -16 was "quality.architecture.cycles" (cycles > 0). Recette R1-36 / ADR-056: a dependency cycle is a
+        // finding of its own, one per group of cycles with its members, so it warns when it is new through
+        // "system.quality.new-medium.architecture" and no longer as a threshold alert on a count. The id is
+        // left unused so a stored override of the old rule is never mistaken for another one.
         Metric(-17, "quality.metric.degradation", null, "*", AnalysisPolicyOperator.Degraded, 0)
     ];
 

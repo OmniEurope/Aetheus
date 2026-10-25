@@ -47,13 +47,29 @@ public sealed class AiTasksActionTests : BunitContext
         return cut;
     }
 
+    // R1-4: Run now is the row's visible action, the others are entries of its "More actions" menu.
     private static IElement Action(IRenderedComponent<AiTasks> cut, string title) =>
-        cut.FindAll("button").First(button =>
-            string.Equals(button.GetAttribute("title"), title, StringComparison.Ordinal));
+        cut.FindAll("button").FirstOrDefault(button =>
+            string.Equals(button.GetAttribute("title"), title, StringComparison.Ordinal))
+        ?? cut.FindMenuItem(title)
+        ?? throw new InvalidOperationException($"No button or menu entry named {title}");
 
     private bool Sent(string method, string urlContains) =>
         _handler.Requests.Any(request => request.Method == method
             && request.Url.Contains(urlContains, StringComparison.Ordinal));
+
+    /// <summary>R1-4: a row keeps one visible action (Run now); Results, Edit and Delete are in its menu.</summary>
+    [Fact]
+    public void ARowShowsRunAsItsOnlyAction_AndKeepsTheOthersInTheMenu()
+    {
+        var cut = RenderList();
+
+        Assert.Single(cut.FindAll("button[title='RunNow']"));
+        Assert.Empty(cut.FindAll("button[title='Results'], button[title='Edit'], button[title='Delete']"));
+        Assert.Single(cut.FindAll(".omni-overflow-menu__trigger"));
+        foreach (var label in new[] { "Results", "Edit", "Delete" })
+            Assert.NotNull(cut.FindMenuItem(label));
+    }
 
     // ---------- create and edit ----------
 

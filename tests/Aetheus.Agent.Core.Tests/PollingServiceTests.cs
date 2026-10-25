@@ -5,6 +5,7 @@ using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Functions;
 using Aetheus.Agent.Core.Operations;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -182,6 +183,37 @@ public class PollingServiceTests
         Assert.Equal(TimeSpan.FromSeconds(10), service.NextPollDelay());
     }
 
+    [Fact]
+    public async Task R33_APipelineTask_OpensTheWindowAContainerIsAttributedTo_AndAServerTaskDoesNot()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 23, 20, 20, 0, TimeSpan.Zero));
+        var health = new AgentRuntimeHealth(time);
+        var gate = new TaskCompletionSource();
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(
+                [new PendingTaskDto { Id = 8, Name = "maintenance", Command = "echo", Executor = ExecutorType.Shell }],
+                [new PendingTaskDto { Id = 9, Name = "tests", Command = "echo", Executor = ExecutorType.Shell, PipelineRunId = 2869 }],
+                []);
+        _executorMock.ExecuteAsync(Arg.Any<string>(), Arg.Any<Dictionary<string, string>>(), Arg.Any<int>(),
+                Arg.Any<Func<string, TaskLogLevel, Task>>(), Arg.Any<CancellationToken>())
+            .Returns(async _ => { await gate.Task; return new ExecutorResult(0, false); });
+        var service = CreateService(runtimeHealth: health, timeProvider: time, options: TenSecondPolling);
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.False(health.CreatedDuringLivePipelineTask(time.GetUtcNow()));
+
+        await service.PollOnceAsync(TestContext.Current.CancellationToken);
+        time.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(SpinWait.SpinUntil(
+            () => health.CreatedDuringLivePipelineTask(time.GetUtcNow()), TimeSpan.FromSeconds(10)));
+
+        gate.SetResult();
+        await service.DrainRunningTasksAsync();
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.False(health.CreatedDuringLivePipelineTask(time.GetUtcNow()));
+    }
+
     private static readonly IOptions<AetheusAgentOptions> TenSecondPolling = Options.Create(new AetheusAgentOptions
     {
         ServerUrl = "http://localhost:5301",
@@ -196,7 +228,7 @@ public class PollingServiceTests
             .Returns(call => Task.Delay(Timeout.InfiniteTimeSpan, call.ArgAt<CancellationToken>(1)));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            PollingService.SendLogBatchAsync(
+            BufferedLogForwarder.SendLogBatchAsync(
                 _apiClientMock,
                 [new AppendLogRequest { TaskId = 42, Message = "bounded" }],
                 TestContext.Current.CancellationToken,

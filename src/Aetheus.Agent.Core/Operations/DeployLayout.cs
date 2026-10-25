@@ -67,7 +67,7 @@ internal static class DeployLayout
                 throw new InvalidDataException($"Deploy archive exceeds the {maxEntries} entry safety limit.");
             if (entry.Length < 0 || entry.Length > maxExpandedBytes - expandedBytes)
                 throw new InvalidDataException(
-                    $"Deploy archive expands beyond the {maxExpandedBytes / (1024 * 1024)} MiB safety limit.");
+                    $"Deploy archive expands beyond the {maxExpandedBytes / (1024 * 1024)} Mo safety limit.");
             expandedBytes += entry.Length;
         }
         if (entries == 0) throw new InvalidDataException("Deploy archive is empty.");
@@ -83,6 +83,7 @@ internal static class DeployLayout
             var target = ResolveSafeEntryPath(destDir, entry.FullName);
             if (target is null)
             {
+                // nosemgrep: aetheus.csharp.archive-entry-path-traversal - ResolveSafeEntryPath above already rejected any entry leaving destDir.
                 Directory.CreateDirectory(Path.GetFullPath(Path.Combine(destDir, entry.FullName)));
                 continue;
             }

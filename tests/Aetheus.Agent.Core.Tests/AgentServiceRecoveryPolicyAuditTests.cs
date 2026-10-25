@@ -42,7 +42,7 @@ public sealed class AgentServiceRecoveryPolicyAuditTests
     }
 
     private static string ReadScript(string name) =>
-        File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "scripts", name));
+        File.ReadAllText(Path.Combine(FindRepoRoot(), "deploy", "agent-installer", name));
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;
 }

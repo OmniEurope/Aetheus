@@ -24,7 +24,7 @@ internal sealed class ArtifactTransferBudget
                 {
                     if (heavy) _heavyRunning = true;
                     else _lightRunning++;
-                    return new Reservation(this, heavy);
+                    return new Reservation(() => Release(heavy));
                 }
             }
             await _changed.WaitAsync(ct).ConfigureAwait(false);
@@ -41,13 +41,15 @@ internal sealed class ArtifactTransferBudget
         _changed.Release();
     }
 
-    private sealed class Reservation(ArtifactTransferBudget owner, bool heavy) : IAsyncDisposable
+    /// <summary>Gives the slot back once, through the callback it is created with, so it does not depend on
+    /// the budget that hands it out.</summary>
+    private sealed class Reservation(Action release) : IAsyncDisposable
     {
         private int _released;
 
         public ValueTask DisposeAsync()
         {
-            if (Interlocked.Exchange(ref _released, 1) == 0) owner.Release(heavy);
+            if (Interlocked.Exchange(ref _released, 1) == 0) release();
             return ValueTask.CompletedTask;
         }
     }

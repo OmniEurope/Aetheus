@@ -18,20 +18,12 @@ else
 {
     @* Use equal-height responsive tiles so the summary remains readable on phones; show the last
        export time with its measurement window to make freshness explicit. *@
-    <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
-            <OmniStatTile Class="app-performance-tile" Value="@LastSentText" Label="@L["AppPerformanceLastSent"]" Detail="@WindowText" data-testid="app-performance-window" />
-        </OmniColumn>
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
-            <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Label="@L["AppPerformanceRoutes"]" />
-        </OmniColumn>
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
-            <OmniStatTile Class="app-performance-tile" Value="@TotalRequestsText" Label="@L["AppPerformanceRequests"]" />
-        </OmniColumn>
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="3">
-            <OmniStatTile Class="app-performance-tile" Value="@SlowestP95Text" Label="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
-        </OmniColumn>
-    </OmniRow>
+    <OmniTileGrid Columns="4" Class="omni-u-mb-md">
+        <OmniStatTile Class="app-performance-tile" Value="@LastSentText" Title="@L["AppPerformanceLastSent"]" Detail="@WindowText" data-testid="app-performance-window" />
+        <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Title="@L["AppPerformanceRoutes"]" />
+        <OmniStatTile Class="app-performance-tile" Value="@TotalRequestsText" Title="@L["AppPerformanceRequests"]" />
+        <OmniStatTile Class="app-performance-tile" Value="@SlowestP95Text" Title="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
+    </OmniTileGrid>
 
     @* Export the displayed measurement context and every filtered route through the grid's footer
        so the file remains interpretable outside the page. *@
@@ -40,14 +32,14 @@ else
                      ExportFields="@ExportFields" ExportFileName="@ExportFileName">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AppRouteTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="Route" Title="@L["Route"]" MinWidth="16rem" Filterable="true" >
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="Route" Title="@L["Route"]" Filterable="true" >
                 <Template Context="route"><code>@route.Route</code></Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="Count" Title="@L["PerformanceCalls"]" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P50Ms" Title="@L["PerformanceP50"]" ExportValue="@P50Export" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="Count" Title="@L["PerformanceCalls"]" Width="6rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P50Ms" Title="@L["PerformanceP50"]" ExportValue="@P50Export" Width="6rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="route">@Milliseconds(route.P50Ms)</Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P95Ms" Title="@L["PerformanceP95"]" ExportValue="@P95Export" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P95Ms" Title="@L["PerformanceP95"]" ExportValue="@P95Export" Width="6rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="route">
                     @* A percentile taken on too few calls is the maximum; it reads as an order of
                        magnitude. *@
@@ -61,7 +53,7 @@ else
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P99Ms" Title="@L["PerformanceP99"]" ExportValue="@P99Export" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="P99Ms" Title="@L["PerformanceP99"]" ExportValue="@P99Export" Width="6rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="route">
                     @if (IsOrderOfMagnitude(route, P99MinimumCalls))
                     {
@@ -73,7 +65,7 @@ else
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="MaxMs" Title="@L["Maximum"]" ExportValue="@MaxExport" Width="6rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="AppRouteTimingDto" Property="MaxMs" Title="@L["Maximum"]" ExportValue="@MaxExport" Width="6rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="route">@Milliseconds(route.MaxMs)</Template>
             </OmniDataGridColumn>
         </Columns>

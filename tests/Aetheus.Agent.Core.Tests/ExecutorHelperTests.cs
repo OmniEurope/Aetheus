@@ -27,12 +27,44 @@ public class ExecutorHelperTests
         var levelsReceived = new List<TaskLogLevel>();
         var reader = CreateStreamReader("test\n");
 
-        await ExecutorHelper.StreamOutputAsync(reader, TaskLogLevel.Error,
+        await ExecutorHelper.StreamOutputAsync(reader, TaskLogLevel.Info,
             (msg, level) => { levelsReceived.Add(level); return Task.CompletedTask; },
             TestContext.Current.CancellationToken);
 
         Assert.Single(levelsReceived);
-        Assert.Equal(TaskLogLevel.Error, levelsReceived[0]);
+        Assert.Equal(TaskLogLevel.Info, levelsReceived[0]);
+    }
+
+    // R-36: standard error is a channel, not a verdict. An unmarked line is a Warning (visible, not red) and
+    // keeps the mark of its channel; nothing is dropped.
+    [Fact]
+    public async Task StreamOutputAsync_UnmarkedStderrLine_IsAWarningAndKeepsItsChannelMark()
+    {
+        var received = new List<(string Text, TaskLogLevel Level)>();
+        var reader = CreateStreamReader("Volume aetheus-qa-rollback-2848-x Creating\n");
+
+        await ExecutorHelper.StreamOutputAsync(reader, TaskLogLevel.Error,
+            (msg, level) => { received.Add((msg, level)); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        var entry = Assert.Single(received);
+        Assert.Equal(TaskLogLevel.Warning, entry.Level);
+        Assert.Equal("[stderr] Volume aetheus-qa-rollback-2848-x Creating", entry.Text);
+    }
+
+    [Fact]
+    public async Task StreamOutputAsync_StderrLineThatStatesAnError_StaysAnErrorUntouched()
+    {
+        var received = new List<(string Text, TaskLogLevel Level)>();
+        var reader = CreateStreamReader("ERROR the scan failed\n");
+
+        await ExecutorHelper.StreamOutputAsync(reader, TaskLogLevel.Error,
+            (msg, level) => { received.Add((msg, level)); return Task.CompletedTask; },
+            TestContext.Current.CancellationToken);
+
+        var entry = Assert.Single(received);
+        Assert.Equal(TaskLogLevel.Error, entry.Level);
+        Assert.Equal("ERROR the scan failed", entry.Text);
     }
 
     [Fact]

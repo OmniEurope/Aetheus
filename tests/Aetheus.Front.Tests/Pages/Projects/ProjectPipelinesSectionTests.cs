@@ -90,7 +90,7 @@ public class ProjectPipelinesSectionTests : BunitContext
         var cut = Render(builder =>
         {
             builder.OpenComponent<SectionOutlet>(0);
-            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PipelinesList.HeaderActionsSection);
+            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PageHeaderActions.SectionName);
             builder.CloseComponent();
             builder.OpenComponent<ProjectPipelinesSection>(2);
             builder.AddAttribute(3, nameof(ProjectPipelinesSection.Pipelines), pipelines);

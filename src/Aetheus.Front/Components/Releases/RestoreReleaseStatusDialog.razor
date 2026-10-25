@@ -18,7 +18,7 @@
         </OmniFormField>
         <ValidationMessage For="@(() => _model.Reason)" />
         <DialogFooter OnCancel="@(() => Dialog.Close())">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Restore" /> <span>@L["ReleaseStatusRestore"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Restore" /></Icon><ChildContent><span>@L["ReleaseStatusRestore"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

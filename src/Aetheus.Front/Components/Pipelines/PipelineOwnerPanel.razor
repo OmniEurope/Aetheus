@@ -2,12 +2,12 @@
 @* The owner chained runs are authorized against, on the pipeline settings tab. *@
 <OmniStack Gap="OmniSpacing.XSmall" Class="pipeline-owner-panel">
     <OmniText Element="OmniTextElement.Strong">@L["PipelineOwner"]</OmniText>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 pipeline-owner-name">@(Pipeline.OwnerUsername ?? L["PipelineOwnerMissing"].Value)</OmniText>
         <PipelineOwnerBadge OwnerUsername="@Pipeline.OwnerUsername" OwnerInactive="@Pipeline.OwnerInactive" />
         @if (Auth.IsAdmin)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnChangeOwnerAsync"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["ChangeOwner"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnChangeOwnerAsync"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["ChangeOwner"]</span></ChildContent></OmniButton>
         }
     </OmniStack>
     @if (Pipeline.OwnerInactive)

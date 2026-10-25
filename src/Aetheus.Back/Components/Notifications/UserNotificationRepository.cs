@@ -129,6 +129,17 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
             .Where(preference => preference.UserId == userId)
             .ToListAsync(ct);
 
+    public async Task<Dictionary<int, bool>> GetSavedChoicesAsync(
+        string eventType, IReadOnlyCollection<int> userIds, CancellationToken ct = default)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.UserNotificationPreferences.AsNoTracking()
+            .Where(preference => preference.EventType == eventType && ids.Contains(preference.UserId))
+            .ToDictionaryAsync(preference => preference.UserId, preference => preference.IsEnabled, ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<HashSet<int>> GetRecipientsAlreadyEmailedAsync(
         string eventType, string payloadMarker, IReadOnlyCollection<int> userIds, CancellationToken ct = default)
     {

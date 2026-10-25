@@ -27,6 +27,8 @@ public abstract class PeriodicBackgroundService(
         {
             try
             {
+                // Reported to the slow-request diagnostics (R1-40): this iteration may be what a pause overlapped.
+                using var tracked = BackgroundWorkTracker.Shared.Begin(GetType().Name);
                 await ExecuteIterationAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

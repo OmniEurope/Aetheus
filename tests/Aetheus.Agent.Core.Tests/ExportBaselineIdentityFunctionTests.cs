@@ -9,7 +9,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/candidate/export-baseline-identity.sh</c>, run through the real
+/// The C# port of the former <c>export-baseline-identity.sh</c> script, run through the real
 /// executor on a temp workspace with Git answered by a fake: the bootstrap attestation, the schema state
 /// of a current contract, the reconstruction of a legacy one from the Git tree of its deployed revision,
 /// and the script's refusals with its messages.

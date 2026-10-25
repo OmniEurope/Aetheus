@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R1-38: one row of the grade block: label (with the OE help mark that explains its criterion), value and
+   grade on a single line; a click on the row opens more detail (a row of the block's OE accordion,
+   folded by default). *@
+<OmniAccordionItem Class="@($"analysis-grade-row analysis-grade-row--{Kind}")" data-testid="@TestId" Help="@Tooltip">
+    <HeaderContent>
+        <span class="analysis-grade-row-title">
+            <span class="analysis-grade-measure-label @(Limiting ? "analysis-grade-domain-limiting" : null)">@Label</span>
+            @Hints
+        </span>
+    </HeaderContent>
+    <SummaryContent>
+        <span class="analysis-grade-value">@Value</span>
+        <GradeBadge Value="@Grade" />
+    </SummaryContent>
+    <ChildContent>
+        <div class="analysis-grade-row-detail">@Details</div>
+    </ChildContent>
+</OmniAccordionItem>

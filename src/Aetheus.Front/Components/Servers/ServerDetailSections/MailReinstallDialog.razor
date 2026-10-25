@@ -16,6 +16,6 @@
         </OmniFormField>
     </OmniStack>
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Danger" ButtonType="OmniButtonType.Submit" Disabled="@(!Matches)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallConfirm"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" ButtonType="OmniButtonType.Submit" Disabled="@(!Matches)"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["MailReinstallConfirm"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniTemplateForm>

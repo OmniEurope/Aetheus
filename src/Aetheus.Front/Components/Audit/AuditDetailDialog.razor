@@ -3,7 +3,7 @@
 <div>
     @* Server-verified hash-chain integrity for this entry (never an optimistic default). *@
     <OmniCard Class="omni-u-mb-md">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             @if (_verifying)
             {
                 <AetheusLoader Size="OmniControlSize.Small" Centered="false" />
@@ -35,19 +35,19 @@
 
     @* Structured facts: actor, action, target, time. *@
     <OmniStack Gap="OmniSpacing.Small">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.User" Class="run-tile-icon" /> @L["Actor"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph">@Log.Username</OmniText>
         </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Lightning" Class="run-tile-icon" /> @L["Action"]</OmniText>
             <OmniBadge Fill="OmniFill.Solid" Tone="@ActionBadge">@ActionLabel</OmniBadge>
         </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Target" Class="run-tile-icon" /> @L["Target"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph" Class="text-mono">@Log.EntityType@(Log.EntityId.HasValue ? $" #{Log.EntityId}" : string.Empty)</OmniText>
         </OmniStack>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Timer" Class="run-tile-icon" /> @L["Timestamp"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph">@Log.Timestamp.ToString("G")</OmniText>
         </OmniStack>
@@ -62,7 +62,7 @@
         <SecondaryContent>
             @if (!string.IsNullOrWhiteSpace(Log.Details))
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
             }
         </SecondaryContent>
     </DialogFooter>

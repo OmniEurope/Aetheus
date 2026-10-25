@@ -18,9 +18,11 @@ public class HubConnectionFactory(
     /// </summary>
     public TimeProvider Clock { get; } = clock ?? TimeProvider.System;
 
+    /// <summary>When the page was hidden, fed by <c>RealtimeSyncIndicator</c>; the outage reports use it (R1-42).</summary>
+    internal PageVisibilityTimeline PageVisibility { get; } = new(clock ?? TimeProvider.System);
+
     // One reporter for every connection of the tab, so one outage of all the hubs is one report (R1-89).
-    private readonly RealtimeOutageReporter? _outages =
-        errorReporter is null ? null : new RealtimeOutageReporter(errorReporter, clock ?? TimeProvider.System);
+    private RealtimeOutageReporter? _outages;
 
     /// <summary>
     /// Where every connection built here reports its reconnect catch-up, for the "synchronising"
@@ -90,7 +92,8 @@ public class HubConnectionFactory(
     // on an error, or comes back after a long outage, says so in the system logs (api/client-errors).
     internal void ReportOutages(HubConnection connection, string hubPath)
     {
-        if (_outages is not { } outages || errorReporter is null) return;
+        if (errorReporter is null) return;
+        var outages = _outages ??= new RealtimeOutageReporter(errorReporter, Clock, PageVisibility);
         DateTimeOffset? downSince = null;
         connection.Reconnecting += _ =>
         {

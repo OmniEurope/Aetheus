@@ -47,10 +47,13 @@ public partial class ServerMailStatusList : IAsyncDisposable
     internal ServerLiveFeed? LiveFeed => _liveFeed;
 
     /// <summary>The lines of the status, in fix order.</summary>
-    internal IReadOnlyList<MailDiagnosticItemDto> StatusItems => _diagnostics is null ? [] :
+    internal IReadOnlyList<MailDiagnosticItemDto> StatusItems => SelectStatusItems(_diagnostics);
+
+    /// <summary>The status lines of a diagnostics read, in fix order; the page banner (R1-29) reads the same lines.</summary>
+    internal static IReadOnlyList<MailDiagnosticItemDto> SelectStatusItems(MailDiagnosticsDto? diagnostics) => diagnostics is null ? [] :
     [
-        .. s_serverKeys.Select(key => _diagnostics.Items.FirstOrDefault(item => item.Key == key)).OfType<MailDiagnosticItemDto>(),
-        .. _diagnostics.Items.Where(item => s_domainPrefixes.Any(prefix => item.Key.StartsWith(prefix, StringComparison.Ordinal)))
+        .. s_serverKeys.Select(key => diagnostics.Items.FirstOrDefault(item => item.Key == key)).OfType<MailDiagnosticItemDto>(),
+        .. diagnostics.Items.Where(item => s_domainPrefixes.Any(prefix => item.Key.StartsWith(prefix, StringComparison.Ordinal)))
     ];
 
     /// <summary>The domain the DNS help names, the first one checked; null without a mail

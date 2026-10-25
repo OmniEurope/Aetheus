@@ -13,6 +13,7 @@ internal sealed class GitPushPipelineTriggerHandler(
     IPipelineRunService pipelineRunService,
     IPipelineAutoTriggerRepository pipelineRepo,
     IGitLightCliService cli,
+    PipelineDefinitionSynchronizer synchronizer,
     ILogger<GitPushPipelineTriggerHandler> logger)
     : IDomainEventHandler<GitPushProcessedEvent>
 {
@@ -22,7 +23,7 @@ internal sealed class GitPushPipelineTriggerHandler(
 
         // Definitions first: a push that changes a pipeline's YAML must trigger the changed one.
         foreach (var update in domainEvent.RefUpdates)
-            await SyncPipelinesFromRepoAsync(domainEvent, update, ct).ConfigureAwait(false);
+            await synchronizer.SyncAsync(domainEvent, update, ct).ConfigureAwait(false);
         await TriggerPushPipelinesAsync(domainEvent, ct).ConfigureAwait(false);
     }
 
@@ -133,53 +134,5 @@ internal sealed class GitPushPipelineTriggerHandler(
         if (replacement is null)
             logger.LogWarning(
                 "Git push replacement for pipeline {PipelineId} could not be persisted", pipeline.Id);
-    }
-
-    private async Task SyncPipelinesFromRepoAsync(
-        GitPushProcessedEvent push, GitRefUpdate update, CancellationToken ct)
-    {
-        try
-        {
-            if (push.ProjectId == 0 || push.DiskPath.Length == 0) return;
-
-            // Carried over verbatim, including its flaw: a non-branch ref (a tag) is sliced at the
-            // length of "refs/heads/" anyway and yields a nonsense source branch. Left as-is so this
-            // commit stays a move; fixing it here would hide a behaviour change inside a refactor.
-            var sourceBranch = update.Reference["refs/heads/".Length..];
-            var tree = await cli.GetTreeAsync(push.DiskPath, update.NewObjectId, ".pipeline", ct).ConfigureAwait(false);
-            var yamlFiles = tree.Where(entry => entry.Name.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)
-                                          || entry.Name.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)).ToList();
-            if (yamlFiles.Count == 0) return;
-
-            foreach (var file in yamlFiles)
-            {
-                var blob = await cli.GetBlobAsync(
-                    push.DiskPath, update.NewObjectId, $".pipeline/{file.Name}", ct).ConfigureAwait(false);
-                if (blob is null || string.IsNullOrWhiteSpace(blob.Content)) continue;
-
-                var definition = YamlParsingHelper.ParseAndValidate(blob.Content, logger);
-                if (definition is null)
-                {
-                    logger.LogWarning(
-                        "Invalid pipeline YAML in .pipeline/{File} for repo {Repo}", file.Name, push.RepositoryName);
-                    continue;
-                }
-
-                var pipelineName = string.IsNullOrWhiteSpace(definition.Name)
-                    ? Path.GetFileNameWithoutExtension(file.Name)
-                    : definition.Name;
-
-                await pipelineService.UpsertPipelineFromYamlAsync(
-                    pipelineName, blob.Content, push.ProjectId, definition.Trigger, ct,
-                    sourceBranch, push.DefaultBranch, push.GitRepoId).ConfigureAwait(false);
-                logger.LogInformation(
-                    "Synced pipeline '{Name}' from {Commit}:.pipeline/{File}",
-                    pipelineName, update.NewObjectId, file.Name);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to sync pipelines from .pipeline/ for repo {Repo}", push.RepositoryName);
-        }
     }
 }

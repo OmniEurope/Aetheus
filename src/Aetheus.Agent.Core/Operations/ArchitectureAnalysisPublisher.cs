@@ -182,14 +182,7 @@ internal static class ArchitectureAnalysisPublisher
                         : "Forbidden dependency"
                 }
             });
-        var results = report.Violations.Select(item => new
-        {
-            ruleId = item.RuleId,
-            level = "warning",
-            message = new { text = item.Message },
-            properties = new { severity = "Medium", confidence = "High" },
-            logicalLocations = new[] { new { fullyQualifiedName = $"{item.Source}->{item.Target}" } }
-        });
+        var results = report.Violations.Select(BuildResult);
         return JsonSerializer.Serialize(new
         {
             version = "2.1.0",
@@ -202,6 +195,26 @@ internal static class ArchitectureAnalysisPublisher
                 }
             }
         });
+    }
+
+    /// <summary>A violation carrying an identity (a group of cycles, ADR-056) is tracked by that identity and
+    /// the group's anchor, so the example path in its message can change without becoming another finding.
+    /// The others keep the shape their findings already had, so they stay the same findings.</summary>
+    private static Dictionary<string, object> BuildResult(ArchitectureViolation item)
+    {
+        var result = new Dictionary<string, object>
+        {
+            ["ruleId"] = item.RuleId,
+            ["level"] = "warning",
+            ["message"] = new { text = item.Message },
+            ["properties"] = new { severity = "Medium", confidence = "High" },
+            ["logicalLocations"] = new[] { new { fullyQualifiedName = $"{item.Source}->{item.Target}" } }
+        };
+        if (item.Identity is null) return result;
+        var anchor = item.Identity[(item.Identity.IndexOf(':', StringComparison.Ordinal) + 1)..];
+        result["partialFingerprints"] = new Dictionary<string, string> { ["aetheus/identity"] = item.Identity };
+        result["locations"] = new[] { new { logicalLocations = new[] { new { fullyQualifiedName = anchor } } } };
+        return result;
     }
 
     private static async Task<string?> HashRulesAsync(string path, CancellationToken ct)

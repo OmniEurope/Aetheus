@@ -4,7 +4,7 @@ using System.Text;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>deploy-identity</c> function, port of <c>deploy/scripts/deploy-identity.sh</c>: derives the
+/// The <c>deploy-identity</c> function, port of the former <c>deploy-identity.sh</c> script: derives the
 /// deployment identity from the owning project and agent, so a copied pipeline cannot silently target
 /// another installation. The script was sourced and left shell variables behind; the function
 /// publishes them: <c>PROJECT_SLUG</c> (the project name lower-cased, each run of other characters a

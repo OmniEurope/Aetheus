@@ -223,8 +223,16 @@ internal static class ContainerWorkspaceMaterializer
     {
         var name = Path.GetFileName(entry);
         return name is GitMetadataDirectory or ReadyMarker
-            || ContainerRunExecutor.IsShellSafeScriptName(name);
+            || IsShellSafeScriptName(name);
     }
+
+    // The shape of the step script names ContainerRunExecutor.CreateScriptName produces.
+    internal static bool IsShellSafeScriptName(string scriptName) =>
+        scriptName.StartsWith(".prom-step-", StringComparison.Ordinal)
+        && scriptName.EndsWith(".sh", StringComparison.Ordinal)
+        && scriptName.Length == 46
+        && scriptName.All(static character =>
+            char.IsAsciiLetterOrDigit(character) || character is '.' or '-');
 
     private static bool IsSymbolicLink(string path) => new DirectoryInfo(path).LinkTarget is not null;
 
@@ -234,6 +242,9 @@ internal sealed class WorkspacePreparationLock
 {
     private readonly Dictionary<int, Entry> _entries = [];
     private readonly object _gate = new();
+    private readonly Action<int, Entry> _releaseReference;
+
+    public WorkspacePreparationLock() => _releaseReference = ReleaseReference;
 
     internal int EntryCount
     {
@@ -259,7 +270,7 @@ internal sealed class WorkspacePreparationLock
         try
         {
             await entry.Semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            return new Releaser(this, workspaceKey, entry);
+            return new Releaser(_releaseReference, workspaceKey, entry);
         }
         catch
         {
@@ -301,15 +312,17 @@ internal sealed class WorkspacePreparationLock
         internal int RefCount;
     }
 
+    /// <summary>Releases the workspace's slot. It reaches the lock only through the release delegate it is
+    /// given, so the lock and its releaser do not depend on each other.</summary>
     internal readonly struct Releaser(
-        WorkspacePreparationLock owner,
+        Action<int, Entry> releaseReference,
         int workspaceKey,
         Entry entry) : IDisposable
     {
         public void Dispose()
         {
             entry.Semaphore.Release();
-            owner.ReleaseReference(workspaceKey, entry);
+            releaseReference(workspaceKey, entry);
         }
     }
 }

@@ -119,9 +119,9 @@
       },
       "OmniEurope.Blazor": {
         "type": "Direct",
-        "requested": "[1.8.2, )",
-        "resolved": "1.8.2",
-        "contentHash": "VYgMFnuMpHoCuiq7Tr0ncY+Nwc/0WI0LrcaQ+0qT0jSqKD7H5P4W0ARSmDLAnUvk3uGyiRJjidxO+PJFIlbwSQ==",
+        "requested": "[1.9.1, )",
+        "resolved": "1.9.1",
+        "contentHash": "D8MitU2Mid3xPitvUWKTRnNS3qjf0hEQCCUt8NiM0jj0+KWzqPSAEipE3I3z5THZuezTudTu89Vfnz63tDOCMg==",
         "dependencies": {
           "HtmlSanitizer": "9.2.1039",
           "Microsoft.AspNetCore.Components.Web": "10.0.13",

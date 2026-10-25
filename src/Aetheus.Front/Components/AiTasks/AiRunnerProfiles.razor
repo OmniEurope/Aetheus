@@ -6,9 +6,9 @@
 
 <OmniPageHeader Title="@L["AiRunnerProfiles"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("smart_toy")" /></Icon>
-    <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
 @* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
@@ -17,7 +17,7 @@
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
     <AetheusDataGrid FullHeight="true" @ref="_grid" RowClick="@(profile => OpenDialogAsync(profile))" Data="@_profiles" Count="@_totalCount"
@@ -30,7 +30,7 @@
             <EmptyState Icon="smart_toy" Title="@L["NoAiRunnerProfiles"]"
                         Description="@L["NoAiRunnerProfilesDescription"]">
                 <ActionContent>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
                 </ActionContent>
             </EmptyState>
         </EmptyTemplate>
@@ -61,11 +61,11 @@
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiRunnerProfileDto" Title="@L["Actions"]" Width="120px"
-                                  Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
+                                  Sortable="false" Filterable="false" TextAlign="OmniAlignment.Center">
                 <Template Context="profile">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(profile))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(profile))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(profile))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteAsync(profile))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>

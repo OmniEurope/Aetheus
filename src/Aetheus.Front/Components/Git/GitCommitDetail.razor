@@ -69,20 +69,12 @@ else
                     }
                 </div>
             </div>
-            <div class="git-commit-stats" aria-label="@L["FilesChanged"]">
-                <div class="git-commit-stat">
-                    <strong>@_detail.Diff.Stats.FilesChanged</strong>
-                    <span>@L["FilesChanged"]</span>
-                </div>
-                <div class="git-commit-stat">
-                    <strong class="diff-file-stat-add">+@_detail.Diff.Stats.Additions</strong>
-                    <span>@L["Additions"]</span>
-                </div>
-                <div class="git-commit-stat">
-                    <strong class="diff-file-stat-del">-@_detail.Diff.Stats.Deletions</strong>
-                    <span>@L["Deletions"]</span>
-                </div>
-            </div>
+            @* R-3: the three figures are OE stat tiles of one OmniTileGrid (same width, same height). *@
+            <OmniTileGrid Columns="3" Gap="OmniSpacing.Small" Class="git-commit-stats" role="group" aria-label="@L["FilesChanged"]">
+                <OmniStatTile Value="@_detail.Diff.Stats.FilesChanged.ToString()" Title="@L["FilesChanged"]" />
+                <OmniStatTile Class="git-commit-stat-add" Value="@($"+{_detail.Diff.Stats.Additions}")" Title="@L["Additions"]" />
+                <OmniStatTile Class="git-commit-stat-del" Value="@($"-{_detail.Diff.Stats.Deletions}")" Title="@L["Deletions"]" />
+            </OmniTileGrid>
         </div>
     </OmniCard>
 
@@ -102,7 +94,7 @@ else
 
     @if (_detail.Diff.FileDiffs.Count == 0)
     {
-        <OmniAlert Severity="OmniSeverity.Info">@L["NoFileChanges"]</OmniAlert>
+        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-md">@L["NoFileChanges"]</OmniAlert>
     }
     else
     {
@@ -117,10 +109,10 @@ else
                                    Placeholder="@L["Search"]" aria-label="@L["Search"]"
                                    Class="git-file-search" />
                     <div class="git-file-status-filters" aria-label="@L["FilterByStatus"]">
-                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetStatusFilter(null))" Class="@StatusFilterClass(null)" Label="@L["AllFiles"]" aria-pressed="@(_statusFilter is null ? "true" : "false")"><OmniIcon Name="OmniIconName.Document" /> <span>@($"{L["AllFiles"]} · {_detail.Diff.FileDiffs.Count}")</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetStatusFilter(null))" Class="@StatusFilterClass(null)" Label="@L["AllFiles"]" aria-pressed="@(_statusFilter is null ? "true" : "false")"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent><span>@($"{L["AllFiles"]} · {_detail.Diff.FileDiffs.Count}")</span></ChildContent></OmniButton>
                         @foreach (var status in _availableStatuses)
                         {
-                            <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetStatusFilter(status))" Class="@StatusFilterClass(status)" Label="@LocalizeStatus(status)" aria-pressed="@(StatusFilterIsActive(status) ? "true" : "false")"><OmniIcon Name="@MaterialIconMap.Resolve(StatusIcon(status))" /> <span>@($"{LocalizeStatus(status)} · {StatusCount(status)}")</span></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetStatusFilter(status))" Class="@StatusFilterClass(status)" Label="@LocalizeStatus(status)" aria-pressed="@(StatusFilterIsActive(status) ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(StatusIcon(status))" /></Icon><ChildContent><span>@($"{LocalizeStatus(status)} · {StatusCount(status)}")</span></ChildContent></OmniButton>
                         }
                     </div>
                 </div>
@@ -149,7 +141,7 @@ else
                                 <span class="diff-file-stat-del">-@_selectedFile.Deletions</span>
                             </div>
                         </div>
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ToggleDiff" Class="git-diff-toggle" Label="@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])" aria-expanded="@(!_diffCollapsed ? "true" : "false")"><OmniIcon Name="@MaterialIconMap.Resolve((_diffCollapsed ? "expand_more" : "expand_less"))" /> <span>@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ToggleDiff" Class="git-diff-toggle" Label="@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])" aria-expanded="@(!_diffCollapsed ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_diffCollapsed ? "expand_more" : "expand_less"))" /></Icon><ChildContent><span>@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])</span></ChildContent></OmniButton>
                     </div>
                     @if (!_diffCollapsed)
                     {

@@ -47,7 +47,7 @@ else
                 </OmniFormField><ValidationMessage For="@(() => _model.Email)" />
                 @* The password rule in plain words behind the "?", before the user meets it as an error. *@
                 <OmniFormField Label="@L["Password"]" Help="@string.Format(L["MailPasswordRule"], PasswordPolicy.MinimumLength, PasswordPolicy.MaximumLength)" For="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4"><OmniPassword Id="oe-formfield-pages-servers-serverdetailsections-mailoperationdialog-4" @bind-Value="_model.Password" /></OmniFormField><ValidationMessage For="@(() => _model.Password)" />
-                <OmniFormField For="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1"><LabelContent>@($"{L["Quota"]} (MB)")</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.QuotaMb" Minimum="10" Maximum="102400" Id="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1" /></ChildContent></OmniFormField>
+                <OmniFormField For="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1"><LabelContent>@($"{L["Quota"]} (Mo)")</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.QuotaMb" Minimum="10" Maximum="102400" Id="oe-pages-servers-serverdetailsections-mailoperationdialog-numeric-1" /></ChildContent></OmniFormField>
             }
             else if (Mode == MailDialogMode.AddAlias)
             {
@@ -94,7 +94,7 @@ else
             }
         </OmniStack>
         <DialogFooter OnCancel="@(() => Dialog.Close())">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Check" /> <span>@SubmitText</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@SubmitText</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniTemplateForm>
 }

@@ -42,7 +42,8 @@ public sealed record NuGetRegistrationVersion(
     string Version,
     bool IsListed,
     DateTime PublishedAt,
-    IReadOnlyList<NuGetDependencyGroup> DependencyGroups);
+    IReadOnlyList<NuGetDependencyGroup> DependencyGroups,
+    bool IsDeprecated = false);
 
 public sealed record NuGetDependencyGroup(
     string TargetFramework,

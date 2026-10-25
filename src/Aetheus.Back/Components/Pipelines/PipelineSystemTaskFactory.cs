@@ -100,7 +100,7 @@ public sealed class PipelineSystemTaskFactory(
         PipelineYamlDefinition definition, int? organizationId, int? projectId, CancellationToken ct)
     {
         var affinityServerId = await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false);
-        var isCleanup = systemSteps.All(step => step.StageName == PipelineRunService.SystemCleanupStage);
+        var isCleanup = systemSteps.All(step => step.StageName == PipelineRunHelpers.SystemCleanupStage);
         Server? server = null;
         if (affinityServerId is not null)
             server = await repo.FindOnlineServerByIdAsync(affinityServerId.Value, ct: ct).ConfigureAwait(false);
@@ -153,7 +153,7 @@ public sealed class PipelineSystemTaskFactory(
         bool useWindows,
         bool deferredCleanup)
     {
-        var isPrepare = step.StageName == PipelineRunService.SystemPrepareStage;
+        var isPrepare = step.StageName == PipelineRunHelpers.SystemPrepareStage;
         step.ServerId = server.Id;
         var workspace = ResolveSystemWorkspace(runId, resolvedVars, isWindows, isContainer);
         resolvedVars["WORKSPACE"] = workspace;
@@ -249,7 +249,7 @@ public sealed class PipelineSystemTaskFactory(
     public async Task<bool> DispatchCleanupIfPendingAsync(int runId, CancellationToken ct)
     {
         var pendingCleanup = await repo.GetPendingStepRunsAsync(runId, ct).ConfigureAwait(false);
-        var cleanupSteps = pendingCleanup.Where(s => s.StageName == PipelineRunService.SystemCleanupStage).ToList();
+        var cleanupSteps = pendingCleanup.Where(s => s.StageName == PipelineRunHelpers.SystemCleanupStage).ToList();
         if (cleanupSteps.Count == 0) return false;
 
         // A failure can complete in parallel with an already-dispatched always()/failed() handler.

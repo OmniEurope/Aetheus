@@ -45,7 +45,12 @@ public sealed record PipelineFunctionDescriptor(
     public string? NamedOutputParameter { get; init; }
 
     /// <summary>The task kind this function is dispatched as.</summary>
-    public OperationKind Operation => PipelineFunctionCatalog.OperationFor(Access);
+    public OperationKind Operation => Access switch
+    {
+        PipelineFunctionAccess.Build => OperationKind.PipelineFunction,
+        PipelineFunctionAccess.Deployment => OperationKind.PipelineDeploymentFunction,
+        _ => throw new ArgumentOutOfRangeException(nameof(Access), Access, "Unknown pipeline function access.")
+    };
 
     /// <summary>The declared parameter with that <c>with:</c> key, or <c>null</c>.</summary>
     public PipelineFunctionParameter? FindParameter(string name) =>

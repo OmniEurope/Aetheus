@@ -28,6 +28,13 @@ public sealed class UserPreferenceSession(
 {
     private static readonly string[] Languages = ["en", "fr-FR"];
 
+    /// <summary>The language this page runs in: French when the UI culture is French, English otherwise.
+    /// The application menu of the shell shows the same value.</summary>
+    internal static string CurrentLanguage =>
+        System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("fr", StringComparison.OrdinalIgnoreCase)
+            ? "fr-FR"
+            : "en";
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _taken;
     private string? _user;
@@ -86,7 +93,7 @@ public sealed class UserPreferenceSession(
             return;
         if (await js.InvokeAsync<string?>("localStorage.getItem", ct, StorageKeys.Lang) != language)
             await js.InvokeVoidAsync("localStorage.setItem", ct, StorageKeys.Lang, language);
-        if (string.Equals(language, Aetheus.Front.Layout.MainLayout.CurrentLanguage, StringComparison.Ordinal))
+        if (string.Equals(language, CurrentLanguage, StringComparison.Ordinal))
             return;
         await js.InvokeVoidAsync("Aetheus.setLang", ct, language);
         navigation.NavigateTo(navigation.Uri, forceLoad: true);

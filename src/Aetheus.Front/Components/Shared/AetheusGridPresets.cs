@@ -23,12 +23,12 @@ public static class AetheusGridPresets
                 // Enable column-edge double-click autofit so users can size columns to their
                 // content.
                 [nameof(OmniDataGrid<object>.AllowColumnAutoFit)] = true,
+                // R-69: size every column to its content so a narrower page tightens the columns
+                // without ever cutting a value; a declared Width is ignored, MinWidth stays a floor.
+                [nameof(OmniDataGrid<object>.ColumnSizing)] = OmniDataGridColumnSizing.Content,
                 [nameof(OmniDataGrid<object>.AllowAlternatingRows)] = true,
                 [nameof(OmniDataGrid<object>.HighlightRowOnHover)] = true,
                 [nameof(OmniDataGrid<object>.Density)] = OmniDensity.Compact,
-                // Apply STD-GRIDTITLE truncation so headers stay on one line with an ellipsis when
-                // space is insufficient.
-                [nameof(OmniDataGrid<object>.HeaderWrap)] = OmniDataGridHeaderWrap.Truncate,
                 // Keep the footer hidden by default and offer Markdown only, with actions at the
                 // footer's end; raw grids export all Items, while ExportMarkdown=false forbids
                 // export under GridExportCoverageAuditTests.

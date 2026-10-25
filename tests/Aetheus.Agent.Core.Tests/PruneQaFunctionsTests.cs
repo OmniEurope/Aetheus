@@ -6,8 +6,8 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# ports of <c>deploy/scripts/prune-qa-buildx-cache.sh</c> and
-/// <c>deploy/scripts/prune-stale-qa-compose.sh</c>, run through the real executor against an in-memory
+/// The C# ports of the former <c>prune-qa-buildx-cache.sh</c> script and
+/// the former <c>prune-stale-qa-compose.sh</c> script, run through the real executor against an in-memory
 /// Docker daemon: the exact prune argv and its refusals, and the removal of earlier runs' Compose
 /// resources with the current and newer runs protected.
 /// </summary>
@@ -55,7 +55,7 @@ public sealed class PruneQaFunctionsTests : IDisposable
         Assert.Equal(
             ["buildx prune --builder qa-builder --force --reserved-space 20GB --max-used-space 32GB --min-free-space 20GB"],
             _docker.Commands);
-        Assert.Contains("Applying bounded QA Buildx maintenance: builder=qa-builder max=32GiB reserved=20GiB minFree=20GiB", LogLines);
+        Assert.Contains("Applying bounded QA Buildx maintenance: builder=qa-builder max=32Go reserved=20Go minFree=20Go", LogLines);
         Assert.Contains("Bounded QA Buildx maintenance completed for 'qa-builder'.", LogLines);
     }
 

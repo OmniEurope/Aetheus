@@ -18,13 +18,13 @@ public sealed class AlertThresholdUnitTests : BunitContext
     [InlineData(MetricType.Cpu, "%")]
     [InlineData(MetricType.Memory, "%")]
     [InlineData(MetricType.Disk, "%")]
-    [InlineData(MetricType.DiskFree, "GiB")]
-    [InlineData(MetricType.BuildCache, "GiB")]
+    [InlineData(MetricType.DiskFree, "Go")]
+    [InlineData(MetricType.BuildCache, "Go")]
     public void EachMetric_HasTheUnitTheEvaluatorComparesIn(MetricType metric, string unit) =>
         Assert.Equal(unit, AlertThresholdUnit.Of(metric));
 
     [Fact]
-    public void AlertList_ShowsGiB_ForAFreeDiskSpaceThreshold_AndPercent_ForCpu()
+    public void AlertList_ShowsGo_ForAFreeDiskSpaceThreshold_AndPercent_ForCpu()
     {
         _handler.SetJsonResponse("api/alerts", new List<AlertRuleDto>
         {
@@ -38,7 +38,7 @@ public sealed class AlertThresholdUnitTests : BunitContext
         {
             var disk = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Free disk", StringComparison.Ordinal));
             var cpu = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Hot CPU", StringComparison.Ordinal));
-            Assert.Contains("LessThan 20 GiB", disk.TextContent, StringComparison.Ordinal);
+            Assert.Contains("LessThan 20 Go", disk.TextContent, StringComparison.Ordinal);
             Assert.DoesNotContain("20%", disk.TextContent, StringComparison.Ordinal);
             Assert.Contains("GreaterThan 90%", cpu.TextContent, StringComparison.Ordinal);
         });
@@ -51,6 +51,6 @@ public sealed class AlertThresholdUnitTests : BunitContext
 
         var cut = Render<AlertEditDialog>(p => p.Add(x => x.Alert, alert));
 
-        Assert.Contains("Threshold (GiB)", cut.Find("label[for=oe-pages-alerts-alerteditdialog-numeric-1]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("Threshold (Go)", cut.Find("label[for=oe-pages-alerts-alerteditdialog-numeric-1]").TextContent, StringComparison.Ordinal);
     }
 }

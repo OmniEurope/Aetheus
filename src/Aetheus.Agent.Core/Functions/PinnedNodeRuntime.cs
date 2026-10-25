@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// Port of <c>deploy/scripts/ensure-node-runtime.sh</c>, which the ported scripts load: resolves the
+/// Port of the former <c>ensure-node-runtime.sh</c> script, which the ported scripts load: resolves the
 /// exact Node.js the release toolchain requires. The host <c>node</c> is kept when it reports that
 /// exact version; otherwise the official Linux x64 archive, pinned by SHA-256, is installed under
 /// <c>$HOME/.aetheus</c>, one installer at a time behind an installation lock, extracted into a staging

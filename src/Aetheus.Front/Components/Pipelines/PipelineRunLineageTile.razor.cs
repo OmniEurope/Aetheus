@@ -31,9 +31,11 @@ public partial class PipelineRunLineageTile
 
     internal const int WideActorLength = 14;
 
+    /// <summary>The marker class tests and the wide state share; the width itself is the OE tile's
+    /// <c>DoubleWidth</c>.</summary>
     private string TileClass => IsWide
-        ? "run-overview-card run-lineage-tile run-lineage-tile--wide"
-        : "run-overview-card run-lineage-tile";
+        ? "run-lineage-tile run-lineage-tile--wide"
+        : "run-lineage-tile";
 
     /// <summary>The account that launched the run; "automatic" when nobody did, or while it is read.</summary>
     private string ActorText => _lineage?.TriggeredBy ?? L["RunLaunchedAutomatically"];

@@ -15,8 +15,8 @@
                     {
                         <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Danger" Class="omni-u-m-0 mailbox-admin-open-error">@_adminError</OmniText>
                     }
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Primary" Busy="@_adminBusy" Class="mailbox-admin-open-button" OnClick="@OpenAsAdministratorAsync"><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /> <span>@L["MailboxAdminOpen"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Primary" Busy="@_adminBusy" Class="mailbox-admin-open-button" OnClick="@OpenAsAdministratorAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon><ChildContent><span>@L["MailboxAdminOpen"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniStack>
             </OmniAlert>
@@ -30,11 +30,11 @@
     <DialogFooter OnCancel="@(() => Dialog.Close())">
         @if (CanOpenAsAdministrator)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /></Icon><ChildContent><span>@L["MailboxUnlock"]</span></ChildContent></OmniButton>
         }
         else
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_busy"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /></Icon><ChildContent><span>@L["MailboxUnlock"]</span></ChildContent></OmniButton>
         }
     </DialogFooter>
 </OmniTemplateForm>

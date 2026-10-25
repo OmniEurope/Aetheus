@@ -285,11 +285,41 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
         Assert.NotEqual(TaskExecutionStatus.Pending, task.Status);
-        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        // R-31: a replaced session is a failure with its reason, not a timeout: nothing exceeded a delay.
+        Assert.Equal(TaskExecutionStatus.Failed, task.Status);
         Assert.NotNull(task.StartedAt);
+        Assert.Equal(TaskFailureCodes.AgentSessionReplaced, task.FailureCode);
         Assert.Equal(PipelineOutageReplayPolicy.NotReplayedReason, task.FailureReason);
-        Assert.Equal(TaskExecutionStatus.Timeout, step.Status);
+        Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+        Assert.Equal(TaskFailureCodes.AgentSessionReplaced, step.FailureCode);
         Assert.Equal(PipelineOutageReplayPolicy.NotReplayedReason, step.FailureReason);
+    }
+
+    [Fact]
+    public async Task ASupersededTaskThatNeverStarted_FailsWithTheBeforeStartReason()
+    {
+        var (sut, repo) = BuildSut();
+        var task = NeverStarted(TaskExecutionStatus.Assigned, OperationKind.BlueGreenSwitch);
+        repo.GetTasksFromSupersededAgentSessionsAsync(Arg.Any<CancellationToken>()).Returns([task]);
+
+        await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, task.Status);
+        Assert.Equal(TaskFailureCodes.AgentSessionReplaced, task.FailureCode);
+        Assert.Equal(PipelineOutageReplayPolicy.NotReplayedBeforeStartReason, task.FailureReason);
+    }
+
+    [Fact]
+    public async Task ARealRunningTimeout_StaysATimeoutAndKeepsNoSessionFailureCode()
+    {
+        var (sut, repo) = BuildSut();
+        var task = Task(OperationKind.None);
+        repo.GetStaleRunningTasksAsync(Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>()).Returns([task]);
+
+        await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        Assert.NotEqual(TaskFailureCodes.AgentSessionReplaced, task.FailureCode);
     }
 
     [Fact]
@@ -301,7 +331,7 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        Assert.Equal(TaskExecutionStatus.Failed, task.Status);
     }
 
     [Fact]
@@ -315,7 +345,7 @@ public sealed class TaskTimeoutServiceOutageStandbyTests
 
         await sut.CheckStaleTasksAsync(TestContext.Current.CancellationToken);
 
-        Assert.Equal(TaskExecutionStatus.Timeout, task.Status);
+        Assert.Equal(TaskExecutionStatus.Failed, task.Status);
     }
 
     [Fact]

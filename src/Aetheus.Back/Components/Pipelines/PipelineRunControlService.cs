@@ -33,6 +33,18 @@ public interface IPipelineRunControlService
     /// <returns><c>true</c> when something was actually retried.</returns>
     Task<bool> RetryFailedStepsAsync(
         int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
+
+    /// <summary>R-39: resumes a run waiting after a missed confirmation. The stages from the start of the
+    /// deployment are replayed with the run's own definition, artifacts and revision (nothing is rebuilt),
+    /// which puts the new version back online and asks the confirmation again. Audited with its author.
+    /// Throws <see cref="NotFoundException"/> or <see cref="ConflictException"/> with the reason.</summary>
+    Task ResumeAwaitingRunAsync(
+        int runId, string? by, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
+
+    /// <summary>R-39: ends a run whose wait for a resume has elapsed. The previous version kept serving,
+    /// so the run finishes its cleanup and ends rolled back. False when it was not due.</summary>
+    Task<bool> CloseExpiredResumeWaitAsync(
+        int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct);
 }
 
 /// <inheritdoc cref="IPipelineRunControlService"/>
@@ -40,7 +52,8 @@ public sealed class PipelineRunControlService(
     IPipelineRepository repo,
     IHubContext<PipelineHub> pipelineHub,
     IPipelineRunDefinitionParser definitions,
-    IAuditService audit) : IPipelineRunControlService
+    IAuditService audit,
+    TimeProvider timeProvider) : IPipelineRunControlService
 {
     public async Task<bool> CancelRunAsync(
         int runId, PipelineRunCancellation cancellation, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
@@ -150,7 +163,7 @@ public sealed class PipelineRunControlService(
             && await scheduler.FailUnconfirmedStageAsync(runId, refused.StageName, launcher, ct).ConfigureAwait(false))
         {
             await repo.AppendRunWarningsAsync(runId,
-                [$"Stage '{refused.StageName}' was not confirmed ({refused.Status}); the run fails and its failure handlers run."],
+                [$"Stage '{refused.StageName}' was not confirmed ({refused.Status}); the stage fails and the run's failure handlers run."],
                 ct).ConfigureAwait(false);
             return PipelineStatus.Running;
         }
@@ -193,6 +206,58 @@ public sealed class PipelineRunControlService(
             .Groups(HubGroups.PipelineRunUpdates(runId, run.Pipeline.Id))
             .SendAsync("PipelineRunStarted", runId, run.Pipeline.Id, ct).ConfigureAwait(false);
 
+        return true;
+    }
+
+    public async Task ResumeAwaitingRunAsync(
+        int runId, string? by, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        if (run?.Pipeline is null) throw new NotFoundException($"Run {runId} does not exist.");
+        if (run.Status != PipelineStatus.AwaitingResume)
+            throw new ConflictException($"Run {runId} is not waiting for a resume; it is {run.Status}.");
+        var definition = definitions.Parse(run)
+            ?? throw new ConflictException($"Run {runId} has no readable definition to replay.");
+        var stages = PipelineResumeWindow.StagesToReplay(definition);
+        if (stages.Count == 0)
+            throw new ConflictException($"Run {runId} declares no stage that starts its deployment; there is nothing to replay.");
+
+        var outcome = await repo.ReopenAwaitingRunAsync(runId, stages, timeProvider.GetUtcNow().UtcDateTime, ct)
+            .ConfigureAwait(false);
+        if (outcome != ResumeReopenOutcome.Reopened)
+        {
+            var refusal = outcome == ResumeReopenOutcome.Expired
+                ? $"The resume window of run {runId} has elapsed; the run is being closed."
+                : $"Run {runId} is no longer waiting for a resume.";
+            await audit.LogAsync("Resumed", "PipelineRun", runId,
+                $"{run.Pipeline.Name} | by {by ?? "unknown"} | refused: {refusal}", ct).ConfigureAwait(false);
+            throw new ConflictException(refusal);
+        }
+
+        await audit.LogAsync("Resumed", "PipelineRun", runId,
+            $"{run.Pipeline.Name} | by {by ?? "unknown"} | replays {string.Join(", ", stages)}", ct).ConfigureAwait(false);
+        // Re-read: the reopened run is the one the dispatch pass must see (Running, no deadline).
+        var reopened = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false) ?? run;
+        await scheduler.DispatchNextStageSerializedAsync(reopened, definition, launcher, ct).ConfigureAwait(false);
+        await pipelineHub.Clients
+            .Groups(HubGroups.PipelineRunUpdates(runId, run.Pipeline.Id))
+            .SendAsync("PipelineRunStarted", runId, run.Pipeline.Id, ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> CloseExpiredResumeWaitAsync(
+        int runId, IPipelineRunScheduler scheduler, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    {
+        if (!await repo.TryCloseExpiredResumeWaitAsync(runId, timeProvider.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false))
+            return false;
+        await repo.AppendRunWarningsAsync(runId,
+            [PipelineRunNotices.Compose(PipelineRunNotices.ResumeWindowExpired,
+                "Not resumed within its window: the previous version kept serving and the release was not marked deployed.")],
+            ct).ConfigureAwait(false);
+        await audit.LogAsync("ResumeWindowExpired", "PipelineRun", runId,
+            "The wait for a resume elapsed; the run ends rolled back", ct).ConfigureAwait(false);
+        // The deadline now in the past keeps the scheduler from parking it again: the cleanup runs and the
+        // run ends with the status its steps earned, RolledBack.
+        await scheduler.ReconcileRunAsync(runId, launcher, ct).ConfigureAwait(false);
         return true;
     }
 

@@ -17,8 +17,32 @@ internal sealed record CliInvocation(Uri Server, string? Token, int Page, int Pa
         return new CliInvocation(
             CliRuntime.ParseServerUri(server),
             token,
-            CliRuntime.ClampPage(requestedPage),
-            CliRuntime.ClampPageSize(requestedPageSize));
+            ClampPage(requestedPage),
+            ClampPageSize(requestedPageSize));
+    }
+
+    private static int ClampPage(int requested)
+    {
+        var clamped = Math.Clamp(requested, 1, MaximumPage);
+        if (clamped != requested)
+        {
+            Console.Error.WriteLine(
+                $"Warning: --page must be between 1 and {MaximumPage} "
+                + $"(got {requested}); using {clamped}.");
+        }
+        return clamped;
+    }
+
+    private static int ClampPageSize(int requested)
+    {
+        var clamped = Math.Clamp(requested, 1, PaginationRequest.MaxPageSize);
+        if (clamped != requested)
+        {
+            Console.Error.WriteLine(
+                $"Warning: --page-size must be between 1 and {PaginationRequest.MaxPageSize} "
+                + $"(got {requested}); using {clamped}.");
+        }
+        return clamped;
     }
 
     internal AetheusApiClient CreateClient() => new(Server, Token);

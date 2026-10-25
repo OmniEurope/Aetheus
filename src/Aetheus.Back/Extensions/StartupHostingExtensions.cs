@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Cryptography.X509Certificates;
 using Aetheus.Back.Middleware;
+using Aetheus.Back.Seeding;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Aetheus.Back.Extensions;
@@ -69,6 +70,9 @@ internal static class StartupHostingExtensions
         {
             if (addSchemaResetInterceptor)
                 options.AddInterceptors(services.GetRequiredService<Aetheus.Back.Components.Dev.SchemaResetInterceptor>());
+            options.AddInterceptors(
+                services.GetRequiredService<Aetheus.Back.Middleware.RequestDatabaseTimingCommandInterceptor>(),
+                services.GetRequiredService<Aetheus.Back.Middleware.RequestDatabaseTimingTransactionInterceptor>());
             options.UseNpgsql(connectionString)
                 .ConfigureWarnings(w => w.Ignore(
                     Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning,
@@ -111,6 +115,9 @@ internal static class StartupHostingExtensions
             await ApplyMigrationsAsync(app.Configuration, db, startupLogger);
 
         await DbInitializer.SeedAsync(db, app.Configuration);
+        // One-shot, idempotent: an instance seeded before normalize-coverage-report.sh moved to scripts/ keeps the old path.
+        await Aetheus.Back.Components.Pipelines.SeededTemplateScriptPathReconciliation.RunAsync(
+            db, scope.ServiceProvider.GetRequiredService<TimeProvider>(), startupLogger);
         await scope.ServiceProvider.GetRequiredService<TotoConformanceSeeder>().SeedAsync();
         await DemoDataStartupSeeder.SeedIfEnabledAsync(scope.ServiceProvider, db, app.Environment, app.Configuration);
         // Reconcile the canonical catalog last: optional demo seeders must not be able to

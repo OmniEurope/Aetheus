@@ -30,7 +30,7 @@ public sealed class MobileLayoutAuditTests
         { "Servers/ServerDetailSections/DockerRelationsGraph.razor", "ResetViewAsync" },
         { "PackageFeeds/PackageFeedPackagesDialog.razor", "OnClick=\"@SyncAsync\"" },
         { "Servers/ServerDetailSections/ServerConfigSection.razor", "PreviewConfigAsync" },
-        { "Pipelines/PipelineEdit.razor", "OmniIconName.Add\" /> <span>@L[\"Create\"]" },
+        { "Pipelines/PipelineEdit.razor", "OmniIconName.Add\" /></Icon><ChildContent><span>@L[\"Create\"]" },
         { "Servers/ServerDetailSections/DockerProjectDialog.razor", "DockerContainerAction.Restart" },
         { "Projects/ProjectFormDialog.razor", "OnClick=\"@OnDelete\"" },
         { "Servers/ContactAgentDialog.razor", "CancelAndCloseAsync" },
@@ -106,7 +106,7 @@ public sealed class MobileLayoutAuditTests
         }
 
         return open.Select(entry => entry.Attributes)
-            .FirstOrDefault(attributes => attributes.Contains("OmniStackOrientation.Horizontal", StringComparison.Ordinal));
+            .FirstOrDefault(attributes => attributes.Contains("OmniOrientation.Horizontal", StringComparison.Ordinal));
     }
 
     private static (int Ids, int Classes, int Elements) Specificity(string selector)

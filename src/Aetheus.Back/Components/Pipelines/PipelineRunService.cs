@@ -2,14 +2,10 @@
 using Aetheus.Back.Components.AiTasks;
 using Aetheus.Back.Components.AppBackups;
 using Aetheus.Back.Components.Artifacts;
-using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.GitGraph;
 using Aetheus.Back.Components.Pipelines.Events;
 using Aetheus.Back.Components.Servers;
-using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
-using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
@@ -32,12 +28,6 @@ public class PipelineRunService(
     IPipelineRunReader runReader,
     IPipelineRunDefinitionParser definitions) : IPipelineRunService, IPipelineLauncher
 {
-    internal const string SystemPrepareStage = "System:Prepare";
-    internal const string SystemCleanupStage = PipelineSystemStages.Cleanup;
-    internal const string CancellationRequestedVariable = "__AETHEUS_CANCEL_REQUESTED";
-    // Who cancelled the run and why, kept beside the request marker for the run page.
-    internal const string CancelledByVariable = "__AETHEUS_CANCELLED_BY";
-    internal const string CancellationReasonVariable = "__AETHEUS_CANCEL_REASON";
     internal const string SourceCommitVariable = "AETHEUS_SOURCE_COMMIT";
     internal const string SourceBranchVariable = "AETHEUS_RUN_BRANCH";
     // Set only on a run whose workspace comes from another repository (source: block).
@@ -246,7 +236,7 @@ public class PipelineRunService(
 
         // S-TECH-D4XR: validate the supplied run parameters during preflight too, so a bad value is
         // reported alongside the unresolved-target warnings before the run is launched.
-        var paramWarnings = ValidateAndApplyParameters(definition, ref additionalVars);
+        var paramWarnings = ValidateAndApplyParameters(definition, ref additionalVars, forPreflight: true);
 
         var (resolvedVars, warnings, _) = await variableResolver.ResolveVariablesWithWarningsAsync(
             definition, preparation.EffectiveProjectId, additionalVars, ct).ConfigureAwait(false);
@@ -263,7 +253,12 @@ public class PipelineRunService(
     // them with the same resolver the real trigger uses, and merge the effective (supplied ?? default)
     // values back at highest precedence so the preview reflects them. Returns human-readable warnings
     // for any validation failure (preview is non-destructive, so we warn instead of throwing).
-    internal static List<string> ValidateAndApplyParameters(PipelineYamlDefinition definition, ref Dictionary<string, string>? additionalVars)
+    // The launch preflight (<paramref name="forPreflight"/>) runs before the user has answered, so it
+    // reports no missing required value (the launch enforces it) and, like a launch, reads a declared
+    // parameter with no value as an empty ${{ parameters.X }}: a stage target built from it is then
+    // reported as empty instead of being searched under its literal expression.
+    internal static List<string> ValidateAndApplyParameters(
+        PipelineYamlDefinition definition, ref Dictionary<string, string>? additionalVars, bool forPreflight = false)
     {
         if (definition.Parameters.Count == 0) return [];
 
@@ -271,7 +266,15 @@ public class PipelineRunService(
             .Where(kv => definition.Parameters.Any(p => p.Name.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
-        PipelineParameterResolver.TryResolve(definition.Parameters, supplied, out var effective, out var errors);
+        PipelineParameterResolver.TryResolve(
+            definition.Parameters, supplied, out var effective, out var errors, enforceRequired: !forPreflight);
+        if (forPreflight)
+        {
+            additionalVars ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var parameter in definition.Parameters)
+                if (!string.IsNullOrWhiteSpace(parameter.Name) && !effective.ContainsKey(parameter.Name))
+                    additionalVars[PipelineCommandBuilder.ParameterKeyPrefix + parameter.Name] = string.Empty;
+        }
         if (effective.Count > 0)
         {
             additionalVars ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -325,6 +328,12 @@ public class PipelineRunService(
 
     public Task<PipelineStatus?> ApplyRefusalAsync(int runId, CancellationToken ct = default) =>
         control.ApplyRefusalAsync(runId, scheduler, launcher, ct);
+
+    public Task ResumeAwaitingRunAsync(int runId, string? by, CancellationToken ct = default) =>
+        control.ResumeAwaitingRunAsync(runId, by, scheduler, launcher, ct);
+
+    public Task<bool> CloseExpiredResumeWaitAsync(int runId, CancellationToken ct = default) =>
+        control.CloseExpiredResumeWaitAsync(runId, scheduler, launcher, ct);
 
     public async Task<PipelineRunDto?> RetryFailedStepsAsync(int runId, CancellationToken ct = default)
         => await control.RetryFailedStepsAsync(runId, scheduler, launcher, ct).ConfigureAwait(false)

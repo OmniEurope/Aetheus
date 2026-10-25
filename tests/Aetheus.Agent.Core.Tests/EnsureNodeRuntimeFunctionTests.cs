@@ -7,7 +7,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The <c>ensure-node-runtime</c> function, port of <c>deploy/scripts/ensure-node-runtime.sh</c>, run
+/// The <c>ensure-node-runtime</c> function, port of the former <c>ensure-node-runtime.sh</c> script, run
 /// through the real executor: the pinned host <c>node</c> published as <c>NODE</c> with its directory as
 /// <c>NODE_BIN_DIR</c>, the pinned archive installed under <c>$HOME/.aetheus</c> otherwise, and the
 /// script's refusals. The resolution rules themselves are <see cref="PinnedNodeRuntime"/>'s, also

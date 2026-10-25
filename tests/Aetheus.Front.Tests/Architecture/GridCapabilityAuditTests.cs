@@ -173,6 +173,36 @@ public sealed class GridCapabilityAuditTests
         return match.Success ? match.Groups["value"].Value : null;
     }
 
+    /// <summary>Every grid that fills the height left under it has the same floor, three quarters of the
+    /// window (recette R-1). Since OE 1.9.1 that floor is OE's own <c>MinHeight</c> default, so no grid
+    /// states a minimum of its own: a local value would be a second copy of the rule, free to drift.</summary>
+    [Fact]
+    public void EveryFillingGrid_TakesTheOeMinimumHeight()
+    {
+        var filling = RawGrids().Where(grid => DeclaresAny(grid.Tag, "FillAvailableHeight")).ToList();
+        Assert.NotEmpty(filling);
+
+        var offenders = filling
+            .Where(grid => DeclaresAny(grid.Tag, "MinHeight"))
+            .Select(grid => grid.File)
+            .Distinct()
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "A grid with FillAvailableHeight keeps OE's MinHeight default (75dvh, three quarters of the window); "
+            + "a MinHeight of its own duplicates the rule. Found in:\n" + string.Join("\n", offenders));
+
+        var markup = File.ReadAllText(Path.Combine(FrontRoot, "Components", "Shared", "AetheusDataGrid.razor"));
+        Assert.Contains("FillAvailableHeight=\"@FullHeight\"", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinHeight", markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>The OE default the rule above relies on: should OE change it, the floor of every grid changes
+    /// with it, so the change must be seen here.</summary>
+    [Fact]
+    public void OeMinHeightDefault_IsThreeQuartersOfTheWindow() =>
+        Assert.Equal("75dvh", new OmniEurope.Blazor.Components.OmniDataGrid<object>().MinHeight);
+
     /// <summary>Wrapper grids explicitly enable appropriate local or remote virtualization;
     /// server-loaded grids require VirtualData to avoid paging.</summary>
     [Fact]

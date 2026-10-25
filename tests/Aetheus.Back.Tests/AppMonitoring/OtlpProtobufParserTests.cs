@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
-using Aetheus.Back.Components.AppMonitoring.Ingest;
+using Aetheus.Back.Components.AppMonitoring;
 using Aetheus.Back.Data.Entities;
 using Google.Protobuf;
 using OpenTelemetry.Proto.Collector.Logs.V1;

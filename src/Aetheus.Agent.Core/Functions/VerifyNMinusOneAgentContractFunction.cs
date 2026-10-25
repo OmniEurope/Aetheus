@@ -8,7 +8,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-nminus1-agent-contract</c> function, port of
-/// <c>deploy/scripts/verify-nminus1-agent-contract.sh</c>: the retained N-1 software agent must still
+/// the former <c>verify-nminus1-agent-contract.sh</c> script: the retained N-1 software agent must still
 /// work against backend N. Its Linux x64 archive is checked against the manifest (commit, protocol 2,
 /// size and SHA-256) and unpacked in a temporary directory; an admin session issues a one-hour
 /// registration token; the agent is started with it and must enroll (the token used by a server)
@@ -23,7 +23,6 @@ namespace Aetheus.Agent.Core.Functions;
 /// </summary>
 public sealed class VerifyNMinusOneAgentContractFunction : IPipelineFunction
 {
-    internal const int Polls = 60;
     private const string AgentExecutable = "Aetheus.Agent.Linux";
 
     private readonly IPipelineFunctionTools _tools;

@@ -18,9 +18,10 @@ public class VariableLibraryResolveTests
             Substitute.For<IAuditService>(), Substitute.For<IEntityChangeNotifier>(),
             TimeProvider.System, Substitute.For<IMemoryCache>());
 
-    private static VariableLibrary Lib(int? projectId, int? envId, int? projectServerId, string key, string value) =>
+    private static VariableLibrary Lib(int? projectId, int? envId, int? projectServerId, string key, string value, int id = 0) =>
         new()
         {
+            Id = id,
             ProjectId = projectId,
             EnvironmentId = envId,
             ProjectServerId = projectServerId,
@@ -57,5 +58,25 @@ public class VariableLibraryResolveTests
 
         Assert.Equal(2, result.Count);
         Assert.Equal("1", result["a"]); // OrdinalIgnoreCase comparer
+    }
+
+    /// <summary>R2-27: the summary links an empty variable to the library whose value a run reads, which is the
+    /// one the scope precedence picks, not another library holding the same key.</summary>
+    [Fact]
+    public async Task EntryOwners_NameTheLibraryWhoseValueWins_PerKey()
+    {
+        _repo.FindByNamesWithCrossAccessAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>()).Returns(
+        [
+            Lib(null, null, null, "API_HOST", "", id: 10),
+            Lib(1, null, null, "API_HOST", "", id: 11),
+            Lib(1, null, null, "API_PORT", "8080", id: 11),
+            Lib(null, null, null, "ONLY_GLOBAL", "", id: 10)
+        ]);
+
+        var owners = await _sut.ResolveEntryOwnersWithCrossAccessAsync(["any"], 1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(11, owners["api_host"]);
+        Assert.Equal(11, owners["API_PORT"]);
+        Assert.Equal(10, owners["ONLY_GLOBAL"]);
     }
 }

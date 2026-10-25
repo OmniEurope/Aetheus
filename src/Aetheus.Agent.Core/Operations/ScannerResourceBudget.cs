@@ -36,7 +36,7 @@ internal sealed class ScannerResourceBudget(long memoryBytes, double cpus)
                     _usedMemoryBytes += requestedMemory;
                     _usedCpus += requestedCpus;
                     _heavyRunning |= heavy;
-                    return new Reservation(this, requestedMemory, requestedCpus, heavy);
+                    return new Reservation(() => Release(requestedMemory, requestedCpus, heavy));
                 }
             }
             await _changed.WaitAsync(ct).ConfigureAwait(false);
@@ -76,18 +76,16 @@ internal sealed class ScannerResourceBudget(long memoryBytes, double cpus)
         _changed.Release();
     }
 
-    private sealed class Reservation(
-        ScannerResourceBudget owner,
-        long memory,
-        double cpus,
-        bool heavy) : IAsyncDisposable
+    /// <summary>Gives the resources back once, through the callback it is created with, so it does not depend
+    /// on the budget that hands it out.</summary>
+    private sealed class Reservation(Action release) : IAsyncDisposable
     {
         private int _released;
 
         public ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _released, 1) == 0)
-                owner.Release(memory, cpus, heavy);
+                release();
             return ValueTask.CompletedTask;
         }
     }

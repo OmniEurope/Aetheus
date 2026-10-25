@@ -4,6 +4,6 @@
         <div @onkeydown="@OnKeyDown"><OmniTextBox @bind-Value="_value" Id="dashboard-name-input" /></div>
     </OmniFormField>
     <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save" Disabled="@string.IsNullOrWhiteSpace(_value)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save" Disabled="@string.IsNullOrWhiteSpace(_value)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </Aetheus.Front.Components.Shared.DialogFooter>
 </OmniStack>

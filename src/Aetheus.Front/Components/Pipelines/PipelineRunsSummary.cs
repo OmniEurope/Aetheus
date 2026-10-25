@@ -61,7 +61,5 @@ public sealed record PipelineRunsSummary(
         ? lastSuccess.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
         : notAvailable;
 
-    public static string FormatDuration(TimeSpan duration) => duration.TotalMinutes >= 1
-        ? $"{(int)duration.TotalMinutes}m {duration.Seconds}s"
-        : $"{duration.Seconds}s";
+    public static string FormatDuration(TimeSpan duration) => DisplayFormatting.Duration(duration);
 }

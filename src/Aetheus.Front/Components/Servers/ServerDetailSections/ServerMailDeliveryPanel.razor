@@ -22,7 +22,7 @@
                 <Columns>
                     <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="QueueId" Title="ID" Width="7.5rem" />
                     <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="Recipient" Title="@L["Recipient"]" Width="13.75rem" />
-                    <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="Reason" Title="@L["MailDeferredReason"]" Width="40rem" />
+                    <OmniDataGridColumn TItem="MailDeferredMessageDto" Property="Reason" Truncate="true" Title="@L["MailDeferredReason"]" Width="40rem" />
                 </Columns>
             </OmniDataGrid>
         }

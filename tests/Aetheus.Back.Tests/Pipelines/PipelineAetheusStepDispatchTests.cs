@@ -44,9 +44,9 @@ public sealed class PipelineAetheusStepDispatchTests
         var tracked = new List<ServerTask>();
         var stepRun = new PipelineStepRun { Id = 3, PipelineRunId = 7, StageName = "Build", StepName = "Detect languages" };
 
-        var finalized = await DispatchAsync(YamlParsingHelper.FlattenJobs(definition).Single(), stepRun, tracked);
+        var refusal = await DispatchAsync(YamlParsingHelper.FlattenJobs(definition).Single(), stepRun, tracked);
 
-        Assert.False(finalized);
+        Assert.Null(refusal);
         var task = Assert.Single(tracked);
         Assert.Equal(OperationKind.PipelineFunction, task.Operation);
         Assert.Equal(626, (int)task.Operation);
@@ -72,7 +72,7 @@ public sealed class PipelineAetheusStepDispatchTests
         Assert.NotEmpty(errors);
     }
 
-    private static async Task<bool> DispatchAsync(
+    private static async Task<StageDispatchRefusal?> DispatchAsync(
         PipelineStageDefinition stageDef, PipelineStepRun stepRun, List<ServerTask> tracked)
     {
         var repository = Substitute.For<IPipelineRepository>();
@@ -82,7 +82,7 @@ public sealed class PipelineAetheusStepDispatchTests
         var builder = new PipelineStepTaskBuilder(repository, encryption, NullLogger<PipelineStepTaskBuilder>.Instance);
         var dispatcher = new PipelineStepTaskDispatcher(
             repository, Substitute.For<IPipelineDispatchServerResolver>(), builder,
-            Substitute.For<IPipelineRunFinalizer>(), Substitute.For<IPipelineTriggerStepCoordinator>(),
+            Substitute.For<IPipelineTriggerStepCoordinator>(),
             Substitute.For<IPipelineBranchAdvanceStep>(), Substitute.For<IPipelineAnalysisTaskFactory>(),
             Substitute.For<IPipelineDotnetTestTaskFactory>(), new PipelineFunctionTaskFactory(builder, TimeProvider.System),
             Substitute.For<IPipelineGateStatusTaskFactory>(), Substitute.For<IPipelineDeploymentTaskFactory>(),

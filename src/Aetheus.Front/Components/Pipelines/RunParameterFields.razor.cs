@@ -50,9 +50,17 @@ public partial class RunParameterFields
     internal static string? DescriptionId(string parameterName, string? description) =>
         string.IsNullOrWhiteSpace(description) ? null : $"{FieldId(parameterName)}-help-content";
 
+    /// <summary>The message under each field a refused submit found empty; an edit clears its own.</summary>
+    private readonly Dictionary<string, string> _errors = new(StringComparer.OrdinalIgnoreCase);
+
     private bool BoolValue(string name) => _bools.GetValueOrDefault(name) ?? false;
     private string? StringValue(string name) => _strings.GetValueOrDefault(name);
     private decimal? NumberValue(string name) => _numbers.GetValueOrDefault(name);
+    private string? ErrorOf(string name) => _errors.GetValueOrDefault(name);
+
+    private void SetString(string name, string? value) { _strings[name] = value; _errors.Remove(name); }
+    private void SetNumber(string name, decimal? value) { _numbers[name] = value; _errors.Remove(name); }
+    private void SetBool(string name, bool value) { _bools[name] = value; _errors.Remove(name); }
 
     protected override void OnInitialized()
     {
@@ -74,6 +82,15 @@ public partial class RunParameterFields
                     break;
             }
         }
+
+        // R-22: the version starts on the latest release worth deploying at every opening; it stays
+        // editable. A value the caller or the declaration already gave is never overridden, and with no
+        // such release the field stays empty rather than starting on a doubtful one.
+        if (AvailableReleases is not null && FillTargetName is { } target && string.IsNullOrWhiteSpace(_strings.GetValueOrDefault(target))
+            && ReleasePickerVisibility.Latest(AvailableReleases) is { } latest)
+        {
+            _strings[target] = latest.Version;
+        }
     }
 
     /// <summary>The one field a release click may fill; <c>null</c> when that target is ambiguous.</summary>
@@ -82,16 +99,37 @@ public partial class RunParameterFields
     private void FillFromRelease(string version)
     {
         if (FillTargetName is { } target)
-            _strings[target] = version;
+            SetString(target, version);
+    }
+
+    /// <summary>The non-blocking warning about the release now in the version field, when the Gate
+    /// refused it or graded it F; <c>null</c> for any other release or a version typed by hand.</summary>
+    private string? ConcernText
+    {
+        get
+        {
+            if (AvailableReleases is null || FillTargetName is not { } target || StringValue(target)?.Trim() is not { Length: > 0 } version)
+                return null;
+            var release = AvailableReleases.FirstOrDefault(r => string.Equals(r.Version, version, StringComparison.Ordinal));
+            return release is null ? null : ReleasePickerVisibility.ConcernOf(release) switch
+            {
+                ReleaseGateConcern.Rejected => L["ReleaseGateWarningRejected"].Value,
+                ReleaseGateConcern.GradeF => L["ReleaseGateWarningGradeF"].Value,
+                _ => null
+            };
+        }
     }
 
     /// <summary>
-    /// Reads the current inputs. Returns <c>false</c> and a message when a required parameter is empty.
+    /// Reads the current inputs. Returns <c>false</c> when a required parameter is empty: the first
+    /// message comes back in <paramref name="error"/> and every empty required field shows its own
+    /// under it.
     /// </summary>
     public bool TryCollect(out Dictionary<string, string> values, out string? error)
     {
         values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         error = null;
+        _errors.Clear();
         foreach (var p in Parameters)
         {
             var value = p.Type?.ToLowerInvariant() switch
@@ -106,14 +144,19 @@ public partial class RunParameterFields
 
             if (p.Required && string.IsNullOrWhiteSpace(value))
             {
-                error = string.Format(L["RunParameterRequired"], ParameterText.Pick(p.DisplayName, p.DisplayNameFr));
-                return false;
+                var message = string.Format(L["RunParameterRequired"], ParameterText.Pick(p.DisplayName, p.DisplayNameFr));
+                _errors[p.Name] = message;
+                error ??= message;
+                continue;
             }
 
             if (!string.IsNullOrWhiteSpace(value))
                 values[p.Name] = value;
         }
 
-        return true;
+        if (error is null) return true;
+        values.Clear();
+        _ = InvokeAsync(StateHasChanged);
+        return false;
     }
 }

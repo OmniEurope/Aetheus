@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.AgentUpdate;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.DailyRecap;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.Email;
@@ -63,13 +64,13 @@ public sealed class DailyRecapServiceTests : IDisposable
     }
 
     /// <summary>A fresh service over a fresh context, as after a restart or in another instance.</summary>
-    private DailyRecapService Service(IConfiguration? configuration = null)
+    private DailyRecapService Service(IConfiguration? configuration = null, IMailTemplateRenderer? templates = null)
     {
         var repo = new DailyRecapRepository(Context());
         var compatibility = Substitute.For<IAgentCompatibilityPolicy>();
         compatibility.Evaluate(Arg.Any<ServerDto>()).Returns(new AgentCompatibilityDto());
         var collector = new DailyRecapCollector(repo, compatibility, new ConfigurationBuilder().Build());
-        return new DailyRecapService(repo, collector, _sender, NotificationMailKit.Templates(), Substitute.For<IAuditService>(), _clock,
+        return new DailyRecapService(repo, collector, _sender, templates ?? NotificationMailKit.Templates(), Substitute.For<IAuditService>(), _clock,
             configuration ?? new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Cors:Origins:0"] = "https://app.example.org" }).Build(),
             NullLogger<DailyRecapService>.Instance);
     }
@@ -169,6 +170,41 @@ public sealed class DailyRecapServiceTests : IDisposable
         await Service().RunScheduledAsync(Ct);
 
         Assert.Equal(["ops@example.org", "cto@example.org"], _sent.Select(message => message.To));
+    }
+
+    /// <summary>Recette R1-8: the sent recap follows each recipient's own language and appearance, like a notification mail.</summary>
+    [Fact]
+    public async Task R18_EachRecipientReceivesTheRecap_InTheirOwnLanguageAndColours()
+    {
+        const string dark = """{"version":1,"appearance":"Dark","preset":null,"palette":null}""";
+        var repository = Substitute.For<IMailTemplateRepository>();
+        repository.FindRecipientPreferencesAsync("dark-en@example.org", Arg.Any<CancellationToken>()).Returns(("\"en\"", dark));
+        repository.FindRecipientPreferencesAsync("light-fr@example.org", Arg.Any<CancellationToken>()).Returns(("\"fr-FR\"", null));
+        repository.FindRecipientPreferencesAsync("nobody@example.org", Arg.Any<CancellationToken>()).Returns(((string?)null, (string?)null));
+        var templates = new MailTemplateRenderer(repository, NullLogger<MailTemplateRenderer>.Instance);
+        await Service().UpdateSettingsAsync(new UpdateDailyRecapSettingsRequest
+        {
+            Enabled = true,
+            SendTime = new TimeOnly(7, 0),
+            TimeZoneId = "Europe/Paris",
+            Sections = [DailyRecapSection.Pipelines],
+            Recipients = ["dark-en@example.org", "light-fr@example.org", "nobody@example.org"]
+        }, Ct);
+
+        await Service(templates: templates).RunScheduledAsync(Ct);
+
+        var darkTheme = MailRecipientStyle.FromPreferences(null, dark).Theme;
+        var byAddress = _sent.ToDictionary(message => message.To);
+        Assert.Equal(3, byAddress.Count);
+        Assert.Contains("lang=\"en\"", byAddress["dark-en@example.org"].HtmlBody, StringComparison.Ordinal);
+        Assert.Contains("October 8, 2026", byAddress["dark-en@example.org"].Subject, StringComparison.Ordinal);
+        Assert.Contains(darkTheme.PageBackground, byAddress["dark-en@example.org"].HtmlBody!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("lang=\"fr\"", byAddress["light-fr@example.org"].HtmlBody, StringComparison.Ordinal);
+        Assert.Contains("8 octobre 2026", byAddress["light-fr@example.org"].Subject, StringComparison.Ordinal);
+        Assert.DoesNotContain(darkTheme.PageBackground, byAddress["light-fr@example.org"].HtmlBody!, StringComparison.OrdinalIgnoreCase);
+        // No account, no preference: the language the recap is configured in (French here), default colours.
+        Assert.Contains("8 octobre 2026", byAddress["nobody@example.org"].Subject, StringComparison.Ordinal);
+        Assert.DoesNotContain(darkTheme.PageBackground, byAddress["nobody@example.org"].HtmlBody!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -142,7 +142,7 @@ public class PipelineRunWaitingReasonTests
                 Arg.Any<PipelineStageDefinition>(), Arg.Any<Dictionary<string, string>>(),
                 Arg.Any<List<string>>(), Arg.Any<bool>(), Arg.Any<HashSet<string>>(),
                 Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>())
-            .Returns(false);
+            .Returns((StageDispatchRefusal?)null);
 
         // The step is Assigned after dispatch, which is what tells the planner a task was created.
         await Dispatch(harness, new PipelineStageDefinition { Name = "Build images" },

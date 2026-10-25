@@ -6,5 +6,5 @@
         <OmniFormField For="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-1"><LabelContent>@L["CpuLimit"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.CpuLimit" Minimum="0" Maximum="1024" Step="0.25" Id="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-1" /></ChildContent></OmniFormField>
         <OmniFormField For="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-2"><LabelContent>@L["MemoryLimit"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_model.MemoryLimitMb" Minimum="0" Maximum="1048576" Step="64" TValue="int" Id="oe-pages-servers-serverdetailsections-dockerresourcelimitsdialog-numeric-2" /></ChildContent></OmniFormField>
     </OmniStack>
-    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Check" /> <span>@L["Apply"]</span></OmniButton></DialogFooter>
+    <DialogFooter OnCancel="@(() => Dialog.Close())"><OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["Apply"]</span></ChildContent></OmniButton></DialogFooter>
 </OmniTemplateForm>

@@ -49,7 +49,7 @@ internal sealed class NpmPackageInspector
             if (!string.Equals(name, "package/package.json", StringComparison.Ordinal))
                 continue;
             if (entry.DataStream is null || entry.Length <= 0 || entry.Length > 1024 * 1024)
-                throw new BadRequestException("The npm package.json is missing or exceeds 1 MiB.");
+                throw new BadRequestException("The npm package.json is missing or exceeds 1 Mo.");
 
             using var document = await JsonDocument.ParseAsync(entry.DataStream, cancellationToken: ct)
                 .ConfigureAwait(false);

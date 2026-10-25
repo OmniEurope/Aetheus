@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/candidate/authorize-baseline-bootstrap.sh</c>, run through the real
+/// The C# port of the former <c>authorize-baseline-bootstrap.sh</c> script, run through the real
 /// executor: a bootstrap is refused unless explicitly allowed, anything else is accepted, with the
 /// script's messages.
 /// </summary>

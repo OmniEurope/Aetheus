@@ -270,19 +270,7 @@ public class ProjectRepository(
                 .First())
             .ToDictionary(
                 step => step.PipelineRunId,
-                step => $"{NormalizeStageName(step.StageName)} · {step.StepName}");
-    }
-
-    internal static ProjectProductionStatus ResolveProductionStatus(IEnumerable<AppHealthStatus> statuses)
-    {
-        var values = statuses.ToList();
-        if (values.Count == 0 || values.Any(status => status == AppHealthStatus.Unknown))
-            return ProjectProductionStatus.Unavailable;
-        if (values.Any(status => status is AppHealthStatus.Down or AppHealthStatus.Degraded))
-            return ProjectProductionStatus.Offline;
-        return values.All(status => status == AppHealthStatus.Up)
-            ? ProjectProductionStatus.Online
-            : ProjectProductionStatus.Unavailable;
+                step => $"{ProjectListInsightAssembler.NormalizeStageName(step.StageName)} · {step.StepName}");
     }
 
     public async Task<Project?> GetProjectDetailAsync(int id, CancellationToken ct = default)
@@ -306,11 +294,6 @@ public class ProjectRepository(
                     || step.PipelineRun.Status == PipelineStatus.Pending
                     || step.PipelineRun.Status == PipelineStatus.WaitingForApproval)),
             ct);
-
-    internal static string NormalizeStageName(string stageName) =>
-        stageName.StartsWith("System:", StringComparison.Ordinal)
-            ? stageName["System:".Length..]
-            : stageName;
 
     /// <summary>Returns the latest candidate grade, matching the list insight, and its root run
     /// without loading other insights.</summary>

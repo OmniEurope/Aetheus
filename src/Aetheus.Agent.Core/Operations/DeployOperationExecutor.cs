@@ -626,7 +626,7 @@ public sealed class DeployOperationExecutor(
             // DEPV: the configurable floor remains; payload bytes come from validated ZIP metadata.
             var minFreeBytes = (long)_options.DeployMinFreeSpaceMiB * 1024 * 1024;
             if (DeployLayout.HasEnoughFreeSpaceForExpandedPayload(available, expandedBytes, minFreeBytes)) return true;
-            message = $"Insufficient free space to deploy: {available / (1024 * 1024)} MiB free, need ~{(minFreeBytes + expandedBytes) / (1024 * 1024)} MiB - refusing to risk filling the disk.";
+            message = $"Insufficient free space to deploy: {available / (1024 * 1024)} Mo free, need ~{(minFreeBytes + expandedBytes) / (1024 * 1024)} Mo - refusing to risk filling the disk.";
             return false;
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)

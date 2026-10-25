@@ -186,10 +186,10 @@ public class MailRepository(AppDbContext db) : IMailRepository
         if (db.Database.IsRelational())
             return await db.MailStates
                 .Where(s => s.ServerId == serverId && s.QuotaResyncedAt == null
-                    && s.HelperVersion >= MailService.QuotaMinimumHelperVersion)
+                    && s.HelperVersion >= MailHelperVersions.QuotaMinimum)
                 .ExecuteUpdateAsync(u => u.SetProperty(s => s.QuotaResyncedAt, now), ct).ConfigureAwait(false) == 1;
         var state = await db.MailStates.FirstOrDefaultAsync(s => s.ServerId == serverId, ct).ConfigureAwait(false);
-        if (state is null || state.QuotaResyncedAt is not null || state.HelperVersion < MailService.QuotaMinimumHelperVersion)
+        if (state is null || state.QuotaResyncedAt is not null || state.HelperVersion < MailHelperVersions.QuotaMinimum)
             return false;
         state.QuotaResyncedAt = now;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

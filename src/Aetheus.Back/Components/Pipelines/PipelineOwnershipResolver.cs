@@ -6,7 +6,7 @@ namespace Aetheus.Back.Components.Pipelines;
 internal sealed class PipelineOwnershipResolver(
     IPipelineProjectOwnerReader repository,
     IHttpContextAccessor httpContextAccessor,
-    ILogger<PipelineService> logger)
+    ILogger logger)
 {
     internal string? CurrentUsername =>
         httpContextAccessor.HttpContext?.User?.Identity?.Name;

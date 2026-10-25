@@ -8,7 +8,9 @@ namespace Aetheus.Back.Components.Notifications;
 /// Writes each notification mail, and the channel test, from its editable template (recette R1-75) in its
 /// recipient's language and colours (recette R1-74), then sends through the platform sender.
 /// </summary>
-public sealed class NotificationEmailer(IEmailSender sender, IMailTemplateRenderer templates, IConfiguration? configuration = null)
+public sealed class NotificationEmailer(
+    IEmailSender sender, IMailTemplateRenderer templates, IConfiguration? configuration = null, TimeProvider? clock = null,
+    MailTimeZoneResolver? timeZones = null)
     : INotificationEmailer
 {
     internal const string NoAddressMessage = "The recipient's account has no e-mail address; nothing was sent.";
@@ -25,8 +27,11 @@ public sealed class NotificationEmailer(IEmailSender sender, IMailTemplateRender
             .ToList();
         var messages = new List<EmailMessage>(addressed.Count);
         var styles = new Dictionary<string, MailRecipientStyle>(StringComparer.OrdinalIgnoreCase);
+        // The platform's time zone is read once per batch, and only when a mail is written.
+        TimeZoneInfo? timeZone = addressed.Count > 0 && timeZones is not null
+            ? await timeZones(ct).ConfigureAwait(false) : null;
         foreach (var (email, _) in addressed)
-            messages.Add(await BuildAsync(email, styles, ct).ConfigureAwait(false));
+            messages.Add(await BuildAsync(email, styles, timeZone, ct).ConfigureAwait(false));
         var sent = messages.Count == 0 ? [] : await sender.SendBatchAsync(messages, ct).ConfigureAwait(false);
 
         var results = Enumerable.Repeat(EmailSendResult.NotConfigured(NoAddressMessage), emails.Count).ToArray();
@@ -49,7 +54,8 @@ public sealed class NotificationEmailer(IEmailSender sender, IMailTemplateRender
     }
 
     /// <summary>One recipient's mail; a recipient's style is read once per batch.</summary>
-    private async Task<EmailMessage> BuildAsync(NotificationEmail email, Dictionary<string, MailRecipientStyle> styles, CancellationToken ct)
+    private async Task<EmailMessage> BuildAsync(
+        NotificationEmail email, Dictionary<string, MailRecipientStyle> styles, TimeZoneInfo? timeZone, CancellationToken ct)
     {
         var address = email.To!.Trim();
         if (!styles.TryGetValue(address, out var style))
@@ -58,7 +64,7 @@ public sealed class NotificationEmailer(IEmailSender sender, IMailTemplateRender
             styles[address] = style;
         }
 
-        var data = NotificationEmailComposer.Build(email, FrontOrigin, style.Language);
+        var data = NotificationEmailComposer.Build(email, FrontOrigin, style.Language, style.BlockColours, timeZone, clock);
         var mail = await templates.RenderAsync(MailTemplateKind.NotificationEvent, data, style, ct).ConfigureAwait(false);
         return new EmailMessage(address, mail.Subject, mail.Text, mail.Html);
     }

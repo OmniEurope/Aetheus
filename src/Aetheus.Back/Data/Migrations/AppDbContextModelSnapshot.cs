@@ -443,6 +443,67 @@ namespace Aetheus.Back.Data.Migrations
                     b.ToTable("AiTaskTriggers");
                 });
 
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.AlertOccurrence", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("AlertRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<double?>("ObservedValue")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("Operator")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("ServerId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SustainedSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Threshold")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("TriggeredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AlertRuleId");
+
+                    b.HasIndex("ServerId");
+
+                    b.HasIndex("TriggeredAt");
+
+                    b.ToTable("AlertOccurrences");
+                });
+
             modelBuilder.Entity("Aetheus.Back.Data.Entities.AlertRule", b =>
                 {
                     b.Property<int>("Id")
@@ -2500,10 +2561,16 @@ namespace Aetheus.Back.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AcmeProxyRulesJson")
+                        .HasColumnType("text");
+
                     b.Property<int>("HelperVersion")
                         .HasColumnType("integer");
 
                     b.Property<string>("RenewalCheckFailuresJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RenewalCheckOutputTailJson")
                         .HasColumnType("text");
 
                     b.Property<bool?>("RenewalCheckSucceeded")
@@ -3371,6 +3438,11 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.Property<int?>("GitConnectionId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsConfiguration")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsEmpty")
                         .HasColumnType("boolean");
@@ -4637,6 +4709,9 @@ namespace Aetheus.Back.Data.Migrations
                     b.Property<string>("ResolvedVariablesJson")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("ResumeDeadline")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("RunToEnd")
                         .HasColumnType("boolean");
 
@@ -5585,6 +5660,9 @@ namespace Aetheus.Back.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<bool>("IsDeprecated")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsListed")
                         .HasColumnType("boolean");
 
@@ -6103,6 +6181,9 @@ namespace Aetheus.Back.Data.Migrations
 
                     b.Property<bool>("DeploymentTargetAvailable")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("DisksJson")
+                        .HasColumnType("text");
 
                     b.Property<bool>("DockerAvailable")
                         .HasColumnType("boolean");
@@ -7846,6 +7927,23 @@ namespace Aetheus.Back.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("AiTaskDefinition");
+                });
+
+            modelBuilder.Entity("Aetheus.Back.Data.Entities.AlertOccurrence", b =>
+                {
+                    b.HasOne("Aetheus.Back.Data.Entities.AlertRule", "AlertRule")
+                        .WithMany()
+                        .HasForeignKey("AlertRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Aetheus.Back.Data.Entities.Server", "Server")
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AlertRule");
+
+                    b.Navigation("Server");
                 });
 
             modelBuilder.Entity("Aetheus.Back.Data.Entities.AlertRule", b =>

@@ -206,7 +206,7 @@ public sealed class AetheusWebAnalyticsEndpointTests
         if (exportHandler is not null)
         {
             builder.Services
-                .AddHttpClient(AetheusWebAnalyticsServiceExtensions.HttpClientName)
+                .AddHttpClient(AnalyticsExportService.HttpClientName)
                 .ConfigurePrimaryHttpMessageHandler(() => exportHandler);
         }
 

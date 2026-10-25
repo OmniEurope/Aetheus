@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of the idle-frontend checks of <c>deploy/scripts/release-fast-deploy.sh</c>, run through
+/// The C# port of the idle-frontend checks of the former <c>release-fast-deploy.sh</c> script, run through
 /// the real executor as a deployment function against an in-memory frontend. The incident 2247 refusals
 /// pinned by <c>DeploymentSafetyAuditTests.FastRelease_RefusesAnIndexWhoseAssetsWereNeverResolved</c>
 /// (an unresolved placeholder, a Blazor bootstrap script named but not served) come first; the other
@@ -35,7 +35,7 @@ public sealed class VerifyIdleFrontendFunctionTests : IDisposable
     public VerifyIdleFrontendFunctionTests()
     {
         _front.Get[Url] = ResolvedIndex;
-        _front.Head[Url] = "no-cache, no-store, must-revalidate";
+        _front.Head[Url] = "no-cache";
         _front.Head[Url + "_framework/blazor.webassembly.abc123.js"] = null;
         _front.Get[Url + "_content/OmniEurope.Blazor/omnieurope.blazor.css"] = ".omni-button{}";
         _front.Get[Url + "_content/OmniEurope.Blazor/omniInterop.js"] = "export function focusFirstInvalid(){}";
@@ -61,7 +61,7 @@ public sealed class VerifyIdleFrontendFunctionTests : IDisposable
     }
 
     [Fact]
-    public async Task ResolvedIndex_WithItsAssetsAndNoStore_IsAccepted()
+    public async Task ResolvedIndex_WithItsAssetsAndNoCache_IsAccepted()
     {
         var (result, variables) = await RunAsync();
 
@@ -167,13 +167,30 @@ public sealed class VerifyIdleFrontendFunctionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("public, max-age=3600")]
-    [InlineData(null)]
-    public async Task ACacheableIndex_IsRefused(string? cacheControl)
+    [InlineData("no-cache")]
+    [InlineData("No-Cache")]
+    [InlineData("no-cache, must-revalidate")]
+    public async Task ARevalidatedIndex_IsAccepted(string cacheControl)
     {
         _front.Head[Url] = cacheControl;
 
-        Assert.Equal("Idle frontend index.html is cacheable" + Unchanged, await FailureAsync());
+        Assert.Equal(0, (await RunAsync()).Result.ExitCode);
+    }
+
+    [Theory]
+    [InlineData("no-store")]
+    [InlineData("no-cache, no-store, must-revalidate")]
+    [InlineData("public, max-age=3600")]
+    [InlineData("max-age=0, must-revalidate")]
+    [InlineData("private")]
+    [InlineData("no-cache=\"Set-Cookie\"")]
+    [InlineData("no-cached")]
+    [InlineData(null)]
+    public async Task AnIndexThatIsNotRevalidated_IsRefused(string? cacheControl)
+    {
+        _front.Head[Url] = cacheControl;
+
+        Assert.Equal("Idle frontend index.html is not revalidated on every use" + Unchanged, await FailureAsync());
     }
 
     [Fact]

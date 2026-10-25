@@ -8,4 +8,5 @@ public interface IPackageRegistryAdminService
         PackageRegistryKind? kind, PaginationRequest request, CancellationToken ct = default);
     Task<PackageRegistryPackageDetailDto?> GetPackageAsync(int id, CancellationToken ct = default);
     Task<bool> SetListedAsync(int packageId, int versionId, bool listed, CancellationToken ct = default);
+    Task<bool> SetDeprecatedAsync(int packageId, int versionId, bool deprecated, CancellationToken ct = default);
 }

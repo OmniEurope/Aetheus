@@ -65,7 +65,9 @@ internal sealed class HeartbeatInventoryFingerprints
                 heartbeat.Certbot.RenewalCheckedAt,
                 heartbeat.Certbot.RenewalCheckSucceeded,
                 heartbeat.Certbot.HelperVersion,
-                heartbeat.Certbot.RenewalCheckFailures
+                heartbeat.Certbot.RenewalCheckFailures,
+                heartbeat.Certbot.RenewalCheckOutputTail,
+                heartbeat.Certbot.AcmeProxyRules
             }),
             [Mail] = Hash(heartbeat.Mail),
             [Teamspeak] = Hash(heartbeat.Teamspeak),

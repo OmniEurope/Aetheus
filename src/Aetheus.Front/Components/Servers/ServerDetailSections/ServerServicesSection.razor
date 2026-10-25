@@ -6,9 +6,9 @@
     @* Capability notice + live heartbeat as two aligned tiles. The capability self-heals on the next
        heartbeat (re-install with --enable-package-manage); the notice clears itself once a beat lands
        reporting the aetheus-package sudoers grant, no manual reload needed. *@
-    <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Stretch" Class="omni-u-mb-lg">
-        <OmniCard Class="flex-spacer capability-warning-tile">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center">
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
+        <OmniCard Class="capability-warning-tile">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center">
                 <OmniIcon Name="OmniIconName.Lock" Class="capability-warning-icon" />
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["ServiceInstallCapabilityDisabled"]</OmniText>
             </OmniStack>
@@ -16,7 +16,7 @@
         <OmniCard Class="heartbeat-tile">
             <HeartbeatPulse Server="Server" />
         </OmniCard>
-    </OmniRow>
+    </OmniTileGrid>
 }
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" />
@@ -130,7 +130,7 @@
 @if (_logsVisible)
 {
     <OmniCard Class="omni-u-mt-lg">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Logs"] - @_logsServiceName</OmniText>
             <div class="flex-spacer"></div>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["LogLines"]</OmniText>
@@ -139,7 +139,7 @@
             <OmniSwitch TValue="bool" TextFirst="true" Value="_logFollow" ValueExpression="@(() => _logFollow)" ValueChanged="@(v => OnFollowChangedAsync(v))" Class="omni-u-text-muted">@L["FollowLogs"]</OmniSwitch>
             @* The open log viewer refreshes its tail every 30 seconds when auto-refresh is
                enabled. *@
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseLogsAsync" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseLogsAsync" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
         @if (_logsLoading && string.IsNullOrEmpty(_logsContent))
         {
@@ -149,14 +149,14 @@
         {
             @if (HasInsufficientJournalPermissions)
             {
-                <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-sm">
+                <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md">
                     @L["JournalPermissionInsufficient"]
                 </OmniAlert>
             }
             <OmniCodeBlock Code="@(string.IsNullOrWhiteSpace(_logsContent) ? L["NoLogsAvailable"].Value : _logsContent)" Title="@L["Output"]" Wrap="true" Class="docker-logs code-block-bounded" />
             @if (_logFollow)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-sm">
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["FollowingLogs"]</OmniText>
                 </OmniStack>
             }

@@ -5,7 +5,6 @@ using System.Text.Json;
 using Aetheus.Back.Components.AppBackups;
 using Aetheus.Back.Components.AppMonitoring;
 using Aetheus.Back.Components.Artifacts;
-using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
@@ -36,7 +35,8 @@ public interface IPipelineHostOperationTaskFactory
 
     Task CreateBlueGreenTaskAsync(
         string type, int runId, Server legServer, PipelineStepRun stepRun,
-        PipelineStepDefinition stepDef, Dictionary<string, string> legVars, CancellationToken ct);
+        PipelineStepDefinition stepDef, Dictionary<string, string> legVars, string? stageEnvironment,
+        CancellationToken ct);
 }
 
 /// <summary>
@@ -53,8 +53,12 @@ public sealed class PipelineHostOperationTaskFactory(
     IAppDeployEnvProvider appDeployEnv,
     ILogger<PipelineHostOperationTaskFactory> logger,
     TimeProvider timeProvider,
-    IPipelineResourceLockRepository? resourceLocks = null) : IPipelineHostOperationTaskFactory
+    IPipelineResourceLockRepository? resourceLocks = null,
+    IProjectConfigRepositoryService? configRepository = null) : IPipelineHostOperationTaskFactory
 {
+    /// <summary>The vhost template an <c>apache-proxy</c> step renders when it names none; the launch
+    /// preflight reads the same one (R-32).</summary>
+    internal const string DefaultProxyTemplatePath = ".pipeline/configs/apache/reverse-proxy-http.conf";
 
     private async Task FailPipelineOperationStepAsync(
         string operation, int runId, Server server, PipelineStepRun stepRun,
@@ -114,9 +118,8 @@ public sealed class PipelineHostOperationTaskFactory(
             return;
         }
 
-        const string DefaultTemplatePath = ".pipeline/configs/apache/reverse-proxy-http.conf";
         var templatePath = string.IsNullOrWhiteSpace(stepDef.ConfigTemplate)
-            ? DefaultTemplatePath
+            ? DefaultProxyTemplatePath
             : stepDef.ConfigTemplate.Trim();
         if (!PipelineConfigTemplateRenderer.IsSafeConfigPath(templatePath))
         {
@@ -203,13 +206,20 @@ public sealed class PipelineHostOperationTaskFactory(
                 return;
             }
 
-            var template = await pipelineGit.ReadProjectConfigAtRevisionAsync(
-                source.ProjectId, templatePath, source.DefinitionCommit, ct,
-                source.Run.Pipeline!.SourceRepositoryId).ConfigureAwait(false);
+            // The project's configuration repository first, then its source at the run's commit (ADR-057).
+            var template = configRepository is null
+                ? await pipelineGit.ReadProjectConfigAtRevisionAsync(
+                    source.ProjectId, templatePath, source.DefinitionCommit, ct,
+                    source.Run.Pipeline!.SourceRepositoryId).ConfigureAwait(false)
+                : await configRepository.ReadAsync(
+                    source.ProjectId, templatePath, source.DefinitionCommit,
+                    source.Run.Pipeline!.SourceRepositoryId, ct).ConfigureAwait(false);
             if (template is null)
             {
                 await FailAsync(
-                    $"template '{templatePath}' was not found at commit {source.DefinitionCommit}.")
+                    $"template '{templatePath}' was found neither in the project's configuration repository nor at "
+                    + $"commit {source.DefinitionCommit} of its source: prepare the production deployment from the "
+                    + "pipeline setup wizard, which creates it.")
                     .ConfigureAwait(false);
                 return;
             }
@@ -434,7 +444,7 @@ public sealed class PipelineHostOperationTaskFactory(
     // inheriting anything from a predecessor's process.
     public async Task CreateBlueGreenTaskAsync(
         string type, int runId, Server legServer, PipelineStepRun stepRun, PipelineStepDefinition stepDef,
-        Dictionary<string, string> legVars, CancellationToken ct)
+        Dictionary<string, string> legVars, string? stageEnvironment, CancellationToken ct)
     {
         Task FailAsync(string reason) => FailPipelineOperationStepAsync(
             "Blue-green", runId, legServer, stepRun, reason, ct);
@@ -460,7 +470,7 @@ public sealed class PipelineHostOperationTaskFactory(
         // deployed production with telemetry disabled - the type: deploy path already did it, and
         // nothing carried it over when this pipeline moved to the reusable cutover.
         if (operation == OperationKind.BlueGreenUp)
-            await AddTelemetryEnvironmentAsync(runId, legVars, ct).ConfigureAwait(false);
+            await AddTelemetryEnvironmentAsync(runId, stageEnvironment, legVars, ct).ConfigureAwait(false);
         if (!BlueGreenStepBinding.TryBind(
             operation, stepDef, raw => SubstituteVariables(raw ?? string.Empty, legVars).Trim(),
             legVars, out var binding, out var bindingError))
@@ -526,18 +536,15 @@ public sealed class PipelineHostOperationTaskFactory(
     /// is logged instead, and the colour starts with telemetry disabled as it did before.
     /// </remarks>
     internal async Task AddTelemetryEnvironmentAsync(
-        int runId, Dictionary<string, string> legVars, CancellationToken ct)
+        int runId, string? stageEnvironment, Dictionary<string, string> legVars, CancellationToken ct)
     {
         try
         {
-            var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-            var projectId = run?.Pipeline is null
-                ? null
-                : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
-            if (projectId is null) return;
+            var target = await DeployObservabilityTarget.ResolveAsync(repo, runId, stageEnvironment, ct).ConfigureAwait(false);
+            if (target is null) return;
 
             var telemetryEnv = await appDeployEnv
-                .GetDeployEnvAsync(projectId.Value, environmentId: null, runId, ct).ConfigureAwait(false);
+                .GetDeployEnvAsync(target.Value.ProjectId, target.Value.EnvironmentId, runId, ct).ConfigureAwait(false);
             foreach (var (key, value) in telemetryEnv)
                 legVars[key] = value;
         }

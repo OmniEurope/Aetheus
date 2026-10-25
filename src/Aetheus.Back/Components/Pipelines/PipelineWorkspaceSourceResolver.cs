@@ -94,7 +94,7 @@ public sealed class PipelineWorkspaceSourceResolver(
                 "source.must_match_definition needs the definition's repository pinned to a commit.");
         var definitionRepository = (definitionRepositoryId is { } id
                 ? repositories.FirstOrDefault(candidate => candidate.Id == id)
-                : repositories.Where(candidate => !candidate.IsAdditionalSource).Take(2).ToList() is [var only] ? only : null)
+                : repositories.Where(candidate => !candidate.IsAdditionalSource && !candidate.IsConfiguration).Take(2).ToList() is [var only] ? only : null)
             ?? throw new BadRequestException(
                 "source.must_match_definition needs the repository the definition is read from.");
 

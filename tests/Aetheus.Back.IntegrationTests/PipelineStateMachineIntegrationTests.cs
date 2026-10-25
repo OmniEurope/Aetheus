@@ -517,7 +517,7 @@ public sealed class PipelineStateMachineIntegrationTests(PostgresFixture fixture
             var run = await db.PipelineRuns.AsNoTracking().FirstAsync(r => r.Id == runId, cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(PipelineStatus.Running, run.Status);
             var variables = PipelineRunHelpers.DeserializeResolvedVariables(run.AdditionalVariablesJson);
-            Assert.Equal("true", variables[PipelineRunService.CancellationRequestedVariable]);
+            Assert.Equal("true", variables[PipelineRunHelpers.CancellationRequestedVariable]);
 
             var pendingSteps = await db.PipelineStepRuns.AsNoTracking()
                 .Where(s => s.PipelineRunId == runId && s.Status == TaskExecutionStatus.Pending)

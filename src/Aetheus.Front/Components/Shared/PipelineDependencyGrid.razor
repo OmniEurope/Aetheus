@@ -43,13 +43,13 @@
         </div>
     </DetailTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="PipelineDependencyDto" Property="Name" Title="@L["Pipeline"]" MinWidth="11rem" Filterable="true">
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="PipelineDependencyDto" Property="Name" Title="@L["Pipeline"]" Filterable="true">
             <Template Context="pipeline">
                 <a href="@PipelineHref(pipeline.Id)" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@pipeline.Name</a>
                 <PipelineOwnerBadge OwnerUsername="@pipeline.OwnerUsername" OwnerInactive="@pipeline.OwnerInactive" />
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PipelineDependencyDto" Property="ProjectName" Title="@L["Project"]" Width="10rem" Filterable="true"
+        <OmniDataGridColumn TItem="PipelineDependencyDto" Property="ProjectName" Title="@L["Project"]" Filterable="true"
             FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true"
             Visible="@GroupByProject" Class="pipeline-project-column" HeaderClass="pipeline-project-column">
             <Template Context="pipeline">
@@ -112,7 +112,7 @@
                     else
                     {
                         <span class="pipeline-template-status" title="@TemplateStatusTitle(fleetItem)">
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@FreshnessStyle(fleetItem.Freshness)">@FreshnessText(fleetItem.Freshness)</OmniBadge>
+                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@FreshnessStyle(fleetItem.Freshness)">@FreshnessText(fleetItem.Freshness)</OmniBadge>
                             @if (fleetItem.PinnedVersion is { } pinnedVersion)
                             {
                                 <span>@($"v{pinnedVersion}")</span>
@@ -122,14 +122,14 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PipelineDependencyDto" Title="@L["Actions"]" Width="13rem" Sortable="false" TextAlign="OmniDataGridTextAlign.End"
+        <OmniDataGridColumn TItem="PipelineDependencyDto" Title="@L["Actions"]" Sortable="false" TextAlign="OmniAlignment.End"
             Class="pipeline-actions-column" HeaderClass="pipeline-actions-column">
             <Template Context="pipeline">
                 @* Keep Run and the favourite star directly available while secondary actions use
                    the row menu; Run uses the product's blue STD-BTN exception and the star remains
                    a ghost icon. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetFavorite(pipeline.Id, !IsFavorite(pipeline.Id)))" Disabled="@PendingFavoritePipelineIds.Contains(pipeline.Id)" Class="@(IsFavorite(pipeline.Id) ? "pipeline-favorite-button active" : "pipeline-favorite-button")" title="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])" Label="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])"><OmniIcon Name="@MaterialIconMap.Resolve((IsFavorite(pipeline.Id) ? "star" : "star_border"))" /></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Class="pipeline-row-actions" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                    <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => SetFavorite(pipeline.Id, !IsFavorite(pipeline.Id)))" Disabled="@PendingFavoritePipelineIds.Contains(pipeline.Id)" Class="@(IsFavorite(pipeline.Id) ? "pipeline-favorite-button active" : "pipeline-favorite-button")" title="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])" Label="@(IsFavorite(pipeline.Id) ? L["RemovePipelineFromFavorites"] : L["AddPipelineToFavorites"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((IsFavorite(pipeline.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
                     <OmniSplitButton Text="@L["Run"]" OnClick="@(() => RunPipeline(pipeline.Id, null))"
                         aria-label="@L["RunPipelineAction"]" title="@L["RunPipelineAction"]" Disabled="@(!CanWrite)" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
                         <OmniMenuItem OnClick="@(() => RunPipeline(pipeline.Id, "options"))">@L["RunWithOptions"]</OmniMenuItem>

@@ -19,8 +19,24 @@ public partial class AnalysisGradeBreakdown
     /// <summary>The project's latest average CRAP score, shown (advisory) under code quality.</summary>
     [Parameter] public double? CrapScore { get; set; }
 
+    /// <summary>Recette R1-38: draw the run's single grade block (the Gate grade as its first row) instead of
+    /// the two-column domain cards.</summary>
+    [Parameter] public bool GateRow { get; set; }
+
+    /// <summary>The grade the run shows (the sealed letter when it is not the analysis one).</summary>
+    [Parameter] public AnalysisGrade? GateGrade { get; set; }
+
+    // What sets the Gate grade, in the value column of its row: the blocking tests when the seal is
+    // the cause, else the first measure carrying the overall letter.
+    private string? GateCause => SealBlockedByTests
+        ? L["GateFirstCauseBlockingTests"].Value
+        : FirstLimitingMeasure(Grade) is { } cause ? $"{MeasureLabel(cause.Key)} : {MeasureText(cause)}" : null;
+
+    // The block reads the code and tests first, then the other domains in their usual order.
+    private IReadOnlyList<DomainView> BlockDomains => [.. Domains.OrderBy(domain => domain.CodeAndTests ? 0 : 1)];
+
     // Recette R-176: a domain with neither a measure nor a CRAP score is a compact line, not a card.
-    private static bool HasDetails(DomainView domain) => domain.Measures.Any(IsShown) || domain.CrapScore.HasValue;
+    private static bool HasDetails(DomainView domain) => ShownMeasures(domain.Measures).Count > 0 || domain.CrapScore.HasValue;
 
     // Every domain whose letter is the overall one sets the grade, several when they tie; nothing
     // limits an A, and an incomplete grade has no limiting domain yet.
@@ -44,7 +60,7 @@ public partial class AnalysisGradeBreakdown
         ];
         return order
             .SelectMany(domain => grade.Domains.Where(candidate => candidate.Domain == domain))
-            .SelectMany(domain => domain.Measures)
+            .SelectMany(domain => ShownMeasures(domain.Measures))
             .FirstOrDefault(measure => measure.Grade == grade.OverallGrade);
     }
 
@@ -55,6 +71,28 @@ public partial class AnalysisGradeBreakdown
         || !measure.ObservedValue.HasValue
         || measure.ObservedValue.Value != 0
         || measure.Grade is > AnalysisGrade.A;
+
+    /// <summary>
+    /// Recette R-2: the measures a domain lists. The security score over the open findings
+    /// (<c>grade.security.findings</c>) is left out when a severity line shown beside it already says the same:
+    /// the same number of findings (so every open finding sits in the severity lines) and the same letter. Kept
+    /// whenever it adds something (a low or info finding no severity line counts, or another letter), because
+    /// it is the measure that grades the domain. Display only: the grade is computed as before.
+    /// </summary>
+    internal static IReadOnlyList<AnalysisGradeMeasureDto> ShownMeasures(IReadOnlyList<AnalysisGradeMeasureDto> measures)
+    {
+        var shown = measures.Where(IsShown).ToList();
+        return [.. shown.Where(measure => !RepeatsASeverityLine(measure, shown))];
+    }
+
+    private static bool RepeatsASeverityLine(AnalysisGradeMeasureDto measure, IReadOnlyList<AnalysisGradeMeasureDto> shown)
+    {
+        if (measure.Key != "grade.security.findings" || measure.FindingCounts is not { } counts || !measure.Grade.HasValue) return false;
+        var severityLines = shown.Where(other => other.Severity.HasValue && other.ObservedValue.HasValue).ToList();
+        return severityLines.Count > 0
+            && severityLines.Sum(line => line.ObservedValue!.Value) == AnalysisFindingScore.Total(counts)
+            && severityLines.Any(line => line.Grade == measure.Grade);
+    }
 
     // The distance to the next letter is in the unit of the value shown: a weighted finding score shows
     // the number of findings (recette R1-4), so its distance, in weighted points, would not match it.
@@ -86,6 +124,7 @@ public partial class AnalysisGradeBreakdown
                         .Min(),
                     codeAndTests.SelectMany(domain => domain.Measures).ToArray(),
                     CrapScore,
+                    "AnalysisCriterionCodeQualityAndTests",
                     CodeAndTests: true));
             }
 
@@ -137,6 +176,43 @@ public partial class AnalysisGradeBreakdown
         return string.IsNullOrWhiteSpace(measure.Unit) ? value : $"{value} {measure.Unit}";
     }
 
+    private static string CriterionKey(AnalysisGradeDomain domain) => domain switch
+    {
+        AnalysisGradeDomain.Security => "AnalysisCriterionSecurity",
+        AnalysisGradeDomain.Architecture => "AnalysisCriterionArchitecture",
+        AnalysisGradeDomain.Performance => "AnalysisCriterionPerformance",
+        _ => "AnalysisCriterionCodeQualityAndTests"
+    };
+
+    /// <summary>The criterion of a measure in words, for its tooltip and detail.</summary>
+    private string MeasureCriterion(string key) => key switch
+    {
+        "grade.coverage.line" => L["AnalysisCriterionCoverageLine"],
+        "grade.coverage.branch" => L["AnalysisCriterionCoverageBranch"],
+        "grade.complexity.maximum" => L["AnalysisCriterionComplexityMaximum"],
+        "grade.duplication" => L["AnalysisCriterionDuplication"],
+        "grade.architecture.cycles" => L["AnalysisCriterionCycles"],
+        "grade.security.critical" or "grade.security.high" or "grade.security.medium" => L["AnalysisCriterionVulnerabilities"],
+        "grade.security.findings" or "grade.quality.findings" => L["AnalysisCriterionFindings"],
+        _ => L["AnalysisCriterionGeneric"]
+    };
+
+    /// <summary>The grade thresholds of a measure, in the direction that is better ("A ≥ 75 %, B ≥ 65 %"); null
+    /// when the measure carries none.</summary>
+    internal static string? ThresholdText(AnalysisGradeMeasureDto measure)
+    {
+        var sign = measure.Direction == AnalysisMetricDirection.LowerIsBetter ? "≤" : "≥";
+        var suffix = string.Equals(measure.Unit, "percent", StringComparison.OrdinalIgnoreCase) ? " %" : string.Empty;
+        var parts = new (string Letter, double? Value)[]
+        {
+            ("A", measure.AThreshold), ("B", measure.BThreshold), ("C", measure.CThreshold),
+            ("D", measure.DThreshold), ("E", measure.EThreshold)
+        }.Where(part => part.Value.HasValue)
+            .Select(part => $"{part.Letter} {sign} {part.Value!.Value.ToString("0.##", CultureInfo.CurrentCulture)}{suffix}")
+            .ToArray();
+        return parts.Length == 0 ? null : string.Join(", ", parts);
+    }
+
     private void AddDomain(
         ICollection<DomainView> target,
         IReadOnlyList<AnalysisGradeDomainDto> source,
@@ -145,7 +221,8 @@ public partial class AnalysisGradeBreakdown
         var item = source.FirstOrDefault(candidate => candidate.Domain == domain);
         if (item is null) return;
         target.Add(new DomainView(
-            DomainLabel(L, domain), item.Grade, item.Required, item.Completeness, item.EvaluatedAt, item.Measures, null));
+            DomainLabel(L, domain), item.Grade, item.Required, item.Completeness, item.EvaluatedAt, item.Measures, null,
+            CriterionKey(domain)));
     }
 
     private static AnalysisGrade? WorstGrade(IEnumerable<AnalysisGradeDomainDto> domains) =>
@@ -161,5 +238,6 @@ public partial class AnalysisGradeBreakdown
         DateTime? EvaluatedAt,
         IReadOnlyList<AnalysisGradeMeasureDto> Measures,
         double? CrapScore,
+        string CriterionKey,
         bool CodeAndTests = false);
 }

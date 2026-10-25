@@ -184,6 +184,9 @@ public sealed record PipelineRunDto
     public string? CancellationReason { get; init; }
     /// <summary>The run was launched in "run to end" mode: every step continued on error.</summary>
     public bool RunToEnd { get; init; }
+    /// <summary>Until when a run in <see cref="PipelineStatus.AwaitingResume"/> can still be resumed
+    /// (UTC); null for a run in any other status. Carried on the run detail only (recette R-39).</summary>
+    public DateTime? ResumeDeadline { get; init; }
     /// <summary>Internal projection bridge used to hydrate <see cref="Warnings"/> after EF materialization.</summary>
     [JsonIgnore]
     public string? ProjectedWarningsJson { get; init; }
@@ -286,6 +289,9 @@ public sealed record PipelineRunParameterDto
     /// <summary>The optional French help text.</summary>
     public string? DescriptionFr { get; init; }
     public List<string> AllowedValues { get; init; } = [];
+
+    /// <summary>The launch dialog tucks this parameter in its folded "Advanced" zone.</summary>
+    public bool Advanced { get; init; }
 }
 
 public sealed record PipelineStepRunDto
@@ -510,6 +516,10 @@ public sealed record PipelineTemplateParameterDefinition
     /// <summary>French help text, falling back to <see cref="Description"/>; maps to YAML
     /// description_fr.</summary>
     public string? DescriptionFr { get; init; }
+
+    /// <summary>YAML key <c>advanced: true</c>: a diagnostic or rarely changed parameter that the launch
+    /// dialog shows in a folded "Advanced" zone instead of among the main fields.</summary>
+    public bool Advanced { get; init; }
 }
 
 public sealed record PipelineStageDefinition
@@ -532,6 +542,12 @@ public sealed record PipelineStageDefinition
     /// environment approval, through YAML approval_timeout_minutes. Refusal or expiry fails the run
     /// so failed() rollback can execute.</summary>
     public int? ApprovalTimeoutMinutes { get; init; }
+
+    /// <summary>YAML <c>resume_window_hours</c>, read on a stage that carries
+    /// <see cref="ApprovalTimeoutMinutes"/>: when that confirmation times out and the rollback restores
+    /// the previous version, the run waits this many hours for a resume instead of ending (recette
+    /// R-39). Null means the default of 24 hours; 0 keeps the run ending at once, rolled back.</summary>
+    public int? ResumeWindowHours { get; init; }
     public string? Pool { get; init; }
     public string? Condition { get; init; }
     public List<string> DependsOn { get; init; } = [];

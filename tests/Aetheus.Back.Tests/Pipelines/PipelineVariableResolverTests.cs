@@ -355,6 +355,56 @@ public class PipelineVariableResolverTests
         Assert.Equal(["Variable library 'aetheus-prod-host' not found."], current);
     }
 
+    private static PipelineYamlDefinition UsesLibraryAndVault() => new()
+    {
+        Name = "deploy",
+        VariableLibraries = ["ats-prod-host"],
+        Vaults = ["ats-deploy"],
+        Stages = [new PipelineStageDefinition
+        {
+            Name = "Deploy",
+            Steps = [new PipelineStepDefinition { Name = "render", Shell = "echo $(API_HOST)" }]
+        }]
+    };
+
+    [Fact]
+    public async Task ResolveVariablesWithWarningsAsync_EnforcedReferences_RefuseAnEmptyLibraryEntryTheStepsUse()
+    {
+        _varLib.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["API_HOST"] = "" },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ats-prod-host" }));
+        _vault.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ats-deploy" }));
+        var definition = UsesLibraryAndVault();
+
+        var exception = await Assert.ThrowsAsync<Aetheus.Back.Exceptions.BadRequestException>(() =>
+            _sut.ResolveVariablesWithWarningsAsync(definition, 1, null, TestContext.Current.CancellationToken, enforceResolvedReferences: true));
+
+        Assert.Contains("'API_HOST'", exception.Message, StringComparison.Ordinal);
+        // Without the enforcement (a plain resolution) the empty value is still handed over, as before.
+        var (resolved, _, _) = await _sut.ResolveVariablesWithWarningsAsync(
+            definition, 1, null, TestContext.Current.CancellationToken);
+        Assert.Equal(string.Empty, resolved["API_HOST"]);
+    }
+
+    [Fact]
+    public async Task ResolveVariablesWithWarningsAsync_EnforcedReferences_RefuseAnEmptyVaultSecret()
+    {
+        _varLib.ResolveLibrariesWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["API_HOST"] = "api.example.test" },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ats-prod-host" }));
+        _vault.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["DB_PASSWORD"] = "" },
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ats-deploy" }));
+
+        var exception = await Assert.ThrowsAsync<Aetheus.Back.Exceptions.BadRequestException>(() =>
+            _sut.ResolveVariablesWithWarningsAsync(
+                UsesLibraryAndVault(), 1, null, TestContext.Current.CancellationToken, enforceResolvedReferences: true));
+
+        Assert.Contains("'DB_PASSWORD'", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("api.example.test", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task DropResolvedLibraryWarningsAsync_WithoutAProject_UsesTheProjectlessLookup()
     {

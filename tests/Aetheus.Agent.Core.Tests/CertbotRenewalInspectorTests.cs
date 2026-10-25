@@ -154,6 +154,77 @@ public sealed class CertbotRenewalInspectorTests
         Assert.Equal((new DateTime(2026, 9, 18, 12, 8, 8, DateTimeKind.Utc), (bool?)false), sut.ReadRenewalCheck());
     }
 
+    [Fact]
+    public void R1_7_ReadRenewalCheckOutputTail_ReturnsTheRecordedLinesInOrder()
+    {
+        // The record the helper writes for a failed run that no known message explains.
+        var content = "checked_at=1789733288\nexit_code=1\n"
+            + "output=certbot renew --dry-run ran for 612 s and exited with code 1\r\n"
+            + "output=Another instance of Certbot is already running.\n"
+            + "output=\n"
+            + "output=" + new string('x', 400) + "\n";
+        var sut = new CertbotRenewalInspector(
+            new Dictionary<string, string> { ["/var/lib/aetheus-certbot/renewal-check"] = content }.GetValueOrDefault,
+            _ => false);
+
+        var tail = sut.ReadRenewalCheckOutputTail();
+
+        Assert.Equal(3, tail.Count);
+        Assert.Equal("certbot renew --dry-run ran for 612 s and exited with code 1", tail[0]);
+        Assert.Equal("Another instance of Certbot is already running.", tail[1]);
+        Assert.Equal(CertbotDataDto.MaxOutputTailLineLength, tail[2].Length);
+        Assert.Empty(sut.ReadRenewalCheckFailures());
+    }
+
+    [Fact]
+    public void R1_7_ARecordWrittenByTheHelper_ReadsAsFailuresWithTheirDetailAndAsOutput()
+    {
+        // Shape written by aetheus-certbot-manage renewal-check (see agent-host-helpers.test.mjs for the helper side).
+        const string content = "checked_at=1789733288\nexit_code=1\n"
+            + "failed=shop.example.com\tSome challenges have failed. (shop.example.com: 203.0.113.10: Fetching http://shop.example.com/.well-known/acme-challenge/Kd7xq: Timeout during connect (likely firewall problem))\n"
+            + "failed=docs.example.com\tMissing command line flag or config entry for this setting: Input the webroot for www.docs.example.com:\n"
+            + "failed=wiki.example.com\t\n"
+            + "output=certbot renew --dry-run ran for 612 s and exited with code 1\n"
+            + "output=1 renew failure(s), 0 parse failure(s)\n";
+        var sut = new CertbotRenewalInspector(
+            new Dictionary<string, string> { ["/var/lib/aetheus-certbot/renewal-check"] = content }.GetValueOrDefault,
+            _ => false);
+
+        var failures = sut.ReadRenewalCheckFailures();
+
+        Assert.Equal(["shop.example.com", "docs.example.com", "wiki.example.com"], failures.Select(f => f.Name).ToArray());
+        Assert.EndsWith("Timeout during connect (likely firewall problem))", failures[0].Reason, StringComparison.Ordinal);
+        Assert.EndsWith("Input the webroot for www.docs.example.com:", failures[1].Reason, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, failures[2].Reason);
+        Assert.Equal(2, sut.ReadRenewalCheckOutputTail().Count);
+    }
+
+    [Fact]
+    public void R1_7_TheOutputTail_IsBoundedAndAbsentWithoutRecord()
+    {
+        var many = string.Concat(Enumerable.Range(1, 50).Select(i => $"output=line {i}\n"));
+
+        Assert.Equal(CertbotDataDto.MaxOutputTailLines, CertbotRenewalInspector.ParseRenewalCheckOutputTail(many).Count);
+        Assert.Empty(CertbotRenewalInspector.ParseRenewalCheckOutputTail(null));
+        Assert.Empty(CertbotRenewalInspector.ParseRenewalCheckOutputTail("checked_at=1\nexit_code=0\n"));
+    }
+
+    [Fact]
+    public void R2_TheProxyRulesTheHelperRecorded_AreReadInOrder_BoundedAndAbsentWithoutRecord()
+    {
+        // Shape written by aetheus-certbot-manage (see agent-host-helpers.test.mjs for the helper side).
+        const string content = "rule=/etc/apache2/sites-enabled/shop.conf:12\r\nrule=/srv/site.inc:2\nrule=\nnoise\n";
+        var sut = new CertbotRenewalInspector(
+            new Dictionary<string, string> { ["/var/lib/aetheus-certbot/acme-proxy-rules"] = content }.GetValueOrDefault,
+            _ => false);
+
+        Assert.Equal(["/etc/apache2/sites-enabled/shop.conf:12", "/srv/site.inc:2"], sut.ReadAcmeProxyRules());
+        var many = string.Concat(Enumerable.Range(1, 80).Select(i => $"rule=/etc/apache2/a.conf:{i}\n"));
+        Assert.Equal(CertbotDataDto.MaxAcmeProxyRules, CertbotRenewalInspector.ParseAcmeProxyRules(many).Count);
+        Assert.Empty(CertbotRenewalInspector.ParseAcmeProxyRules(null));
+        Assert.Empty(CertbotRenewalInspector.ParseAcmeProxyRules(string.Empty));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("checked_at=1789733288\nexit_code=0\n")]

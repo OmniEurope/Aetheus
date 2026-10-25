@@ -63,7 +63,7 @@ public class PipelineRunGradeAggregationTests : IDisposable
     {
         // The candidate pipeline has no analysis_grading block of its own: it delegates every
         // analysis to a child pipeline and publishes its verdict via CANDIDATE_ASSURANCE_GRADE
-        // (deploy/scripts/generate-candidate-assurance-contract.mjs).
+        // (deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs).
         var pipeline = AddPipeline("candidate");
         var run = AddRun(pipeline.Id);
         _db.PipelineStepRuns.Add(new PipelineStepRun
@@ -171,6 +171,33 @@ public class PipelineRunGradeAggregationTests : IDisposable
         var dto = Assert.Single(items);
         Assert.Equal(AnalysisGrade.C, dto.GateGrade);
         _ = deployRun; // seeded for context; not asserted on directly
+    }
+
+    [Fact]
+    public async Task R1_30_HydrateLinkedGradeAsync_DeployRunDetail_ReadsTheDeployedCandidateGrade()
+    {
+        // The run page (detail path, not the list) shows the grade in its status tile: the API must give
+        // a deploy run the grade of the candidate release it restored (run 2819 case).
+        var project = new Project { Name = "proj" };
+        _db.Projects.Add(project);
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var deployPipeline = AddPipeline("deploy-prod");
+        deployPipeline.ProjectId = project.Id;
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        _db.Releases.Add(new Release
+        {
+            ProjectId = project.Id,
+            Version = "c-2819",
+            AssuranceGrade = AnalysisGrade.A,
+            DetectedAt = DateTime.UtcNow
+        });
+        var deployRun = AddRun(deployPipeline.Id, parametersJson: """{"candidateVersion":"c-2819"}""");
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var detail = new PipelineRunDto { Id = deployRun.Id, PipelineId = deployPipeline.Id, ProjectId = project.Id };
+        var hydrated = await _repo.HydrateLinkedGradeAsync(detail, TestContext.Current.CancellationToken);
+
+        Assert.Equal(AnalysisGrade.A, hydrated.GateGrade);
     }
 
     [Fact]

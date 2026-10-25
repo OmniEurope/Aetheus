@@ -23,7 +23,7 @@ internal sealed class PipelineListViews(IUserPreferences preferences)
     public static int IndexOf(string? slug) =>
         Slugs.ToList().FindIndex(known => string.Equals(known, slug, StringComparison.OrdinalIgnoreCase));
 
-    public static OmniIconName? Icon(string slug) => slug == RunsSlug ? OmniIconName.Reset : OmniIconName.Rows;
+    public static OmniIconName Icon(string slug) => slug == RunsSlug ? OmniIconName.Reset : OmniIconName.Rows;
 
     /// <summary>The last view this user opened, used only as the initial selection.</summary>
     public async Task RestoreAsync()

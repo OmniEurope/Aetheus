@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>ensure-node-runtime</c> function, port of <c>deploy/scripts/ensure-node-runtime.sh</c> (see
+/// The <c>ensure-node-runtime</c> function, port of the former <c>ensure-node-runtime.sh</c> script (see
 /// <see cref="PinnedNodeRuntime"/> for the resolution rules). The script printed the executable path on
 /// stdout for <c>NODE="$(sh ensure-node-runtime.sh)"</c>; the function publishes it as <c>NODE</c>, and
 /// its directory as <c>NODE_BIN_DIR</c>, which the pipelines derived with <c>dirname</c> to put the

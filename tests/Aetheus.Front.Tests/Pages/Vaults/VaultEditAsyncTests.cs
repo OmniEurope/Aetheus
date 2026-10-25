@@ -49,6 +49,21 @@ public class VaultEditAsyncTests : BunitContext
         });
     }
 
+    /// <summary>R2-22: the readiness finding links to the creation of one particular vault; the name
+    /// it carries is already in the form.</summary>
+    [Fact]
+    public void NewVault_OpenedWithAName_StartsWithThatName()
+    {
+        SetupProjects();
+
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .NavigateTo("http://localhost/vaults/new?projectId=1&name=wordmorrow.qa");
+
+        var cut = Render<VaultEdit>();
+
+        cut.WaitForAssertion(() => Assert.Contains("value=\"wordmorrow.qa\"", cut.Markup, StringComparison.Ordinal));
+    }
+
     // ── Test 1: New vault - OnSubmit creates and navigates ───────────────────
 
     [Fact]

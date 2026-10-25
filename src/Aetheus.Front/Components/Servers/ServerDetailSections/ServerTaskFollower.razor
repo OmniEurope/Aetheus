@@ -9,7 +9,7 @@
     <OmniAlert Severity="@Severity" Class="server-task-follower" aria-live="polite">
         <Icon><OmniIcon Name="@Icon" /></Icon>
         <ChildContent>
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
                 <OmniText Element="OmniTextElement.Strong">@_title</OmniText>
                 <OmniText Element="OmniTextElement.Span">@L[StatusKey]</OmniText>
                 @if (_group is { } group)

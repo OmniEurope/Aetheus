@@ -45,7 +45,8 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
                         version.Version,
                         version.IsListed,
                         version.CreatedAt,
-                        version.Metadata))
+                        version.Metadata,
+                        version.IsDeprecated))
                     .ToList()))
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);

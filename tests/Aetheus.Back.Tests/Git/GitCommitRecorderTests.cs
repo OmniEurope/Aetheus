@@ -2,7 +2,6 @@
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;

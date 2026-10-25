@@ -4,8 +4,6 @@ using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Git.Events;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
-using Aetheus.Back.Services;
 using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;

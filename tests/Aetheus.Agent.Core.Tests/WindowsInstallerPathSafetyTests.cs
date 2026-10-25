@@ -44,7 +44,7 @@ public sealed class WindowsInstallerPathSafetyTests
         startInfo.ArgumentList.Add("-ExecutionPolicy");
         startInfo.ArgumentList.Add("Bypass");
         startInfo.ArgumentList.Add("-File");
-        startInfo.ArgumentList.Add(Path.Combine(FindRepoRoot(), "deploy", "scripts", "install-agent-windows.ps1"));
+        startInfo.ArgumentList.Add(Path.Combine(FindRepoRoot(), "deploy", "agent-installer", "install-agent-windows.ps1"));
         startInfo.ArgumentList.Add("-ValidatePathsOnly");
         startInfo.ArgumentList.Add("-InstallDir");
         startInfo.ArgumentList.Add(installDir);

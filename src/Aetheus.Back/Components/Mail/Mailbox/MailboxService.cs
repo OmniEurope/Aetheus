@@ -246,7 +246,7 @@ public sealed class MailboxService(
         var size = await session.GetMessageSizeAsync(folder, uid, ct).ConfigureAwait(false);
         if (size > MaxMessageBytes)
             throw new BadRequestException(
-                $"This message is {size / (1024 * 1024)} MB, over the {MaxMessageBytes / (1024 * 1024)} MB the mailbox opens.");
+                $"This message is {size / (1024 * 1024)} Mo, over the {MaxMessageBytes / (1024 * 1024)} Mo the mailbox opens.");
         return await session.GetMessageAsync(folder, uid, ct).ConfigureAwait(false)
             ?? throw new NotFoundException("This message is no longer in the folder.");
     }

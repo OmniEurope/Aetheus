@@ -25,6 +25,7 @@ public sealed class GitPushPipelineTriggerHandlerTests
     public GitPushPipelineTriggerHandlerTests() =>
         _sut = new GitPushPipelineTriggerHandler(
             _pipelineService, _runService, _pipelineRepo, _cli,
+            new PipelineDefinitionSynchronizer(_pipelineService, _cli, NullLogger<PipelineDefinitionSynchronizer>.Instance),
             NullLogger<GitPushPipelineTriggerHandler>.Instance);
 
     private static GitPushProcessedEvent Push(string reference, string commit, string defaultBranch = "main") =>

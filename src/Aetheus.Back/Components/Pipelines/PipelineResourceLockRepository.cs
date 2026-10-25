@@ -29,7 +29,7 @@ internal sealed class PipelineResourceLockRepository(AppDbContext db, TimeProvid
     private const int MaxAncestorDepth = 6;
 
     private static readonly PipelineStatus[] ActiveStatuses =
-        [PipelineStatus.Pending, PipelineStatus.Running, PipelineStatus.WaitingForApproval];
+        [PipelineStatus.Pending, PipelineStatus.Running, PipelineStatus.WaitingForApproval, PipelineStatus.AwaitingResume];
 
     public async Task<PipelineResourceLockHolder?> TryAcquireAsync(
         int runId, IReadOnlyCollection<string> keys, CancellationToken ct = default)

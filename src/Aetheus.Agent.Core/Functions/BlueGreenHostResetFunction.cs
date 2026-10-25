@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>bluegreen-host-reset</c> function, port of <c>deploy/scripts/bluegreen-host-reset.sh</c>:
+/// The <c>bluegreen-host-reset</c> function, port of the former <c>bluegreen-host-reset.sh</c> script:
 /// resets a disposable blue-green environment so each qualification starts from fresh containers,
 /// volumes and secrets, while vhosts and certificates stay for the next deployment. The identity guards
 /// come first (state directory a direct child of the workspace, environment and secrets inside it, a
@@ -26,9 +26,6 @@ namespace Aetheus.Agent.Core.Functions;
 public sealed partial class BlueGreenHostResetFunction : IPipelineFunction
 {
     private const string ProjectLabel = "label=com.docker.compose.project=";
-
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\z")]
-    private static partial Regex ComposeProject();
 
     private readonly IPipelineFunctionTools _tools;
 
@@ -59,12 +56,16 @@ public sealed partial class BlueGreenHostResetFunction : IPipelineFunction
         if (failure is not null)
             return PipelineFunctionResult.Failure(failure);
 
-        File.Delete(identity.EnvFile);
-        File.Delete(identity.SecretsFile);
-        File.Delete(Path.Combine(identity.StateDir, "live-color"));
-        File.Delete(Path.Combine(identity.StateDir, "source-commit"));
-        if (Directory.Exists(Path.Combine(identity.StateDir, "deployment-transaction")))
-            Directory.Delete(Path.Combine(identity.StateDir, "deployment-transaction"), recursive: true);
+        // A fresh run workspace has no state directory yet: nothing to delete, like the script's rm -f.
+        if (Directory.Exists(identity.StateDir))
+        {
+            File.Delete(identity.EnvFile);
+            File.Delete(identity.SecretsFile);
+            File.Delete(Path.Combine(identity.StateDir, "live-color"));
+            File.Delete(Path.Combine(identity.StateDir, "source-commit"));
+            if (Directory.Exists(Path.Combine(identity.StateDir, "deployment-transaction")))
+                Directory.Delete(Path.Combine(identity.StateDir, "deployment-transaction"), recursive: true);
+        }
 
         var proof = await ProveAsync(docker, identity, cancellationToken).ConfigureAwait(false);
         if (proof is not null)
@@ -88,7 +89,7 @@ public sealed partial class BlueGreenHostResetFunction : IPipelineFunction
             return null;
 
         var names = await docker.LinesAsync(cancellationToken, ["inspect", "--format", "{{.Name}}", .. containers]).ConfigureAwait(false) ?? [];
-        if (names.Any(NamesProduction))
+        if (names.Any(ResetIdentity.NamesProduction))
             return "A container selected for removal names production; refusing to delete anything.";
         await context.Log($">>> Removing the containers of {project}").ConfigureAwait(false);
         var exitCode = await docker.QuietAsync(cancellationToken, ["rm", "-f", .. containers]).ConfigureAwait(false);
@@ -106,7 +107,7 @@ public sealed partial class BlueGreenHostResetFunction : IPipelineFunction
         if (volumes.Length == 0)
             return null;
 
-        if (volumes.Any(NamesProduction))
+        if (volumes.Any(ResetIdentity.NamesProduction))
             return "A volume selected for removal names production; refusing to delete it.";
         await context.Log($">>> Removing the volumes of {project}: {string.Concat(volumes.Select(volume => volume + " "))}").ConfigureAwait(false);
         var exitCode = await docker.QuietAsync(cancellationToken, ["volume", "rm", .. volumes]).ConfigureAwait(false);
@@ -151,11 +152,15 @@ public sealed partial class BlueGreenHostResetFunction : IPipelineFunction
 
     private static string[] Unique(IEnumerable<string> values) => [.. values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
 
-    private static bool NamesProduction(string value) => value.Contains("prod", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>The checked identity of the environment to reset.</summary>
-    private sealed record ResetIdentity(string StateDir, string EnvFile, string SecretsFile, string Project, IReadOnlyList<string> Images)
+    private sealed partial record ResetIdentity(string StateDir, string EnvFile, string SecretsFile, string Project, IReadOnlyList<string> Images)
     {
+        [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\z")]
+        private static partial Regex ComposeProject();
+
+        /// <summary>True for a name carrying the production token, which no reset ever touches.</summary>
+        public static bool NamesProduction(string value) => value.Contains("prod", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>The script's guards, in its order, with its messages; null and the refusal when one
         /// fails.</summary>
         public static ResetIdentity? Resolve(PipelineFunctionContext context, out string? refusal)

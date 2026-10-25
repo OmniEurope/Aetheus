@@ -48,8 +48,8 @@ public class AdministrationTests : BunitContext
 
         SetupDefaultResponses();
         var cut = Render<Administration>();
-        Assert.Equal(tiles.Count, cut.FindAll("a.admin-tile-link .omni-settings-tile").Count);
-        Assert.Equal(tiles.Count, cut.FindAll("a.admin-tile-link .omni-settings-hint").Count);
+        Assert.Equal(tiles.Count, cut.FindAll("a.omni-nav-tile").Count);
+        Assert.Equal(tiles.Count, cut.FindAll("a.omni-nav-tile .omni-nav-tile__description").Count);
     }
 
     [Fact]

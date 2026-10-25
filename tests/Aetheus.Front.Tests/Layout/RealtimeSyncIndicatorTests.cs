@@ -94,6 +94,24 @@ public sealed class RealtimeSyncIndicatorTests : BunitContext
         stuck.Dispose();
     }
 
+    // R1-42: the visibility the browser sends also reaches the timeline the outage reports read.
+    [Fact]
+    public void PageVisibilityChanges_FeedTheTimelineOfTheOutageReports()
+    {
+        var cut = Render<RealtimeSyncIndicator>();
+        var timeline = Services.GetRequiredService<HubConnectionFactory>().PageVisibility;
+        var now = DateTimeOffset.UtcNow;
+        var later = (From: now.AddHours(1), To: now.AddHours(2));
+
+        cut.InvokeAsync(() => cut.Instance.OnPageVisibilityChanged(false));
+        // Still hidden: the open stretch covers any later window.
+        Assert.True(timeline.HiddenBetween(later.From, later.To) > TimeSpan.Zero);
+
+        cut.InvokeAsync(() => cut.Instance.OnPageVisibilityChanged(true));
+        // Shown again: the stretch is closed and no longer reaches a later window.
+        Assert.Equal(TimeSpan.Zero, timeline.HiddenBetween(later.From, later.To));
+    }
+
     [Fact]
     public void Render_RegistersThePageVisibilityWatcher()
     {

@@ -1,10 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@using static Aetheus.Front.Components.Shared.PipelineRunFormatting
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 @* The header identifies the run and links to its pipeline; attention badges complement the
    detailed overview tiles. *@
-<OmniPageHeader Title="@($"{L["PipelineRun"]} #{Run.Id}")" ShowBack="@(!string.IsNullOrWhiteSpace(PipelineHref))"
+<OmniPageHeader Title="@($"#{Run.Id} {L["PipelineRun"]}")" ShowBack="@(!string.IsNullOrWhiteSpace(PipelineHref))"
                                  Class="pipeline-run-page-header" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
     <Badges>
@@ -28,21 +28,22 @@
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@string.Format(L["WarningsCount"], InfoWarningCount)</OmniBadge>
         }
     </Badges>
-    <Actions>
+    @* R-30, R-31, R-40: Rerun is pinned (never folded, on a row of its own on a phone, the menu
+       staying on line 1) and has no chevron; its variants are in the page menu. *@
+    <PinnedActionsContent>
         @if (CanRerun)
         {
-            @* Rerun actions use a primary button with an icon for each choice. *@
-            <OmniSplitButton Variant="OmniButtonVariant.Primary" Class="@(Rerunning ? "btn-busy" : null)" aria-busy="@(Rerunning ? "true" : null)" Text="@L["Rerun"]" OnClick="@(() => RerunRequested.InvokeAsync(null))" Busy="@Rerunning"
-                aria-label="@L["Rerun"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>
-                <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("current"))"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["RerunCurrent"]</span></OmniMenuItem>
-                <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("sameCommit"))"><OmniIcon Name="OmniIconName.GitCommit" /> <span>@L["RerunSameCommit"]</span></OmniMenuItem>
-                <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("branchHead"))"><OmniIcon Name="OmniIconName.GitFork" /> <span>@L["RerunBranchHead"]</span></OmniMenuItem>
-                <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("resumeCheckpoints"))"><OmniIcon Name="OmniIconName.Play" /> <span>@L["ResumeCheckpoints"]</span></OmniMenuItem>
-            </ChildContent></OmniSplitButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" Class="@(Rerunning ? "btn-busy" : null)" Busy="@Rerunning" OnClick="@(() => RerunRequested.InvokeAsync(null))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Rerun"]</span></ChildContent></OmniButton>
         }
-    </Actions>
+    </PinnedActionsContent>
     <MenuContent>
         <OmniMenuItem OnClick="EditRequested"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["Edit"]</ChildContent></OmniMenuItem>
+        @if (CanRerun)
+        {
+            <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("sameCommit"))"><Icon><OmniIcon Name="OmniIconName.GitCommit" /></Icon><ChildContent>@L["RerunSameCommit"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("branchHead"))"><Icon><OmniIcon Name="OmniIconName.GitFork" /></Icon><ChildContent>@L["RerunBranchHead"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@(() => RerunRequested.InvokeAsync("resumeCheckpoints"))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["ResumeCheckpoints"]</ChildContent></OmniMenuItem>
+        }
         @if (Run.ResolvedVariables.Count > 0)
         {
             <OmniMenuItem OnClick="VariablesRequested"><Icon><OmniIcon Name="OmniIconName.BracketsCurly" /></Icon><ChildContent>@L["ResolvedVariables"]</ChildContent></OmniMenuItem>

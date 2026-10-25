@@ -24,9 +24,10 @@ public class VaultServiceResolveTests
             TimeProvider.System, Substitute.For<IMemoryCache>());
     }
 
-    private static Vault Vault(int? projectId, int? envId, int? projectServerId, string key, string value) =>
+    private static Vault Vault(int? projectId, int? envId, int? projectServerId, string key, string value, int id = 0) =>
         new()
         {
+            Id = id,
             ProjectId = projectId,
             EnvironmentId = envId,
             ProjectServerId = projectServerId,
@@ -61,5 +62,23 @@ public class VaultServiceResolveTests
         var result = await _sut.ResolveVaultSecretsWithCrossAccessAsync(["any"], 1, ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
+    }
+
+    /// <summary>R2-27: the summary links an empty secret to the vault whose value a run reads (the scope
+    /// precedence), not another vault holding the same name.</summary>
+    [Fact]
+    public async Task SecretOwners_NameTheVaultWhoseValueWins_PerKey()
+    {
+        _repo.FindByNamesWithCrossAccessAsync(Arg.Any<List<string>>(), 1, Arg.Any<CancellationToken>()).Returns(
+        [
+            Vault(null, null, null, "DB_PASSWORD", "", id: 20),
+            Vault(1, null, null, "DB_PASSWORD", "", id: 21),
+            Vault(null, null, null, "JWT_KEY", "", id: 20)
+        ]);
+
+        var owners = await _sut.ResolveSecretOwnersWithCrossAccessAsync(["any"], 1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(21, owners["db_password"]);
+        Assert.Equal(20, owners["JWT_KEY"]);
     }
 }

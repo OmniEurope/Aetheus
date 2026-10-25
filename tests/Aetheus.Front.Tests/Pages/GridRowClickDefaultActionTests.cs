@@ -119,7 +119,8 @@ public sealed class GridRowClickDefaultActionTests : BunitContext
         RowCell(cut, "nightly-db").Click();
 
         cut.WaitForAssertion(() => Assert.Equal("nightly-db", cut.Find("input#oe-pages-backups-backups-1").GetAttribute("value")));
-        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 4);
+        // R1-4: a backup row holds Run now and the menu trigger.
+        Assert.True(RowEventIsolation.AssertNoRowControlReachesTheRow(cut.FindAll(RowEventIsolation.ClickableRows)) >= 2);
     }
 
     [Fact]

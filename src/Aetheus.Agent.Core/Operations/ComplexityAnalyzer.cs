@@ -8,6 +8,13 @@ namespace Aetheus.Agent.Core.Operations;
 /// <summary>L: aggregate code-quality metrics for a set of C# source files.</summary>
 public sealed record ComplexityHotspot(string Path, int Line, string Member, int Cyclomatic);
 
+/// <summary>A method over the complexity threshold, with the qualified symbol that identifies it from one
+/// analysis to the next.</summary>
+public sealed record ComplexityMethod(string Path, int Line, string Symbol, int Cyclomatic);
+
+/// <summary>The aggregate report and the methods over the threshold, in file then line order.</summary>
+public sealed record ComplexityAnalysis(ComplexityReport Report, IReadOnlyList<ComplexityMethod> HighMethods);
+
 /// <summary>L: aggregate code-quality metrics for a set of C# source files.</summary>
 public sealed record ComplexityReport(
     int TotalMethods,
@@ -26,7 +33,9 @@ public sealed record ComplexityReport(
 /// </summary>
 public static class ComplexityAnalyzer
 {
-    public const int HighComplexityThreshold = 10;
+    /// <summary>A method becomes a finding only above this cyclomatic complexity: the limit of grade A of the
+    /// quality grade (grade.complexity.maximum) and of the repository complexity guard, one number for all three.</summary>
+    public const int HighComplexityThreshold = 15;
 
     public static ComplexityReport Analyze(IEnumerable<(string Path, string Content)> files)
         => Analyze(files.Select(file => new ParsedCSharpSource(
@@ -35,8 +44,20 @@ public static class ComplexityAnalyzer
             CSharpSyntaxTree.ParseText(file.Content, path: file.Path))));
 
     public static ComplexityReport Analyze(IEnumerable<ParsedCSharpSource> files)
+        => AnalyzeDetailed(files).Report;
+
+    public static ComplexityAnalysis AnalyzeDetailed(IEnumerable<(string Path, string Content)> files)
+        => AnalyzeDetailed(files.Select(file => new ParsedCSharpSource(
+            file.Path,
+            file.Content,
+            CSharpSyntaxTree.ParseText(file.Content, path: file.Path))));
+
+    /// <summary>The report plus every method over <see cref="HighComplexityThreshold"/>, each with a qualified
+    /// symbol: the unit ADR-056 turns into a finding (the report keeps only the top hotspots).</summary>
+    public static ComplexityAnalysis AnalyzeDetailed(IEnumerable<ParsedCSharpSource> files)
     {
         var complexities = new List<ComplexityHotspot>();
+        var highMethods = new List<ComplexityMethod>();
         var totalNloc = 0;
 
         foreach (var source in files)
@@ -49,15 +70,36 @@ public static class ComplexityAnalyzer
             foreach (var node in root.DescendantNodes())
             {
                 var body = MemberBody(node);
-                if (body is not null)
-                {
-                    var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
-                    complexities.Add(new ComplexityHotspot(
-                        path, line, MemberName(node), CyclomaticComplexity(body)));
-                }
+                if (body is null) continue;
+                var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                var cyclomatic = CyclomaticComplexity(body);
+                complexities.Add(new ComplexityHotspot(path, line, MemberName(node), cyclomatic));
+                if (cyclomatic > HighComplexityThreshold)
+                    highMethods.Add(new ComplexityMethod(path, line, QualifiedSymbol(node), cyclomatic));
             }
         }
 
+        return new ComplexityAnalysis(BuildReport(complexities, totalNloc), DisambiguateSymbols(highMethods));
+    }
+
+    /// <summary>Two methods of one file with the same qualified symbol (overloads that differ only by a type
+    /// the signature spells the same way, lambdas of one member) get an ordinal, in source order, so each is
+    /// a finding of its own with an identity that does not depend on the other.</summary>
+    private static IReadOnlyList<ComplexityMethod> DisambiguateSymbols(List<ComplexityMethod> methods)
+    {
+        var result = new List<ComplexityMethod>(methods.Count);
+        foreach (var group in methods.GroupBy(item => (item.Path, item.Symbol)))
+        {
+            var ordered = group.OrderBy(item => item.Line).ToList();
+            result.AddRange(ordered.Count == 1
+                ? ordered
+                : ordered.Select((item, index) => item with { Symbol = $"{item.Symbol}#{index + 1}" }));
+        }
+        return [.. result.OrderBy(item => item.Path, StringComparer.Ordinal).ThenBy(item => item.Line)];
+    }
+
+    private static ComplexityReport BuildReport(List<ComplexityHotspot> complexities, int totalNloc)
+    {
         if (complexities.Count == 0)
             return new ComplexityReport(0, totalNloc, 0, 0, 0, []);
 
@@ -76,6 +118,40 @@ public static class ComplexityAnalyzer
             HighComplexityMethods: complexities.Count(item => item.Cyclomatic > HighComplexityThreshold),
             Hotspots: hotspots);
     }
+
+    /// <summary>The namespace, the types and the enclosing members of a callable, then its own signature:
+    /// stable while the code stays, whatever line it moves to.</summary>
+    private static string QualifiedSymbol(SyntaxNode node)
+    {
+        var segments = new List<string> { Signature(node) };
+        for (var current = node.Parent; current is not null; current = current.Parent)
+        {
+            var segment = current switch
+            {
+                BaseNamespaceDeclarationSyntax declaration => declaration.Name.ToString(),
+                BaseTypeDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                PropertyDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                IndexerDeclarationSyntax => "this[]",
+                EventDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax
+                    => Signature(current),
+                _ => null
+            };
+            if (segment is not null) segments.Add(segment);
+        }
+        segments.Reverse();
+        return string.Join('.', segments);
+    }
+
+    private static string Signature(SyntaxNode node) => node switch
+    {
+        BaseMethodDeclarationSyntax method => $"{MemberName(method)}({ParameterTypes(method.ParameterList)})",
+        LocalFunctionStatementSyntax local => $"{local.Identifier.ValueText}({ParameterTypes(local.ParameterList)})",
+        _ => MemberName(node)
+    };
+
+    private static string ParameterTypes(ParameterListSyntax list) =>
+        string.Join(", ", list.Parameters.Select(parameter => parameter.Type?.ToString() ?? "?"));
 
     // Bodies that count as an independently executable callable unit.
     private static SyntaxNode? MemberBody(SyntaxNode node) => node switch

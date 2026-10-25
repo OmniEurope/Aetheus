@@ -131,7 +131,7 @@ public class ServerCronSectionRenderTests : BunitContext
     [Fact]
     public void ValidateCronExpression_WithValidSchedule_ReturnsIsValidTrue()
     {
-        var result = ServerCronSection.ValidateCronExpression("*/5 * * * *");
+        var result = CronSchedulePreview.ValidateCronExpression("*/5 * * * *");
         Assert.True(result.IsValid);
     }
 }

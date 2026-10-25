@@ -74,7 +74,7 @@ else
             </OmniColumn>
         </OmniRow>
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /> <span>@(IsEdit ? L["Save"] : L["Create"])</span></OmniButton>
+            <OmniButton Busy="@_busy" ButtonType="OmniButtonType.Submit" Variant="OmniButtonVariant.Primary"><Icon><OmniIcon Name="@(IsEdit ? OmniIconName.Save : OmniIconName.Add)" /></Icon><ChildContent><span>@(IsEdit ? L["Save"] : L["Create"])</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniTemplateForm>
 }

@@ -5,7 +5,7 @@ using System.Text;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>verify-release-ancestry</c> function, port of <c>deploy/scripts/verify-release-ancestry.sh</c>,
+/// The <c>verify-release-ancestry</c> function, port of the former <c>verify-release-ancestry.sh</c> script,
 /// the production gate that refuses to deploy a release the deploy branch does not contain. Same Git
 /// commands in the same order, run in the workspace with <c>GIT_TERMINAL_PROMPT=0</c> and
 /// <c>GIT_ASKPASS=/bin/false</c> so a fetch that would need a credential fails instead of waiting: the
@@ -26,9 +26,6 @@ namespace Aetheus.Agent.Core.Functions;
 /// </summary>
 public sealed class VerifyReleaseAncestryFunction : IPipelineFunction
 {
-    private const string StderrPrefix = "[stderr] ";
-    private const string ExitLinePrefix = "[process] exit-code=";
-
     private readonly IPipelineFunctionTools _tools;
 
     public VerifyReleaseAncestryFunction()
@@ -139,6 +136,9 @@ public sealed class VerifyReleaseAncestryFunction : IPipelineFunction
     /// error is written to the log unless discarded, like <c>2&gt;/dev/null</c>.</summary>
     private sealed class Git(IPipelineFunctionTools tools, PipelineFunctionContext context)
     {
+        private const string StderrPrefix = "[stderr] ";
+        private const string ExitLinePrefix = "[process] exit-code=";
+
         public enum Output
         {
             Log,

@@ -10,7 +10,7 @@
         <OmniColumn Span="12" MediumSpan="6">
             <OmniStack Gap="OmniSpacing.XSmall">
                 <OmniText Element="OmniTextElement.Strong">@L["Status"]</OmniText>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-p-sm" Gap="OmniSpacing.Large">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-p-sm" Gap="OmniSpacing.Large">
                     <ReleaseStatusBadge Status="@Release.Status" />
                 </OmniStack>
             </OmniStack>
@@ -59,7 +59,7 @@
                action when the release has no run. *@
             @if (Release.PipelineRunId.HasValue)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/pipelines/runs/{Release.PipelineRunId}"))" title="@L["PipelineRun"]"><OmniIcon Name="OmniIconName.Eye" /> <span>@L["Execution"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/pipelines/runs/{Release.PipelineRunId}"))" title="@L["PipelineRun"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent><span>@L["Execution"]</span></ChildContent></OmniButton>
                 @if (Release.Artifacts.Count > 0)
                 {
                     <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -69,7 +69,7 @@
             }
             else if (Release.Artifacts.Count > 0)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/projects/{Release.ProjectId}/artifacts"))"><OmniIcon Name="OmniIconName.Archive" /> <span>@L["Artifact"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo($"/projects/{Release.ProjectId}/artifacts"))"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent><span>@L["Artifact"]</span></ChildContent></OmniButton>
             }
         </SecondaryContent>
     </DialogFooter>

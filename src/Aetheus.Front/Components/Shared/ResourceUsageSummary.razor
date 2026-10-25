@@ -1,0 +1,34 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* Who reads a library or a vault (R-65, R-66): the readers as links, or an "Unused" badge when
+   nothing the instance knows of reads it. Nothing is drawn until the usage is loaded, so a slow or
+   refused usage call never shows a false "Unused". The links stop the click so a grid row does not
+   open under them. *@
+@if (Loaded)
+{
+    @if (Readers.Count == 0)
+    {
+        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["ResourceUnusedHint"]">@L["ResourceUnused"]</OmniBadge>
+    }
+    else
+    {
+        <span class="resource-usage" title="@AllNames" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            @for (var index = 0; index < Readers.Count; index++)
+            {
+                var user = Readers[index];
+                @if (index > 0)
+                {
+                    <span class="resource-usage__separator">, </span>
+                }
+                @if (HrefOf(user) is { } href)
+                {
+                    <OmniLink Href="@href">@NameOf(user)</OmniLink>
+                }
+                else
+                {
+                    <span>@NameOf(user)</span>
+                }
+            }
+        </span>
+    }
+}

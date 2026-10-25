@@ -2,18 +2,18 @@
 @inject GridExportContext ExportContext
 @* Containers tab of the Docker section: the grid, the per-project bulk actions, and the five
    detail panels (logs, inspect, shell, env, file browser). Markup moved verbatim from the parent. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredContainers.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterContainers"]" @bind-Value="_containerSearch" Placeholder="@L["FilterContainers"]" Class="docker-search" />
 </OmniStack>
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
 @if (UnexpectedRiskCount > 0)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["DockerRiskSummaryTitle"]" Class="omni-u-mb-sm docker-risk-summary">@L["DockerRiskSummary", UnexpectedRiskCount]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["DockerRiskSummaryTitle"]" Class="omni-u-mb-md docker-risk-summary">@L["DockerRiskSummary", UnexpectedRiskCount]</OmniAlert>
 }
 else if (RisksUnknown)
 {
-    <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm docker-risk-unknown">@L["DockerRiskUnknown"]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md docker-risk-unknown">@L["DockerRiskUnknown"]</OmniAlert>
 }
 @if (!InitialLoaded && FilteredContainers.Count == 0)
 {
@@ -27,13 +27,13 @@ else
 {
     @if (BulkProjectOptions.Count > 0)
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm docker-bulk-actions">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm docker-bulk-actions">
             <label for="docker-bulk-project">@L["Project"]</label>
             <OmniDropDown aria-label="@L["Project"]" TValue="string" Id="docker-bulk-project" Options="@BulkProjectOptions"
                 AllowEmpty="true" Placeholder="@L["Project"]" @bind-Value="_bulkProject" />
             @* Recette R3-41/R3-42: Restart is the bar's one visible action; Start, Stop and Zoom sit in the menu. *@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Restart))"
-                title="@L["RestartAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
+                title="@L["RestartAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Restart"]</span></ChildContent></OmniButton>
             <OmniOverflowMenu Label="@L["MoreActions"]">
                 <OmniMenuItem OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Start))" title="@L["StartAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
                 <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => ProjectBulkActionAsync(SelectedBulkProject!, DockerContainerAction.Stop))" title="@L["StopAll"]" Disabled="@(AgentOffline || SelectedBulkProject is null)"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["StopAll"]</ChildContent></OmniMenuItem>
@@ -45,11 +45,11 @@ else
     AllGroupsExpanded="@_allContainerGroupsExpanded"
     RowRender="@OnContainerRowRender" OnRowClick="@(args => InspectFromRowAsync(args.Item))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="DockerContainerDto" Property="Project" Title="@L["Project"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
-        <OmniDataGridColumn TItem="DockerContainerDto" Property="Name" Title="@L["Name"]" Filterable="true" Width="11.25rem">
+        <OmniDataGridColumn Frozen="true" TItem="DockerContainerDto" Property="Project" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="DockerContainerDto" Property="Name" Title="@L["Name"]" Filterable="true">
             <Template Context="c">
                 <OmniStack Gap="OmniSpacing.XSmall">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
                         <OmniBadge Fill="OmniFill.Solid" Tone="@GetContainerBadge(c.State)">@c.State</OmniBadge>
                         <span title="@c.ContainerId">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@c.Name</OmniText>
@@ -69,7 +69,7 @@ else
         <OmniDataGridColumn TItem="DockerContainerDto" Property="MemoryUsageMb" Title="@L["Memory"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" Width="10rem">
             <Template Context="c">
                 <OmniStack Gap="OmniSpacing.XSmall">
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@(c.MemoryUsageMb.ToString("F0")) / @(c.MemoryLimitMb.ToString("F0")) MB</OmniText>
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@DisplayFormatting.SizeFromMo(c.MemoryUsageMb) / @DisplayFormatting.SizeFromMo(c.MemoryLimitMb)</OmniText>
                     <OmniProgressBar Value="@c.MemoryUsageMb" Maximum="@(c.MemoryLimitMb > 0 ? c.MemoryLimitMb : 1)"
                         ShowValue="false" Class="@GetMemoryBarClass(c)" />
                 </OmniStack>
@@ -79,18 +79,18 @@ else
         <OmniDataGridColumn TItem="DockerContainerDto" Title="@L["Actions"]" Width="7rem" Sortable="false" Filterable="false">
             <Template Context="c">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="docker-row-actions">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Class="docker-row-actions">
                     @* Recette R3-41/R3-42: one visible action per row (Restart when running, Start when stopped);
                        the others sit behind "…", destructive ones in Danger. *@
                     @if (c.State == "running")
                     {
                         <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Restart))"
-                            title="@L["Restart"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Restart"]"><OmniIcon Name="OmniIconName.Refresh" /></OmniButton>
+                            title="@L["Restart"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Restart"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon></OmniButton>
                     }
                     else
                     {
                         <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => DockerActionAsync(c.ContainerId, DockerContainerAction.Start))"
-                            title="@L["Start"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
+                            title="@L["Start"]" Class="@((_dockerActionTarget == c.ContainerId) ? "btn-busy" : null)" Busy="@((_dockerActionTarget == c.ContainerId))" Label="@L["Start"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
                     }
                     <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@AgentOffline">
                         @if (c.State == "running")
@@ -124,10 +124,10 @@ else
 @if (_logsContainerId is not null)
 {
     <OmniCard Class="omni-u-mt-md">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerLogs"] - @_logsContainerId[..Math.Min(12, _logsContainerId.Length)]</OmniText>
             <div class="flex-spacer"></div>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _logsContainerId = null; _logsContent = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _logsContainerId = null; _logsContent = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
         @if (_logsContent is null)
         {
@@ -144,10 +144,10 @@ else
 @if (_inspectContainerId is not null)
 {
     <OmniCard Class="omni-u-mt-md docker-panel-fadein">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerInspect"] - @_inspectContainerId[..Math.Min(12, _inspectContainerId.Length)]</OmniText>
             <div class="flex-spacer"></div>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _inspectContainerId = null; _inspectContent = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _inspectContainerId = null; _inspectContent = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
         @if (_inspectContent is null)
         {
@@ -165,17 +165,17 @@ else
 {
     <OmniCard Class="omni-u-mt-md docker-panel-fadein">
         <OmniStack Gap="OmniSpacing.Small">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerShell"] - @_shellContainerName</OmniText>
                 <div class="flex-spacer"></div>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _shellContainerId = null; _shellOutput = string.Empty; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _shellContainerId = null; _shellOutput = string.Empty; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
             </OmniStack>
             <OmniCodeBlock Code="@_shellOutput" Title="@L["Output"]" Wrap="true" Class="docker-logs docker-shell-output code-block-bounded" />
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
                 <div @onkeydown="OnShellKeyDown">
                     <OmniTextBox aria-label="@L["EnterCommand"]" @bind-Value="_shellCommand" Placeholder="@L["EnterCommand"]" Class="docker-shell-input" />
                 </div>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendShellCommandAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_shellCommand))" title="@L["Send"]"><OmniIcon Name="OmniIconName.PaperPlaneRight" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SendShellCommandAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_shellCommand))" title="@L["Send"]"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon></OmniButton>
             </OmniStack>
         </OmniStack>
     </OmniCard>
@@ -184,10 +184,10 @@ else
 @if (_envContainerId is not null)
 {
     <OmniCard Class="omni-u-mt-md docker-panel-fadein">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerEnvVars"] - @_envContainerName</OmniText>
             <div class="flex-spacer"></div>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _envContainerId = null; _envContent = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _envContainerId = null; _envContent = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
         @if (_envContent is null)
         {
@@ -198,7 +198,7 @@ else
             <OmniDataGrid Items="@ParseEnvVars(_envContent)" ExportMarkdown="false" TItem="DockerEnvVarDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="DockerEnvVarDto" Property="Key" Title="@L["Key"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="DockerEnvVarDto" Property="Value" Title="@L["Value"]" Filterable="true" />
+                    <OmniDataGridColumn TItem="DockerEnvVarDto" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true" />
                 </Columns>
             </OmniDataGrid>
         }
@@ -208,11 +208,11 @@ else
 @if (_browseContainerId is not null)
 {
     <OmniCard Class="omni-u-mt-md docker-panel-fadein">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerFileBrowser"] - @_browseContainerName</OmniText>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@_browsePath</OmniText>
             <div class="flex-spacer"></div>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _browseContainerId = null; _browseContent = null; })" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _browseContainerId = null; _browseContent = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
         @if (_browseContent is null)
         {

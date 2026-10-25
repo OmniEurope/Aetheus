@@ -417,7 +417,7 @@ public sealed class PipelineGitService(
                     $"Source repository {repositoryId} does not belong to project {projectId}.");
         // The mirror of an external repository attached beside the project's repository is a source
         // a pipeline names (source: repository:), never where a definition is read by default.
-        var own = repos.Where(repo => !repo.IsAdditionalSource).ToList();
+        var own = repos.Where(repo => !repo.IsAdditionalSource && !repo.IsConfiguration).ToList();
         return own.Count switch
         {
             0 => null,

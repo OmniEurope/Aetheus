@@ -31,16 +31,16 @@
             <OmniDataGridColumn TItem="PipelineRunTableItem" Property="RunId" Title="@L["ID"]" Width="7rem" Frozen="true"
                 Class="pipeline-run-id-actions-column" HeaderClass="pipeline-run-id-actions-column" Filterable="true">
                 <Template Context="run">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                         <a href="@RunHref(run)" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">#@run.RunId</a>
                         @if (CanCancel(run))
                         {
-                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CancelRunAsync(run))" Disabled="@(_cancelling == run.RunId)" title="@L["CancelRun"]" Label="@L["CancelRun"]"><OmniIcon Name="OmniIconName.Prohibit" /></OmniButton></span>
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => CancelRunAsync(run))" Disabled="@(_cancelling == run.RunId)" title="@L["CancelRun"]" Label="@L["CancelRun"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton></span>
                         }
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="PipelineName" Title="@L["Pipeline"]" MinWidth="10rem"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="PipelineName" Title="@L["Pipeline"]"
                 Visible="@ShowPipelineColumn"
                 Class="pipeline-run-name-column" HeaderClass="pipeline-run-name-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
@@ -56,32 +56,32 @@
                            place of the badge is more useful than a static "Running" label. *@
                         @if (!string.IsNullOrWhiteSpace(run.CurrentStep))
                         {
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="pipeline-run-current-step">
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="pipeline-run-current-step">
                                 <div class="run-tl-dot run-timeline-dot-running"><span class="run-timeline-pulse"></span></div>
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@run.CurrentStep</OmniText>
                             </OmniStack>
                         }
                         else
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(run.Status)">@L.Localize(run.Status)</OmniBadge>
+                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
                         }
                     }
                     else
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(run.Status)">@L.Localize(run.Status)</OmniBadge>
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
                             @if (run.LaunchRefused)
                             {
                                 @* Give refused automated launches their own badge so they remain
                                    distinct from rejected executions. *@
-                                <OmniBadge Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
+                                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
                             }
                             @if (run.GateGrade.HasValue)
                             {
                                 @* The gate letter only appears when a gate actually graded the run; an
                                    ungraded run shows nothing rather than a misleading placeholder. *@
                                 @* The letter opens the Gate tab, where an F gives its cause. *@
-                                <a href="@Aetheus.Front.Components.Pipelines.PipelineRunPresentation.GateHref(run.RunId, run.ProjectId, ServerId)" class="pipeline-gate-grade-link" title="@L["GateGrade"]"
+                                <a href="@PipelineRunPresentation.GateHref(run.RunId, run.ProjectId, ServerId)" class="pipeline-gate-grade-link" title="@L["GateGrade"]"
                                    @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                     <GradeBadge Value="@run.GateGrade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" />
                                 </a>
@@ -90,7 +90,7 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ProjectName" Title="@L["Project"]" Width="10rem"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ProjectName" Title="@L["Project"]"
                 Visible="@GroupByProject" Class="pipeline-project-column" HeaderClass="pipeline-project-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
                     <span class="pipeline-project-context">@(run.ProjectName ?? L["Unassigned"])</span>
@@ -106,7 +106,7 @@
                     <span class="pipeline-run-duration"><PipelineRunTableLiveDuration Run="@run" /></span>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="BranchName" Title="@L["Branch"]" Width="10rem"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="BranchName" Title="@L["Branch"]"
                 Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
                     @if (string.IsNullOrWhiteSpace(run.BranchName))
@@ -140,7 +140,7 @@
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ServerName" Title="@L["Server"]" Width="9rem"
+            <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ServerName" Title="@L["Server"]"
                 Class="pipeline-secondary-column" HeaderClass="pipeline-secondary-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
                     @if (string.IsNullOrWhiteSpace(run.ServerName))

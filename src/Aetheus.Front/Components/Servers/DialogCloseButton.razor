@@ -4,5 +4,5 @@
    has at least one button to close it, with the shared close icon and label. *@
 
 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(_ => Dialog.Close())">
-    <OmniIcon Name="OmniIconName.Close" /> @(Text ?? L["Close"])
+    <Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent>@(Text ?? L["Close"])</ChildContent>
 </OmniButton>

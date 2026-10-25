@@ -33,7 +33,7 @@
             <ValidationMessage For="@(() => _form.Command)" />
         </ChildContent></OmniFormField>
         <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!ScheduleValidation.IsValid)" ButtonType="OmniButtonType.Submit"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!ScheduleValidation.IsValid)" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
         </Aetheus.Front.Components.Shared.DialogFooter>
     </OmniStack>
 </OmniTemplateForm>

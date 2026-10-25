@@ -47,9 +47,17 @@ public sealed class VaultEditDialogActionTests : BunitContext
     private IRenderedComponent<VaultEdit> RenderVault() =>
         Render<VaultEdit>(parameters => parameters.Add(page => page.Id, 1));
 
-    private static IElement Button(IRenderedComponent<VaultEdit> cut, string title) =>
-        cut.FindAll("button").First(button =>
-            string.Equals(button.GetAttribute("title"), title, StringComparison.Ordinal));
+    // R1-4: Edit is the row's visible action, the others are entries of its "More actions" menu.
+    // The vault's own tools menu comes first and also has a Delete; the secret row's menu is the last trigger.
+    private static IElement Button(IRenderedComponent<VaultEdit> cut, string title)
+    {
+        if (cut.FindAll("button").FirstOrDefault(button =>
+                string.Equals(button.GetAttribute("title"), title, StringComparison.Ordinal)) is { } button)
+            return button;
+        cut.FindAll(".omni-overflow-menu__trigger").Last().Click();
+        return cut.FindAll(".omni-menu__item")
+            .First(entry => entry.Names().Contains(title, StringComparison.Ordinal));
+    }
 
     private static IElement TextButton(IRenderedComponent<VaultEdit> cut, string text) =>
         cut.FindAll("button").First(button => button.TextContent.Contains(text, StringComparison.Ordinal));
@@ -116,6 +124,20 @@ public sealed class VaultEditDialogActionTests : BunitContext
     }
 
     // ---------- updating a secret ----------
+
+    /// <summary>R1-4: a secret row keeps one visible action (Edit); the others are in its menu.</summary>
+    [Fact]
+    public void ASecretRowShowsEditAsItsOnlyAction_AndKeepsTheOthersInTheMenu()
+    {
+        var cut = RenderVault();
+
+        Assert.Single(cut.FindAll("button[title='Edit']"));
+        Assert.Empty(cut.FindAll("button[title='Rotate'], button[title='Delete'], button[title='History'], button[title='CopyKeyReference']"));
+        cut.FindAll(".omni-overflow-menu__trigger").Last().Click();
+        var entries = cut.FindAll(".omni-menu__item").Select(entry => entry.TextContent.Trim()).ToList();
+        foreach (var label in new[] { "CopyKeyReference", "History", "Rotate", "Delete" })
+            Assert.Contains(label, entries);
+    }
 
     [Fact]
     public void UpdatingASecretSendsTheValueTheDialogReturned()

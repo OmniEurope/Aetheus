@@ -55,11 +55,13 @@ public sealed class RunParameterFieldsTests : BunitContext
             .Add(x => x.AvailableReleases, TwoReleases()));
 
         cut.WaitForAssertion(() => Assert.Contains("1.1.482", cut.Markup));
-        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("1.1.482"));
-        // A row click must not guess between the two fields.
+        // Neither a row click nor a card click may guess between the two fields.
         cut.FindAll("tr[data-omni-row-index]").First(row => row.TextContent.Contains("1.1.482")).Click();
-        Assert.False(cut.Instance.TryCollect(out _, out var error));
+        cut.FindAll("[data-testid='release-picker-card']").First(card => card.TextContent.Contains("1.1.482")).Click();
+        Assert.False(cut.Instance.TryCollect(out var values, out var error));
         Assert.NotNull(error);
+        Assert.Empty(values);
+        Assert.DoesNotContain("1.1.482", cut.FindAll("input").Select(input => input.GetAttribute("value")));
     }
 
     /// <summary>R3-13: a parameter's description sits behind the "?" of its OE field (Help), named by the

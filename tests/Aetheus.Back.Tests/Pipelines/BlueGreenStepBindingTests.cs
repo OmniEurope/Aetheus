@@ -128,6 +128,30 @@ public sealed class BlueGreenStepBindingTests
         Assert.Contains("revision", error, StringComparison.Ordinal);
     }
 
+    // The template defaults the revision to a run variable ($(BUILD_SOURCEVERSION)). A run without a
+    // commit leaves that reference literal; recording it as the deployed revision would be a fake value.
+    [Fact]
+    public void Switch_RefusesARevisionThatIsAnUnresolvedReference()
+    {
+        Assert.False(Bind(
+            OperationKind.BlueGreenSwitch, ValidStep() with { Revision = "$(BUILD_SOURCEVERSION)" }, out _, out var error));
+        Assert.Contains("unresolved", error, StringComparison.Ordinal);
+        Assert.Contains("$(BUILD_SOURCEVERSION)", error, StringComparison.Ordinal);
+    }
+
+    // The first step of the template carries the revision so the refusal comes before the shared schema
+    // is migrated; a migrate step without a revision (catalog v1) is unaffected.
+    [Fact]
+    public void Migrate_RefusesAnUnresolvedRevisionButAcceptsNone()
+    {
+        Assert.False(Bind(
+            OperationKind.BlueGreenMigrate, ValidStep() with { Revision = "$(BG_REVISION)" }, out _, out var error));
+        Assert.Contains("unresolved", error, StringComparison.Ordinal);
+
+        Assert.True(Bind(OperationKind.BlueGreenMigrate, ValidStep() with { Revision = "" }, out _, out error), error);
+        Assert.True(Bind(OperationKind.BlueGreenMigrate, ValidStep() with { Revision = "deadbeef" }, out _, out error), error);
+    }
+
     // Without the migration sources the expand/contract gate has nothing to inspect, which is how an
     // earlier revision of this feature lost the check while still claiming to enforce it.
     [Fact]

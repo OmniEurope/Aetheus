@@ -29,6 +29,57 @@ public sealed class PackageRegistryConcurrencyIntegrationTests(PostgresFixture f
                 TestContext.Current.CancellationToken));
     }
 
+    // R1-18 against the real schema: the migration adds IsDeprecated, and it round-trips per version
+    // through the repository the NuGet registration reads.
+    [Fact]
+    public async Task Deprecation_IsStoredPerVersion_AndReadByTheNuGetRegistration()
+    {
+        await ResetAndMigrateAsync();
+        await using (var seed = NewContext())
+        {
+            var package = NewPackage();
+            package.Versions =
+            [
+                NewVersion("1.0.0"),
+                NewVersion("2.0.0")
+            ];
+            seed.RegistryPackages.Add(package);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var update = NewContext())
+        {
+            var package = await update.RegistryPackages.Include(item => item.Versions)
+                .SingleAsync(TestContext.Current.CancellationToken);
+            package.Versions.Single(version => version.Version == "1.0.0").IsDeprecated = true;
+            await update.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var read = NewContext();
+        var registration = await new Aetheus.Back.Components.PackageRegistry.PackageRegistryRepository(read)
+            .GetRegistrationPackageAsync(
+                PackageRegistryKind.NuGet, "aetheus.concurrent", ct: TestContext.Current.CancellationToken);
+        Assert.NotNull(registration);
+        Assert.Equal(
+            ["1.0.0"],
+            registration.Versions.Where(version => version.IsDeprecated).Select(version => version.Version));
+        Assert.Equal(2, registration.Versions.Count);
+    }
+
+    private static RegistryPackageVersion NewVersion(string version) => new()
+    {
+        Version = version,
+        NormalizedVersion = version,
+        FilePath = $"nuget/{version}.nupkg",
+        ContentType = "application/octet-stream",
+        Sha256 = new string('a', 64),
+        Sha1 = new string('b', 40),
+        Integrity = "sha512-x",
+        Metadata = "{}",
+        PublishedBy = "tester",
+        CreatedAt = DateTime.UtcNow
+    };
+
     private static RegistryPackage NewPackage()
     {
         var now = DateTime.UtcNow;

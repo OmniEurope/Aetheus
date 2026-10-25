@@ -29,6 +29,10 @@ public sealed record GitLightRepoDto
     /// repository: a source a pipeline asks for by name (<c>source: repository:</c>), never the
     /// repository a pipeline definition is read from by default.</summary>
     public bool IsAdditionalSource { get; init; }
+
+    /// <summary>True for the repository of the project's system configuration files (ADR-057): not its
+    /// source, so a pipeline definition, a workspace or a push trigger never takes it for one.</summary>
+    public bool IsConfiguration { get; init; }
 }
 
 public sealed record CreateGitLightRepoRequest
@@ -53,6 +57,11 @@ public sealed record UpdateGitLightRepoRequest
 
     [StringLength(200)]
     public string? DefaultBranch { get; init; }
+
+    /// <summary>True designates this repository as the project's configuration repository (ADR-057): the
+    /// deployment then reads the host configuration files from it and the previous one stops being it, a
+    /// project having one. False gives it up. Null leaves it as it is.</summary>
+    public bool? IsConfiguration { get; init; }
 }
 
 // --- Commits ---

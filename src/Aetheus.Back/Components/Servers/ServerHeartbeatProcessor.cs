@@ -95,7 +95,8 @@ internal sealed class ServerHeartbeatProcessor(
         ApplyAgentIdentity(server, serverId, heartbeat);
         ServerHeartbeatCapabilityProjector.Apply(server, heartbeat);
         ApplyCapabilityDiagnostics(server, heartbeat);
-        await PersistHeartbeatInventoriesAsync(serverId, heartbeat, fingerprints, ct).ConfigureAwait(false);
+        ServerDisks.Apply(server, heartbeat);
+        await PersistHeartbeatInventoriesAsync(server.Name, serverId, heartbeat, fingerprints, ct).ConfigureAwait(false);
         // Saved with the sections it describes: a rolled-back beat leaves the previous fingerprints.
         var fingerprintsJson = fingerprints.ToJson();
         if (server.HeartbeatInventoryFingerprintsJson != fingerprintsJson)
@@ -155,6 +156,7 @@ internal sealed class ServerHeartbeatProcessor(
     /// rewritten only when its fingerprint changed (see <see
     /// cref="HeartbeatInventoryFingerprints"/>). </summary>
     private async Task PersistHeartbeatInventoriesAsync(
+        string serverName,
         int serverId,
         ServerHeartbeatDto heartbeat,
         HeartbeatInventoryFingerprints fingerprints,
@@ -166,7 +168,7 @@ internal sealed class ServerHeartbeatProcessor(
         await UpdateDockerDataAsync(serverId, heartbeat.Docker, fingerprints, ct).ConfigureAwait(false);
         if (fingerprints.HasChanged(HeartbeatInventoryFingerprints.Apache))
             await UpdateApacheDataAsync(serverId, heartbeat.Apache, ct).ConfigureAwait(false);
-        await UpdateCertbotDataAsync(serverId, heartbeat.Certbot, fingerprints, ct).ConfigureAwait(false);
+        await UpdateCertbotDataAsync(serverName, serverId, heartbeat.Certbot, fingerprints, ct).ConfigureAwait(false);
         await UpdateMailDataAsync(
             serverId, heartbeat.Mail, fingerprints.HasChanged(HeartbeatInventoryFingerprints.Mail), ct).ConfigureAwait(false);
         if (fingerprints.HasChanged(HeartbeatInventoryFingerprints.Teamspeak))
@@ -407,6 +409,7 @@ internal sealed class ServerHeartbeatProcessor(
     }
 
     private async Task UpdateCertbotDataAsync(
+        string serverName,
         int serverId, CertbotDataDto certbot, HeartbeatInventoryFingerprints fingerprints, CancellationToken ct)
     {
         if (fingerprints.HasChanged(HeartbeatInventoryFingerprints.CertbotCertificates))
@@ -439,11 +442,17 @@ internal sealed class ServerHeartbeatProcessor(
                 HelperVersion = certbot.HelperVersion,
                 RenewalCheckFailuresJson = certbot.RenewalCheckFailures.Count == 0
                     ? null
-                    : JsonSerializer.Serialize(certbot.RenewalCheckFailures)
+                    : JsonSerializer.Serialize(certbot.RenewalCheckFailures),
+                RenewalCheckOutputTailJson = certbot.RenewalCheckOutputTail.Count == 0
+                    ? null
+                    : JsonSerializer.Serialize(certbot.RenewalCheckOutputTail),
+                AcmeProxyRulesJson = certbot.AcmeProxyRules.Count == 0
+                    ? null
+                    : JsonSerializer.Serialize(certbot.AcmeProxyRules)
             }
             : null, ct).ConfigureAwait(false);
         if (certbot is { RenewalCheckSucceeded: false, RenewalCheckedAt: { } checkedAt } && checkedAt != previousCheck)
-            domainEvents?.Publish(new Certbot.CertbotRenewalCheckFailedEvent(serverId, checkedAt));
+            domainEvents?.Publish(new Certbot.CertbotRenewalCheckFailedEvent(serverId, serverName, checkedAt));
     }
 
     private async Task UpdateMailDataAsync(int serverId, MailDataDto mail, bool changed, CancellationToken ct)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Notifications;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.Email;
 using NSubstitute;

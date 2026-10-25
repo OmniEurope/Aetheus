@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 @* Present the supplied notifications together so their full text remains accessible in one dialog. *@
-<OmniStack Gap="OmniSpacing.Small">
+<OmniStack>
     @foreach (var message in Messages)
     {
         <OmniAlert Severity="@AlertSeverity(message.Severity)" data-testid="notification-list-item">

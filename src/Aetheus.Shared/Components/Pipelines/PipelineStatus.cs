@@ -22,5 +22,11 @@ public enum PipelineStatus
     /// <summary>Marks a completed candidate as rejected when its assurance seal publishes
     /// CANDIDATE_DEPLOYABLE=false after a required control fails. It is distinct from technical
     /// failure and does not trigger on_success chains.</summary>
-    Rejected = 8
+    Rejected = 8,
+
+    /// <summary>A stage confirmation timed out and the rollback restored the previous version: the
+    /// run is not over. It waits, until <c>PipelineRunDto.ResumeDeadline</c>, for someone to resume it
+    /// (the new version goes back online and the confirmation is asked again) or cancel it. Without
+    /// either, it closes as <see cref="RolledBack"/> (recette R-39).</summary>
+    AwaitingResume = 9
 }

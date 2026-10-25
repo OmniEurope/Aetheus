@@ -15,15 +15,15 @@ internal static class ScannerApiSpecifications
     /// <summary>The definitions of the step: the list when one is given, else the single URL, else none.</summary>
     internal static IReadOnlyList<string> Read(IReadOnlyDictionary<string, string> envVars)
     {
-        var list = (ScannerOperationSupport.Value(envVars, ListVariable) ?? string.Empty)
+        var list = (envVars.GetValueOrDefault(ListVariable) ?? string.Empty)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (list.Length > 0) return list;
-        return ScannerOperationSupport.Value(envVars, SingleVariable) is { Length: > 0 } single ? [single] : [];
+        return envVars.GetValueOrDefault(SingleVariable) is { Length: > 0 } single ? [single] : [];
     }
 
     /// <summary>True when the step names a list: it is scanned partition by partition.</summary>
     internal static bool IsPartitioned(IReadOnlyDictionary<string, string> envVars) =>
-        !string.IsNullOrWhiteSpace(ScannerOperationSupport.Value(envVars, ListVariable));
+        !string.IsNullOrWhiteSpace(envVars.GetValueOrDefault(ListVariable));
 
     /// <summary>The environment of one partition: the same step, with that definition as its single URL.</summary>
     internal static IReadOnlyDictionary<string, string> ForPartition(

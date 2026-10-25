@@ -30,12 +30,7 @@ internal static class GitRepositoryViewHelpers
         return sb.ToString();
     }
 
-    public static string FormatSize(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
-        _ => $"{bytes / (1024.0 * 1024.0):F1} MB"
-    };
+    public static string FormatSize(long bytes) => DisplayFormatting.Size(bytes);
 
     public static OmniTone GetPullRequestStatusBadge(PullRequestStatus status) => status switch
     {

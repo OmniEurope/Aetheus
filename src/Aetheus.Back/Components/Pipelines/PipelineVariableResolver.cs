@@ -45,13 +45,20 @@ internal sealed class PipelineVariableResolver(
         var secretKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var resolved = CreateSystemVariables(definition, pipelineId, runId, pipelineName, buildNumber);
         AddProjectAndDeclaredVariables(resolved, definition, projectId, runId);
-        await AddLibraryVariablesAsync(resolved, warnings, definition, projectId, ct).ConfigureAwait(false);
+        var emptyLibraryKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await AddLibraryVariablesAsync(resolved, warnings, emptyLibraryKeys, definition, projectId, ct).ConfigureAwait(false);
         await AddVaultVariablesAsync(resolved, secretKeys, definition, projectId, ct).ConfigureAwait(false);
         AddAdditionalVariables(resolved, additionalVariables);
+        // R-24: written last, over every other source, so the verdict always comes from the release itself.
+        await PipelineReleaseGateVariables.InjectAsync(resolved, definition, projectId, repo, ct).ConfigureAwait(false);
         PipelineVariableExpansion.ExpandResolved(
             resolved, secretKeys, PipelineUnresolvedVariableGuard.BuildDeferredNames(definition));
         if (enforceResolvedReferences)
+        {
             PipelineUnresolvedVariableGuard.Validate(definition, resolved, secretKeys);
+            // A copied library or vault is created empty: a run must not read "" where a value belongs.
+            PipelineUnresolvedVariableGuard.ValidateNoEmptyValues(definition, resolved, secretKeys, emptyLibraryKeys);
+        }
         PipelineDeploymentTargetGuard.ValidateVariables(resolved);
         return (resolved, warnings, secretKeys);
     }
@@ -114,6 +121,7 @@ internal sealed class PipelineVariableResolver(
     private async Task AddLibraryVariablesAsync(
         IDictionary<string, string> resolved,
         ICollection<string> warnings,
+        ISet<string> emptyLibraryKeys,
         PipelineYamlDefinition definition,
         int? projectId,
         CancellationToken ct)
@@ -139,7 +147,11 @@ internal sealed class PipelineVariableResolver(
         foreach (var name in definition.VariableLibraries)
             if (!foundNames.Contains(name, StringComparer.OrdinalIgnoreCase))
                 warnings.Add(MissingLibraryWarning(name));
-        foreach (var (key, value) in libraryVariables) resolved[key] = value;
+        foreach (var (key, value) in libraryVariables)
+        {
+            resolved[key] = value;
+            if (string.IsNullOrEmpty(value)) emptyLibraryKeys.Add(key);
+        }
     }
 
     /// <summary>The one place this sentence is written, so the reader below can recognise its own.</summary>

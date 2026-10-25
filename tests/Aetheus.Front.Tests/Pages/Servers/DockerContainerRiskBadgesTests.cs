@@ -80,6 +80,18 @@ public sealed class DockerContainerRiskBadgesTests : BunitContext
     }
 
     [Fact]
+    public void R33_RunTestcontainersReaper_IsNamed_ItsPrivilegeAndSocketAreExpected()
+    {
+        var cut = RenderBadges(Container("testcontainers-ryuk-3f2b6c1e-8d4a-4b5e-9c7f-0a1b2c3d4e5f",
+            DockerContainerRisks.Privileged | DockerContainerRisks.DockerSocket, AetheusContainerRole.TestcontainersReaper));
+
+        Assert.Equal("TestcontainersReaper", cut.Find("[data-docker-role]").GetAttribute("data-docker-role"));
+        Assert.Contains("DockerRoleTestcontainersReaper", cut.Find("[data-docker-role]").TextContent, StringComparison.Ordinal);
+        Assert.Equal("true", cut.Find("[data-docker-risk=Privileged]").GetAttribute("data-expected"));
+        Assert.Equal("true", cut.Find("[data-docker-risk=DockerSocket]").GetAttribute("data-expected"));
+    }
+
+    [Fact]
     public void CleanOrUninspectedContainer_DrawsNoBadge()
     {
         Assert.Empty(RenderBadges(Container("web")).FindComponents<OmniBadge>());

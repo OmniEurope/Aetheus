@@ -1,14 +1,97 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Show domain and measure breakdowns on both project and run Quality pages. Metrics such as
    coverage or complexity can affect a grade without producing findings. *@
-@if (Grade is not null)
+@if (GateRow && (Grade is not null || GateGrade is not null))
+{
+    @* R1-38: one block, one style. The Gate grade first, then code quality and tests, security and
+       architecture, each domain followed by its measures; every line explains its criterion in a tooltip
+       and opens its detail on a click. *@
+    <OmniAccordion Multiple="true" Level="OmniHeadingLevel.H4" Class="analysis-grade-block" data-testid="analysis-grade-block">
+        <AnalysisGradeRow Kind="gate" TestId="grade-row-gate" Label="@L["GateGrade"]" Tooltip="@L["AnalysisCriterionGate"]"
+                          Grade="@GateGrade">
+            <Hints>
+                @if (GateCause is { } cause)
+                {
+                    @* Mockup R1-37: the cause reads under the label, not in the value column. *@
+                    <small class="analysis-grade-measure-hint" data-testid="grade-row-gate-cause">@L["GateGradeSetBy"] @cause</small>
+                }
+            </Hints>
+            <Details>
+                <p>@L["AnalysisCriterionGate"]</p>
+                @if (Grade?.LimitingDomain is { } limiting)
+                {
+                    <p>@string.Format(L["AnalysisGradeLimitingDomain"], DomainLabel(L, limiting))</p>
+                }
+                @if (Grade?.EvaluatedAt is { } evaluatedAt)
+                {
+                    <p>@string.Format(L["AnalysisGradeEvaluatedOn"], evaluatedAt.ToLocalTime().ToString("g"))</p>
+                }
+            </Details>
+        </AnalysisGradeRow>
+        @foreach (var domain in BlockDomains)
+        {
+            <AnalysisGradeRow Kind="domain" TestId="grade-row-domain" Label="@domain.Label" Tooltip="@L[domain.CriterionKey]"
+                              Value="@(domain.Completeness == AnalysisGradeCompleteness.Incomplete ? L["Incomplete"].Value : null)"
+                              Grade="@domain.Grade" Limiting="@IsLimiting(domain)">
+                <Hints>
+                    @* Recette R-17: a domain the gate does not require is shown but does not set the Gate grade
+                       (a coverage graded E beside a Gate grade A). *@
+                    @if (!domain.Required)
+                    {
+                        <small class="analysis-grade-measure-hint" data-testid="grade-row-domain-not-required">@L["GateDomainNotRequired"]</small>
+                    }
+                </Hints>
+                <Details>
+                    <p>@L[domain.CriterionKey]</p>
+                    @if (domain.EvaluatedAt is { } evaluatedAt)
+                    {
+                        <p>@string.Format(L["AnalysisGradeEvaluatedOn"], evaluatedAt.ToLocalTime().ToString("g"))</p>
+                    }
+                </Details>
+            </AnalysisGradeRow>
+            @foreach (var measure in ShownMeasures(domain.Measures))
+            {
+                <AnalysisGradeRow Kind="measure" TestId="grade-row-measure" Label="@MeasureLabel(measure.Key)" Tooltip="@MeasureCriterion(measure.Key)"
+                                  Value="@MeasureText(measure)" Grade="@measure.Grade">
+                    <Hints>
+                        @if (ShowDistance(measure))
+                        {
+                            <small class="analysis-grade-measure-hint">@L["AnalysisDistanceToGrade", measure.DistanceToNextGrade!.Value.ToString("0.##"), measure.NextGrade!]</small>
+                        }
+                        @if (measure.FindingCounts is { Critical: > 0 })
+                        {
+                            <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
+                        }
+                    </Hints>
+                    <Details>
+                        <p>@MeasureCriterion(measure.Key)</p>
+                        @if (ThresholdText(measure) is { } thresholds)
+                        {
+                            <p>@string.Format(L[measure.Direction == AnalysisMetricDirection.LowerIsBetter ? "AnalysisGradeThresholdsLower" : "AnalysisGradeThresholdsHigher"], thresholds)</p>
+                        }
+                        <p>@string.Format(L["AnalysisGradeMeasuredValue"], MeasureText(measure))</p>
+                    </Details>
+                </AnalysisGradeRow>
+            }
+            @if (domain.CrapScore.HasValue)
+            {
+                <AnalysisGradeRow Kind="measure" TestId="grade-row-crap" Label="@L["AnalysisCrapAverage"]" Tooltip="@L["AnalysisCrapExplanation"]"
+                                  Value="@domain.CrapScore.Value.ToString("0.0")">
+                    <Details><p>@L["AnalysisCrapExplanation"]</p></Details>
+                </AnalysisGradeRow>
+            }
+        }
+    </OmniAccordion>
+}
+else if (Grade is not null)
 {
     @* Use two columns with one line per measure and compact empty domains. Bold each domain title
        that determines the overall grade. *@
-    <div class="analysis-grade-domains">
+    @* R-3: the domains are OE cards of one OmniTileGrid (same width, same height, nothing spills). *@
+    <OmniTileGrid Columns="2">
         @foreach (var domain in Domains.Where(HasDetails))
         {
-            <section class="analysis-grade-domain">
+            <OmniCard Class="analysis-grade-domain">
                 <div class="analysis-grade-domain-heading">
                     <span class="@(IsLimiting(domain) ? "analysis-grade-domain-limiting" : null)">@domain.Label</span>
                     <GradeBadge Value="@domain.Grade" />
@@ -17,7 +100,7 @@
                 {
                     <div class="analysis-grade-domain-state">@L["Incomplete"]</div>
                 }
-                @foreach (var measure in domain.Measures.Where(IsShown))
+                @foreach (var measure in ShownMeasures(domain.Measures))
                 {
                     <div class="analysis-grade-measure">
                         <span class="analysis-grade-measure-label" title="@MeasureLabel(measure.Key)">@MeasureLabel(measure.Key)</span>
@@ -41,9 +124,9 @@
                         <strong aria-label="@L["AnalysisAdvisory"]">–</strong>
                     </div>
                 }
-            </section>
+            </OmniCard>
         }
-    </div>
+    </OmniTileGrid>
     @foreach (var domain in Domains.Where(domain => !HasDetails(domain)))
     {
         <div class="analysis-grade-domain-empty">

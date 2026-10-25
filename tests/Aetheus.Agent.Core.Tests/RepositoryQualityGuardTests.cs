@@ -23,10 +23,10 @@ public sealed class RepositoryQualityGuardTests
         var details = string.Join(
             Environment.NewLine,
             report.Hotspots
-                .Where(item => item.Cyclomatic > 15)
+                .Where(item => item.Cyclomatic > ComplexityAnalyzer.HighComplexityThreshold)
                 .Select(item => $"{item.Cyclomatic}: {Path.GetRelativePath(root, item.Path)}:{item.Line} {item.Member}"));
 
-        Assert.True(report.MaxCyclomatic <= 15,
+        Assert.True(report.MaxCyclomatic <= ComplexityAnalyzer.HighComplexityThreshold,
             $"Maximum cyclomatic complexity is {report.MaxCyclomatic}; grade A requires <= 15.{Environment.NewLine}{details}");
     }
 

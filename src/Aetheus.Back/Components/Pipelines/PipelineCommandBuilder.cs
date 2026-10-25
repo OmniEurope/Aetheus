@@ -87,6 +87,12 @@ internal static partial class PipelineCommandBuilder
             ? []
             : VariablePattern().Matches(text).Select(match => match.Groups[1].Value);
 
+    /// <summary>The parameter names <paramref name="text"/> references as <c>${{ parameters.NAME }}</c>.</summary>
+    internal static IEnumerable<string> ReferencedParameterNames(string? text) =>
+        string.IsNullOrEmpty(text)
+            ? []
+            : ParameterPattern().Matches(text).Select(match => match.Groups[1].Value);
+
     /// <summary>
     /// Substitutes <c>${{ parameters.X }}</c> and <c>$(X)</c>. An unknown <c>$(X)</c> stays literal.
     /// <c>$(X:-default)</c> takes the value of X when it is defined and not empty; otherwise

@@ -8,7 +8,7 @@ namespace Aetheus.Agent.Core.Functions;
 internal sealed record PackageSbomDependency(object? Name, object? Version);
 
 /// <summary>
-/// <c>readNuGetPackages</c> and <c>readNpmPackages</c> of <c>deploy/scripts/generate-package-sbom.mjs</c>
+/// <c>readNuGetPackages</c> and <c>readNpmPackages</c> of the former <c>generate-package-sbom.mjs</c> script
 /// over the input parsed by <see cref="JsJson"/>, with JavaScript's iteration, spread and conversion
 /// semantics: a string iterates as its code points (none of which carries a package), a value that is
 /// not iterable throws V8's <see cref="JsTypeError"/>, a later NuGet duplicate (same lowercased id and

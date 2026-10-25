@@ -7,10 +7,10 @@
     <Badges>
         <HelpLink PageKey="projects" />
     </Badges>
-    <Actions>
+    <ActionsContent>
         @* The supervision of every project is a side-menu entry (NavMenu), not a button here. *@
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!_canWrite)" Class="project-list-create" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-    </Actions>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!_canWrite)" Class="project-list-create" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
 <div class="project-list-toolbar">
@@ -25,14 +25,14 @@
             @bind-Value:after="ApplyFilters" Label="@L["FilterByStatus"]" Class="project-list-status-filter" />
         <OmniDropDown TValue="ProjectSortOption" Options="@_sortOptions"
             @bind-Value="_sortOption" Label="@L["SortProjects"]" Class="project-list-sort" />
-        <OmniButton Variant="@(_favoritesOnly ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@ToggleFavoritesOnly" Class="project-favorites-filter" title="@L["FavoritesOnly"]" aria-pressed="@_favoritesOnly"><OmniIcon Name="@MaterialIconMap.Resolve((_favoritesOnly ? "star" : "star_border"))" /> <span>@L["Favorites"]</span></OmniButton>
+        <OmniButton Variant="@(_favoritesOnly ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@ToggleFavoritesOnly" Class="project-favorites-filter" title="@L["FavoritesOnly"]" aria-pressed="@_favoritesOnly"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoritesOnly ? "star" : "star_border"))" /></Icon><ChildContent><span>@L["Favorites"]</span></ChildContent></OmniButton>
         <div class="project-view-switch" role="group" aria-label="@L["ProjectViewMode"]">
-            <OmniButton Variant="@(_viewMode == ProjectViewMode.Comfortable ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@(() => SetViewModeAsync(ProjectViewMode.Comfortable))" title="@L["ComfortableView"]" Label="@L["ComfortableView"]" aria-pressed="@(_viewMode == ProjectViewMode.Comfortable)"><OmniIcon Name="OmniIconName.SquaresFour" /></OmniButton>
-            <OmniButton Variant="@(_viewMode == ProjectViewMode.Dense ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@(() => SetViewModeAsync(ProjectViewMode.Dense))" title="@L["DenseView"]" Label="@L["DenseView"]" aria-pressed="@(_viewMode == ProjectViewMode.Dense)"><OmniIcon Name="OmniIconName.Rows" /></OmniButton>
+            <OmniButton Variant="@(_viewMode == ProjectViewMode.Comfortable ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@(() => SetViewModeAsync(ProjectViewMode.Comfortable))" title="@L["ComfortableView"]" Label="@L["ComfortableView"]" aria-pressed="@(_viewMode == ProjectViewMode.Comfortable)"><Icon><OmniIcon Name="OmniIconName.SquaresFour" /></Icon></OmniButton>
+            <OmniButton Variant="@(_viewMode == ProjectViewMode.Dense ? OmniButtonVariant.Primary : OmniButtonVariant.Ghost)" OnClick="@(() => SetViewModeAsync(ProjectViewMode.Dense))" title="@L["DenseView"]" Label="@L["DenseView"]" aria-pressed="@(_viewMode == ProjectViewMode.Dense)"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon></OmniButton>
         </div>
         @if (_statusFilter.HasValue || !string.IsNullOrEmpty(_search) || _favoritesOnly)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><OmniIcon Name="OmniIconName.Close" /> <span>@L["ClearFilters"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
         }
     </div>
 </div>
@@ -45,10 +45,13 @@
 }
 else if (_viewMode == ProjectViewMode.Comfortable)
 {
-    <div class="project-card-grid">
+    @* R-5: the project cards sit in one OmniTileGrid (same width, same height). The click target is the
+       wrapper, not OmniCard.OnClick/Href: the card holds its own links and buttons and OE refuses inline
+       event handlers on a card (see the OE need in the R-5 report). *@
+    <OmniTileGrid Columns="3">
         @foreach (var project in VisibleProjects)
         {
-            <div role="link" tabindex="0" data-testid="project-item"
+            <div role="link" tabindex="0" data-testid="project-item" class="project-card-item"
                  @onclick="@(() => OpenProject(project.Id))"
                  @onkeydown="@((KeyboardEventArgs args) => OnProjectKeyDown(args, project.Id))">
             <OmniCard Class="project-card">
@@ -62,7 +65,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                         <OmniIcon Name="OmniIconName.Lock" Class="omni-u-text-muted icon-xs-app" title="@L["Read"]" />
                     }
                     <span class="project-card-action" @onclick:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
                     </span>
                 </div>
 
@@ -79,10 +82,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                 <div class="project-production">
                     <div class="project-production-row">
                         <span class="project-production-label">@L["Production"]</span>
-                        <span class="@($"project-production-status {ProductionStatusClass(project.ProductionStatus)}")">
-                            <span class="project-production-dot"></span>
-                            @L[$"Production{project.ProductionStatus}"]
-                        </span>
+                        <OmniBadge Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
                     </div>
                     <div class="project-production-row">
                         <a href="@($"/projects/{project.Id}/quality")" class="project-gate-summary"
@@ -121,9 +121,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                                 }
                                 @if (project.LastCommitAt.HasValue)
                                 {
-                                    <span class="project-activity-date" title="@project.LastCommitAt.Value.ToString("F")">
-                                        @project.LastCommitAt.Value.ToString("g") · @RelativeTime.FormatAgo(L, project.LastCommitAt.Value)
-                                    </span>
+                                    <span class="project-activity-date"><OmniRelativeTime Value="@AsOffset(project.LastCommitAt.Value)" /></span>
                                 }
                             }
                             else
@@ -142,7 +140,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                                 <div class="project-activity-run">
                                     @if (project.LastRunStatus is { } runStatus)
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(runStatus)">@L.Localize(runStatus)</OmniBadge>
+                                        <PipelineRunStatusBadge Status="runStatus" />
                                     }
                                     <a href="@($"/pipelines/runs/{project.LastRunId}")" class="project-activity-link"
                                         @onclick:stopPropagation="true">
@@ -155,9 +153,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                                 }
                                 @if (project.LastRunAt.HasValue)
                                 {
-                                    <span class="project-activity-date" title="@project.LastRunAt.Value.ToString("F")">
-                                        @project.LastRunAt.Value.ToString("g") · @RelativeTime.FormatAgo(L, project.LastRunAt.Value)
-                                    </span>
+                                    <span class="project-activity-date"><OmniRelativeTime Value="@AsOffset(project.LastRunAt.Value)" /></span>
                                 }
                             }
                             else
@@ -184,7 +180,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
             </OmniCard>
             </div>
         }
-    </div>
+    </OmniTileGrid>
 }
 else
 {
@@ -204,7 +200,7 @@ else
                 @onkeydown="@((KeyboardEventArgs args) => OnProjectKeyDown(args, project.Id))">
                 <div class="project-dense-project">
                     <span @onclick:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
                     </span>
                     <div>
                         <a href="@($"/projects/{project.Id}")" @onclick:stopPropagation="true">@project.Name</a>
@@ -212,10 +208,7 @@ else
                     </div>
                 </div>
                 <div>
-                    <span class="@($"project-production-status {ProductionStatusClass(project.ProductionStatus)}")">
-                        <span class="project-production-dot"></span>
-                        @L[$"Production{project.ProductionStatus}"]
-                    </span>
+                    <OmniBadge Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
                 </div>
                 <div>
                     <a href="@($"/projects/{project.Id}/quality")"
@@ -248,7 +241,7 @@ else
                         <div class="project-activity-run">
                             @if (project.LastRunStatus is { } denseStatus)
                             {
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(denseStatus)">@L.Localize(denseStatus)</OmniBadge>
+                                <PipelineRunStatusBadge Status="denseStatus" />
                             }
                             <a href="@($"/pipelines/runs/{project.LastRunId}")" @onclick:stopPropagation="true">
                                 #@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])
@@ -292,11 +285,11 @@ else
         <ActionContent>
             @if (_statusFilter.HasValue || !string.IsNullOrEmpty(_search) || _favoritesOnly)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><OmniIcon Name="OmniIconName.Close" /> <span>@L["ClearFilters"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
             }
             else
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!_canWrite)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialog" Disabled="@(!_canWrite)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
             }
         </ActionContent>
     </EmptyState>

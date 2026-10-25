@@ -90,6 +90,10 @@ public class SettingsTests : BunitContext
         await cut.InvokeAsync(() => settings.DensityChanged.InvokeAsync(OmniDensity.Compact));
         await cut.InvokeAsync(() => settings.TextSizeLevelChanged.InvokeAsync(7));
         await cut.InvokeAsync(() => settings.ControlSizeLevelChanged.InvokeAsync(4));
+        // R1-25: the content width (centred or full width) is offered here as in the Theme window.
+        Assert.True(settings.FullWidthChanged.HasDelegate);
+        await cut.InvokeAsync(() => settings.FullWidthChanged.InvokeAsync(false));
+        Assert.False(Services.GetRequiredService<OmniAppearanceState>().FullWidth);
 
         // STD-SHELL: every choice is the user's appearance in OE's OmniAppearanceState (omni.appearance),
         // which the application's OmniThemeScope follows; nothing is written by hand, in storage or on the root.

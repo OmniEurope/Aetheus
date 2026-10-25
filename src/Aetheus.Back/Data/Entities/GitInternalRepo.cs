@@ -15,6 +15,10 @@ public class GitInternalRepo
     public DateTime? LastPushAt { get; set; }
     public int? GitConnectionId { get; set; }
 
+    /// <summary>True for the repository that holds the project's system configuration files (Apache
+    /// virtual hosts, environment sample, upstream); never the project's own source (ADR-057).</summary>
+    public bool IsConfiguration { get; set; }
+
     // Navigation
     public Project Project { get; set; } = null!;
     public GitConnection? GitConnection { get; set; }

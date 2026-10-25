@@ -50,7 +50,7 @@
     }
     <DialogFooter OnCancel="@(() => Dialog.Close())">
         <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnConfirm" Busy="@(Phase is not null)" Disabled="@(!CanConfirm)">
-            <OmniIcon Name="@(Delete ? OmniIconName.Delete : OmniIconName.Close)" /> <span>@(Delete ? L["Delete"] : L["Deactivate"])</span>
+            <Icon><OmniIcon Name="@(Delete ? OmniIconName.Delete : OmniIconName.Close)" /></Icon><ChildContent><span>@(Delete ? L["Delete"] : L["Deactivate"])</span></ChildContent>
         </OmniButton>
     </DialogFooter>
 </OmniStack>

@@ -50,7 +50,7 @@ public class OmniDialogService(AppDialogs dialogs, OmniOverlayService overlay)
             Intent = OmniTone.Accent,
             // Nothing looks selected when the message opens.
             InitialFocus = OmniDialogInitialFocus.Panel,
-            Footer = builder =>
+            FooterContent = builder =>
             {
                 builder.OpenComponent<OmniButton>(0);
                 builder.AddComponentParameter(1, nameof(OmniButton.Variant), OmniButtonVariant.Secondary);

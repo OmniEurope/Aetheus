@@ -7,6 +7,7 @@ public partial class Alerts : IAsyncDisposable
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private UiActions Ui { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
@@ -56,6 +57,11 @@ public partial class Alerts : IAsyncDisposable
         _recent = AlertNotify.Recent;
         StateHasChanged();
     });
+
+    private void OpenRecentAlert(AlertTriggeredDto alert)
+    {
+        if (alert.OccurrenceId is { } id) Nav.NavigateTo($"/alerts/{id}");
+    }
 
     private static OmniTone RecentSeverityBadge(string severity) => severity?.ToLowerInvariant() switch
     {

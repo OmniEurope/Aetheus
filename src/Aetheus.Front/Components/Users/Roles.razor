@@ -8,9 +8,9 @@
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon>
         <Badges>
         </Badges>
-        <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewRole"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-        </Actions>
+        <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewRole"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        </ActionsContent>
     </OmniPageHeader>
 
     <AdminIdentityNav ActiveSection="roles" />
@@ -26,14 +26,14 @@
                 VirtualData="@(() => new OmniDataGridResult<RoleDto>(_roles, _totalCount))"
                 FullHeight="true" RowClick="@OnRowClick">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Name"]" MinWidth="180px" Filterable="true" >
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                     <Template Context="role">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                             <a href="/admin/roles/@role.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@role.Name</a>
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="RoleDto" Property="Description" Title="@L["Description"]" MinWidth="240px" Filterable="true" >
+                <OmniDataGridColumn TItem="RoleDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="240px" Filterable="true" >
                     <Template Context="role">@LocalizeDescription(role)</Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="RoleDto" Property="PermissionCount" Title="@L["Permissions"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" FilterOperator="OmniDataGridFilterOperator.Equals" >
@@ -43,10 +43,10 @@
                 <OmniDataGridColumn TItem="RoleDto" Title="@L["Actions"]" Width="120px" Sortable="false" Filterable="false" >
                     <Template Context="role">
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClone(role))" title="@L["CloneRole"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClone(role))" title="@L["CloneRole"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             @if (role.Name != "Admin")
                             {
-                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(role))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(role))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             }
                         </span>
                     </Template>

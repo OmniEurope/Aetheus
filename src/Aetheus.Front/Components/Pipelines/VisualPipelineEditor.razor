@@ -52,13 +52,13 @@ else
                         <OmniTextBox aria-label="@L["Value"]" Value="@value" Placeholder="@L["Value"]"
                                        ValueChanged="@(val => OnPipelineVarChanged(key, val))"
                                        Class="icon-input-sm" ValueExpression="@(() => value)" />
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemovePipelineVar(key))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnRemovePipelineVar(key))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     }
                 </div>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Class="omni-u-mt-sm">
                     <OmniTextBox aria-label="@L["Key"]" @bind-Value="_newPipelineVarKey" Placeholder="@L["Key"]" Class="text-input-flex" />
                     <OmniTextBox aria-label="@L["Value"]" @bind-Value="_newPipelineVarValue" Placeholder="@L["Value"]" Class="text-input-flex" />
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddPipelineVar" Disabled="@string.IsNullOrWhiteSpace(_newPipelineVarKey)" title="@L["Add"]"><OmniIcon Name="OmniIconName.Add" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddPipelineVar" Disabled="@string.IsNullOrWhiteSpace(_newPipelineVarKey)" title="@L["Add"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon></OmniButton>
                 </OmniStack>
             </ChildContent></OmniFieldset>
         </div>
@@ -66,21 +66,24 @@ else
 
     @* Toolbar *@
     <div class="vp-toolbar">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddStage" title="@L["AddStage"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddStage" title="@L["AddStage"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
         <OmniDropDown aria-label="@L["StageTemplate"]" TValue="int?" Placeholder="@L["StageTemplate"]" Options="@(_stageTemplateItems.ToOptions(item => (int?)item.Value, item => item.Text))"
                         Value="@_selectedStageTemplateId"
                         ValueChanged="OnStageTemplateChanged"
                         ValueExpression="@(() => _selectedStageTemplateId)"
                         Class="w-rem-10 fs-13" />
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnUndo" Disabled="@(!CanUndo)" title="@L["Undo"]" Label="@L["Undo"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRedo" Disabled="@(!CanRedo)" title="@L["Redo"]" Label="@L["Redo"]"><OmniIcon Name="OmniIconName.ArrowUUpRight" /></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnUndo" Disabled="@(!CanUndo)" title="@L["Undo"]" Label="@L["Undo"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnRedo" Disabled="@(!CanRedo)" title="@L["Redo"]" Label="@L["Redo"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpRight" /></Icon></OmniButton>
         @* STD-BTN detection 11: Add visible, the other actions in the menu (the icon-only view controls stay in the toolbar). *@
         <OmniOverflowMenu Label="@L["MoreActions"]">
             <OmniMenuItem OnClick="@OnAutoLayout" title="@L["AutoLayout"]"><Icon><OmniIcon Name="OmniIconName.Sparkle" /></Icon><ChildContent>@L["Arrange"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomIn" title="@L["ZoomIn"]"><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomOut" title="@L["ZoomOut"]"><OmniIcon Name="OmniIconName.MagnifyingGlassMinus" /></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnFitView" title="@L["FitScreen"]"><OmniIcon Name="OmniIconName.FrameCorners" /></OmniButton>
+        @* The icon-only view controls form one control group (R-2). *@
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center" role="group" aria-label="@L["ZoomControls"]">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomIn" title="@L["ZoomIn"]" Label="@L["ZoomIn"]"><Icon><OmniIcon Name="OmniIconName.MagnifyingGlassPlus" /></Icon></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnZoomOut" title="@L["ZoomOut"]" Label="@L["ZoomOut"]"><Icon><OmniIcon Name="OmniIconName.MagnifyingGlassMinus" /></Icon></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnFitView" title="@L["FitScreen"]" Label="@L["FitScreen"]"><Icon><OmniIcon Name="OmniIconName.FrameCorners" /></Icon></OmniButton>
+        </OmniStack>
     </div>
 
     <OmniAlert Severity="OmniSeverity.Info" Class="vp-editor-guide">
@@ -136,7 +139,7 @@ else
                 <div class="vp-empty-canvas">
                     <OmniIcon Name="OmniIconName.Graph" Class="icon-3xl" />
                     <OmniText Element="OmniTextElement.Paragraph">@L["EmptyPipeline"]</OmniText>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddStage" title="@L["AddStage"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddStage" title="@L["AddStage"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 </div>
             }
             else

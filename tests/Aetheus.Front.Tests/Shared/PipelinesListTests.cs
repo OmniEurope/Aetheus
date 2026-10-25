@@ -107,8 +107,11 @@ public class PipelinesListTests : BunitContext
         });
 
         var cut = RenderList();
-        // The three fleet freshness states each have their chip.
-        cut.WaitForState(() => cut.FindAll(".pipeline-status-chip").Count == 6);
+        // R1-21: a chip that counts nothing is not drawn (here Current and Off catalogue: no pipeline is up to date or off the catalogue).
+        cut.WaitForState(() => cut.FindAll(".pipeline-status-chip").Count > 0);
+        Assert.Equal(4, cut.FindAll(".pipeline-status-chip").Count);
+        Assert.Empty(cut.FindAll(".pipeline-status-chip-current"));
+        Assert.DoesNotContain(cut.FindAll(".pipeline-status-chip-count"), count => count.TextContent.Trim() == "0");
 
         string Chip(string status) => cut.Find($".pipeline-status-chip-{status}").TextContent;
         Assert.Contains("Failed", Chip("failed"), StringComparison.Ordinal);
@@ -689,7 +692,7 @@ public class PipelinesListTests : BunitContext
         _host = Render(builder =>
         {
             builder.OpenComponent<SectionOutlet>(0);
-            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PipelinesList.HeaderActionsSection);
+            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PageHeaderActions.SectionName);
             builder.CloseComponent();
             builder.OpenComponent<PipelinesList>(2);
             builder.AddAttribute(3, nameof(PipelinesList.ProjectId), projectId);

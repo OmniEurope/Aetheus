@@ -8,11 +8,11 @@
     }
     else
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 omni-u-text-muted">@L["OwnedPipelinesHint"]</OmniText>
             @if (_owned.Count > 0)
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnTransferAsync"><OmniIcon Name="OmniIconName.UserPlus" /> <span>@L["TransferPipelinesTo"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnTransferAsync"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["TransferPipelinesTo"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
         @if (_owned.Count == 0)
@@ -24,7 +24,7 @@
             <OmniDataGrid FillAvailableHeight="true" TItem="PipelineOwnershipDto" ExportTitle="@ExportContext.Title(L["OwnedPipelines"])" ExportFields="@ExportContext.Fields()" Items="@_owned"
                 OnRowClick="@(args => Nav.NavigateTo($"/pipelines/{args.Item.PipelineId}?tab=settings"))" Class="aetheus-clickable-rows" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
                 <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="PipelineOwnershipDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true">
+                    <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="PipelineOwnershipDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true">
                         <Template Context="p">
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"/pipelines/{p.PipelineId}?tab=settings")">@p.PipelineName</OmniLink></span>
                             <PipelineOwnerBadge OwnerUsername="@p.OwnerUsername" OwnerInactive="@p.OwnerInactive" />

@@ -10,6 +10,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public interface IPipelineEnvironmentCheckGuard
 {
+    public const string EnvironmentCheckHttpClient = "PipelineEnvironmentCheck";
+
     /// <param name="projectId">The run's project (BACK-018): the stage's environment is read in it, so
     /// a homonym of another project never answers for it.</param>
     /// <returns><c>true</c> when the stage may proceed.</returns>
@@ -30,6 +32,8 @@ public sealed class PipelineEnvironmentCheckGuard(
     // The DNS lookup of a REST callback host; the system resolver unless a test supplies one.
     Func<string, CancellationToken, Task<System.Net.IPAddress[]>>? resolve = null) : IPipelineEnvironmentCheckGuard
 {
+    public const string EnvironmentCheckHttpClient = "PipelineEnvironmentCheck";
+
     public async Task<bool> CheckEnvironmentChecksAsync(PipelineStageDefinition stageDef, int? projectId, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(stageDef.Environment)) return true;
@@ -92,7 +96,7 @@ public sealed class PipelineEnvironmentCheckGuard(
                 }
             }
 
-            var httpClient = httpClientFactory.CreateClient(PipelinesModuleExtensions.EnvironmentCheckHttpClient);
+            var httpClient = httpClientFactory.CreateClient(EnvironmentCheckHttpClient);
             using var response = await httpClient.GetAsync(url, timeoutCts.Token).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }

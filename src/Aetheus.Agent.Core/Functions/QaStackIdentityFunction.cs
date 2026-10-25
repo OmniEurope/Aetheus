@@ -3,7 +3,7 @@
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>qa-stack-identity</c> function, port of <c>deploy/scripts/qa/qa-stack-identity.sh</c>, which
+/// The <c>qa-stack-identity</c> function, port of the former <c>qa-stack-identity.sh</c> script, which
 /// the QA steps sourced: the project slug (<see cref="DeployIdentityFunction.Slug"/>, the same
 /// <c>tr | sed</c>), the PostgreSQL role (the slug with <c>-</c> as <c>_</c>, prefixed <c>p_</c> when it
 /// does not start with a letter) and its <c>_e2e</c> database, and the Compose project

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/deploy-identity.sh</c>, run through the real executor: the slug and
+/// The C# port of the former <c>deploy-identity.sh</c> script, run through the real executor: the slug and
 /// image repositories derived from the project name, the helper directory and its refusals, with the
 /// script's messages.
 /// </summary>

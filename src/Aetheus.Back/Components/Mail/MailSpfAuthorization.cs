@@ -17,9 +17,9 @@ internal sealed class MailSpfAuthorization(IMailDnsResolver resolver)
 
     private enum Outcome { NoMatch, Pass, NotPass }
 
-    private sealed class Budget
+    private sealed class Budget(int lookups)
     {
-        public int Remaining { get; set; } = MaxLookups;
+        public int Remaining { get; set; } = lookups;
     }
 
     /// <summary>True when <paramref name="record"/>, published at <paramref name="domain"/>, gives a pass to
@@ -29,7 +29,7 @@ internal sealed class MailSpfAuthorization(IMailDnsResolver resolver)
         ArgumentNullException.ThrowIfNull(address);
         var sender = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { domain };
-        return await EvaluateAsync(domain, record, sender, new Budget(), visited, ct).ConfigureAwait(false) == Outcome.Pass;
+        return await EvaluateAsync(domain, record, sender, new Budget(MaxLookups), visited, ct).ConfigureAwait(false) == Outcome.Pass;
     }
 
     private async Task<Outcome> EvaluateAsync(string domain, string record, IPAddress sender, Budget budget,

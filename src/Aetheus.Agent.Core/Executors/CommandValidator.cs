@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.RegularExpressions;
+using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Agent.Core.Executors;
 
@@ -21,18 +22,8 @@ public sealed partial class CommandValidator(IOptions<AetheusAgentOptions> optio
 {
     private static readonly TimeSpan AllowedPatternMatchTimeout = TimeSpan.FromSeconds(1);
 
-    private static readonly HashSet<string> DangerousEnvVars = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "GCONV_PATH", "BASH_ENV", "ENV",
-        "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "NODE_OPTIONS",
-        "IFS", "SHELL", "HISTFILE",
-        "PATH", "HOME", "USER", "LOGNAME", "CDPATH",
-        "PROMPT_COMMAND", "SHELLOPTS", "BASHOPTS", "GLOBIGNORE",
-        "DOTNET_STARTUP_HOOKS", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "CORECLR_ENABLE_PROFILING",
-        "DOCKER_HOST", "DOCKER_CONTEXT", "GIT_CONFIG_GLOBAL",
-        "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
-        "PSModulePath", "PSModuleAutoloadingPreference", "COMSPEC", "PATHEXT", "PYTHONPATH"
-    };
+    // Shared with the production setup, which never names a library entry after one of them.
+    private static readonly IReadOnlySet<string> DangerousEnvVars = AgentEnvironmentPolicy.DangerousNames;
 
     private readonly List<Regex> _allowedPatterns = options.Value.AllowedCommandPatterns
         .Select(CreateAllowedPattern)

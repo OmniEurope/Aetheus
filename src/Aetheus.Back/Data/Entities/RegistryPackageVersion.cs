@@ -16,6 +16,9 @@ public class RegistryPackageVersion
     public string Metadata { get; set; } = string.Empty;
     public bool IsPrerelease { get; set; }
     public bool IsListed { get; set; } = true;
+    /// <summary>Deprecated per version (R1-18): still served, flagged in the admin, in the npm
+    /// <c>deprecated</c> field and in the NuGet registration <c>deprecation</c> entry.</summary>
+    public bool IsDeprecated { get; set; }
     public string PublishedBy { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public RegistryPackage RegistryPackage { get; set; } = null!;

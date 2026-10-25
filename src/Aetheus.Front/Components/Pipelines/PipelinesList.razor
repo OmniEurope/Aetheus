@@ -1,0 +1,120 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Pipelines
+@using Microsoft.AspNetCore.Components.Sections
+@* Place list actions in the host's page-header outlet so the hub, project and server layouts share
+   one action area. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    @* Switch catalogue and runs from the page header with their counts so both views share the
+       same page structure. *@
+    @if (!_loading)
+    {
+        <OmniSelectBar TValue="string" Options="@ViewOptions" Label="@L["PipelineView"]"
+            Value="@Views.CurrentSlug" ValueExpression="@(() => Views.CurrentSlug)" ValueChanged="@OnViewChangedAsync"
+            Class="pipeline-view-switch">
+            <IconTemplate Context="slug"><OmniIcon Name="@PipelineListViews.Icon(slug)" /></IconTemplate>
+        </OmniSelectBar>
+    }
+    @if (IsGlobal)
+    {
+        <HelpLink PageKey="pipelines" />
+    }
+    @* Follow pipeline and entity hub events so the list stays current without a manual refresh
+       action. *@
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPipeline" Disabled="@(!_canWrite)" Class="pipeline-list-new-button" title="@(!_canWrite ? L["InsufficientPermissions"] : L["NewPipeline"])" Label="@L["NewPipeline"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    @* Keep Create visible as the primary blue action and place secondary Import in the header
+       menu. *@
+    @if (IsGlobal)
+    {
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem OnClick="@OnImportPipelineClick" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"].Value : L["ImportPipelineFromYaml"].Value)"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    }
+</SectionContent>
+
+@if (_showPipelineImporter)
+{
+    <OmniUpload MaximumFileSize="PipelineDefinitionLimits.MaxYamlLength"
+                AllowedContentTypes="@YamlContentTypes"
+                OnFilesSelect="@OnPipelineFileSelected" />
+}
+
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Large" />
+}
+else
+{
+    @if (Views.IsCatalog)
+    {
+        <div class="pipeline-catalog-panel">
+            <div class="pipeline-catalog-filters">
+                <OmniTextBox aria-label="@L["SearchPipelines"]" Placeholder="@L["SearchPipelines"]" @bind-Value="_search" @bind-Value:after="ApplyFilters" Class="pipeline-list-search" />
+                @* One or several triggers, one or several models. *@
+                <OmniMultiSelect TValue="PipelineTriggerType"
+                    Options="@_triggerOptions" Placeholder="@L["AllTriggers"]" aria-label="@L["AllTriggers"]"
+                    @bind-Value="_triggerFilters" @bind-Value:after="ApplyFilters" Class="pipeline-filter-multi" />
+                @if (_fleetAvailable && _templateOptions.Count > 0)
+                {
+                    <OmniMultiSelect TValue="int" Filterable="true"
+                        Options="@TemplateFilterOptions" Placeholder="@L["AllTemplates"]" aria-label="@L["AllTemplates"]"
+                        Value="@_templateFilterIds" ValueChanged="@OnTemplateFilterChanged" ValueExpression="@(() => _templateFilterIds)"
+                        Class="pipeline-filter-multi" />
+                }
+                <OmniCheckBox @bind-Value="_favoritesOnly">@L["FavoritesOnly"]</OmniCheckBox>
+                <OmniCheckBox @bind-Value="_withChildrenOnly">@L["PipelinesWithChildren"]</OmniCheckBox>
+                @if (HasActiveFilters)
+                {
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearFilters"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
+                }
+            </div>
+            @* Include an icon, label and count so state filters do not rely on colour alone;
+               clicking a selected chip clears its filter. *@
+            @* Use OE's chevrons for overflow so the chip strip stays on one line without another
+               scrollbar. *@
+            @if (HasActionableStatusChip)
+            {
+                <OmniStack Orientation="OmniOrientation.Horizontal" Overflow="OmniStackOverflow.Scroll" Gap="OmniSpacing.Small"
+                           Class="pipeline-status-summary" role="group" aria-label="@L["PipelineStatusSummary"]">
+                    @foreach (var status in VisibleStatuses())
+                    {
+                        var count = StatusCount(status);
+                        var active = _statusFilters.Contains(status);
+                        @* Allow multiple state chips and show a check on active ones so selection
+                           is distinguishable beyond colour and border weight. *@
+                        <OmniButton Variant="@PipelineCatalogView.Variant(status)"
+                                    Class="@PipelineCatalogView.ChipCssClass(status, active)"
+                                    aria-pressed="@(active ? "true" : "false")"
+                                    OnClick="@(() => ToggleStatusFilter(status))">
+                            <Icon><OmniIcon Name="@(active ? OmniIconName.Check : PipelineCatalogView.Icon(status))" /></Icon><ChildContent><span>@StatusLabel(status)</span>
+                            <span class="pipeline-status-chip-count">@count</span></ChildContent>
+                        </OmniButton>
+                    }
+                </OmniStack>
+            }
+            @if (FilteredCatalog.Count == 0)
+            {
+                <EmptyState Icon="account_tree" Title="@L["NoPipelinesFound"]" Description="@L["EmptyPipelinesHint"]">
+                    <ActionContent>
+                        @if (_canWrite && !HasActiveFilters)
+                        {
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPipeline" title="@L["NewPipeline"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+                        }
+                    </ActionContent>
+                </EmptyState>
+            }
+            else
+            {
+                <PipelineDependencyGrid Items="@FilteredCatalog" PipelineHref="@PipelineHref" RunPipeline="@RunPipelineClick"
+                    SetFavorite="@SetFavoriteAsync" FavoritePipelineIds="@_favoritePipelineIds"
+                    PendingFavoritePipelineIds="@_pendingFavoritePipelineIds"
+                    FleetItems="@_fleetItems" FleetAvailable="@_fleetAvailable"
+                    GroupByProject="@IsGlobal" FillHeight="true" Virtualize="true" CanWrite="@_canWrite" ServerId="@ServerId" />
+            }
+        </div>
+    }
+    else
+    {
+        <PipelineRunsGrid Items="@_recentRuns" GroupByProject="@IsGlobal" FillHeight="true" Virtualize="true"
+            EmptyTitleKey="NoRecentRuns" EmptyDescriptionKey="NoRecentRuns" ServerId="@ServerId" />
+    }
+}

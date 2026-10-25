@@ -45,3 +45,23 @@ internal sealed class AlertRuleConfiguration : IEntityTypeConfiguration<AlertRul
                .OnDelete(DeleteBehavior.SetNull);
     }
 }
+
+internal sealed class AlertOccurrenceConfiguration : IEntityTypeConfiguration<AlertOccurrence>
+{
+    public void Configure(EntityTypeBuilder<AlertOccurrence> builder)
+    {
+        builder.Property(e => e.RuleName).HasMaxLength(200).IsRequired();
+        builder.Property(e => e.ServerName).HasMaxLength(200);
+        builder.Property(e => e.Metric).HasMaxLength(100).IsRequired();
+        builder.Property(e => e.Message).HasMaxLength(4000);
+        builder.HasIndex(e => e.TriggeredAt);
+        builder.HasOne(e => e.AlertRule)
+               .WithMany()
+               .HasForeignKey(e => e.AlertRuleId)
+               .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne(e => e.Server)
+               .WithMany()
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.SetNull);
+    }
+}

@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/admin/system-logs"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 <PageTitle>@L["SystemLogs"]</PageTitle>
 
@@ -11,7 +11,7 @@
 
 <OmniCard Class="omni-u-mb-lg">
     <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End">
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="ddFile">@L["LogFile"]</OmniLabel>
             <OmniDropDown Id="ddFile" TValue="string" @bind-Value="_selectedFile"
                             Options="@(_fileNames.ToOptions(item => (string)item, item => item))" name="ddFile"
@@ -20,7 +20,7 @@
                             Class="w-rem-16" />
         </OmniStack>
 
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="ddLevel">@L["LogLevel"]</OmniLabel>
             <OmniDropDown Id="ddLevel" TValue="string" @bind-Value="_selectedLevel"
                             Options="@(_levelOptions.ToOptions(item => item.Value, item => item.Text))" name="ddLevel"
@@ -29,21 +29,21 @@
                             Class="w-rem-10" />
         </OmniStack>
 
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="dtFrom">@L["DateFrom"]</OmniLabel>
                 <OmniDateTimePicker @bind-Value="_dateFrom" Id="dtFrom"
                                     @bind-Value:after="OnFilterChangedAsync"
                                     Class="w-rem-12-5" />
         </OmniStack>
 
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="dtTo">@L["DateTo"]</OmniLabel>
                 <OmniDateTimePicker @bind-Value="_dateTo" Id="dtTo"
                                     @bind-Value:after="OnFilterChangedAsync"
                                     Class="w-rem-12-5" />
         </OmniStack>
 
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="txtSearch">@L["Search"]</OmniLabel>
             <OmniTextBox Value="@_searchText" Id="txtSearch"
                            Placeholder="@L["SearchLogs"]"
@@ -56,7 +56,7 @@
         @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
         @if (!string.IsNullOrWhiteSpace(_selectedFile))
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
         }
 
         <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -96,7 +96,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="SystemLogEntryDto" Property="Category"
                                 Title="@L["Category"]" Width="16.25rem" Filterable="true" />
-            <OmniDataGridColumn TItem="SystemLogEntryDto" Property="Message"
+            <OmniDataGridColumn TItem="SystemLogEntryDto" Property="Message" Truncate="true"
                                 Title="@L["Message"]" Filterable="true">
                 <Template Context="entry">
                     <span title="@entry.Message" class="log-message-cell">
@@ -109,19 +109,19 @@
                 <Template Context="entry">
                     @if (!string.IsNullOrWhiteSpace(entry.CorrelationId))
                     {
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <span class="correlation-id-text">@entry.CorrelationId</span>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyCorrelationIdAsync(entry.CorrelationId!))" title="@L["CopyCorrelationId"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyCorrelationIdAsync(entry.CorrelationId!))" title="@L["CopyCorrelationId"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                         </OmniStack>
                     }
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="SystemLogEntryDto" Title="" Width="5.75rem"
-                                Sortable="false" TextAlign="OmniDataGridTextAlign.Center">
+                                Sortable="false" TextAlign="OmniAlignment.Center">
                 <Template Context="entry">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                        <OmniButton Variant="@(string.IsNullOrWhiteSpace(entry.Exception) ? OmniButtonVariant.Ghost : OmniButtonVariant.Danger)" OnClick="@(() => ShowMessageDialogAsync(entry))" title="@L["ViewMessage"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyMessageAsync(entry.Message))" title="@L["CopyMessage"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+                        <OmniButton Variant="@(string.IsNullOrWhiteSpace(entry.Exception) ? OmniButtonVariant.Ghost : OmniButtonVariant.Danger)" OnClick="@(() => ShowMessageDialogAsync(entry))" title="@L["ViewMessage"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnCopyMessageAsync(entry.Message))" title="@L["CopyMessage"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>

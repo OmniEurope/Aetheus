@@ -41,18 +41,18 @@ public sealed class AppDatabaseSizeViewTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.Contains("AppMetricSamples", cut.Markup, StringComparison.Ordinal));
         var total = cut.Find("[data-testid='app-database-total']").TextContent;
-        Assert.Contains(N(6290) + " MB", total, StringComparison.Ordinal);
-        Assert.Contains("+" + N(40) + " MB over 24 hours", total, StringComparison.Ordinal);
+        Assert.Contains(DisplayFormatting.Size(6290 * Mb), total, StringComparison.Ordinal);
+        Assert.Contains("+" + DisplayFormatting.Size(40 * Mb) + " over 24 hours", total, StringComparison.Ordinal);
         var largest = cut.Find("[data-testid='app-database-largest']").TextContent;
-        Assert.Contains(N(3049) + " MB", largest, StringComparison.Ordinal);
+        Assert.Contains(DisplayFormatting.Size(3049 * Mb), largest, StringComparison.Ordinal);
         Assert.Contains("AppMetricSamples", largest, StringComparison.Ordinal);
         Assert.Contains("aetheus", cut.Find("[data-testid='app-database-measured']").TextContent, StringComparison.Ordinal);
 
         Assert.Contains(N(8_418_471), cut.Markup, StringComparison.Ordinal);
         Assert.Contains("audit.Fresh", cut.Markup, StringComparison.Ordinal); // a schema other than public is named
-        Assert.Contains("16 kB", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("16 Ko", cut.Markup, StringComparison.Ordinal);
         var trends = cut.FindAll("[data-testid='app-database-trend']").Select(cell => cell.TextContent).ToList();
-        Assert.Equal(["-" + N(51) + " MB", "0 kB", "-"], trends);
+        Assert.Equal(["-" + DisplayFormatting.Size(51 * Mb), "0 o", "-"], trends);
     }
 
     [Fact]

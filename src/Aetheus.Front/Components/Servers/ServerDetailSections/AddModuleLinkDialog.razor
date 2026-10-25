@@ -14,6 +14,6 @@
         <OmniDropDown Id="module-link-source-resource" TValue="string" name="module-link-source-resource" Options="@(Resources.ToOptions(item => (string)item, item => item))" @bind-Value="_sourceIdentifier" />
     </OmniStack>
     <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@Save"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </Aetheus.Front.Components.Shared.DialogFooter>
 </OmniStack>

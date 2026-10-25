@@ -4,7 +4,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/qa/persist-compatibility-mode.sh</c>, run through the real executor
+/// The C# port of the former <c>persist-compatibility-mode.sh</c> script, run through the real executor
 /// on a temp workspace unique to each test: where each status is read from, how it is normalized, the
 /// mode and verdict in bootstrap and N/N-1, and the refusals on a missing V-1 commit.
 /// </summary>

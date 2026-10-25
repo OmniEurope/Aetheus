@@ -18,15 +18,15 @@
                 <OmniStack Gap="OmniSpacing.Small">
                     <OmniText Element="OmniTextElement.Strong">@L["PublicDemo"]</OmniText>
                     <OmniFormField Label="@L["Username"]" For="public-demo-username">
-                        <OmniTextBox Value="@DemoUsername" ReadOnly="true" Copyable="true" OnCopy="@OnDemoValueCopied"
+                        <OmniTextBox Value="@DemoUsername" ReadOnly="true" ShowCopy="true" OnCopy="@OnDemoValueCopied"
                                      Id="public-demo-username" ValueExpression="@(() => DemoUsername)" />
                     </OmniFormField>
                     <OmniFormField Label="@L["Password"]" For="public-demo-password">
-                        <OmniTextBox Value="@DemoPassword" ReadOnly="true" Copyable="true" OnCopy="@OnDemoValueCopied"
+                        <OmniTextBox Value="@DemoPassword" ReadOnly="true" ShowCopy="true" OnCopy="@OnDemoValueCopied"
                                      Id="public-demo-password" ValueExpression="@(() => DemoPassword)" />
                     </OmniFormField>
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@FillWithPublicDemoAccount" Class="public-demo-fill"><OmniIcon Name="OmniIconName.ArrowLineDown" /> <span>@L["PublicDemoFillForm"]</span></OmniButton>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@FillWithPublicDemoAccount" Class="public-demo-fill"><Icon><OmniIcon Name="OmniIconName.ArrowLineDown" /></Icon><ChildContent><span>@L["PublicDemoFillForm"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniStack>
             </ChildContent></OmniAlert>
@@ -88,14 +88,14 @@
 
                 @* Login is the single form button, aligned at the row end; forgotten password is a
                    footer link. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End"
+                <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End"
                            Gap="OmniSpacing.Small" Class="omni-u-mt-xs">
-                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_loading ? "btn-busy" : null)" Busy="@(_loading)" Label="@L["Login"]"><OmniIcon Name="OmniIconName.SignIn" /> <span>@L["Login"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_loading ? "btn-busy" : null)" Busy="@(_loading)" Label="@L["Login"]"><Icon><OmniIcon Name="OmniIconName.SignIn" /></Icon><ChildContent><span>@L["Login"]</span></ChildContent></OmniButton>
                 </OmniStack>
             </OmniStack>
         </OmniTemplateForm>
     </ChildContent>
-    <Footer>
+    <FooterContent>
         @* A real link: the hint is the page's state in its address (?forgot=true), so the link toggles
            it, the browser's back button closes it, and the form keeps what was typed. *@
         <OmniLink Href="@ForgotPasswordHref" Class="login-forgot-link"
@@ -106,5 +106,5 @@
                 @L["ForgotPasswordHint"]
             </ChildContent></OmniAlert>
         }
-    </Footer>
+    </FooterContent>
 </OmniLoginShell>

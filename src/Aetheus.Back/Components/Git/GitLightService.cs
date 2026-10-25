@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Extensions;
-using Aetheus.Back.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -19,6 +18,7 @@ public class GitLightService(
     IHubContext<GitRealtimeHub> hub,
     IMemoryCache cache,
     GitBranchProtectionService branchProtection,
+    IGitBranchMovedAnnouncer branchMoved,
     ILogger<GitLightService> logger,
     TimeProvider timeProvider) : IGitLightService
 {
@@ -102,7 +102,14 @@ public class GitLightService(
         return true;
     }
 
-    public async Task<GitLightRepoDto> CreateRepositoryAsync(CreateGitLightRepoRequest request, CancellationToken ct = default)
+    public Task<GitLightRepoDto> CreateRepositoryAsync(CreateGitLightRepoRequest request, CancellationToken ct = default) =>
+        CreateRepositoryCoreAsync(request, isConfiguration: false, ct);
+
+    public Task<GitLightRepoDto> CreateConfigurationRepositoryAsync(CreateGitLightRepoRequest request, CancellationToken ct = default) =>
+        CreateRepositoryCoreAsync(request, isConfiguration: true, ct);
+
+    private async Task<GitLightRepoDto> CreateRepositoryCoreAsync(
+        CreateGitLightRepoRequest request, bool isConfiguration, CancellationToken ct)
     {
         // Guard the FK before touching disk: an unknown ProjectId otherwise surfaces as a raw
         // 23503 foreign-key violation (HTTP 500) at SaveChangesAsync - and only after a bare
@@ -125,7 +132,8 @@ public class GitLightService(
             Name = request.Name,
             Slug = slug,
             Description = request.Description,
-            DefaultBranch = defaultBranch
+            DefaultBranch = defaultBranch,
+            IsConfiguration = isConfiguration
         };
 
         await lightRepo.AddAsync(entity, ct).ConfigureAwait(false);
@@ -188,6 +196,9 @@ public class GitLightService(
             defaultBranchChanged = true;
         }
 
+        if (request.IsConfiguration is { } designation && designation != entity.IsConfiguration)
+            await SetConfigurationAsync(entity, designation, ct).ConfigureAwait(false);
+
         entity.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         await lightRepo.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync("Updated", "GitInternalRepo", id, null, ct).ConfigureAwait(false);
@@ -198,6 +209,30 @@ public class GitLightService(
 
         entity = await lightRepo.FindByIdWithProjectAsync(id, ct).ConfigureAwait(false);
         return GitLightMapper.MapRepoToDto(entity!, BuildCloneUrl(entity!.ProjectId, entity.Slug));
+    }
+
+    /// <summary>Makes <paramref name="entity"/> the project's configuration repository (the previous one stops
+    /// being it) or gives it up (ADR-057). A mirror of an external repository cannot be one, Aetheus not
+    /// committing to it, and neither can the last repository the project's pipelines take their source from.</summary>
+    private async Task SetConfigurationAsync(GitInternalRepo entity, bool designate, CancellationToken ct)
+    {
+        if (!designate)
+        {
+            entity.IsConfiguration = false;
+            return;
+        }
+
+        var repositories = await lightRepo.GetByProjectAsync(entity.ProjectId, ct).ConfigureAwait(false);
+        if (repositories.Find(repository => repository.Id == entity.Id) is { } loaded
+            && GitLightMapper.IsAdditionalSource(loaded))
+            throw new BadRequestException("The mirror of an external repository cannot hold the configuration files.");
+        if (!repositories.Any(repository => repository.Id != entity.Id
+                && !repository.IsConfiguration && !GitLightMapper.IsAdditionalSource(repository)))
+            throw new BadRequestException(
+                "This is the project's only source repository: it cannot become its configuration repository.");
+
+        await lightRepo.ClearConfigurationFlagAsync(entity.ProjectId, entity.Id, ct).ConfigureAwait(false);
+        entity.IsConfiguration = true;
     }
 
     public async Task<bool> DeleteRepositoryAsync(int id, CancellationToken ct = default)
@@ -493,6 +528,11 @@ public class GitLightService(
         pr.LastSyncedAt = timeProvider.GetUtcNow().UtcDateTime;
         await gitRepo.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // The merge committed straight onto the target branch, with no receive-pack: announce it so
+        // the pipeline definitions of that branch follow, as they do for a push.
+        if (!string.IsNullOrEmpty(mergeCommitSha))
+            await branchMoved.AnnounceAsync(entity, diskPath, pr.TargetBranch, null, mergeCommitSha, ct)
+                .ConfigureAwait(false);
         await audit.LogAsync("Merged", "PullRequest", pr.Id, $"#{prId}", ct).ConfigureAwait(false);
         await BroadcastAsync(repoId, GitRealtimeEvents.PullRequestsChanged, ct).ConfigureAwait(false);
         await BroadcastAsync(repoId, GitRealtimeEvents.BranchesChanged, ct).ConfigureAwait(false);

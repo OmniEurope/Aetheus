@@ -42,7 +42,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private bool _fadingOut;
     private int? _requestId;
     private AgentUpdateRequestStatus? _requestStatus;
-    private bool _checking;
 
     // Registered handlers - kept so we can detach them in DisposeAsync to avoid leaks if the
     // hub connection survives this component (it always does - the connection is owned by
@@ -73,7 +72,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             _phase = AgentUpdatePhase.Queued;
             _percent = 0;
             _message = null;
-            _checking = false;
             StartStaleTimer(120);
             _ = InvokeAsync(StateHasChanged);
         });
@@ -89,7 +87,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             _phase = dto.Phase;
             _percent = dto.Percent;
             _message = dto.Message;
-            _checking = false;
             if (dto.Phase is AgentUpdatePhase.Failed or AgentUpdatePhase.Done)
                 CancelStaleTimer();
             else
@@ -121,7 +118,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             if (serverId != ServerId) return;
             _requestId = requestId;
             CancelStaleTimer();
-            _checking = false;
             _phase = AgentUpdatePhase.Failed;
             _percent = 0;
             _message = Request?.FailureDiagnostic ?? L["AgentUpdateFailed"];
@@ -133,7 +129,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
         _requestId = requestId;
         CancelStaleTimer();
-        _checking = false;
         _phase = AgentUpdatePhase.Done;
         _percent = 100;
         _message = !string.IsNullOrEmpty(targetVersion)
@@ -190,7 +185,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
                 return;
             case AgentUpdateRequestStatus.Failed:
                 CancelStaleTimer();
-                _checking = false;
                 _phase = AgentUpdatePhase.Failed;
                 _percent = 0;
                 _message = Request.FailureDiagnostic ?? L["AgentUpdateFailed"];
@@ -207,7 +201,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
         _phase = phase;
         _percent = percent;
         _message = PersistedMessage(request);
-        _checking = false;
     }
 
     // An in-progress status of the followed request only moves the card forward, never back from a
@@ -242,7 +235,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private async Task RetryAsync()
     {
         CancelStaleTimer();
-        _checking = false;
         _phase = null;
         _percent = 0;
         _message = null;
@@ -321,7 +313,6 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     {
         if (_phase is AgentUpdatePhase.Done or AgentUpdatePhase.Failed or null)
             return;
-        _checking = true;
         _message = L["AgentUpdateCheckingHint"];
         StartStaleTimer(RecheckSeconds);
         _ = InvokeAsync(async () =>

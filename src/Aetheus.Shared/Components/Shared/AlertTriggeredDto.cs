@@ -7,6 +7,8 @@ namespace Aetheus.Shared.Components.Shared;
 /// </summary>
 public sealed record AlertTriggeredDto
 {
+    /// <summary>The identifier of the stored occurrence, hence of the alert's page; null for an alert source that does not store its occurrences yet.</summary>
+    public long? OccurrenceId { get; init; }
     public int? RuleId { get; init; }
     public string RuleName { get; init; } = string.Empty;
     public int? ServerId { get; init; }

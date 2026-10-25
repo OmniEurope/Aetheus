@@ -31,6 +31,8 @@ public partial class VaultsList
     // The project column's checkable filter lists every project owning a vault the caller can read:
     // served by the API for the global list, taken from the loaded list in server scope.
     private VaultFilterValuesDto _filterValues = new();
+    private Dictionary<int, List<ResourceUsageUserDto>> _usage = [];
+    private bool _usageLoaded;
 
     private string CacheKey => $"vaults:server:{ServerId}";
 
@@ -70,8 +72,27 @@ public partial class VaultsList
         }
 
         await LoadFilterValuesAsync();
+        await LoadUsageAsync();
         await FollowEntitiesAsync(ResourceType.Vault);
     }
+
+    /// <summary>Who reads each vault (R-66). A failed call leaves the column empty rather than claiming
+    /// every vault is unused.</summary>
+    private async Task LoadUsageAsync()
+    {
+        try
+        {
+            _usage = (await Api.Variables.GetResourceUsageAsync()).Vaults;
+            _usageLoaded = true;
+        }
+        catch (HttpRequestException) { } // the list stays usable without the usage column
+    }
+
+    private IReadOnlyList<ResourceUsageUserDto>? UsersOf(int vaultId) =>
+        _usage.TryGetValue(vaultId, out var users) ? users : null;
+
+    /// <summary>The detail page of a vault, remembering this list so its Back and its deletion return here.</summary>
+    private string VaultHref(int id) => LocalReturnUrl.Append($"/vaults/{id}", LocalReturnUrl.Current(Nav));
 
     private async Task LoadFilterValuesAsync()
     {

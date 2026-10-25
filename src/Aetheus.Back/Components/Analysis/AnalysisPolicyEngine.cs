@@ -30,19 +30,8 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
             or AnalysisReportStatus.Unavailable)
             return ErrorEvaluation(report, context, grade, now);
 
-        var candidates = await repository.GetApplicablePoliciesAsync(
-            context.OrganizationId,
-            context.ProjectId,
-            ct).ConfigureAwait(false);
-        var policies = AnalysisPolicyResolver.Resolve(
-            context.OrganizationId,
-            context.ProjectId,
-            candidates);
-        policies = PipelineAnalysisGatePolicyResolver.Apply(
-            policies,
-            context.PipelineYaml,
-            report.Category,
-            now);
+        var policies = await ResolveEffectivePoliciesAsync(
+            repository, context, report.Category, now, ct).ConfigureAwait(false);
         var exceptions = await repository.GetActiveExceptionsAsync(
             context.ProjectId,
             now,
@@ -93,12 +82,54 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
         };
     }
 
+    /// <summary>The policies in force for a report: the persisted hierarchy, then the pipeline's own gate
+    /// overrides. Shared with the ingestion that turns a crossed metric rule into a finding (ADR-056), so
+    /// both read the same thresholds.</summary>
+    internal static async Task<List<ResolvedAnalysisPolicy>> ResolveEffectivePoliciesAsync(
+        IAnalysisRepository repository,
+        AnalysisRunContext context,
+        AnalysisCategory category,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var candidates = await repository.GetApplicablePoliciesAsync(
+            context.OrganizationId,
+            context.ProjectId,
+            ct).ConfigureAwait(false);
+        var policies = AnalysisPolicyResolver.Resolve(
+            context.OrganizationId,
+            context.ProjectId,
+            candidates);
+        return PipelineAnalysisGatePolicyResolver.Apply(policies, context.PipelineYaml, category, now);
+    }
+
+    /// <summary>Every effective metric rule that targets this metric, and whether the metric crosses it (a
+    /// threshold passed, or a degradation against the previous analysis). What the gate counts and what
+    /// ADR-056 turns into a finding when crossed, or closes when no longer crossed.</summary>
+    internal static List<(ResolvedAnalysisPolicy Policy, bool Crossed)> MetricRuleStates(
+        IReadOnlyList<ResolvedAnalysisPolicy> policies,
+        AnalysisMetric metric,
+        AnalysisReport report,
+        string? branch,
+        string? environment) =>
+        [.. SupersedeCatchAllDegradation(
+                [.. policies.Where(policy => policy.IsEffective
+                    && MatchesMetricPolicy(policy.Policy, metric, report, branch, environment))])
+            .Select(policy => (policy, MetricThresholdMatches(policy.Policy, metric)))];
+
     private static PolicyCounts EvaluateFinding(
         AnalysisFindingOccurrence occurrence, AnalysisReport report, AnalysisRunContext context,
         IReadOnlyList<ResolvedAnalysisPolicy> policies, IReadOnlyList<AnalysisPolicyException> exceptions,
         AnalysisPolicyDecisionSnapshotBuilder decisions)
     {
         var finding = occurrence.AnalysisFinding;
+        // ADR-056: a finding born of a crossed metric rule is counted once, by that rule (EvaluateMetric),
+        // so the finding policies leave it alone.
+        if (AnalysisThresholdFindings.IsThresholdRule(occurrence.RuleId))
+        {
+            decisions.AddFinding("threshold-rule", FindingDecisionKey(occurrence), "pass", null, null);
+            return default;
+        }
         var matchingExceptions = exceptions.Where(item => MatchesException(
             item, finding, occurrence, report, context.BranchName, context.EnvironmentName)).ToList();
         // An exception without a policy covers every policy; one naming a policy covers only that one.
@@ -160,6 +191,14 @@ public sealed class AnalysisPolicyEngine(IAnalysisRepository repository)
             if (scoped is not null)
             {
                 decisions.AddMetric($"exception:{scoped.Id}", metric.Key, "excepted", scoped.ExpiresAt,
+                    AnalysisPolicySnapshot.Serialize(policy), MetricText(metric.Value));
+                continue;
+            }
+            // ADR-056: the finding this crossing produced was decided on (accepted, false positive or
+            // mitigated); the rule no longer warns or blocks for it.
+            if (AnalysisThresholdFindings.IsDecided(report, policy.Policy, metric))
+            {
+                decisions.AddMetric("decided-finding", metric.Key, "decided", null,
                     AnalysisPolicySnapshot.Serialize(policy), MetricText(metric.Value));
                 continue;
             }

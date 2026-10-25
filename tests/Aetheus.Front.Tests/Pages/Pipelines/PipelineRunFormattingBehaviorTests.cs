@@ -13,10 +13,10 @@ public sealed class PipelineRunFormattingBehaviorTests
         => Assert.Equal(expected, PipelineRunFormatting.IsWindows(os));
 
     [Theory]
-    [InlineData(999L, "999 B")]
-    [InlineData(1024L, "1 KB")]
-    [InlineData(1_048_576L, "MB")]
-    [InlineData(1_073_741_824L, "GB")]
+    [InlineData(999L, "999 o")]
+    [InlineData(1024L, "1 Ko")]
+    [InlineData(1_048_576L, "Mo")]
+    [InlineData(1_073_741_824L, "Go")]
     public void FormatSize_UsesTheExpectedUnit(long bytes, string expected)
     {
         var formatted = PipelineRunFormatting.FormatSize(bytes);
@@ -40,13 +40,10 @@ public sealed class PipelineRunFormattingBehaviorTests
 
         Assert.True(PipelineRunFormatting.IsRolledBack(rolledBack));
         Assert.Equal(OmniTone.Warning, PipelineRunFormatting.GetStepBadge(rolledBack));
-        // Advisory failure remains red and uses an outline to distinguish its nonblocking outcome.
+        // Advisory failure remains red (filled, R-24: see StepStatusBadgeTests).
         Assert.Equal(OmniTone.Danger, PipelineRunFormatting.GetStepBadge(advisory));
-        Assert.Equal(OmniFill.Outline, PipelineRunFormatting.GetStepBadgeVariant(advisory));
         Assert.False(PipelineRunFormatting.IsRolledBack(blocking));
         Assert.Equal(OmniTone.Danger, PipelineRunFormatting.GetStepBadge(blocking));
-        Assert.Equal(OmniFill.Solid, PipelineRunFormatting.GetStepBadgeVariant(blocking));
-        Assert.Equal(OmniFill.Solid, PipelineRunFormatting.GetStepBadgeVariant(rolledBack));
     }
 
     [Fact]

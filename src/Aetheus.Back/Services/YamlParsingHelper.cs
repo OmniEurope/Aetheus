@@ -129,6 +129,7 @@ public static class YamlParsingHelper
             ExecutionRole = job.ExecutionRole ?? stage.ExecutionRole,
             Environment = job.Environment ?? stage.Environment,
             ApprovalTimeoutMinutes = stage.ApprovalTimeoutMinutes,
+            ResumeWindowHours = stage.ResumeWindowHours,
             DeploymentRole = stage.DeploymentRole,
             Pool = job.Pool ?? stage.Pool,
             Condition = job.Condition ?? stage.Condition,

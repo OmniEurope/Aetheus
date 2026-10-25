@@ -45,7 +45,7 @@ internal static class AgentSelfUpdateFileSystem
             CopyPayloadFile(source, rollbackDir, relativePath, overwrite: true);
         }
 
-        var currentVersion = typeof(AgentSelfUpdateOperationExecutor).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+        var currentVersion = typeof(AgentSelfUpdateFileSystem).Assembly.GetName().Version?.ToString(3) ?? "unknown";
         File.WriteAllText(Path.Combine(rollbackDir, "rollback-version.txt"), currentVersion);
     }
 

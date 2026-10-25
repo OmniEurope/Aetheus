@@ -18,7 +18,7 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     [Parameter] public int ProjectId { get; set; }
 
     /// <summary>The project header's menu outlet.</summary>
-    [CascadingParameter] public Layout.ProjectSectionMenu? SectionMenu { get; set; }
+    [CascadingParameter] public ProjectSectionMenu? SectionMenu { get; set; }
 
 
     private bool _loading = true;

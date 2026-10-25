@@ -109,15 +109,30 @@ public partial class EmailSenderSettingsPanel
         }
     }
 
-    private async Task PrepareAsync()
+    /// <summary>The default sender works as far as Aetheus knows, yet the mail server may refuse its password (it
+    /// was changed there, or the mailbox was recreated): the way to put both sides back in step.</summary>
+    private bool CanReset =>
+        _settings is { CanPrepareNoReply: true, UseCustom: false, EffectiveSource: EmailSenderSource.ManagedNoReply };
+
+    private Task PrepareAsync()
+    {
+        if (_settings?.Problem == EmailSenderProblem.NoReplyPasswordUnknown)
+            return GenerateAsync("EmailSenderPrepare", "EmailSenderPrepareResetConfirm");
+        return GenerateAsync(null, null);
+    }
+
+    private Task ResetAsync() => GenerateAsync("EmailSenderReset", "EmailSenderResetConfirm");
+
+    /// <summary>Generates the no-reply password, after the confirmation <paramref name="confirmKey"/> names (none when null).</summary>
+    private async Task GenerateAsync(string? titleKey, string? confirmKey)
     {
         if (_preparing || _settings is null) return;
-        if (_settings.Problem == EmailSenderProblem.NoReplyPasswordUnknown)
+        if (titleKey is not null && confirmKey is not null)
         {
             var confirmed = await Dialog.Confirm(
-                L["EmailSenderPrepareResetConfirm", _settings.NoReplyAddress ?? string.Empty].Value,
-                L["EmailSenderPrepare"].Value,
-                new OmniConfirmOptions { OkButtonText = L["EmailSenderPrepare"].Value, CancelButtonText = L["GoBack"].Value });
+                L[confirmKey, _settings.NoReplyAddress ?? string.Empty].Value,
+                L[titleKey].Value,
+                new OmniConfirmOptions { OkButtonText = L[titleKey].Value, CancelButtonText = L["GoBack"].Value });
             if (confirmed != true) return;
         }
 

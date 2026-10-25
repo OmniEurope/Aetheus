@@ -12,6 +12,9 @@ namespace Aetheus.Front.Layout;
 /// </summary>
 internal static class FrontHostSetup
 {
+    /// <summary>How often OmniPreferences re-reads the server's preferences while a tab stays open (R1-41).</summary>
+    internal static readonly TimeSpan PreferencesSyncInterval = TimeSpan.FromMinutes(5);
+
     /// <summary>Registers every front service on <paramref name="services"/>; in Production the log level
     /// is raised to Warning.</summary>
     public static void ConfigureServices(
@@ -45,7 +48,7 @@ internal static class FrontHostSetup
         services.AddTransient<ClientApiTimingHandler>();
         services.AddSingleton<PageLoadActivity>();
         // Which front version this tab runs against the deployed one (approvals wait on it).
-        services.AddSingleton(sp => new Aetheus.Front.Layout.ApplicationVersionState(
+        services.AddSingleton(sp => new Aetheus.Front.Components.Shared.ApplicationVersionState(
             () => sp.GetRequiredService<IHttpClientFactory>().CreateClient(),
             new Uri(environment.BaseAddress),
             configuration["App:Version"] ?? "dev"));
@@ -83,11 +86,11 @@ internal static class FrontHostSetup
           .AddHttpMessageHandler<AuthDelegatingHandler>();
 
         // Breadcrumb
-        services.AddScoped<Aetheus.Front.Layout.BreadcrumbService>();
+        services.AddScoped<Aetheus.Front.Components.Shared.BreadcrumbService>();
         // OE's breadcrumb service, which OmniPageHeader reads, installs the Aetheus route trail.
-        services.AddScoped<IOmniBreadcrumbResolver, Aetheus.Front.Layout.AetheusBreadcrumbResolver>();
+        services.AddScoped<IOmniBreadcrumbResolver, Aetheus.Front.Components.Shared.AetheusBreadcrumbResolver>();
         services.AddScoped<Aetheus.Front.Components.Users.AdminIdentitySearch>();
-        services.AddScoped<Aetheus.Front.Layout.ProjectNavContextService>();
+        services.AddScoped<Aetheus.Front.Components.Shared.ProjectNavContextService>();
         services.AddScoped<Aetheus.Front.Components.Shared.NotifyHelper>();
         services.AddScoped<Aetheus.Front.Components.Shared.GridExportContext>();
         services.AddScoped<Aetheus.Front.Components.Shared.ClipboardService>();
@@ -95,8 +98,8 @@ internal static class FrontHostSetup
         services.AddScoped<Aetheus.Front.Components.Shared.AppDialogs>();
         services.AddScoped<Aetheus.Front.Components.Shared.OmniDialogService>();
         services.AddScoped<Aetheus.Front.Components.Shared.ConfirmHelper>();
-        services.AddScoped<Aetheus.Front.Components.Shared.PipelineRunGate>();
-        services.AddScoped<Aetheus.Front.Components.Shared.PipelineRunDialogCoordinator>();
+        services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineRunGate>();
+        services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineRunDialogCoordinator>();
         services.AddScoped<Aetheus.Front.Components.Shared.PipelineImportState>();
         services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
         // Scoped (one scope per page in WASM, as a singleton was): it reads the user preferences, which are scoped.
@@ -107,7 +110,7 @@ internal static class FrontHostSetup
         // Share the pending approvals list between the home page and top bar.
         services.AddSingleton<Aetheus.Front.Components.Shared.PendingApprovalsService>();
         // Same lifetime and reason, one unread count for the bell, the menu badge and /notifications.
-        services.AddSingleton<Aetheus.Front.Components.Notifications.UserNotificationsFeed>();
+        services.AddSingleton<Aetheus.Front.Components.Shared.UserNotificationsFeed>();
         // Clock abstraction (used by ListCacheService TTL) - System provider in the browser; tests swap a fake.
         services.AddSingleton(TimeProvider.System);
         // 0-a: stale-while-revalidate cache for shared list components. Singleton so the cache survives
@@ -130,7 +133,12 @@ internal static class FrontHostSetup
         // R1-66: every user preference (OE and Aetheus, the appearance in OE's OmniAppearanceState) is kept per
         // user on the server, cached in the browser; a change of user resets them without reloading the page.
         services.AddSingleton<Aetheus.Front.Components.Users.PreferenceScope>();
-        services.AddOmniEuropePreferences<Aetheus.Front.Components.Users.ApiPreferenceStore>();
+        // R1-41: the periodic synchronization polled GET api/users/me/preferences (OE default: every minute,
+        // plus once per tab shown again). A user's preferences change only when that user changes them (at
+        // most from another device), so a longer period is enough; the cache still follows the store when a
+        // tab becomes visible and when a key is first read.
+        services.AddOmniEuropePreferences<Aetheus.Front.Components.Users.ApiPreferenceStore>(
+            options => options.SyncInterval = PreferencesSyncInterval);
         services.AddScoped<IUserPreferences, UserPreferences>();
         services.AddScoped<Aetheus.Front.Components.Settings.LegacyPreferenceMigration>();
         services.AddScoped<Aetheus.Front.Components.Settings.LegacyAppearanceMigration>();

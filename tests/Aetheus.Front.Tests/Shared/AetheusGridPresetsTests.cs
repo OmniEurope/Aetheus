@@ -21,7 +21,7 @@ public sealed class AetheusGridPresetsTests : BunitContext
         Assert.True(grid.AllowColumnResize);
         Assert.True(grid.AllowAlternatingRows);
         Assert.Equal(OmniDensity.Compact, grid.Density);
-        Assert.Equal(OmniDataGridHeaderWrap.Truncate, grid.HeaderWrap); // Titles on one line
+        Assert.Equal(OmniDataGridHeaderWrap.Wrap, grid.HeaderWrap); // R-35: a title is never truncated
     }
 
     /// <summary>Raw grids expose Markdown export only when their footer bar is enabled, with

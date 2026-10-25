@@ -1,6 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-@* R3-58 (ADR-051): choose the privileges an agent update grants on the host. Only the closed whitelist
-   of AgentEnableableCapabilities is offered; one primary action, Cancel in the footer. *@
+@* R3-58 (ADR-051), R1-5 (ADR-055): choose the components an agent update installs on the host. Only the closed
+   whitelist of AgentEnableableCapabilities is offered, one card per component; one primary action (it only
+   updates the agent when nothing is chosen), Cancel in the footer. *@
 <OmniStack Gap="OmniSpacing.Large" Class="agent-capabilities-dialog">
     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">
         @string.Format(L["EnableAgentCapabilitiesIntro"], Server.Name)
@@ -13,16 +14,20 @@
         </OmniAlert>
     }
 
-    <OmniFormField For="agent-capabilities" Label="@L["EnableAgentCapabilitiesField"]" Required="true"
+    <OmniFormField For="agent-capabilities" Label="@L["EnableAgentCapabilitiesField"]"
                    Help="@L["EnableAgentCapabilitiesHelp"]" Class="omni-u-w-100">
         <OmniSelectableCardGroup TValue="string" TSelection="IReadOnlyList<string>" Id="agent-capabilities"
-                                 Multiple="true" Disabled="@(!AgentCanEnable)" @bind-Value="_selected">
-            <OmniSelectableCard Choice="@AgentEnableableCapabilities.PatchManage"
-                                Title="@L["WizardModulePatchManagement"]"
-                                Description="@(PatchManageGranted ? L["EnableAgentCapabilitiesAlreadyGranted"] : L["WizardModulePatchManagementHint"])"
-                                Disabled="@PatchManageGranted">
-                <Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon>
-            </OmniSelectableCard>
+                                 Multiple="true" Columns="1" Disabled="@(!AgentCanEnable)" @bind-Value="_selected">
+            @foreach (var option in Options)
+            {
+                var granted = IsGranted(option.Token);
+                <OmniSelectableCard @key="option.Token" Choice="@option.Token"
+                                    Title="@L[option.TitleKey]"
+                                    Description="@(granted ? L["EnableAgentCapabilitiesAlreadyGranted"] : L[option.HintKey])"
+                                    Disabled="@granted">
+                    <Icon><OmniIcon Name="@option.Icon" /></Icon>
+                </OmniSelectableCard>
+            }
         </OmniSelectableCardGroup>
     </OmniFormField>
 
@@ -33,7 +38,7 @@
     <DialogFooter OnCancel="@Cancel" CancelText="@L["Cancel"]">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SubmitAsync" Disabled="@(!CanSubmit)" Busy="@_busy"
                     Class="agent-capabilities-submit">
-            <OmniIcon Name="OmniIconName.Download" /> <span>@L["EnableAgentCapabilitiesSubmit"]</span>
+            <Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L[SubmitKey]</span></ChildContent>
         </OmniButton>
     </DialogFooter>
 </OmniStack>

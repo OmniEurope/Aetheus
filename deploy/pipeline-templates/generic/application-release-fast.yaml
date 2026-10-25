@@ -1,15 +1,101 @@
 # SPDX-License-Identifier: EUPL-1.2
 # Builds and deploys directly, without a candidate, with the project's fast release commands: shell written
-# in its pipeline in APPLICATION_RELEASE_FAST_COMMANDS (run with `sh -eu -c` from the workspace). Nothing
-# is required in its repository (ADR-050, recette R3-64); without commands the step fails and says so.
+# in its pipeline in APPLICATION_RELEASE_FAST_COMMANDS (run with `sh -eu -c` from the checked-out workspace).
+# Nothing is required in its repository (ADR-050, recette R3-64); a pipeline that sets the commands empty fails
+# the step and says so.
+# The template carries the same default as the production deployment (recette R2-9), for a Docker server: the
+# checked-out source is copied into DEPLOY_DIR (kept between releases, so the project's volumes and files stay)
+# and started there with Docker Compose, in the project named by COMPOSE_PROJECT (library `prod`, else
+# APPLICATION_PREFIX), with ENV_FILE (library `prod`) as the Compose env file when it is set, and the commit as
+# SOURCE_COMMIT. It waits for every service to run (healthy when it declares a health check) and otherwise
+# fails. A project that deploys otherwise sets APPLICATION_RELEASE_FAST_COMMANDS, which replaces the default whole.
+# The server is the `deployServer` parameter, the name of a server of the project (the setup wizard writes the
+# server of the project's production environment, among the project's servers). The checkout and the release
+# share the workspace, so both run on it.
 name: application-release-fast-template
 trigger: manual
+parameters:
+  # Written again by the setup wizard as a choice among the project's servers, with the server of its production
+  # environment as default (recette R-21). None is guessed: a run without it is refused before it starts.
+  - name: deployServer
+    display_name: Production server
+    display_name_fr: Serveur de production
+    type: string
+    required: true
+    description: Name of the project's server the fast release runs on.
+    description_fr: Nom du serveur du projet sur lequel la release rapide s'exécute.
 variables:
   APPLICATION_HAS_FRONTEND: "true"
   APPLICATION_HAS_BACKEND: "true"
   APPLICATION_HAS_DATABASE: "false"
   APPLICATION_ROLLBACK_ENABLED: "true"
-  APPLICATION_RELEASE_FAST_COMMANDS: ""
+  APPLICATION_RELEASE_FAST_COMMANDS: |
+    # Default fast release on a Docker server: the checked-out source is copied into DEPLOY_DIR and started
+    # with Docker Compose. A project that deploys otherwise sets APPLICATION_RELEASE_FAST_COMMANDS.
+    set -eu
+    if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+      echo "Docker Compose is not available on this server: install it, or set APPLICATION_RELEASE_FAST_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    PROJECT="${COMPOSE_PROJECT:-${APPLICATION_PREFIX:-}}"
+    if test -z "$PROJECT"; then
+      echo "No Compose project name: set COMPOSE_PROJECT in the prod library, or APPLICATION_PREFIX in this pipeline." >&2
+      exit 1
+    fi
+    SOURCE_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
+    export SOURCE_COMMIT
+    DEPLOY_DIR="${DEPLOY_DIR:-${HOME:-/tmp}/.deployments/$PROJECT}"
+    mkdir -p "$DEPLOY_DIR"
+    # Readable by everyone, as in a checkout: the images copy these files for the non-root user of their
+    # containers, and the runner's restrictive umask would otherwise leave them unreadable.
+    tar --exclude=./.git --mode=a+rX -cf - . | (umask 022 && tar -xf - -C "$DEPLOY_DIR")
+    cd "$DEPLOY_DIR"
+    COMPOSE_FILE_NAME=""
+    for CANDIDATE in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
+      if test -f "$CANDIDATE"; then COMPOSE_FILE_NAME="$CANDIDATE"; break; fi
+    done
+    if test -z "$COMPOSE_FILE_NAME"; then
+      echo "No Compose file (compose.yaml, compose.yml, docker-compose.yaml or docker-compose.yml) at the root of the repository: add one, or set APPLICATION_RELEASE_FAST_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    set --
+    if test -n "${ENV_FILE:-}"; then
+      if ! test -f "$ENV_FILE"; then
+        echo "ENV_FILE ($ENV_FILE) does not exist on this server." >&2
+        exit 1
+      fi
+      set -- --env-file "$ENV_FILE"
+    fi
+    echo ">>> docker compose project $PROJECT from $DEPLOY_DIR/$COMPOSE_FILE_NAME, commit ${SOURCE_COMMIT:-unknown}"
+    # The agent names the Buildx builder of a build step (BUILDX_BUILDER) without creating it when its Docker
+    # maintenance is off: an absent or unhealthy builder is (re)created here, with the host's optional cap on
+    # parallel build steps: BUILDX_MAX_PARALLELISM, a positive integer set per host (the agent's environment or a
+    # library entry), for a small host where concurrent builds exhaust the memory. A healthy builder is left alone,
+    # so changing the cap means removing the builder first (docker buildx rm <builder>).
+    case "${BUILDX_MAX_PARALLELISM:-}" in
+      '') ;;
+      0|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
+    esac
+    if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
+      case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) echo "Unsafe Buildx builder name: $BUILDX_BUILDER" >&2; exit 2 ;; esac
+      BUILDKIT_CONFIG=""
+      if test -n "${BUILDX_MAX_PARALLELISM:-}"; then
+        mkdir -p "${HOME:-/tmp}/.buildx-config"
+        BUILDKIT_CONFIG="${HOME:-/tmp}/.buildx-config/buildkitd-$BUILDX_BUILDER.toml"
+        printf '[worker.oci]\n  max-parallelism = %s\n' "$BUILDX_MAX_PARALLELISM" > "$BUILDKIT_CONFIG"
+        echo "BuildKit will run at most $BUILDX_MAX_PARALLELISM step(s) at a time on this host."
+      fi
+      if docker buildx rm --force "$BUILDX_BUILDER" >/dev/null 2>&1; then echo "Removed the stale Buildx builder $BUILDX_BUILDER."; fi
+      docker buildx create --name "$BUILDX_BUILDER" --driver docker-container ${BUILDKIT_CONFIG:+--config "$BUILDKIT_CONFIG"} --bootstrap >/dev/null
+      echo "Buildx builder $BUILDX_BUILDER created."
+    fi
+    if ! docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" up -d --build --remove-orphans --wait; then
+      docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" ps -a >&2 || true
+      docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" logs --tail 50 >&2 || true
+      echo "The services did not all start." >&2
+      exit 1
+    fi
+    docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" ps
 
 # Recette R3-67: the libraries a production deployment reads, named like the platform's own
 # (`<project>.share`, `<project>.prod`): `${{ project.slug }}` is the project's slug, so the setup wizard creates
@@ -19,10 +105,23 @@ variable_libraries:
   - "${{ project.slug }}.prod"
 
 stages:
+  # The checkout in its own stage: the steps of one stage run concurrently (ADR-012), so in the release stage
+  # the commands could start before the source is there.
+  - name: Checkout
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    steps:
+      - name: Check out the exact revision
+        checkout: true
+
   - name: FastRelease
     group: Deploy
     execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
     os: linux
+    depends_on: [Checkout]
     steps:
       - name: Run project fast release commands
         working_directory: "$(WORKSPACE)"

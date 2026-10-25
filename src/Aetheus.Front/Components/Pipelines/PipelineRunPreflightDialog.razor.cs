@@ -12,19 +12,47 @@ public partial class PipelineRunPreflightDialog
 
     private List<CauseGroup> Groups => BuildGroups();
 
-    /// <summary>One distinct blocking cause, the stages it blocks, and how to fix it.</summary>
-    internal sealed record CauseGroup(string Reason, List<string> Stages, Remediation? Remediation);
+    /// <summary>One distinct blocking cause (one French sentence), the stages it blocks, what to do about
+    /// it, and the action that does it when there is a page for that.</summary>
+    internal sealed record CauseGroup(string Reason, List<string> Stages, string? Hint, Remediation? Remediation);
 
     /// <summary>An action that resolves a cause, rather than a message telling the user to go find it.</summary>
     internal sealed record Remediation(string Explanation, string ActionLabel, string ActionIcon, string Href);
 
+    /// <summary>
+    /// One cause per distinct target, whatever the number of stages that name it. A parameter left empty
+    /// (no production server chosen) is one cause of its own: the stages are blocked because nothing was
+    /// chosen, not because an agent by that name is missing.
+    /// </summary>
     private List<CauseGroup> BuildGroups() =>
         [.. Unresolved
-            .GroupBy(stage => stage.Reason ?? L["PreflightUnknownReason"].Value, StringComparer.Ordinal)
+            .GroupBy(CauseKey, StringComparer.Ordinal)
             .Select(group => new CauseGroup(
-                Shorten(group.Key),
+                CauseText(group.First()),
                 [.. group.Select(Label)],
+                group.First().EmptyTargetParameter is not null ? L["PreflightEmptyParameterHint"].Value : null,
                 RemediationFor(group.First())))];
+
+    private static string CauseKey(PreflightStageDto stage) =>
+        stage.EmptyTargetParameter is { } empty ? $"parameter:{empty.Name}"
+        : stage.Target.Length > 0 ? $"{stage.TargetKind}:{stage.Target}"
+        : $"reason:{stage.Reason}";
+
+    /// <summary>The cause in French, from what the stage targets rather than from the backend's English
+    /// reason, which stays the fallback for a stage with no target to name.</summary>
+    private string CauseText(PreflightStageDto stage)
+    {
+        if (stage.EmptyTargetParameter is { } empty)
+            return string.Format(L["PreflightEmptyParameterCause"], ParameterText.Pick(empty.Label, empty.LabelFr));
+        if (stage.Target.Length == 0)
+            return Shorten(stage.Reason ?? L["PreflightUnknownReason"].Value);
+        return string.Format(L[stage.TargetKind switch
+        {
+            PreflightTargetKind.Environment => "PreflightCauseEnvironment",
+            PreflightTargetKind.Pool => "PreflightCausePool",
+            _ => "PreflightCauseAgent"
+        }], stage.Target);
+    }
 
     /// <summary>
     /// The badge for one blocked stage. The preview now follows the chain, so a stage named "Deploy"
@@ -54,7 +82,7 @@ public partial class PipelineRunPreflightDialog
     /// binding), so the environment page is where the fix happens; an agent target points at the
     /// server itself.
     /// </summary>
-    private Remediation? RemediationFor(PreflightStageDto stage) => stage.TargetKind switch
+    private Remediation? RemediationFor(PreflightStageDto stage) => stage.EmptyTargetParameter is not null ? null : stage.TargetKind switch
     {
         PreflightTargetKind.Environment => new Remediation(
             L["PreflightFixEnvironmentHint"].Value,

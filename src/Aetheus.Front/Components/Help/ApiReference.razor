@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/admin/api-reference"
 @page "/api-reference"
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 <PageTitle>@L["ApiReference"] - Aetheus</PageTitle>
 
@@ -13,9 +13,9 @@
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["EndpointsCount"], _endpoints.Count)</OmniBadge>
         }
     </Badges>
-    <Actions>
+    <ActionsContent>
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="StateHasChanged" Class="api-ref-search" />
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_loading)

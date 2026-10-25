@@ -8,9 +8,9 @@
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("apartment")" /></Icon>
         <Badges>
         </Badges>
-        <Actions>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewOrganization"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
-        </Actions>
+        <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewOrganization"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        </ActionsContent>
     </OmniPageHeader>
 
     <AdminIdentityNav ActiveSection="organizations" />
@@ -22,24 +22,24 @@
             VirtualData="@(() => new OmniDataGridResult<OrganizationDto>(_items, _totalCount))"
             FullHeight="true" RowClick="@(org => OpenDetail(org))">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="OrganizationDto" Property="Name" Title="@L["Name"]" MinWidth="180px" Filterable="true" >
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="OrganizationDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                     <Template Context="org">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                             <span class="server-name-link">@org.Name</span>
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="OrganizationDto" Property="Slug" Title="@L["Slug"]" Width="160px" Filterable="true" >
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="OrganizationDto" Property="Slug" Title="@L["Slug"]" Filterable="true" >
                     <Template Context="org"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@org.Slug</OmniBadge></Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="OrganizationDto" Property="Description" Title="@L["Description"]" MinWidth="240px" Filterable="true" />
+                <OmniDataGridColumn TItem="OrganizationDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="240px" Filterable="true" />
                 <OmniDataGridColumn TItem="OrganizationDto" Property="MemberCount" Title="@L["Members"]" Width="140px" Filterable="true" FilterOperator="OmniDataGridFilterOperator.Equals" />
                 <OmniDataGridColumn TItem="OrganizationDto" Property="ProjectCount" Title="@L["Projects"]" Width="140px" Filterable="true" FilterOperator="OmniDataGridFilterOperator.Equals" />
-                <OmniDataGridColumn TItem="OrganizationDto" Title="@L["Actions"]" Width="110px" TextAlign="OmniDataGridTextAlign.Center" Sortable="false" Filterable="false" >
+                <OmniDataGridColumn TItem="OrganizationDto" Title="@L["Actions"]" Width="110px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
                     <Template Context="org">
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDetail(org))" title="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(org))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDetail(org))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(org))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                         </span>
                     </Template>
                 </OmniDataGridColumn>

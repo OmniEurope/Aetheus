@@ -9,5 +9,7 @@ public enum CertbotAction
     Delete,
     RevokeAndDelete,
     Normalize,
-    RenewalCheck
+    RenewalCheck,
+    /// <summary>Recette R-12: reissues a certificate without one of its names (the certificate is kept).</summary>
+    RemoveDomain
 }

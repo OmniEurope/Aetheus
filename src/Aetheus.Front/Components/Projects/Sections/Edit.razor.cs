@@ -10,7 +10,7 @@ public partial class Edit
     // standalone, so it owns the load itself.
     [Inject] private ProjectDetailLoader Loader { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
-    [Inject] private Aetheus.Front.Layout.BreadcrumbService Breadcrumb { get; set; } = default!;
+    [Inject] private Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
 
     protected override async Task OnParametersSetAsync()
@@ -20,9 +20,9 @@ public partial class Edit
         // ProjectDetailLayout.
         if (Loader.Project is { } project)
             Breadcrumb.Set(
-                new Aetheus.Front.Layout.BreadcrumbItem(L["Projects"], "/projects"),
-                new Aetheus.Front.Layout.BreadcrumbItem(project.Name, $"/projects/{Id}/overview"),
-                new Aetheus.Front.Layout.BreadcrumbItem(L["Edit"]));
+                new Aetheus.Front.Components.Shared.BreadcrumbItem(L["Projects"], "/projects"),
+                new Aetheus.Front.Components.Shared.BreadcrumbItem(project.Name, $"/projects/{Id}/overview"),
+                new Aetheus.Front.Components.Shared.BreadcrumbItem(L["Edit"]));
     }
 
     // ProjectEditSection raises OnSaved after a successful update. Force-reload the shared (scoped)

@@ -220,6 +220,8 @@ internal sealed class NpmRegistryService(
             ["integrity"] = version.Integrity,
             ["tarball"] = $"{registryBaseUrl.TrimEnd('/')}/{packagePath}/-/{Uri.EscapeDataString(baseName + "-" + version.Version + ".tgz")}"
         };
+        if (version.IsDeprecated)
+            document["deprecated"] = PackageRegistryDefaults.DeprecationMessage;
         return document;
     }
 

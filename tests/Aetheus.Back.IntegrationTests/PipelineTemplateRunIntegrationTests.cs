@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Services;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

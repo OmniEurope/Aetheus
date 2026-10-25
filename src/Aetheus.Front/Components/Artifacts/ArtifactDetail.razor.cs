@@ -9,7 +9,7 @@ public partial class ArtifactDetail
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private IJSRuntime Js { get; set; } = default!;
     [Inject] private ClipboardService Clipboard { get; set; } = default!;
-    [Inject] private Layout.ProjectNavContextService ProjectNav { get; set; } = default!;
+    [Inject] private ProjectNavContextService ProjectNav { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
 
     [Parameter] public int ArtifactId { get; set; }

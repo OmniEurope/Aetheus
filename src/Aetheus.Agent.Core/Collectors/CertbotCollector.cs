@@ -69,7 +69,9 @@ public sealed partial class CertbotCollector : BaseShellCollector<CertbotCollect
                 RenewalCheckedAt = renewalCheckedAt,
                 HelperVersion = ReadHelperVersion(),
                 RenewalCheckSucceeded = renewalCheckSucceeded,
-                RenewalCheckFailures = _renewalInspector.ReadRenewalCheckFailures()
+                RenewalCheckFailures = _renewalInspector.ReadRenewalCheckFailures(),
+                RenewalCheckOutputTail = _renewalInspector.ReadRenewalCheckOutputTail(),
+                AcmeProxyRules = _renewalInspector.ReadAcmeProxyRules()
             };
         }
         catch (Exception ex)

@@ -7,14 +7,13 @@
 @* Use a breadcrumb and column header filters; the list refreshes from the notification feed. *@
 <OmniPageHeader Title="@L["MyNotifications"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("notifications")" /></Icon>
-    <Actions>
+    <ActionsContent>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="MarkAllReadAsync" Busy="@_markingAll"
                     Disabled="@(Feed.UnreadCount == 0)"
                     Class="@(_markingAll ? "notifications-mark-all btn-busy" : "notifications-mark-all")">
-            <OmniIcon Name="OmniIconName.CheckCircle" />
-            <span>@L["NotificationsMarkAllRead"]</span>
+            <Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent><span>@L["NotificationsMarkAllRead"]</span></ChildContent>
         </OmniButton>
-    </Actions>
+    </ActionsContent>
     @* STD-BTN detection 11: NotificationsMarkAllRead visible, the other actions in the menu. *@
     <MenuContent>
         @* Recette R1-54: the notification options, on the Settings tab that holds them. *@
@@ -53,15 +52,15 @@
                 <span title="@row.EventType">@NotificationLabels.EventLabel(L, row.EventType)</span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="ChannelName" Title="@L["NotificationChannel"]" Width="10rem" Filterable="false">
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="NotificationDeliveryDto" Property="ChannelName" Title="@L["NotificationChannel"]" Filterable="false">
             <Template Context="row">
                 @(row.ChannelName ?? L["NotificationChannelNone"].Value)
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Subject" Title="@L["NotificationSubject"]" MinWidth="16rem" Filterable="true" />
+        <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Subject" Truncate="true" Title="@L["NotificationSubject"]" MinWidth="16rem" Filterable="true" />
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Status" Title="@L["Status"]" Width="16rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="row">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row)"
+                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row)"
                            Class="notification-status-badge">@NotificationLabels.StatusLabel(L, row)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
@@ -72,7 +71,7 @@
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => MarkReadAsync(row))"
                                 title="@L["NotificationsMarkRead"]" Label="@L["NotificationsMarkRead"]" Class="notifications-mark-read">
-                        <OmniIcon Name="OmniIconName.Check" />
+                        <Icon><OmniIcon Name="OmniIconName.Check" /></Icon>
                     </OmniButton>
                     </span>
                 }

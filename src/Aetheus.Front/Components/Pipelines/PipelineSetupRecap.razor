@@ -1,0 +1,40 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R2-17 / R2-24: the summary step in one reading order, one OE card per subject so the subjects are told apart.
+   First what will be created (the project, its type and the pipelines, whose list is folded away by default;
+   OE's description list draws a rule between the lines), then what is to do before creating (the repository and
+   the libraries and vaults) and, last, the other findings. All of it lives in the step's body. *@
+<OmniStack Gap="OmniSpacing.Medium" data-testid="setup-recap">
+    <OmniCard data-testid="setup-summary">
+        <HeaderContent><strong>@L["PipelineSetupRecapCreateTitle"]</strong></HeaderContent>
+        <ChildContent>
+            <OmniDescriptionList>
+                <OmniDescriptionItem Term="@L["Project"]"><strong>@ProjectName</strong></OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["PipelineArchitectureTitle"]">@ArchitectureSummary</OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["Pipelines"]">
+                    <OmniFieldset Collapsible="true" Expanded="false" data-testid="setup-pipelines-list">
+                        <Legend>@string.Format(L["PipelineSetupRecapPipelineCount"], SummaryItems.Count)</Legend>
+                        <ChildContent>
+                            <div class="pipeline-setup-summary">
+                                @foreach (var item in SummaryItems)
+                                {
+                                    <div><OmniIcon Name="OmniIconName.Graph" /><strong>@item.Name</strong><span>@item.TemplateName</span></div>
+                                }
+                            </div>
+                        </ChildContent>
+                    </OmniFieldset>
+                </OmniDescriptionItem>
+            </OmniDescriptionList>
+        </ChildContent>
+    </OmniCard>
+
+    @* R2-24: what will be created and what is left to do before creating it are two blocks, told apart by a rule. *@
+    <OmniDivider />
+    <PipelineSetupReadinessPanel ProjectId="@ProjectId" Readiness="@Readiness" Loading="@ReadinessLoading"
+                                 TemplateNames="@TemplateNames" ReturnUrl="@ReturnUrl" GateCreation="true"
+                                 OnChanged="@OnReadinessChanged" />
+    @* ADR-057: the production deployment read from the Compose file, only when its pipeline is selected. *@
+    @if (ProductionSetup is not null)
+    {
+        <PipelineProductionPanel Setup="@ProductionSetup" />
+    }
+</OmniStack>

@@ -10,4 +10,7 @@ public partial class AppErrorDetailDialog
 
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+
+    /// <summary>R-39: the whole detail as Markdown, computed at the click (clipboard only, no file).</summary>
+    private Task<string> MarkdownAsync() => Task.FromResult(ErrorDetailMarkdown.ForAppError(Error, key => L[key]));
 }

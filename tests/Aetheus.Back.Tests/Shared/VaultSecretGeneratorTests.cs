@@ -110,19 +110,17 @@ public class VaultSecretGeneratorTests
     public void Recipes_StillMatchTheDeploymentScripts()
     {
         var repositoryRoot = RepositoryScan.Root;
-        var deployScript = File.ReadAllText(Path.Combine(repositoryRoot, "deploy", "scripts", "deploy.sh"));
-        // The production recipe is declared by the versioned template and executed by the renderer
-        // prod-deploy-prepare.sh calls: #{SECRET_HEX_<N>}# is `openssl rand -hex <N>`.
+        var deployScript = File.ReadAllText(Path.Combine(repositoryRoot, "deploy", "remote-deploy", "deploy.sh"));
+        // The production recipe is declared by the versioned template; the renderer that runs it is
+        // the heredoc of the prepare step in .pipeline/aetheus-deploy-prod.yaml: #{SECRET_HEX_<N>}# is
+        // `openssl rand -hex <N>`.
         var productionTemplate = File.ReadAllText(
             Path.Combine(repositoryRoot, "deploy", "env", "prod.env.sample"));
-        var renderScript = File.ReadAllText(
-            Path.Combine(repositoryRoot, "deploy", "scripts", "render-env-sample.sh"));
 
         Assert.Contains("ensure_env_secret JWT_KEY", deployScript, StringComparison.Ordinal);
         Assert.Contains("ensure_env_secret ENCRYPTION_KEY", deployScript, StringComparison.Ordinal);
         Assert.Contains("ensure_env_secret ENCRYPTION_SALT", deployScript, StringComparison.Ordinal);
         Assert.Matches(new Regex(@"(?m)^DB_PASSWORD=#\{SECRET_HEX_24\}#$"), productionTemplate);
-        Assert.Contains("openssl rand -hex \"$length\"", renderScript, StringComparison.Ordinal);
 
         // JWT_KEY and ENCRYPTION_KEY: 48 bytes, base64, tr -d "/+=".
         foreach (var key in new[] { "JWT_KEY", "ENCRYPTION_KEY" })

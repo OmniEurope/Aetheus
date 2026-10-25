@@ -27,7 +27,7 @@ public sealed class IconLabelAlignmentAuditTests
         var stacks = 0;
         foreach (var (file, element) in Elements())
         {
-            if (element.Name != "OmniStack" || !element.Tag.Contains("OmniStackOrientation.Horizontal", StringComparison.Ordinal))
+            if (element.Name != "OmniStack" || !element.Tag.Contains("OmniOrientation.Horizontal", StringComparison.Ordinal))
                 continue;
             stacks++;
             if (!element.Children.Contains("OmniIcon")) continue;
@@ -103,7 +103,7 @@ public sealed class IconLabelAlignmentAuditTests
             if (!isIcon || element.ParentTag is not { } parentTag) continue;
             var parentCentred = ClassesOf(parentTag).Any(centredRows.Contains)
                 || (parentTag.StartsWith("<OmniStack", StringComparison.Ordinal)
-                    && parentTag.Contains("OmniStackOrientation.Horizontal", StringComparison.Ordinal)
+                    && parentTag.Contains("OmniOrientation.Horizontal", StringComparison.Ordinal)
                     && parentTag.Contains("Align=\"OmniAlignment.Center\"", StringComparison.Ordinal));
             if (!parentCentred) continue;
             foreach (var name in ClassesOf(element.Tag).Where(offset.Contains))

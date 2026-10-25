@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.AppMonitoring;
-using Aetheus.Back.Components.AppMonitoring.Ingest;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Data;

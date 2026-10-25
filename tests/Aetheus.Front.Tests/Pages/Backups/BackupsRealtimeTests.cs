@@ -30,7 +30,15 @@ public sealed class BackupsRealtimeTests : BunitContext
     private InMemoryHubServer Entities => this.Hub("entities");
 
     private int Reads(string path) =>
-        _handler.Requests.ToList().Count(request => request.Method == "GET" && request.Url.Contains(path, StringComparison.Ordinal));
+        _handler.RequestsSnapshot().Count(request => request.Method == "GET" && request.Url.Contains(path, StringComparison.Ordinal));
+
+    // Instrumentation for a failure seen twice under the full suite and never reproduced alone (96
+    // runs under 8 parallel loops): a failed count names every request in order, so the next failure
+    // tells which load was missing or doubled.
+    private string Trace() => string.Join(" | ", _handler.RequestsSnapshot().Select(request => $"{request.Method} {request.Url}"));
+
+    private void AssertReads(int expected, string path) =>
+        Assert.True(Reads(path) == expected, $"Expected {expected} GET {path}, got {Reads(path)}: {Trace()}");
 
     private async Task<IRenderedComponent<BackupsPage>> RenderConnectedAsync(int? projectId = null)
     {
@@ -48,15 +56,15 @@ public sealed class BackupsRealtimeTests : BunitContext
     public async Task ABackupChange_RefreshesThePolicies_AndTheOpenRunHistory()
     {
         var cut = await RenderConnectedAsync();
-        cut.FindAll("button").First(button => button.Names().Contains("BackupRuns", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("BackupRuns")!.Click();
         await _handler.WhenGetAsync("api/backups/1/runs");
-        Assert.Equal(1, Reads("api/backups/1/runs"));
+        AssertReads(1, "api/backups/1/runs");
         var policies = Reads("api/backups?");
 
         await Entities.PushAsync(OperationalRealtimeEvents.BackupChanged, 1);
 
-        Assert.True(Reads("api/backups?") > policies);
-        Assert.Equal(2, Reads("api/backups/1/runs"));
+        Assert.True(Reads("api/backups?") > policies, $"Expected more than {policies} GET api/backups?: {Trace()}");
+        AssertReads(2, "api/backups/1/runs");
     }
 
     [Fact]
@@ -67,8 +75,8 @@ public sealed class BackupsRealtimeTests : BunitContext
 
         await Entities.PushAsync(OperationalRealtimeEvents.BackupChanged, 1);
 
-        Assert.True(Reads("api/backups?") > policies);
-        Assert.Equal(0, Reads("api/backups/1/runs"));
+        Assert.True(Reads("api/backups?") > policies, $"Expected more than {policies} GET api/backups?: {Trace()}");
+        AssertReads(0, "api/backups/1/runs");
     }
 
     [Fact]
@@ -79,7 +87,7 @@ public sealed class BackupsRealtimeTests : BunitContext
 
         await Entities.PushAsync(OperationalRealtimeEvents.BackupChanged, 4);
 
-        Assert.Equal(before, Reads("api/backups?"));
+        AssertReads(before, "api/backups?");
     }
 
     [Fact]

@@ -5,28 +5,18 @@ using Bunit;
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
 /// <summary>
-/// Recette R1-43: the run page shows what the expand/contract gate of each blue-green migrate step
-/// concluded, read from the run's endpoint, and shows nothing for a run without a gate.
+/// Recette R1-43: the verdict card shows what the expand/contract gate of each blue-green migrate step
+/// concluded, and shows nothing for a run without a gate. The run's Schema tab (R-18) reads the verdicts
+/// and passes them in.
 /// </summary>
 public sealed class PipelineRunMigrationGateTests : BunitContext
 {
-    private readonly BunitTestHelper.TestHandler _handler;
-
-    public PipelineRunMigrationGateTests() => _handler = BunitTestHelper.RegisterServices(this);
-
-    private static PipelineRunDto Run(PipelineStatus status = PipelineStatus.Failed) => new()
-    {
-        Id = 4242,
-        PipelineId = 5,
-        PipelineName = "deploy-prod",
-        Status = status,
-        StartedAt = DateTime.UtcNow.AddMinutes(-5)
-    };
+    public PipelineRunMigrationGateTests() => BunitTestHelper.RegisterServices(this);
 
     [Fact]
     public void ARefusedGate_ShowsTheVerdictTheStepAndEachMigrationWithItsViolations()
     {
-        _handler.SetJsonResponse("api/pipelines/runs/4242/migration-gate", new List<PipelineRunMigrationGateDto>
+        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Gates, new List<PipelineRunMigrationGateDto>
         {
             new()
             {
@@ -42,11 +32,9 @@ public sealed class PipelineRunMigrationGateTests : BunitContext
                     }
                 ]
             }
-        });
+        }));
 
-        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Run, Run()));
-
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='run-migration-gate']")));
+        Assert.NotNull(cut.Find("[data-testid='run-migration-gate']"));
         var verdict = cut.Find("[data-testid='migration-gate-verdict']");
         var badge = verdict.QuerySelector(".omni-badge")!;
         Assert.Equal("Enum_MigrationGateOutcome_Refused", badge.TextContent.Trim());
@@ -66,18 +54,15 @@ public sealed class PipelineRunMigrationGateTests : BunitContext
     [Fact]
     public void AnUnavailableGate_ShowsItsReason()
     {
-        _handler.SetJsonResponse("api/pipelines/runs/4242/migration-gate", new List<PipelineRunMigrationGateDto>
+        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Gates, new List<PipelineRunMigrationGateDto>
         {
             new()
             {
                 Id = 1, StepName = "Migrate", Outcome = MigrationGateOutcome.Unavailable, RecordedAt = DateTime.UtcNow,
                 Detail = "Migration sources not found at '/srv/x'"
             }
-        });
+        }));
 
-        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Run, Run()));
-
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".run-migration-gate-detail")));
         Assert.Equal("Migration sources not found at '/srv/x'", cut.Find(".run-migration-gate-detail").TextContent);
         Assert.Empty(cut.FindAll("[data-testid='migration-gate-migration']"));
     }
@@ -85,36 +70,9 @@ public sealed class PipelineRunMigrationGateTests : BunitContext
     [Fact]
     public void ARunWithoutAGate_RendersNothing()
     {
-        _handler.SetJsonResponse("api/pipelines/runs/4242/migration-gate", new List<PipelineRunMigrationGateDto>());
+        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Gates, new List<PipelineRunMigrationGateDto>()));
 
-        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Run, Run(PipelineStatus.Success)));
-
-        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.Contains("/migration-gate", StringComparison.Ordinal)));
         Assert.Empty(cut.FindAll("[data-testid='run-migration-gate']"));
-    }
-
-    [Fact]
-    public void AnUnreadableAnswer_RendersNothingInsteadOfFailingThePage()
-    {
-        _handler.SetResponse("api/pipelines/runs/4242/migration-gate", System.Net.HttpStatusCode.InternalServerError);
-
-        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Run, Run()));
-
-        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Url.Contains("/migration-gate", StringComparison.Ordinal)));
-        Assert.Empty(cut.FindAll("[data-testid='run-migration-gate']"));
-    }
-
-    [Fact]
-    public void TheVerdictIsReadAgainWhenTheRunStatusChanges_NotOnEveryRender()
-    {
-        _handler.SetJsonResponse("api/pipelines/runs/4242/migration-gate", new List<PipelineRunMigrationGateDto>());
-
-        var cut = Render<PipelineRunMigrationGate>(p => p.Add(c => c.Run, Run(PipelineStatus.Running)));
-        cut.Render(p => p.Add(c => c.Run, Run(PipelineStatus.Running)));
-        cut.Render(p => p.Add(c => c.Run, Run(PipelineStatus.Failed)));
-
-        cut.WaitForAssertion(() => Assert.Equal(2,
-            _handler.Requests.Count(r => r.Url.Contains("/migration-gate", StringComparison.Ordinal))));
     }
 
     [Theory]

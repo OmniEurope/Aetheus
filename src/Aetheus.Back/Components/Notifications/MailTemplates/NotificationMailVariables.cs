@@ -31,6 +31,12 @@ public static class NotificationMailVariables
     /// <summary>The words of the action button; empty, so no button, when there is no link.</summary>
     public const string LinkLabel = "LinkLabel";
 
+    /// <summary>The time the mail was written, in the platform wall clock with its zone named; it differs from one mail to the next.</summary>
+    public const string SentAt = "SentAt";
+
+    /// <summary>Block: the named subject on its own line, a link to its server when it is one.</summary>
+    public const string ContextLink = "ContextLink";
+
     /// <summary>Block: the banner with the event in the colours of its status.</summary>
     public const string StatusBanner = "StatusBanner";
 

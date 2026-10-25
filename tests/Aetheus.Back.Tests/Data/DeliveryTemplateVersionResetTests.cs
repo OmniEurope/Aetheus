@@ -3,6 +3,7 @@ using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Seeding;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
@@ -38,7 +39,7 @@ public sealed class DeliveryTemplateVersionResetTests
             var template = await LoadTemplateAsync(db, organizationId, name);
             // Reset to the first shipped file as v1; normal seeding adds any later shipped files
             // afterward.
-            var shippedFiles = DeliveryPipelineTemplateSeeder.Definitions[name].Resources;
+            var shippedFiles = DeliveryTemplateCatalog.Definitions[name].Resources;
             Assert.Equal(shippedFiles.Length, template.LatestVersion);
             Assert.Equal(Enumerable.Range(1, shippedFiles.Length), template.Versions.Select(item => item.Version).Order());
             var version = template.Versions.Single(item => item.Version == 1);
@@ -133,12 +134,14 @@ public sealed class DeliveryTemplateVersionResetTests
     {
         await using var db = NewDatabase();
         var (organizationId, projectId) = await SeedOrganizationAsync(db, "aetheus");
-        var files = DeliveryPipelineTemplateSeeder.Definitions["application-candidate"].Resources
-            .Select(DeliveryPipelineTemplateSeeder.ReadResource).ToArray();
-        Assert.Equal(2, files.Length);
-        AddTemplate(db, organizationId, "application-candidate", 2, files[1], firstVersionYaml: files[0]);
-        var candidateYaml = "name: ats-candidate\nextends: application-candidate@2\nstages: []\n";
-        var candidate = AddPipeline(db, projectId, "ats-candidate", candidateYaml, "application-candidate", 2);
+        var files = DeliveryTemplateCatalog.Definitions["application-candidate"].Resources
+            .Select(DeliveryTemplateCatalog.ReadResource).ToArray();
+        var shipped = files.Length;
+        AddTemplate(db, organizationId, "application-candidate", shipped, files[^1], firstVersionYaml: files[0]);
+        foreach (var version in db.PipelineTemplates.Local.Single().Versions)
+            version.YamlContent = files[version.Version - 1];
+        var candidateYaml = $"name: ats-candidate\nextends: application-candidate@{shipped}\nstages: []\n";
+        var candidate = AddPipeline(db, projectId, "ats-candidate", candidateYaml, "application-candidate", shipped);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var versionIds = await db.PipelineTemplateVersions.Select(version => version.Id)
             .ToListAsync(TestContext.Current.CancellationToken);
@@ -146,10 +149,10 @@ public sealed class DeliveryTemplateVersionResetTests
         await new DeliveryPipelineTemplateSeeder(db, TimeProvider.System).SeedAsync(TestContext.Current.CancellationToken);
 
         var template = await LoadTemplateAsync(db, organizationId, "application-candidate");
-        Assert.Equal(2, template.LatestVersion);
+        Assert.Equal(shipped, template.LatestVersion);
         Assert.Equal(versionIds.Order(), template.Versions.Select(version => version.Id).Order());
         var pipeline = await db.Pipelines.SingleAsync(item => item.Id == candidate.Id, TestContext.Current.CancellationToken);
-        Assert.Equal(2, pipeline.TemplateReferenceVersion);
+        Assert.Equal(shipped, pipeline.TemplateReferenceVersion);
         Assert.Equal(candidateYaml, pipeline.YamlDefinition);
     }
 
@@ -403,7 +406,7 @@ public sealed class DeliveryTemplateVersionResetTests
             yaml, new HashSet<string>(["application-ci"], StringComparer.OrdinalIgnoreCase)));
 
     private static string Shipped(string name) =>
-        DeliveryPipelineTemplateSeeder.ReadResource(DeliveryPipelineTemplateSeeder.Definitions[name].Resources[0]);
+        DeliveryTemplateCatalog.ReadResource(DeliveryTemplateCatalog.Definitions[name].Resources[0]);
 
     private static AppDbContext NewDatabase() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))

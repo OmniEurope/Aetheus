@@ -140,6 +140,10 @@ public sealed class VariablesApi(HttpClient http) : ApiClientBase(http)
             GridColumnFilters.AddTo(QueryHelpers.AddQueryString("api/vaults", query), filters), JsonOptions.Web) ?? new();
     }
 
+    /// <summary>Who reads each library and vault the caller can read: pipelines and monitored applications (R-65, R-66).</summary>
+    public async Task<ResourceUsageDto> GetResourceUsageAsync(CancellationToken ct = default) =>
+        await Http.GetFromJsonAsync<ResourceUsageDto>("api/pipelines/resource-usage", JsonOptions.Web, ct) ?? new();
+
     /// <summary>The project names the vaults list's checkable filter offers.</summary>
     public async Task<VaultFilterValuesDto> GetVaultFilterValuesAsync(CancellationToken ct = default) =>
         await Http.GetFromJsonAsync<VaultFilterValuesDto>("api/vaults/filter-values", JsonOptions.Web, ct) ?? new();

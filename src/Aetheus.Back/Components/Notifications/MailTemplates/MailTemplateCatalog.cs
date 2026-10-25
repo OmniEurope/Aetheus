@@ -22,7 +22,7 @@ internal static class MailTemplateCatalog
         MailTemplateKind.NotificationEvent =>
         [
             Text(Event), Text(Summary), Text(Intro), Text(Context), Text(Project), Text(LinkLabel), Link(NotificationMailVariables.Link),
-            Link(InboxUrl), Block(StatusBanner), Block(Details), Block(LinkNote)
+            Link(InboxUrl), Text(SentAt), Block(StatusBanner), Block(ContextLink), Block(Details), Block(LinkNote)
         ],
         MailTemplateKind.DailyRecap => [Text(Date), Text(Period), Link(SettingsUrl), Block(Tiles), Block(Sections)],
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown mail template kind.")

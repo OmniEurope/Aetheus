@@ -2,7 +2,6 @@
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Back.Components.Apache;
-using Aetheus.Back.Components.Mail;
 using Aetheus.Back.Components.Rkhunter;
 using Microsoft.Extensions.Options;
 
@@ -67,8 +66,6 @@ public class CommandHelperValidationTests
         { "Restart",        ApacheCommandHelper.BuildServiceCommand(ApacheAction.Restart) },
         { "Reload",         ApacheCommandHelper.BuildServiceCommand(ApacheAction.Reload) },
         { "TestConfig",     ApacheCommandHelper.BuildServiceCommand(ApacheAction.TestConfig) },
-        { "EnableSite",     ApacheCommandHelper.BuildEnableSiteCommand("mysite") },
-        { "DisableSite",    ApacheCommandHelper.BuildDisableSiteCommand("mysite") },
         { "EnableModule",   ApacheCommandHelper.BuildEnableModuleCommand("proxy") },
         { "DisableModule",  ApacheCommandHelper.BuildDisableModuleCommand("proxy") },
         { "GetLogs_access", ApacheCommandHelper.BuildGetLogsCommand("access", 100) },

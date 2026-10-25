@@ -9,7 +9,6 @@ namespace Aetheus.Front.Components.Monitoring;
 /// budget red: the budget sweep then purges the oldest detail. </summary>
 public partial class SupervisionProjectsGrid
 {
-    private const double Megabyte = 1024d * 1024d;
 
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -49,8 +48,7 @@ public partial class SupervisionProjectsGrid
 
     private string GroupLabel(object? value, int count) => $"{value} ({count})";
 
-    private string Megabytes(long bytes) =>
-        string.Format(CultureInfo.CurrentCulture, L["SizeMegabytes"], (bytes / Megabyte).ToString("N1", CultureInfo.CurrentCulture));
+    private static string Megabytes(long bytes) => DisplayFormatting.Size(bytes);
 
     internal static string Percent(int percent) => string.Create(CultureInfo.CurrentCulture, $"{percent} %");
 

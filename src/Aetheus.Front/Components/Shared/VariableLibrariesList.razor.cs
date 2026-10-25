@@ -37,6 +37,8 @@ public partial class VariableLibrariesList : IAsyncDisposable
     // The project column's checkable filter lists every project owning a library the caller can
     // read: served by the API for the global list, taken from the loaded list in server scope.
     private VariableLibraryFilterValuesDto _filterValues = new();
+    private Dictionary<int, List<ResourceUsageUserDto>> _usage = [];
+    private bool _usageLoaded;
     private HubConnection? _hubConnection;
 
     private string CacheKey => $"variable-libraries:server:{ServerId}";
@@ -77,8 +79,27 @@ public partial class VariableLibrariesList : IAsyncDisposable
         }
 
         await LoadFilterValuesAsync();
+        await LoadUsageAsync();
         await StartHubAsync();
     }
+
+    /// <summary>Who reads each library (R-65). A failed call leaves the column empty rather than claiming
+    /// every library is unused.</summary>
+    private async Task LoadUsageAsync()
+    {
+        try
+        {
+            _usage = (await Api.Variables.GetResourceUsageAsync()).Libraries;
+            _usageLoaded = true;
+        }
+        catch (HttpRequestException) { } // the list stays usable without the usage column
+    }
+
+    private IReadOnlyList<ResourceUsageUserDto>? UsersOf(int libraryId) =>
+        _usage.TryGetValue(libraryId, out var users) ? users : null;
+
+    /// <summary>The detail page of a library, remembering this list so its Back and its deletion return here.</summary>
+    private string LibraryHref(int id) => LocalReturnUrl.Append($"/variable-libraries/{id}", LocalReturnUrl.Current(Nav));
 
     private async Task LoadFilterValuesAsync()
     {

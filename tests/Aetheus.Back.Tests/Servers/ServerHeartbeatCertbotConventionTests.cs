@@ -63,7 +63,7 @@ public sealed class ServerHeartbeatCertbotConventionTests
 
         await _sut.ProcessHeartbeatAsync(1, Heartbeat(succeeded: false), ct: TestContext.Current.CancellationToken);
 
-        _events.Received(1).Publish(Arg.Is<CertbotRenewalCheckFailedEvent>(e => e.ServerId == 1 && e.CheckedAt == CheckedAt));
+        _events.Received(1).Publish(Arg.Is<CertbotRenewalCheckFailedEvent>(e => e.ServerId == 1 && e.ServerName == "web" && e.CheckedAt == CheckedAt));
     }
 
     [Fact]
@@ -87,6 +87,65 @@ public sealed class ServerHeartbeatCertbotConventionTests
         var failure = Assert.Single(mapped.RenewalCheckFailures);
         Assert.Equal("shop.example.com", failure.Name);
         Assert.Equal("Some challenges have failed.", failure.Reason);
+    }
+
+    [Fact]
+    public async Task R1_7_TheOutputTailOfAFailedCheck_IsStoredWithTheState_AndReadBackForThePage()
+    {
+        var heartbeat = Heartbeat(succeeded: false);
+        heartbeat = heartbeat with
+        {
+            Certbot = heartbeat.Certbot with
+            {
+                RenewalCheckOutputTail = ["certbot renew --dry-run ran for 612 s and exited with code 1", "Another instance of Certbot is already running."]
+            }
+        };
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, heartbeat, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(stored);
+        var mapped = ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = stored });
+        Assert.Equal(["certbot renew --dry-run ran for 612 s and exited with code 1", "Another instance of Certbot is already running."], mapped.RenewalCheckOutputTail);
+    }
+
+    [Fact]
+    public async Task R1_7_APassedCheckStoresNoTail_AndAnUnreadableColumnReadsAsNone()
+    {
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, Heartbeat(succeeded: true), ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(stored!.RenewalCheckOutputTailJson);
+        Assert.Empty(ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = new CertbotState { RenewalCheckOutputTailJson = "{not json" } }).RenewalCheckOutputTail);
+    }
+
+    [Fact]
+    public async Task R2_TheProxyRulesTheHelperRecorded_AreStoredWithTheState_AndReadBackForThePage()
+    {
+        var heartbeat = Heartbeat(succeeded: true);
+        heartbeat = heartbeat with { Certbot = heartbeat.Certbot with { AcmeProxyRules = ["/etc/apache2/sites-enabled/shop.conf:12"] } };
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, heartbeat, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(stored);
+        Assert.Equal(["/etc/apache2/sites-enabled/shop.conf:12"], ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = stored }).AcmeProxyRules);
+    }
+
+    [Fact]
+    public async Task R2_NoProxyRule_StoresNothing_AndAnUnreadableColumnReadsAsNone()
+    {
+        CertbotState? stored = null;
+        await _heartbeatRepo.ReplaceCertbotStateAsync(1, Arg.Do<CertbotState?>(state => stored = state), Arg.Any<CancellationToken>());
+
+        await _sut.ProcessHeartbeatAsync(1, Heartbeat(succeeded: true), ct: TestContext.Current.CancellationToken);
+
+        Assert.Null(stored!.AcmeProxyRulesJson);
+        Assert.Empty(ServerDataMapper.MapCertbotDataDto(new Server { CertbotState = new CertbotState { AcmeProxyRulesJson = "{not json" } }).AcmeProxyRules);
     }
 
     [Fact]
@@ -126,9 +185,13 @@ public sealed class ServerHeartbeatCertbotConventionTests
         var notifications = Substitute.For<INotificationService>();
         var handler = new CertbotRenewalCheckNotificationHandler(notifications);
 
-        await handler.HandleAsync(new CertbotRenewalCheckFailedEvent(1, CheckedAt), TestContext.Current.CancellationToken);
+        await handler.HandleAsync(new CertbotRenewalCheckFailedEvent(1, "web", CheckedAt), TestContext.Current.CancellationToken);
 
         await notifications.Received(1).SendEventAsync("certbot.renewal-check.failed", Arg.Any<object>(), Arg.Any<CancellationToken>());
+        var payload = notifications.ReceivedCalls().Select(call => call.GetArguments()[1]).Single();
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(payload));
+        Assert.Equal("web", json.RootElement.GetProperty("ServerName").GetString());
+        Assert.Equal(1, json.RootElement.GetProperty("ServerId").GetInt32());
     }
 
     private static ServerHeartbeatDto Heartbeat(bool succeeded) => new()

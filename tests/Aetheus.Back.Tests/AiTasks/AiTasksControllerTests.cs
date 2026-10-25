@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Claims;
 using Aetheus.Back.Components.AiTasks;
-using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services;

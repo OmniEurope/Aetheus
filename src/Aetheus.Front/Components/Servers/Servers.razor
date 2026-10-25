@@ -14,18 +14,18 @@
         <StatusCountBadge Count="@_compatibilitySummary.UpdateRequired" Label="@L["AgentCompatibility_UpdateRequired"]" Icon="OmniIconName.Warning" Tone="OmniTone.Danger" />
         <StatusCountBadge Count="@_compatibilitySummary.Unknown" Label="@L["AgentCompatibility_Unknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
     </Badges>
-    <Actions>
+    <ActionsContent>
         @* Open the column chooser from Tools. *@
         <div class="column-chooser-wrap">
             @if (_showColumnChooser)
             {
                 <OmniCard Class="column-chooser-popup">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["ChooseColumns"]</OmniText>
                         <div class="flex-spacer"></div>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleColumnChooser" title="@L["Close"]" Label="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleColumnChooser" title="@L["Close"]" Label="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
                     </OmniStack>
-                    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall">
+                    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                         @foreach (var col in _columnLabels)
                         {
                             var visible = IsColumnVisible(col.Key);
@@ -35,7 +35,7 @@
                 </OmniCard>
             }
         </div>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GoToAddAgent" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"].Value : null)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["AddAgent"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GoToAddAgent" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"].Value : null)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddAgent"]</span></ChildContent></OmniButton>
         @* Last in the row, after Add. *@
         <OmniOverflowMenu Label="@L["Tools"]">
             <OmniMenuItem OnClick="@OnUpdateAllAgents" Disabled="@(!_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["UpdateAllAgents"]</ChildContent></OmniMenuItem>
@@ -43,14 +43,14 @@
             <OmniMenuItem OnClick="@OpenRetiredServersDialog"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["RetiredServers"]</ChildContent></OmniMenuItem>
             <OmniMenuItem OnClick="@ToggleColumnChooser"><Icon><OmniIcon Name="OmniIconName.Columns" /></Icon><ChildContent>@L["ChooseColumns"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
         @L["LoadFailed"]
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadGridAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadGridAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 
@@ -62,14 +62,14 @@
     <EmptyTemplate>
         <EmptyState Icon="dns" Title="@L["EmptyServersTitle"]" Description="@L["EmptyServersHint"]">
             <ActionContent>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GoToAddAgent" Disabled="@(!_canWrite)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["AddAgent"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GoToAddAgent" Disabled="@(!_canWrite)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddAgent"]</span></ChildContent></OmniButton>
             </ActionContent>
         </EmptyState>
     </EmptyTemplate>
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="ServerDto" Property="Name" Title="@L["Name"]" MinWidth="180px" Filterable="true" >
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ServerDto" Property="Name" Title="@L["Name"]" Filterable="true" >
             <Template Context="server">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <span class="server-status-dot @(server.Status == ServerStatus.Online ? "server-status-online" : "server-status-offline")"></span>
                     <NavLink href="@($"/servers/{server.Id}/overview")" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@server.Name</NavLink>
                     @if (!Permissions.CanWrite(ResourceType.Server, server.Id))
@@ -87,15 +87,15 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServerDto" Property="Status" Title="@L["Status"]" Width="230px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
             <Template Context="server">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                     @if (server.Status == ServerStatus.Online)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L.Localize(server.Status)</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L.Localize(server.Status)</OmniBadge>
                     }
                     else
                     {
                         <span title="@OfflineReason(server)">
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@ServerHeartbeatHelper.Severity(server.LastHeartbeat)">@L.Localize(server.Status)</OmniBadge>
+                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@ServerHeartbeatHelper.Severity(server.LastHeartbeat)">@L.Localize(server.Status)</OmniBadge>
                         </span>
                         <ServerReachabilityBadge Server="server" />
                     }
@@ -103,14 +103,14 @@
                     {
                         @* Place connection state beside server status. The icon-only warning keeps
                            an accessible name through title and AriaLabel. *@
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning"
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Warning"
                             title="@L["InsecureTlsHint"]" aria-label="@L["InsecureTlsBadge"]"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon></OmniBadge>
                     }
                 </OmniStack>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServerDto" Property="Hostname" Title="@L["Hostname"]" MinWidth="150px" Visible="@IsColumnVisible("Hostname")" Filterable="true" />
-        <OmniDataGridColumn TItem="ServerDto" Property="OsDescription" Title="@L["OperatingSystem"]" MinWidth="200px" Visible="@IsColumnVisible("OsDescription")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.OsDescriptions" FilterSearchable="true" >
+        <OmniDataGridColumn TItem="ServerDto" Property="Hostname" Title="@L["Hostname"]" Visible="@IsColumnVisible("Hostname")" Filterable="true" />
+        <OmniDataGridColumn TItem="ServerDto" Property="OsDescription" Truncate="true" Title="@L["OperatingSystem"]" MinWidth="200px" Visible="@IsColumnVisible("OsDescription")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.OsDescriptions" FilterSearchable="true" >
             <Template Context="server">
                 <span>@server.OsDescription</span>
             </Template>
@@ -119,7 +119,7 @@
         <OmniDataGridColumn TItem="ServerDto" Property="AgentVersion" Title="@L["AgentVersion"]" Width="240px" Visible="@IsColumnVisible("AgentVersion")" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_agentCandidates" FormatFilterValue="@AgentText" FilterSearchable="true" >
             <Template Context="server">
                 @* One line : the compatibility badge sits beside the version, not under it. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">
                         @server.AgentVersion
                     </OmniText>
@@ -141,7 +141,7 @@
                     @{ var visibleTags = server.Tags.Take(3).ToList(); }
                     @foreach (var tag in visibleTags)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => FilterByTag(tag))" Class="tag-filter-button"><OmniIcon Name="OmniIconName.Tag" /> <span>@tag</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => FilterByTag(tag))" Class="tag-filter-button"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent><span>@tag</span></ChildContent></OmniButton>
                     }
                     @if (server.Tags.Count > 3)
                     {
@@ -166,12 +166,12 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServerDto" Title="" Width="120px" Sortable="false" Filterable="false" TextAlign="OmniDataGridTextAlign.Center">
+        <OmniDataGridColumn TItem="ServerDto" Title="" Width="120px" Sortable="false" Filterable="false" TextAlign="OmniAlignment.Center">
             <Template Context="server">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center"
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center"
                     @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                     @* STD-BTN detection 11: ContactAgent visible (the tag filters already take a row slot), the other actions in the menu. *@
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnContactAgent(server))" title="@L["ContactAgent"]" Label="@L["ContactAgent"]"><OmniIcon Name="OmniIconName.CellTower" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnContactAgent(server))" title="@L["ContactAgent"]" Label="@L["ContactAgent"]"><Icon><OmniIcon Name="OmniIconName.CellTower" /></Icon></OmniButton>
                     @if (Permissions.CanWrite(ResourceType.Server, server.Id))
                     {
                         <OmniOverflowMenu Label="@L["MoreActions"]">

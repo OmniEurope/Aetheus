@@ -383,6 +383,12 @@ public sealed class MonitoringApi(HttpClient http) : ApiClientBase(http)
     }
 
 
+    /// <summary>One alert that fired. The outcome tells apart the alert (Value), an unknown identifier
+    /// (NotFound) and a refusal (StatusCode 403), which the alert page words differently.</summary>
+    public Task<ApiOutcome<AlertOccurrenceDto, ApiError>> GetAlertOccurrenceAsync(long id, CancellationToken ct = default)
+        => SendForOutcomeAsync<AlertOccurrenceDto, ApiError>(HttpMethod.Get, $"api/alerts/occurrences/{id}", null, ct);
+
+
     public Task<AlertRuleDto?> CreateAlertRuleAsync(CreateAlertRuleRequest request, CancellationToken ct = default)
         => PostJsonAsync<CreateAlertRuleRequest, AlertRuleDto>("api/alerts", request, ct);
 

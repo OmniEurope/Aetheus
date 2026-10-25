@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -140,7 +141,7 @@ public class ServerCertbotSectionExtendedTests : BunitContext
     {
         var cut = RenderSection();
         await (Task)typeof(ServerCertbotSection).GetMethod("ExecuteActionAsync", Priv)!
-            .Invoke(cut.Instance, [CertbotAction.RenewAll, null])!;
+            .Invoke(cut.Instance, [CertbotAction.RenewAll, null, null])!;
         Assert.False((bool)typeof(ServerCertbotSection).GetField("_actionRunning", Priv)!.GetValue(cut.Instance)!);
     }
 
@@ -149,7 +150,7 @@ public class ServerCertbotSectionExtendedTests : BunitContext
     {
         var cut = RenderSection();
         await (Task)typeof(ServerCertbotSection).GetMethod("ExecuteActionAsync", Priv)!
-            .Invoke(cut.Instance, [CertbotAction.Renew, "example.com"])!;
+            .Invoke(cut.Instance, [CertbotAction.Renew, "example.com", null])!;
         Assert.False((bool)typeof(ServerCertbotSection).GetField("_actionRunning", Priv)!.GetValue(cut.Instance)!);
     }
 
@@ -192,7 +193,9 @@ public class ServerCertbotSectionExtendedTests : BunitContext
             await release.Task.WaitAsync(ct);
             return new { };
         });
-        var cut = RenderSection();
+        // Recette R-29: Create and its menu sit in the page header, rendered here with the section.
+        var s = MakeServer();
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, s).Add(x => x.ServerId, s.Id));
         AngleSharp.Dom.IElement Button(string text) => cut.FindAll("button").Single(b =>
             b.QuerySelector(".rz-button-text")?.TextContent.Trim() == text
             || b.TextContent.Trim() == text

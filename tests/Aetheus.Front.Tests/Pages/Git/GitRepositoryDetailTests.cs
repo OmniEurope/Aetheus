@@ -87,6 +87,49 @@ public class GitRepositoryDetailTests : BunitContext
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public void TheConfigurationRepository_IsMarkedByABadge_OnlyWhenItIsTheOne(bool configuration)
+    {
+        SetupDefaultMocks();
+        _handler.SetJsonResponse("api/git/repos/1", new GitLightRepoDto
+        {
+            Id = 1,
+            ProjectId = 1,
+            Name = "my-repo",
+            DefaultBranch = "main",
+            CreatedAt = DateTime.UtcNow,
+            IsConfiguration = configuration
+        });
+
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("my-repo"));
+
+        Assert.Equal(configuration, cut.FindAll("[data-testid='git-repo-configuration-badge']").Count == 1);
+    }
+
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 0)]
+    public void TheMirrorOfAnExternalRepository_OffersNoConfigurationDesignation(bool mirror, int menus)
+    {
+        SetupDefaultMocks();
+        _handler.SetJsonResponse("api/git/repos/1", new GitLightRepoDto
+        {
+            Id = 1,
+            ProjectId = 1,
+            Name = "my-repo",
+            DefaultBranch = "main",
+            CreatedAt = DateTime.UtcNow,
+            IsAdditionalSource = mirror
+        });
+
+        var cut = Render<GitRepositoryDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("my-repo"));
+
+        Assert.Equal(menus, cut.FindAll(".omni-page-header .omni-overflow-menu").Count);
+    }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public void R2002_TheCloneUrl_IsOneReadOnlyFieldThatCopiesItself_AndOnlyARefusedCopyToasts(bool accepted)
     {
         SetupDefaultMocks();
@@ -263,9 +306,9 @@ public class GitRepositoryDetailTests : BunitContext
     }
 
     [Theory]
-    [InlineData(500, " B")]
-    [InlineData(1500, " KB")]
-    [InlineData(1_500_000, " MB")]
+    [InlineData(500, " o")]
+    [InlineData(1500, " Ko")]
+    [InlineData(1_500_000, " Mo")]
     public void FormatSize_ReturnsExpected(long bytes, string expectedSuffix)
     {
         var result = GitRepositoryViewHelpers.FormatSize(bytes);

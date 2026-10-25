@@ -9,7 +9,7 @@ else
     @* The breadcrumb supplies the title; the virtualized log grid sends header filters to its
        endpoint. *@
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_result.Items" TItem="TaskLogDto"
-        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
+        Count="@_result.TotalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync" ShowFooterBar="true"
         PageSize="25" EmptyText="@L["NoLogs"]" RowClick="@OpenEntryAsync"
         Virtualize="@AetheusGrid.RemoteVirtualization"
         VirtualData="@(() => new OmniDataGridResult<TaskLogDto>(_result.Items, _result.TotalCount))">
@@ -23,7 +23,11 @@ else
                     <OmniBadge Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L[log.Level.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Title="@L["Message"]" MinWidth="18rem" Filterable="true" />
+            <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Truncate="true" Title="@L["Message"]" MinWidth="18rem" Filterable="true">
+                <Template Context="log">
+                    <OmniAnsiText Text="@log.Message" />
+                </Template>
+            </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
 }

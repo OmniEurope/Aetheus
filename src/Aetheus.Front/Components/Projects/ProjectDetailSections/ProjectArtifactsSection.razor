@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* The breadcrumb identifies artifacts; completed pipeline runs refresh the list through the hub. *@
 
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
         <OmniDropDown aria-label="@L["AllTypes"]" TValue="ArtifactRetentionPolicy?" @bind-Value="@_selectedPolicy" @bind-Value:after="OnPolicyChangedAsync"
             Placeholder="@L["AllTypes"]" AllowEmpty="true" Options="@(_policyOptions.ToOptions(item => (ArtifactRetentionPolicy?)item.Value, item => item.Label))" Class="artifact-policy-filter" />
     </OmniStack>
@@ -15,18 +15,18 @@
             <OmniDataGridColumn Frozen="true" TItem="PipelineArtifactDto" Title="" Width="50px" Sortable="false" Filterable="false">
                 <Template Context="a">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => DownloadArtifact(a))" title="@L["Download"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => DownloadArtifact(a))" title="@L["Download"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineArtifactDto" Property="Name" Title="@L["Name"]" Width="200px" Filterable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PipelineArtifactDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                 <Template Context="a">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                         <a href="/artifacts/@a.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@a.Name</a>
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineArtifactDto" Property="PipelineName" Title="@L["Pipeline"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.PipelineNames" FilterSearchable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PipelineArtifactDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.PipelineNames" FilterSearchable="true" >
                 <Template Context="a">
                     <a href="/pipelines/runs/@a.PipelineRunId" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@a.PipelineName</a>
                 </Template>
@@ -36,7 +36,7 @@
                     <OmniBadge Fill="OmniFill.Solid" Tone="@GetPolicyBadge(a.RetentionPolicy)">@L.Localize(a.RetentionPolicy)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineArtifactDto" Property="EnvironmentName" Title="@L["Environment"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.EnvironmentNames" FilterSearchable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PipelineArtifactDto" Property="EnvironmentName" Title="@L["Environment"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.EnvironmentNames" FilterSearchable="true" >
                 <Template Context="a">
                     @if (!string.IsNullOrEmpty(a.EnvironmentName))
                     {

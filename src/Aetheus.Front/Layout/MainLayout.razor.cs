@@ -66,10 +66,7 @@ public partial class MainLayout : IAsyncDisposable
     private const string FrenchLanguage = "fr-FR";
     private const string EnglishLanguage = "en";
 
-    internal static string CurrentLanguage =>
-        System.Globalization.CultureInfo.CurrentUICulture.Name.StartsWith("fr", StringComparison.OrdinalIgnoreCase)
-            ? FrenchLanguage
-            : EnglishLanguage;
+    internal static string CurrentLanguage => Aetheus.Front.Components.Settings.UserPreferenceSession.CurrentLanguage;
 
     private bool _isProduction = true;
     private string _envName = "Production";

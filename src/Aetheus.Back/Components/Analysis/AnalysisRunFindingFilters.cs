@@ -12,8 +12,10 @@ internal static class AnalysisRunFindingFilters
     public static IQueryable<AnalysisFindingOccurrence> Narrow(
         IQueryable<AnalysisFindingOccurrence> occurrences, AnalysisRunFindingsRequest request)
     {
-        if (!request.IncludeDecided)
-            occurrences = occurrences.Where(occurrence => occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open);
+        // A fixed finding is no decision (recette R1-35): it is listed with neither the open nor the decided.
+        occurrences = request.IncludeDecided
+            ? occurrences.Where(occurrence => occurrence.AnalysisFinding.Status != AnalysisFindingStatus.Fixed)
+            : occurrences.Where(occurrence => occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open);
         if (request.Statuses is { Count: > 0 } statuses)
             occurrences = occurrences.Where(occurrence => statuses.Contains(occurrence.AnalysisFinding.Status));
         if (request.Categories is { Count: > 0 } categories)

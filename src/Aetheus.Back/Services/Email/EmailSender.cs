@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using MailKit.Security;
+
 namespace Aetheus.Back.Services.Email;
 
 /// <summary> The one way Aetheus sends e-mail. The sender is resolved for every call (the settings
@@ -7,7 +9,8 @@ namespace Aetheus.Back.Services.Email;
 public sealed class EmailSender(
     IEmailSenderConfigurationResolver resolver,
     ISmtpTransport transport,
-    ILogger<EmailSender> logger) : IEmailSender
+    ILogger<EmailSender> logger,
+    INoReplyCredentialRepair? credentialRepair = null) : IEmailSender
 {
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken ct = default)
     {
@@ -35,6 +38,8 @@ public sealed class EmailSender(
         {
             // Mandatory: the SMTP text is the verdict the caller must show verbatim.
             logger.LogWarning(exception, "[Email] connection to {Host}:{Port} failed", configuration.Host, configuration.Port);
+            if (exception is AuthenticationException && resolution.Source == EmailSenderSource.ManagedNoReply)
+                await RepairNoReplyCredentialsAsync(ct).ConfigureAwait(false);
             return Repeat(EmailSendResult.Failed(exception.Message), messages.Count);
         }
 
@@ -45,6 +50,23 @@ public sealed class EmailSender(
                 results.Add(await SendOneAsync(session, message, configuration, ct).ConfigureAwait(false));
         }
         return results;
+    }
+
+    /// <summary>The managed sender's password was refused: Aetheus owns both that mailbox and its password, so
+    /// the two copies are brought back in line. This message is still reported as failed (the new password
+    /// reaches the mail server through an agent task); the next ones go through once the task has run.</summary>
+    private async Task RepairNoReplyCredentialsAsync(CancellationToken ct)
+    {
+        if (credentialRepair is null) return;
+        try
+        {
+            await credentialRepair.TryRepairAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (!IsCallerCancellation(exception, ct))
+        {
+            // Mandatory: a failed repair must not hide the refusal the caller is about to be told.
+            logger.LogError(exception, "[Email] re-provisioning the no-reply password failed");
+        }
     }
 
     private async Task<EmailSendResult> SendOneAsync(

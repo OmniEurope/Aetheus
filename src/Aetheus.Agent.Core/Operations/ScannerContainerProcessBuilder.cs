@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Diagnostics;
+using Aetheus.Agent.Core.Executors;
 
 namespace Aetheus.Agent.Core.Operations;
 
@@ -51,8 +52,8 @@ internal static class ScannerContainerProcessBuilder
             resolvedArguments.Insert(1, TrivyDatabaseFreshness.SkipUpdateArgument);
         if (JscpdRepositoryConfiguration.Applies(scanner))
             resolvedArguments.AddRange(JscpdRepositoryConfiguration.AdditionalArguments(sourceDirectory));
-        if (GitleaksRepositoryConfiguration.Applies(scanner))
-            GitleaksRepositoryConfiguration.DropAbsentConfiguration(resolvedArguments, sourceDirectory);
+        if (ScannerOptionalRepositoryFile.Option(scanner) is { } optionalFileOption)
+            ScannerOptionalRepositoryFile.DropAbsent(resolvedArguments, optionalFileOption, sourceDirectory);
         AddEntrypoint(args, scanner);
         foreach (var argument in resolvedArguments) args.Add(argument);
         return psi;
@@ -70,6 +71,7 @@ internal static class ScannerContainerProcessBuilder
         AddOption(arguments, "--pids-limit", PidsLimit.ToString());
         AddOption(arguments, "--memory", scanner.Memory);
         AddOption(arguments, "--cpus", scanner.Cpus);
+        AddOption(arguments, "--cpu-shares", PipelineContainerCpuWeight.Shares);
         arguments.Add("--read-only");
         AddOption(arguments, "--tmpfs", $"/tmp:rw,noexec,nosuid,nodev,size={scanner.MaxTemporaryBytes ?? 268_435_456},mode=1777");
         if (!string.IsNullOrWhiteSpace(scanner.TemporaryHomeDirectory))

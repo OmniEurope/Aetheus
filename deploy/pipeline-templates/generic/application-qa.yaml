@@ -1,21 +1,147 @@
 # SPDX-License-Identifier: EUPL-1.2
-# Validates the immutable CI payload with the project's QA commands, shell written in its pipeline in
-# APPLICATION_QA_COMMANDS (run with `sh -eu -c` from the workspace): nothing is required in the project's
-# repository (ADR-050, recette R3-64). Without commands the step fails and says so: a QA that validated
-# nothing is never reported green. The restore and the commands sit in two stages: the steps of one stage
-# run concurrently (ADR-012), and the commands read what the restore writes.
+# Validates the immutable CI payload, on the model of the platform's own QA pipeline (ADR-054), with the
+# fewest changes that make it generic: the payload of the release (V) and the retained one before it (V-1)
+# are restored, the tests run again on the sealed source, then the project's production Compose file is
+# deployed as a disposable stack on the runner (V-1 first when there is one, then V on its database), the
+# deployed services are probed, the project's browser end-to-end commands run against it when it declares
+# them, V-1 is brought back on V's database (the rollback proof), and the stack is destroyed whatever the
+# outcome. Nothing is required in the project's repository but its Compose file (ADR-050).
+#
+# What runs, and what is said when it does not (recette R-19, never a green that claims more than it did):
+#   - V integration suite: the default for a .NET repository restores, builds and tests every solution of the
+#     sealed source (.pipeline-artifacts/source.tar.gz) in a clean directory, with the SDK global.json pins.
+#     APPLICATION_QA_COMMANDS replaces it whole. A QA whose tests validate nothing fails.
+#   - Deploy V-1, Deploy V, probes, Roll back to V-1: only when the Compose file is known (COMPOSE_FILE,
+#     written by the setup wizard from the production setup) and Docker Compose is on the runner. Otherwise
+#     the run says on its error stream that no disposable environment was deployed.
+#   - V E2E suite: the browser tests need what only the project knows (its URLs, its mail catcher...), so they
+#     run only from APPLICATION_QA_E2E_COMMANDS, with QA_FRONT_URL and QA_BACK_URL pointing at the stack;
+#     without it the run says the browser tests were not run.
+#   - On a first release there is no V-1: the rollback is attested as not exercised, never reported as done.
+#
+# The disposable stack's environment: every variable the Compose file reads gets the value of the run (the
+# library <project>.qa, the vault <project>.qa, the release, the commit, the SDK of global.json, free ports of
+# the runner); a variable with no value and no default in the file gets a throwaway value drawn for this run
+# (listed by name in the log, never the value), so the stack never shares a name, a port or a secret with
+# production. The secrets the step receives are the ones its text names (DB_PASSWORD, JWT_KEY, ENCRYPTION_KEY,
+# ENCRYPTION_SALT, SMOKE_ADMIN_PASSWORD).
+#
+# The steps of one stage run concurrently (ADR-012), so every step that reads what another writes sits in a
+# later stage. The wizard enables the QA in the candidate only when the user chose it (APPLICATION_QA_ENABLED).
 name: application-qa-template
 trigger: manual
 parameters:
   - name: performance
     display_name: Run the optional performance smoke
+    display_name_fr: Lancer le test de performance facultatif
+    description: Passes APPLICATION_PERFORMANCE_ENABLED=true to the project's QA commands, which run their performance smoke when they have one.
+    description_fr: Transmet APPLICATION_PERFORMANCE_ENABLED=true aux commandes de QA du projet, qui lancent leur test de performance s'il existe.
     type: boolean
     default: "false"
 variables:
   APPLICATION_CI_PIPELINE: application-ci
   APPLICATION_ROLLBACK_ENABLED: "true"
   APPLICATION_PERFORMANCE_ENABLED: "${{ parameters.performance }}"
-  APPLICATION_QA_COMMANDS: ""
+  # The project's production Compose file, written by the setup wizard; empty, no stack is deployed.
+  COMPOSE_FILE: ""
+  # The project's browser end-to-end commands, run against the deployed stack; empty, none run.
+  APPLICATION_QA_E2E_COMMANDS: ""
+  # Published by the Find pinned SDK stage.
+  APPLICATION_DOTNET_PINNED: "false"
+  APPLICATION_QA_COMMANDS: |
+    # Default QA of a .NET repository: the tests run again on the exact source sealed in the payload, unpacked
+    # into a clean directory, so a payload that does not build or does not pass on its own is refused.
+    set -eu
+    if ! test -s .pipeline-artifacts/source.tar.gz; then
+      echo "The payload holds no source archive (.pipeline-artifacts/source.tar.gz): set APPLICATION_QA_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    DOTNET="${DOTNET:-dotnet}"
+    if ! command -v "$DOTNET" >/dev/null 2>&1; then
+      echo "The .NET SDK is not available on this agent: install it, or set APPLICATION_QA_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+    rm -rf .pipeline-qa-source
+    mkdir -p .pipeline-qa-source
+    tar -xzf .pipeline-artifacts/source.tar.gz -C .pipeline-qa-source
+    cd .pipeline-qa-source
+    SOLUTIONS="$(find . -maxdepth 1 \( -name '*.sln' -o -name '*.slnx' \) | sort)"
+    if test -z "$SOLUTIONS"; then
+      SOLUTIONS="$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.slnx' \) -not -path '*/node_modules/*' | sort)"
+    fi
+    if test -z "$SOLUTIONS"; then
+      echo "No solution (*.sln or *.slnx) within three levels of the sealed source: set APPLICATION_QA_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    TEST_RUNNER=vstest
+    if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
+      echo ">>> $SOLUTION"
+      "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
+      "$DOTNET" build "$SOLUTION" --configuration Release --no-restore
+      TEST_PROJECTS="$(grep -rlE 'Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject' \
+        --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")" | sort || true)"
+      # Browser end-to-end projects (Playwright, Selenium) drive a running application: they run in the V E2E
+      # suite stage, from the project's own commands, not here.
+      TESTED=0
+      for PROJECT in $TEST_PROJECTS; do
+        if grep -qE 'Microsoft\.Playwright|Selenium\.WebDriver' "$PROJECT"; then
+          echo "WARNING: $PROJECT is a browser end-to-end test project: it is not run here (see the V E2E suite stage)." >&2
+          continue
+        fi
+        TESTED=1
+        # Exit code 8 of Microsoft.Testing.Platform (no test ran) fails the step like any other failure.
+        if test "$TEST_RUNNER" = mtp; then
+          "$DOTNET" test --project "$PROJECT" --configuration Release --no-build
+        else
+          "$DOTNET" test "$PROJECT" --configuration Release --no-build
+        fi
+      done
+      # A QA that validated nothing is never reported green.
+      if test "$TESTED" -eq 0; then
+        echo "$SOLUTION holds no test project this QA can run: it would validate nothing. Add tests, or set APPLICATION_QA_COMMANDS in this pipeline." >&2
+        exit 1
+      fi
+    done
+  # Read from the workspace by every step that runs Docker Compose on the stack. Compose prefers a variable of the
+  # shell to the same name in --env-file, so a run variable or library entry of the same name (an empty DOMAIN of
+  # the qa library, say) would replace the value written for the disposable stack: each name of .qa-env is
+  # removed from the environment, except the ones Docker itself reads (the file got their value from it).
+  APPLICATION_QA_ENV_ISOLATION: |
+    for QA_ENV_NAME in $(cut -d= -f1 .qa-env 2>/dev/null); do
+      case "$QA_ENV_NAME" in PATH|HOME|USER|SHELL|TMPDIR|DOCKER_*|BUILDX_*|COMPOSE_*) ;; *) unset "$QA_ENV_NAME" ;; esac
+    done
+  # Read by the steps that build the stack. The agent names the Buildx builder of a build step (BUILDX_BUILDER)
+  # without creating it when its Docker maintenance is off: an absent or unhealthy builder is (re)created here,
+  # with the host's optional cap on parallel build steps: BUILDX_MAX_PARALLELISM, a positive integer set per host
+  # (the agent's environment or a library entry), for a small host where concurrent builds exhaust the memory. A
+  # healthy builder is left alone, so changing the cap means removing the builder first (docker buildx rm <builder>).
+  APPLICATION_QA_BUILDX_SETUP: |
+    case "${BUILDX_MAX_PARALLELISM:-}" in
+      '') ;;
+      0|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
+    esac
+    if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
+      case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) echo "Unsafe Buildx builder name: $BUILDX_BUILDER" >&2; exit 2 ;; esac
+      BUILDKIT_CONFIG=""
+      if test -n "${BUILDX_MAX_PARALLELISM:-}"; then
+        mkdir -p "${HOME:-/tmp}/.buildx-config"
+        BUILDKIT_CONFIG="${HOME:-/tmp}/.buildx-config/buildkitd-$BUILDX_BUILDER.toml"
+        printf '[worker.oci]\n  max-parallelism = %s\n' "$BUILDX_MAX_PARALLELISM" > "$BUILDKIT_CONFIG"
+        echo "BuildKit will run at most $BUILDX_MAX_PARALLELISM step(s) at a time on this host."
+      fi
+      if docker buildx rm --force "$BUILDX_BUILDER" >/dev/null 2>&1; then echo "Removed the stale Buildx builder $BUILDX_BUILDER."; fi
+      docker buildx create --name "$BUILDX_BUILDER" --driver docker-container ${BUILDKIT_CONFIG:+--config "$BUILDKIT_CONFIG"} --bootstrap >/dev/null
+      echo "Buildx builder $BUILDX_BUILDER created."
+    fi
+  QA_PORT: "$(BUILD_RUN_PORT)"
+  # Hosts are formulas over the library entries, so a domain is written once (ADR-043). The QA domain may be
+  # empty: the disposable stack is reached on the runner's loopback.
+  APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN).$(DOMAIN:-)"
+  API_HOST: "$(HOST_PREFIX:-)$(API_SUBDOMAIN).$(DOMAIN:-)"
+  PUBLIC_APP_URL: "https://$(APP_HOST)"
+  PUBLIC_API_URL: "https://$(API_HOST)"
 
 # Recette R3-67: the QA identity and secrets, named like the platform's own (`<project>.share`,
 # `<project>.qa` libraries, `<project>.qa` Vault): `${{ project.slug }}` is the project's slug, so the setup
@@ -27,22 +153,87 @@ variable_libraries:
   - "${{ project.slug }}.qa"
 
 stages:
-  - name: Restore CI payload
+  - name: Restore V payload
     group: QA
     execution_role: build
     os: linux
     steps:
-      - name: Restore immutable CI payload
+      - name: Restore exact V artifact
         type: restore-artifacts
         artifact: ApplicationPayload-artifacts
         artifact_source_pipeline: "$(APPLICATION_CI_PIPELINE)"
         timeout_seconds: 1800
 
-  - name: QA
+  # The previous deployed payload, for the rollback proof; a first release has none.
+  - name: Restore V-1 payload
     group: QA
     execution_role: build
     os: linux
-    depends_on: [Restore CI payload]
+    steps:
+      - name: Restore exact retained V-1 artifact
+        type: restore-artifacts
+        release: previous-deployed
+        artifact: ApplicationPayload-artifacts
+        target_directory: .nminus1
+        allow_missing: true
+        timeout_seconds: 1800
+
+  # Names the disposable stack and its database after the project and the run, for every later stage:
+  # QA_APP, QA_DB_USER, QA_DB_NAME and QA_STACK (<slug>-qa-rollback-<run>).
+  - name: QA identity
+    group: QA
+    execution_role: build
+    os: linux
+    steps:
+      - name: Name the disposable QA stack
+        type: aetheus
+        function: qa-stack-identity
+        timeout_seconds: 60
+
+  # The SDK global.json pins, read from the sealed source and resolved as the platform's own QA does
+  # (ensure-dotnet-sdk): a runner without .NET installs it under the agent's home.
+  - name: Find pinned SDK
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Restore V payload]
+    steps:
+      - name: Look for the SDK manifest of the sealed source
+        working_directory: "$(WORKSPACE)"
+        outputs: [APPLICATION_DOTNET_PINNED]
+        shell: |
+          set -eu
+          rm -rf .pipeline-qa-sdk
+          mkdir -p .pipeline-qa-sdk
+          if test -s .pipeline-artifacts/source.tar.gz \
+            && tar -xzf .pipeline-artifacts/source.tar.gz -C .pipeline-qa-sdk ./global.json 2>/dev/null \
+            && grep -q '"version"' .pipeline-qa-sdk/global.json; then
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+          else
+            echo "No global.json in the sealed source pins an SDK: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+          fi
+        timeout_seconds: 120
+
+  - name: Pinned SDK
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Find pinned SDK]
+    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    steps:
+      - name: Resolve the pinned .NET SDK
+        type: aetheus
+        function: ensure-dotnet-sdk
+        with:
+          global_json: .pipeline-qa-sdk/global.json
+        timeout_seconds: 900
+
+  - name: V integration suite
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Restore V payload, Restore V-1 payload, QA identity, Pinned SDK]
     steps:
       - name: Run project QA commands
         working_directory: "$(WORKSPACE)"
@@ -52,7 +243,320 @@ stages:
             echo "No QA command declared: set APPLICATION_QA_COMMANDS in this pipeline." >&2
             exit 1
           fi
+          # Naming the vault keys here is what lets the step receive them (a secret reaches only the steps
+          # whose text mentions it).
+          export DB_PASSWORD JWT_KEY ENCRYPTION_KEY ENCRYPTION_SALT SMOKE_ADMIN_PASSWORD
+          QA_MODE=Bootstrap
+          if test -s .nminus1/.pipeline-artifacts/source-commit; then QA_MODE=NMinusOne; fi
+          QA_MODE="$QA_MODE" \
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
           APPLICATION_PERFORMANCE_ENABLED="$(APPLICATION_PERFORMANCE_ENABLED)" \
             sh -eu -c "$APPLICATION_QA_COMMANDS"
         timeout_seconds: 18000
+
+  # The disposable stack: the sources of V (and V-1) unpacked, free ports, and the environment of the Compose
+  # file written for this run only. QA_STACK_DEPLOYED says whether the stages below have a stack to act on.
+  - name: Prepare QA stack
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [V integration suite]
+    steps:
+      - name: Write the disposable stack environment
+        working_directory: "$(WORKSPACE)"
+        outputs: [QA_STACK_DEPLOYED, QA_MODE]
+        shell: |
+          set -eu
+          STACK="${QA_STACK:?QA_STACK is published by the QA identity stage}"
+          # Docker Compose reads COMPOSE_FILE itself: the name is kept, then removed so -f is the only file.
+          COMPOSE_PATH="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          QA_MODE=Bootstrap
+          if test -s .nminus1/.pipeline-artifacts/source.tar.gz; then QA_MODE=NMinusOne; fi
+          echo "##aetheus[setvariable name=QA_MODE]$QA_MODE"
+          if test -z "$COMPOSE_PATH"; then
+            echo "WARNING: COMPOSE_FILE is empty in this pipeline: no disposable environment is deployed, so nothing was validated against a running application." >&2
+            echo "##aetheus[setvariable name=QA_STACK_DEPLOYED]false"
+            exit 0
+          fi
+          case "$COMPOSE_PATH" in /*|*..*) echo "COMPOSE_FILE must be a path inside the repository: $COMPOSE_PATH" >&2; exit 1 ;; esac
+          if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+            # The pipeline declares a Compose file: a runner that cannot run it fails the QA, it never passes it untested.
+            echo "Docker Compose is not available on this runner, so the declared disposable environment ($COMPOSE_PATH) cannot be deployed: run the QA on a runner with Docker Compose." >&2
+            exit 1
+          fi
+          rm -rf .qa-v .qa-v1
+          mkdir -p .qa-v
+          tar -xzf .pipeline-artifacts/source.tar.gz -C .qa-v
+          if test "$QA_MODE" = NMinusOne; then
+            mkdir -p .qa-v1
+            tar -xzf .nminus1/.pipeline-artifacts/source.tar.gz -C .qa-v1
+          fi
+          # The images copy these files for the non-root user of their containers: the runner's restrictive umask
+          # (and a payload sealed under one) must not leave them unreadable.
+          chmod -R a+rX .qa-v
+          if test -d .qa-v1; then chmod -R a+rX .qa-v1; fi
+          # Every variable the Compose file reads, and whether each occurrence carries a default.
+          if ! COMPOSE_TEXT="$(cat ".qa-v/$COMPOSE_PATH" 2>/dev/null)"; then
+            echo "The Compose file $COMPOSE_PATH is not in the sealed source of V." >&2
+            exit 1
+          fi
+          NAMES="$(printf '%s\n' "$COMPOSE_TEXT" | grep -o '\${[A-Za-z_][A-Za-z0-9_]*' | cut -c3- | sort -u)"
+          export DB_PASSWORD JWT_KEY ENCRYPTION_KEY ENCRYPTION_SALT SMOKE_ADMIN_PASSWORD
+          RUN="${BUILD_BUILDID:?BUILD_BUILDID is required}"
+          # The SDK global.json pins, empty for a repository without one.
+          SDK_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .qa-v/global.json 2>/dev/null | head -n 1)"
+          # Free ports of the runner, from the run's own port upward.
+          NEXT_PORT="$(QA_PORT)"
+          free_port() {
+            while ss -ltnH 2>/dev/null | awk '{print $4}' | grep -qE "[:.]$NEXT_PORT\$" || grep -qx "$NEXT_PORT" .qa-ports 2>/dev/null; do
+              NEXT_PORT=$((NEXT_PORT + 1))
+            done
+            echo "$NEXT_PORT" >> .qa-ports
+            echo "$NEXT_PORT"
+          }
+          # Twice as many hexadecimal characters as random bytes asked for.
+          throwaway() { od -An -N"$1" -tx1 /dev/urandom | tr -d ' \n'; }
+          rm -f .qa-ports .qa-env .qa-env.tmp .qa-front-url .qa-back-url
+          umask 077
+          GENERATED=""
+          # Ports first: the URLs below are formulas over them.
+          for NAME in $NAMES; do
+            case "$NAME" in
+              PORT*|*_PORT|*_PORT_*) ;;
+              *) continue ;;
+            esac
+            case "$NAME" in *SMTP*|*MAIL*|*DB*|*DATABASE*) continue ;; esac
+            PORT="$(free_port next)"
+            printf "%s='%s'\n" "$NAME" "$PORT" >> .qa-env.tmp
+            case "$NAME" in
+              *FRONT*) test -s .qa-front-url || echo "http://127.0.0.1:$PORT" > .qa-front-url ;;
+              *BACK*|*API*) test -s .qa-back-url || echo "http://127.0.0.1:$PORT" > .qa-back-url ;;
+            esac
+          done
+          FRONT_URL_VALUE="$(cat .qa-front-url 2>/dev/null || true)"
+          BACK_URL_VALUE="$(cat .qa-back-url 2>/dev/null || echo "$FRONT_URL_VALUE")"
+          for NAME in $NAMES; do
+            grep -q "^$NAME=" .qa-env.tmp 2>/dev/null && continue
+            case "$NAME" in
+              APP_VERSION) VALUE="qa-$RUN" ;;
+              SOURCE_COMMIT) VALUE="$(tr -d ' \r\n' < .pipeline-artifacts/source-commit)" ;;
+              DOTNET_SDK_VERSION) VALUE="$SDK_VERSION" ;;
+              FRONT_URL|PUBLIC_APP_URL|APP_URL) VALUE="$FRONT_URL_VALUE" ;;
+              API_BASE_URL|API_URL|PUBLIC_API_URL|BACK_URL) VALUE="$BACK_URL_VALUE" ;;
+              *)
+                eval "VALUE=\${$NAME:-}"
+                ;;
+            esac
+            if test -z "$VALUE"; then
+              # A default in the file (${NAME:-x} or ${NAME-x}) is left to Compose.
+              if ! grep -qE "[$][{]$NAME([:]?[?]|[}])" ".qa-v/$COMPOSE_PATH"; then
+                continue
+              fi
+              # The application and environment names (container names are often built from them) say
+              # which stack this is; everything else is a throwaway value of the right shape.
+              case "$NAME" in
+                APPNAME|APP_NAME|PROJECT_NAME) VALUE="$STACK" ;;
+                ENV|ENVIRONMENT|APP_ENV|DEPLOY_ENV) VALUE="qa" ;;
+                *PASSWORD*|*SECRET*|*KEY*|*TOKEN*|*SALT*) VALUE="Qa1-$(throwaway 16)" ;;
+                *EMAIL*|*_FROM|*FROM_*|*MAIL_FROM*) VALUE="qa-$RUN@example.com" ;;
+                *HOST*) VALUE="localhost" ;;
+                *USER*) VALUE="qa$(throwaway 4)" ;;
+                *URL*) VALUE="$FRONT_URL_VALUE" ;;
+                *) VALUE="qa$(throwaway 5)" ;;
+              esac
+              GENERATED="$GENERATED $NAME"
+            fi
+            case "$VALUE" in *"'"*) echo "The value of $NAME holds a single quote, which the stack environment file cannot carry." >&2; exit 1 ;; esac
+            printf "%s='%s'\n" "$NAME" "$VALUE" >> .qa-env.tmp
+          done
+          touch .qa-env.tmp
+          mv .qa-env.tmp .qa-env
+          echo ">>> Disposable stack $STACK from $COMPOSE_PATH, mode $QA_MODE"
+          echo ">>> Variables of the Compose file: $(echo $NAMES | tr '\n' ' ')"
+          test -z "$GENERATED" || echo ">>> Throwaway values drawn for this run only:$GENERATED"
+          echo ">>> Front: ${FRONT_URL_VALUE:-none}, back: ${BACK_URL_VALUE:-none}"
+          echo "##aetheus[setvariable name=QA_STACK_DEPLOYED]true"
+        timeout_seconds: 600
+
+  - name: Deploy V-1
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Prepare QA stack]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Deploy V-1 baseline or attest first-release bootstrap
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          if test "${QA_MODE:-Bootstrap}" != NMinusOne; then
+            echo "Bootstrap attestation: no retained V-1 payload exists (first release), so there is no baseline to deploy and the rollback cannot be exercised."
+            exit 0
+          fi
+          STACK="${QA_STACK:?QA_STACK is published by the QA identity stage}"
+          # Docker Compose reads COMPOSE_FILE itself: the name is kept, then removed so -f is the only file.
+          CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          eval "$APPLICATION_QA_ENV_ISOLATION"
+          cd .qa-v1
+          eval "$APPLICATION_QA_BUILDX_SETUP"
+          if ! docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" up -d --build --remove-orphans --wait --wait-timeout 900; then
+            docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" ps -a >&2 || true
+            docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" logs --no-color --tail 100 >&2 || true
+            echo "V-1 did not start in the disposable stack." >&2
+            exit 1
+          fi
+        timeout_seconds: 3600
+
+  - name: Deploy V
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Deploy V-1]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Deploy V on the baseline database
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          STACK="${QA_STACK:?QA_STACK is published by the QA identity stage}"
+          # Docker Compose reads COMPOSE_FILE itself: the name is kept, then removed so -f is the only file.
+          CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          eval "$APPLICATION_QA_ENV_ISOLATION"
+          cd .qa-v
+          eval "$APPLICATION_QA_BUILDX_SETUP"
+          if ! docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" up -d --build --remove-orphans --wait --wait-timeout 900; then
+            docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" ps -a >&2 || true
+            docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" logs --no-color --tail 100 >&2 || true
+            echo "V did not start in the disposable stack." >&2
+            exit 1
+          fi
+          docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" ps
+        timeout_seconds: 3600
+
+  # Every port the stack publishes is asked over HTTP: a server error, or no port answering at all, fails the
+  # stage. A port that does not answer is named (a service may publish a non-HTTP port).
+  - name: V deployed probes
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [Deploy V]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Probe the deployed V
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          STACK="${QA_STACK:?QA_STACK is published by the QA identity stage}"
+          CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          eval "$APPLICATION_QA_ENV_ISOLATION"
+          # A failed probe shows the state and the last lines of every service, so the cause is in the run.
+          stack_state() {
+            (cd .qa-v && docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" ps -a >&2 \
+              && docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" logs --no-color --tail 80 >&2) \
+              || echo "WARNING: the state of the stack could not be read." >&2
+          }
+          ANSWERED=0
+          for PORT in $(cat .qa-ports 2>/dev/null); do
+            CODE=000
+            for ATTEMPT in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$PORT/" || true)"
+              case "$CODE" in 000|502|503|504) sleep 5 ;; *) break ;; esac
+            done
+            case "$CODE" in
+              000) echo "WARNING: nothing answers HTTP on port $PORT." >&2 ;;
+              5*) echo "Port $PORT answers HTTP $CODE: the deployed V is in error." >&2; stack_state; exit 1 ;;
+              *) echo "Port $PORT answers HTTP $CODE."; ANSWERED=$((ANSWERED + 1)) ;;
+            esac
+          done
+          test "$ANSWERED" -gt 0 || { echo "No port of the deployed V answers HTTP." >&2; stack_state; exit 1; }
+        timeout_seconds: 900
+
+  - name: V E2E suite
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [V deployed probes]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Run the project's browser tests against V
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          if test -z "${APPLICATION_QA_E2E_COMMANDS:-}"; then
+            echo "WARNING: no browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed V." >&2
+            exit 0
+          fi
+          QA_FRONT_URL="$(cat .qa-front-url 2>/dev/null || true)" \
+          QA_BACK_URL="$(cat .qa-back-url 2>/dev/null || true)" \
+          QA_SOURCE="$WORKSPACE/.qa-v" \
+            sh -eu -c "$APPLICATION_QA_E2E_COMMANDS"
+        timeout_seconds: 7200
+
+  # The rollback proof: V-1's code brought back on the database V migrated, then probed again.
+  - name: Roll back to V-1
+    group: QA
+    execution_role: build
+    os: linux
+    depends_on: [V E2E suite]
+    condition: "eq(variables['QA_STACK_DEPLOYED'], 'true')"
+    steps:
+      - name: Roll back to V-1 or attest bootstrap
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          if test "${QA_MODE:-Bootstrap}" != NMinusOne; then
+            echo "Bootstrap attestation: first release, no V-1 to roll back to; the rollback was not exercised."
+            exit 0
+          fi
+          if test "${APPLICATION_ROLLBACK_ENABLED:-true}" != true; then
+            echo "WARNING: the rollback is disabled for this project (APPLICATION_ROLLBACK_ENABLED): it was not exercised." >&2
+            exit 0
+          fi
+          STACK="${QA_STACK:?QA_STACK is published by the QA identity stage}"
+          # Docker Compose reads COMPOSE_FILE itself: the name is kept, then removed so -f is the only file.
+          CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          eval "$APPLICATION_QA_ENV_ISOLATION"
+          cd .qa-v1
+          eval "$APPLICATION_QA_BUILDX_SETUP"
+          if ! docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" up -d --build --remove-orphans --wait --wait-timeout 900; then
+            docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" logs --no-color --tail 100 >&2 || true
+            echo "V-1 does not start on the database of V: rolling back would fail." >&2
+            exit 1
+          fi
+          ANSWERED=0
+          for PORT in $(cat ../.qa-ports 2>/dev/null); do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$PORT/" || true)"
+            case "$CODE" in
+              000) echo "WARNING: nothing answers HTTP on port $PORT after the rollback." >&2 ;;
+              5*) echo "Port $PORT answers HTTP $CODE after the rollback." >&2; exit 1 ;;
+              *) echo "Port $PORT answers HTTP $CODE after the rollback."; ANSWERED=$((ANSWERED + 1)) ;;
+            esac
+          done
+          test "$ANSWERED" -gt 0 || { echo "No port answers HTTP after the rollback to V-1." >&2; exit 1; }
+        timeout_seconds: 3600
+
+  - name: Tear down QA stack
+    group: QA
+    execution_role: build
+    os: linux
+    condition: always()
+    depends_on: [V integration suite, Prepare QA stack, Deploy V-1, Deploy V, V deployed probes, V E2E suite, Roll back to V-1]
+    steps:
+      - name: Destroy the disposable QA stack
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          STACK="${QA_STACK:-}"
+          CF="${COMPOSE_FILE:-}"; unset COMPOSE_FILE
+          eval "$APPLICATION_QA_ENV_ISOLATION"
+          if test -n "$STACK" && test "${QA_STACK_DEPLOYED:-false}" = true; then
+            (cd .qa-v && docker compose -p "$STACK" --env-file ../.qa-env -f "$CF" down -v --remove-orphans --rmi local)
+            test -z "$(docker ps -aq --filter "label=com.docker.compose.project=$STACK")"
+            test -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$STACK")"
+            echo ">>> Disposable stack $STACK destroyed."
+          else
+            echo "No disposable stack was deployed by this run: nothing to tear down."
+          fi
+          rm -rf .qa-v .qa-v1 .pipeline-qa-source .pipeline-qa-sdk
+          rm -f .qa-env .qa-env.tmp .qa-ports .qa-front-url .qa-back-url
+        timeout_seconds: 900

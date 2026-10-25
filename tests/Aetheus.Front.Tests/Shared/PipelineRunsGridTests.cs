@@ -29,6 +29,39 @@ public class PipelineRunsGridTests : BunitContext
         Assert.Empty(cut.FindAll("[role='progressbar']"));
     }
 
+    [Theory]
+    [InlineData(PipelineStatus.Pending)]
+    [InlineData(PipelineStatus.Running)]
+    [InlineData(PipelineStatus.WaitingForApproval)]
+    [InlineData(PipelineStatus.Success)]
+    [InlineData(PipelineStatus.Failed)]
+    [InlineData(PipelineStatus.Cancelled)]
+    [InlineData(PipelineStatus.Partial)]
+    [InlineData(PipelineStatus.RolledBack)]
+    [InlineData(PipelineStatus.Rejected)]
+    public void R37_TheStatusBadgeOfEveryRun_CarriesAnIconBeforeItsName(PipelineStatus status)
+    {
+        var items = new List<PipelineRunDto>
+        {
+            new() { Id = 1, PipelineId = 1, PipelineName = "ci", Status = status }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+
+        cut.WaitForAssertion(() =>
+        {
+            var badge = Assert.Single(cut.FindAll(".omni-badge"), b => b.TextContent.Contains($"Enum_PipelineStatus_{status}", StringComparison.Ordinal));
+            Assert.NotNull(badge.QuerySelector(".omni-icon"));
+        });
+    }
+
+    [Fact]
+    public void R37_EveryKnownStatus_HasAnIcon()
+    {
+        foreach (var status in Enum.GetValues<PipelineStatus>())
+            Assert.NotNull(PipelineHelper.GetRunIcon(status));
+        Assert.Null(PipelineHelper.GetRunIcon((PipelineStatus)999));
+    }
+
     [Fact]
     public void R2_146_ARejectedRun_ReadsRejectedInWarning_AndARefusedLaunch_HasItsOwnBadge()
     {
@@ -225,7 +258,7 @@ public class PipelineRunsGridTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("Duration", cut.Markup);
-            Assert.Contains("DurationMinutesSecondsFormat", cut.Markup);
+            Assert.Contains(">2min<", cut.Markup);
             // The server column identifies where a run executes.
             Assert.Contains("web-01", cut.Markup);
         });
@@ -322,7 +355,7 @@ public class PipelineRunsGridTests : BunitContext
             Assert.Equal(
                 ["ID", "Pipeline", "Status", "Project", "Started", "Completed", "Duration", "Branch", "Commit", "Server"],
                 titles);
-            Assert.Contains("DurationMinutesSecondsFormat", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains(">3min<", cut.Markup, StringComparison.Ordinal);
         });
     }
 

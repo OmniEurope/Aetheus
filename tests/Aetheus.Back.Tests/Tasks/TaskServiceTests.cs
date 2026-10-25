@@ -194,7 +194,7 @@ public class TaskServiceTests
         var cleanupStep = new PipelineStepRun
         {
             IsSystem = true,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup"
         };
         _repo.ClaimPendingTasksAsync(

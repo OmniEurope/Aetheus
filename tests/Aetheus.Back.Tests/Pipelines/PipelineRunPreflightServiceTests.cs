@@ -90,6 +90,31 @@ public sealed class PipelineRunPreflightServiceTests
         Assert.Contains("ghost-agent", problem, StringComparison.Ordinal);
     }
 
+    // A definition synchronized from a repository never went through the editor's validation: an
+    // unsupported condition refuses the launch rather than failing the run at that stage.
+    [Fact]
+    public async Task UnsupportedCondition_RefusesTheLaunchAndNamesTheStage()
+    {
+        ConfiguredTargets();
+        var approval = Stage("Approve") with { Condition = "and(eq(variables['A'], 'x'), eq(variables['B'], 'y'))" };
+
+        var problems = await RunAsync(Definition(Stage("build"), approval));
+
+        var problem = Assert.Single(problems);
+        Assert.StartsWith("Stage 'Approve': condition 'and(", problem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SupportedCondition_IsNotALaunchError()
+    {
+        ConfiguredTargets();
+
+        var problems = await RunAsync(Definition(
+            Stage("build") with { Condition = "ne(variables['DEPLOY_HAS_API'], 'true')" }));
+
+        Assert.Empty(problems);
+    }
+
     [Fact]
     public async Task ConfiguredButOfflineServer_IsNotALaunchError()
     {

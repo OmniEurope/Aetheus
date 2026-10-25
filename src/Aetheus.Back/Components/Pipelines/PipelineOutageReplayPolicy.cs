@@ -42,6 +42,11 @@ public static class PipelineOutageReplayPolicy
     public const string NotReplayedReason =
         "Agent session replaced while the task was running; not replayed automatically.";
 
+    /// <summary>The reason a never-started task that was not replayed fails with (a deployment operation,
+    /// a task past the grace, a task no run is waiting for).</summary>
+    public const string NotReplayedBeforeStartReason =
+        "Agent session replaced before the task started; not replayed automatically.";
+
     /// <summary><c>true</c> when the operation may be requeued for a replacement agent session.</summary>
     public static bool MayReplayAfterAnOutage(OperationKind operation) => !NeverReplayed.Contains(operation);
 

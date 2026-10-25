@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.Email;
 
@@ -263,15 +264,20 @@ public sealed class UserNotificationService(
             ? []
             : await repo.GetRecipientsAlreadyEmailedAsync(
                 deliveries[0].EventType, onceMarker, [.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
+        // One query for every recipient's saved choice, not one per delivery.
+        var savedChoices = optInEventType is null || deliveries.Count == 0
+            ? []
+            : await repo.GetSavedChoicesAsync(
+                optInEventType, [.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
         var mailed = new List<NotificationDelivery>();
         var mailedAddresses = new List<string?>();
         for (var i = 0; i < deliveries.Count; i++)
         {
             if (optInEventType is not null)
             {
-                var saved = await repo.GetPreferencesAsync(deliveries[i].RecipientUserId, ct).ConfigureAwait(false);
-                var preference = saved.FirstOrDefault(item => item.EventType == optInEventType);
-                if (!(preference?.IsEnabled ?? descriptor?.DefaultEnabled ?? false))
+                if (!(savedChoices.TryGetValue(deliveries[i].RecipientUserId, out var enabled)
+                        ? enabled
+                        : descriptor?.DefaultEnabled ?? false))
                 {
                     deliveries[i].ErrorMessage = $"E-mail not sent: the recipient did not enable '{optInEventType}'.";
                     continue;

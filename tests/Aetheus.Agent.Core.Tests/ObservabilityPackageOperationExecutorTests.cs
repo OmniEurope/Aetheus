@@ -181,7 +181,7 @@ public sealed class ObservabilityPackageOperationExecutorTests
                 repository = repository.Parent;
             Assert.NotNull(repository);
             var script = Path.Combine(
-                repository.FullName, "deploy", "scripts", "publish-observability-package.sh");
+                repository.FullName, "src", "Aetheus.Agent.Core", "Harnesses", "publish-observability-package.sh");
             var registry = Path.Combine(root, "registry.nupkg");
             var writes = Path.Combine(root, "writes");
             await RunHarnessAsync(script, root, fakeBin, registry, writes, version);

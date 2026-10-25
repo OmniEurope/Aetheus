@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.RegularExpressions;
-using static Aetheus.Front.Components.Pipelines.PipelineRunFormatting;
+using static Aetheus.Front.Components.Shared.PipelineRunFormatting;
 
 namespace Aetheus.Front.Components.Pipelines;
 
@@ -21,6 +21,11 @@ public partial class PipelineRun : IAsyncDisposable
     [Parameter] public int RunId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectId { get; set; }
     [SupplyParameterFromQuery] public int? ServerId { get; set; }
+    /// <summary>Narrowest an overview tile may be (recette R-15): the grid shows four tiles per row while each stays at
+    /// least this wide, and three, two or one when the area, sidebar included, leaves less. A CSS length, OE's
+    /// <c>OmniTileGrid.MinColumnWidth</c>.</summary>
+    internal const string RunTileMinColumnWidth = "14rem";
+
     private int? EffectiveProjectId => _run?.ProjectId ?? ProjectId;
 
     private string PipelineHref => EffectiveProjectId is { } projectId
@@ -29,6 +34,7 @@ public partial class PipelineRun : IAsyncDisposable
     private PipelineRunDto? _run;
     private PipelineRunMetrics _metrics = new();
     private readonly PipelineRunGateState _gateState = new();
+    private readonly PipelineRunSchemaState _schemaState = new();
     private readonly PipelineRunPageCache _pageCache = new();
     private List<ReleaseDto> _releases = [];
     private List<AiRunResultDto> _aiResults = [];
@@ -126,7 +132,7 @@ public partial class PipelineRun : IAsyncDisposable
     private void ReassertBreadcrumb()
     {
         if (_run is null) return;
-        var runItem = new BreadcrumbItem($"{L["PipelineRun"]} #{_run.Id}");
+        var runItem = new BreadcrumbItem($"#{_run.Id} {L["PipelineRun"]}");
         if (_run.ProjectId is { } projectId)
         {
             Breadcrumb.Set(
@@ -207,6 +213,7 @@ public partial class PipelineRun : IAsyncDisposable
         await Task.WhenAll(
             _baselines.LoadAsync(_childRunCache.Values.Prepend(_run)),
             LoadGateAsync(ct),
+            _schemaState.LoadAsync(Api, runId, ct),
             _metrics.LoadAsync(Api, runId, _run),
             failedLogsTask,
             approvalTask);
@@ -256,6 +263,7 @@ public partial class PipelineRun : IAsyncDisposable
         _childrenLoaded = false;
         _metrics = new PipelineRunMetrics();
         _gateState.Clear();
+        _schemaState.Clear();
         _releases = [];
         _aiResults = [];
         _repoId = null;
@@ -333,6 +341,7 @@ public partial class PipelineRun : IAsyncDisposable
             await LoadChildRunsAndAggregateAsync(_loadSession.Token);
             await _baselines.LoadAsync(_childRunCache.Values.Prepend(_run));
             await LoadGateAsync(_loadSession.Token);
+            await _schemaState.LoadAsync(Api, RunId, _loadSession.Token);
             await _approval!.LoadAsync(_run, _loadSession.Token);
             // A child run may have just appeared (its trigger step fired) - join its group so its own
             // step events keep this view live from here on.
@@ -420,14 +429,33 @@ public partial class PipelineRun : IAsyncDisposable
     /// <summary>Application version this run built (APP_VERSION), shown under the Release tile.</summary>
     private string? AppVersion => _run is null ? null : BuiltAppVersion(_run);
 
+    // Recette R-16: a notice (PipelineRunNotices) is information, not a warning of the run: it is neither
+    // blocking, nor orange, nor counted in "Avertissements (n)".
     private IReadOnlyList<string> BlockingWarnings =>
-        _run is null ? [] : _run.Warnings.Where(IsBlockingWarning).ToList();
+        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && IsBlockingWarning(w)).ToList();
 
     private IReadOnlyList<string> InfoWarnings =>
-        _run is null ? [] : _run.Warnings.Where(w => !IsBlockingWarning(w)).ToList();
+        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && !IsBlockingWarning(w)).ToList();
 
     private IReadOnlyList<BlockingWarningView> BlockingWarningViews =>
-        _run is null ? [] : _run.Warnings.Where(IsBlockingWarning).Select(ToBlockingView).ToList();
+        _run is null ? [] : BlockingWarnings.Select(ToBlockingView).ToList();
+
+    /// <summary>The codes of the run's notices, each once.</summary>
+    private IReadOnlyList<string> RunNoticeCodes =>
+        _run is null ? [] : [.. _run.Warnings.Select(PipelineRunNotices.CodeOf).OfType<string>().Distinct(StringComparer.Ordinal)];
+
+    private string RunNoticeText(string code) => code switch
+    {
+        PipelineRunNotices.BaselineAbsent => L["RunNoticeBaselineAbsent"].Value,
+        PipelineRunNotices.ResumeWindowExpired => L["RunNoticeResumeWindowExpired"].Value,
+        _ => string.Format(L["RunNoticeUnknown"].Value, code)
+    };
+
+    private string? RunNoticeHelp(string code) => code switch
+    {
+        PipelineRunNotices.BaselineAbsent => L["RunNoticeBaselineAbsentHelp"].Value,
+        _ => null
+    };
 
     /// <summary>Why nothing is advancing, this run's own wait and its loaded children's. Only while the
     /// run is live: a finished run has nothing left to wait for.</summary>
@@ -467,7 +495,7 @@ public partial class PipelineRun : IAsyncDisposable
 
     private bool ShowGateTab => !RunInProgress && _gateState.HasResult;
 
-    private List<string> TabSlugs() => PipelineRunPresentation.TabSlugs(_run, ShowGateTab, HasYamlTab, HasLintTab);
+    private List<string> TabSlugs() => PipelineRunPresentation.TabSlugs(_run, ShowGateTab, HasYamlTab, HasLintTab, _schemaState.HasGate);
 
     /// <summary>The tabs wait for the child runs (they decide which tabs exist), and for the tab a
     /// shared <c>?tab=</c> link names, or they would open on the overview and stay there.</summary>
@@ -483,8 +511,13 @@ public partial class PipelineRun : IAsyncDisposable
         Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", idx == 0 ? null : slug));
     }
 
-    private void GoToLogsTab() => NavigateToTab("logs");
-    private void GoToArtifactsTab() => NavigateToTab("artifacts");
+    /// <summary>The address that opens the tab <paramref name="slug"/> of this run, for the overview tiles
+    /// that are links (<c>OmniCard.Href</c>); null when the run has no such tab, so the tile stays plain.</summary>
+    private string? TabHref(string slug)
+    {
+        var idx = TabSlugs().IndexOf(slug);
+        return idx < 0 ? null : Nav.GetUriWithQueryParameter("tab", idx == 0 ? null : slug);
+    }
 
     private Task LoadGateAsync(CancellationToken ct)
     {
@@ -594,7 +627,9 @@ public partial class PipelineRun : IAsyncDisposable
     private string FailedRunReason => string.Join(", ", FailedSteps.Select(step =>
         step.ExitCode is { } code ? string.Format(L["FailedStepWithExit"], step.StepName, code) : step.StepName));
     private IReadOnlyList<PipelineStepRunDto> FailedSteps =>
-        _run?.Steps.Where(step => step.Status == TaskExecutionStatus.Failed && !step.IsSystem).ToList() ?? [];
+        // R-31: a step that timed out is a failure too; it used to be missing here, so a run that failed on a
+        // timeout listed no failed step and said nothing.
+        _run?.Steps.Where(step => step.Status is TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout && !step.IsSystem).ToList() ?? [];
     private Task LoadFailedStepLogsAsync() => PipelineRunLogView.LoadFailedStepLogsAsync(FailedSteps, Api, _logWindow);
     private Task DownloadArtifactAsync(PipelineArtifactDto artifact) => Commands.DownloadArtifactAsync(artifact);
     private Task OpenAiResultAsync(AiRunResultDto result) => PipelineRunAiResults.OpenAsync(Dialog, L, result);

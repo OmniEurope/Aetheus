@@ -2,6 +2,7 @@
 using Aetheus.Agent.Core.Collectors;
 using Aetheus.Agent.Core.Configuration;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -494,6 +495,40 @@ public class HeartbeatServiceTests
         time.Advance(TimeSpan.FromMinutes(1));
         await service.CollectAndSendHeartbeatAsync(ct);
         Assert.True(SpinWait.SpinUntil(() => StorageMeasurementCount() == 2, TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_DockerProbeTimesOutUnderLoad_KeepsDockerAvailableForABoundedTime()
+    {
+        // R-31: during the nightly the daemon was busy (builds, image loads, Gitleaks container) and
+        // `docker info` exceeded the probe timeout. That timeout used to be cached as "no Docker" for a
+        // whole slow-inventory period, and the backend then refused the container-isolated stages.
+        var ct = TestContext.Current.CancellationToken;
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 24, 3, 0, 0, TimeSpan.Zero));
+        var daemonBusy = false;
+        _shellRunnerMock.RunExecAsync(
+                Arg.Is<string>(file => file.Contains("docker", StringComparison.OrdinalIgnoreCase)),
+                Arg.Is<IReadOnlyList<string>>(arguments => arguments.Contains("info")),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<TimeSpan?>())
+            .Returns(_ => daemonBusy
+                ? Task.FromException<ShellExecResult>(new OperationCanceledException("probe timeout"))
+                : Task.FromResult(new ShellExecResult(0, "27.3.1", "")));
+        var service = CreateService(time);
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        Assert.True(LastSentHeartbeat().DockerAvailable);
+
+        daemonBusy = true;
+        time.Advance(AgentRuntimeDefaults.SlowInventoryTtl + TimeSpan.FromSeconds(1));
+        await service.CollectAndSendHeartbeatAsync(ct);
+        Assert.True(LastSentHeartbeat().DockerAvailable);
+        Assert.Contains(AgentCapabilities.DockerExecution, LastSentHeartbeat().AgentCapabilities!);
+
+        // A daemon that stays silent past the hold is reported unavailable (fail-closed).
+        time.Advance(AgentRuntimeDefaults.DockerProbeIndeterminateHold);
+        await service.CollectAndSendHeartbeatAsync(ct);
+        Assert.False(LastSentHeartbeat().DockerAvailable);
     }
 
     private ServerHeartbeatDto LastSentHeartbeat() => _apiClientMock.ReceivedCalls()

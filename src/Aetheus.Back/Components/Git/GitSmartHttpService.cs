@@ -2,10 +2,10 @@
 using System.Diagnostics;
 using System.Text;
 using Aetheus.Back.Components.Auth;
+using Aetheus.Back.Components.Git.Events;
 using Aetheus.Back.Components.Webhooks;
 using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Hubs;
 using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
@@ -288,6 +288,10 @@ public class GitSmartHttpService(
         // as the orchestrator took, for work whose result the push does not use: the objects are
         // already on disk and the refs already updated by the time we get here. The event was always
         // declared as observer semantics; it is now dispatched that way.
+        //
+        // The repository of the project's system configuration files (ADR-057) holds no pipeline
+        // definition and no source to build: a push to it announces nothing to pipelines.
+        if (entity.IsConfiguration) return;
         domainEvents.Publish(
             new Events.GitPushProcessedEvent(
                 projectId,

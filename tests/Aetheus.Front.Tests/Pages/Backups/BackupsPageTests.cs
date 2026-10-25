@@ -93,7 +93,7 @@ public class BackupsPageTests : BunitContext
         });
 
         var cut = Render<BackupsPage>();
-        cut.FindAll("button").Single(button => button.Names().Contains("BackupRuns", StringComparison.Ordinal)).Click();
+        cut.FindMenuItem("BackupRuns")!.Click();
 
         Assert.Contains("BackupRestoreVerified", cut.Markup);
         Assert.Contains("BackupRestoreFailed", cut.Markup);

@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/write-integration-manifest.mjs</c>, with the cases of its
+/// The C# port of the former <c>write-integration-manifest.mjs</c> script, with the cases of its
 /// <c>integration-manifest.test.mjs</c>. The delivery contract takes a digest over the manifest's bytes,
 /// so the expected text is the one the script wrote for the same declaration (Node.js 24, captured when
 /// the function replaced it).

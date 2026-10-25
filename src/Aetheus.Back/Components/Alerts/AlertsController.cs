@@ -5,8 +5,25 @@ namespace Aetheus.Back.Components.Alerts;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
-public class AlertsController(IAlertService alertService) : ControllerBase
+public class AlertsController(
+    IAlertService alertService,
+    IAlertOccurrenceService occurrences,
+    IResourceAuthorizationService authz) : ControllerBase
 {
+    /// <summary>One alert that fired, the address the notification mail's button opens (recette R-52).
+    /// An alert about a server is shown only to who may read that server.</summary>
+    [HttpGet("occurrences/{id:long}")]
+    public async Task<ActionResult<AlertOccurrenceDto>> GetOccurrence(long id, CancellationToken ct)
+    {
+        var occurrence = await occurrences.GetAsync(id, ct);
+        if (occurrence is null) return NotFound();
+        // An alert about no server (a platform alert) has none to read: the controller's Admin gate is its only gate.
+        if (occurrence.ServerId is not { } serverId) return Ok(occurrence);
+        return await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Read, ct)
+            ? Ok(occurrence)
+            : Forbid();
+    }
+
     [HttpGet]
     public async Task<ActionResult<List<AlertRuleDto>>> GetAlertRules(CancellationToken ct)
     {

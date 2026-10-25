@@ -69,6 +69,10 @@ public interface IAnalysisRepository
     Task ReopenExpiredFindingDecisionsAsync(int projectId, DateTime now, CancellationToken ct = default);
     Task MarkMissingFindingsFixedAsync(int projectId, string scannerKey, AnalysisCategory category, string? branchName,
         IReadOnlyCollection<string> observedFingerprints, DateTime now, CancellationToken ct = default);
+    /// <summary>Marks fixed exactly these findings of the project (ADR-053: a metric rule no longer crossed),
+    /// where <see cref="MarkMissingFindingsFixedAsync"/> sweeps every finding a scanner no longer reports.</summary>
+    Task MarkFindingsFixedAsync(int projectId, IReadOnlyCollection<string> fingerprints, DateTime now,
+        CancellationToken ct = default);
     Task<Dictionary<string, double>> GetBaselineMetricValuesAsync(int projectId, string baselineBranch,
         int currentRunId, IReadOnlyCollection<string> keys, CancellationToken ct = default);
     Task<(List<AnalysisMetric> Items, int TotalCount)> GetMetricsAsync(int projectId,

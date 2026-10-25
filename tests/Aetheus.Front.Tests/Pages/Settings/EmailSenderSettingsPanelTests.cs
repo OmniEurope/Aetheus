@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -11,6 +13,7 @@ public sealed class EmailSenderSettingsPanelTests : BunitContext
     public EmailSenderSettingsPanelTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        BunitTestHelper.UseImmediateDialogs(this);
         BunitTestHelper.Interactive(this);
     }
 
@@ -35,6 +38,39 @@ public sealed class EmailSenderSettingsPanelTests : BunitContext
         Assert.Contains("EmailSenderEffectiveDetail", cut.Find(".email-sender-effective").TextContent);
         Assert.Empty(cut.FindAll("#email-sender-host"));
         Assert.Empty(cut.FindAll(".email-sender-prepare-button"));
+    }
+
+    [Fact]
+    public void DefaultSender_OffersToResetItsPassword_AndTheResetPostsToTheMailModuleAfterConfirmation()
+    {
+        _handler.SetJsonResponse("api/settings/email-sender", DefaultInUse());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/mail/no-reply-sender", DefaultInUse());
+
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        var cut = Render<EmailSenderSettingsPanel>();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".email-sender-reset-button")));
+
+        dialog.ConfirmResult = false;
+        cut.Find(".email-sender-reset-button").Click();
+        cut.WaitForAssertion(() => Assert.Equal(1, dialog.OpenCount));
+        Assert.Contains("EmailSenderResetConfirm", dialog.LastConfirmMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST");
+
+        dialog.ConfirmResult = true;
+        cut.Find(".email-sender-reset-button").Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/mail/no-reply-sender")));
+    }
+
+    [Fact]
+    public void CustomServer_HasNoResetButton()
+    {
+        _handler.SetJsonResponse("api/settings/email-sender", DefaultInUse() with { UseCustom = true, EffectiveSource = EmailSenderSource.Custom });
+
+        var cut = Render<EmailSenderSettingsPanel>();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("#email-sender-host")));
+
+        Assert.Empty(cut.FindAll(".email-sender-reset-button"));
     }
 
     [Fact]

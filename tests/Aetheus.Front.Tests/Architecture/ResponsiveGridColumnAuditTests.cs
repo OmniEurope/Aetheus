@@ -130,41 +130,64 @@ public sealed class ResponsiveGridColumnAuditTests
             StringComparison.Ordinal);
     }
 
+    /// <summary>R-35 (user decision of 2026-10-22): a grid column title is never truncated. The app adds
+    /// no stylesheet rule that forces a header onto one line or cuts it with an ellipsis, and no grid
+    /// sets <c>HeaderWrap</c> to Truncate.</summary>
     [Fact]
-    public void EveryGrid_HeaderTitleUsesBoundedEllipsis()
+    public void EveryGrid_HeaderTitleIsNeverTruncated()
     {
         var css = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "src", "Aetheus.Front", "wwwroot", "css", "app.css"))
-            .Replace("\r\n", "\n", StringComparison.Ordinal);
+            FindRepoRoot(), "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
 
-        Assert.Contains(".omni-data-grid .omni-data-grid__table {\n    table-layout: fixed;", css);
-        Assert.Contains(".omni-data-grid thead .omni-data-grid__title", css);
-        Assert.Contains("min-width: 0;", css);
-        Assert.Contains("overflow: hidden;", css);
-        Assert.Contains("text-overflow: ellipsis;", css);
-        var titleRule = Regex.Match(
-            css,
-            @"\.omni-data-grid thead \.omni-data-grid__title\s*\{(?<body>[^}]*)\}",
-            RegexOptions.Singleline);
-        Assert.True(titleRule.Success, "The bounded grid-header title rule is missing.");
-        Assert.DoesNotContain("min-width: max-content;", titleRule.Groups["body"].Value);
+        var headerRules = Regex.Matches(css, @"(?<selector>[^{}]*\.omni-data-grid__(?:title|header)\b[^{}]*)\{(?<body>[^}]*)\}");
+        foreach (Match rule in headerRules)
+        {
+            Assert.False(
+                Regex.IsMatch(rule.Groups["body"].Value, @"white-space\s*:\s*nowrap|text-overflow\s*:\s*ellipsis"),
+                $"R-35: header rule '{rule.Groups["selector"].Value.Trim()}' truncates or forces a column title onto one line.");
+        }
+
+        var frontDir = Path.Combine(FindRepoRoot(), "src", "Aetheus.Front");
+        var truncatingSources = RepositoryScan.Enumerate(frontDir, "*.razor")
+            .Concat(RepositoryScan.Enumerate(frontDir, "*.cs"))
+            .Where(file => File.ReadAllText(file).Contains("OmniDataGridHeaderWrap.Truncate", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(frontDir, file))
+            .ToList();
+        Assert.True(truncatingSources.Count == 0,
+            $"R-35: column titles are never truncated, remove HeaderWrap.Truncate from: {string.Join(", ", truncatingSources)}");
     }
 
     [Fact]
-    public void PipelineActionsColumn_IsNotCompressedBelowItsDeclaredWidthOnMobile()
+    public void PipelineActionsColumn_SizesToItsContentAndKeepsItsButtonsOnOneLine()
     {
-        var css = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "src", "Aetheus.Front", "wwwroot", "css", "app.css"))
-            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        // R-6 (user decision 2026-10-24): the actions column of the pipeline grids sizes to its content
+        // like every other column (grid preset ColumnSizing.Content) instead of being pinned to a
+        // width, and its row buttons never wrap onto a second line.
+        var root = FindRepoRoot();
+        var css = File.ReadAllText(Path.Combine(root, "src", "Aetheus.Front", "wwwroot", "css", "app.css"));
 
-        var expectedRule = string.Join('\n',
-            ".pipeline-dependency-grid .pipeline-actions-column {",
-            "        width: 16rem !important;",
-            "        min-width: 16rem !important;",
-            "        max-width: 16rem !important;",
-            "    }");
+        foreach (Match rule in Regex.Matches(css, @"(?<selector>[^{}]*\.pipeline-actions-column\b[^{}]*)\{(?<body>[^}]*)\}"))
+        {
+            Assert.False(
+                Regex.IsMatch(rule.Groups["body"].Value, @"(?<![\w-])(?:min-|max-)?width\s*:"),
+                $"R-6: rule '{rule.Groups["selector"].Value.Trim()}' gives the pipeline actions column a fixed width; it sizes to its content.");
+        }
 
-        Assert.Contains(expectedRule, css, StringComparison.Ordinal);
+        var rowActionsRules = Regex.Matches(css, @"(?<selector>[^{}]*\.pipeline-row-actions\b[^{}]*)\{(?<body>[^}]*)\}")
+            .Where(rule => !rule.Groups["selector"].Value.Contains('@', StringComparison.Ordinal))
+            .ToList();
+        Assert.True(
+            rowActionsRules.Any(rule =>
+                Regex.IsMatch(rule.Groups["body"].Value, @"white-space\s*:\s*nowrap")
+                && Regex.IsMatch(rule.Groups["body"].Value, @"flex-wrap\s*:\s*nowrap")),
+            "R-6: .pipeline-row-actions must keep the row action buttons on one line (white-space and flex-wrap nowrap).");
+
+        var gridSource = File.ReadAllText(Path.Combine(root, "src", "Aetheus.Front", "Components", "Shared", "PipelineDependencyGrid.razor"));
+        var actionsColumn = Regex.Match(gridSource, @"<OmniDataGridColumn\b[^>]*pipeline-actions-column[^>]*>");
+        Assert.True(actionsColumn.Success, "R-6: the pipeline actions column was not found in PipelineDependencyGrid.razor.");
+        Assert.DoesNotMatch(@"\s(?:Width|MinWidth|MaxWidth)\s*=", actionsColumn.Value);
+        Assert.Contains("pipeline-row-actions", gridSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Wrap=\"true\"", Regex.Match(gridSource, @"<OmniStack\b[^>]*pipeline-row-actions[^>]*>").Value, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot() => Aetheus.Front.Tests.Architecture.RepositoryScan.Root;

@@ -366,13 +366,13 @@ public sealed class GitLightCliServiceRepoTests : IDisposable
     [InlineData("-rf")]
     [InlineData("--output=/etc/passwd")]
     public void EnsureRefArgsSafe_LeadingDash_Throws(string bad)
-        => Assert.Throws<ArgumentException>(() => GitLightCliService.EnsureRefArgsSafe(bad));
+        => Assert.Throws<ArgumentException>(() => GitArgumentGuard.EnsureRefArgsSafe(bad));
 
     [Fact]
     public void EnsureRefArgsSafe_NormalRefsAndNull_DoNotThrow()
     {
-        GitLightCliService.EnsureRefArgsSafe("main", "src/Program.cs", null);
-        GitLightCliService.EnsureRefArgsSafe("v1.0", "");
+        GitArgumentGuard.EnsureRefArgsSafe("main", "src/Program.cs", null);
+        GitArgumentGuard.EnsureRefArgsSafe("v1.0", "");
     }
 
     [Fact]

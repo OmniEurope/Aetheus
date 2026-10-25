@@ -33,13 +33,17 @@ internal static class AnalysisReportNormalizer
             && string.Equals(report.ScannerKey, "jscpd", StringComparison.OrdinalIgnoreCase))
         {
             var parsedJscpd = JscpdAnalysisParser.Parse(content);
-            await AddFindingResultsAsync(repository, report, context, parsedJscpd.Findings, now, ct).ConfigureAwait(false);
             await AddMetricResultsAsync(repository, report, context, parsedJscpd.Metrics, now, ct).ConfigureAwait(false);
+            // The clones and the crossed duplication rules are one report's findings, swept together.
+            var thresholds = await EvaluateThresholdsAsync(repository, report, context, now, ct).ConfigureAwait(false);
+            await AddFindingResultsAsync(
+                repository, report, context, [.. parsedJscpd.Findings, .. thresholds.Crossed], now, ct).ConfigureAwait(false);
             return;
         }
         if (report.Format == AnalysisReportFormat.MetricsJson)
         {
             await AddMetricResultsAsync(repository, report, context, AnalysisMetricParser.Parse(content), now, ct).ConfigureAwait(false);
+            await AddThresholdFindingsAsync(repository, report, context, now, ct).ConfigureAwait(false);
             return;
         }
         if (report.Format != AnalysisReportFormat.Sarif)
@@ -89,6 +93,36 @@ internal static class AnalysisReportNormalizer
         }
     }
 
+    /// <summary>ADR-056: the metric rules the report's metrics cross, read against the thresholds in force.</summary>
+    private static async Task<AnalysisThresholdOutcome> EvaluateThresholdsAsync(
+        IAnalysisRepository repository,
+        AnalysisReport report,
+        AnalysisRunContext context,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var policies = await AnalysisPolicyEngine.ResolveEffectivePoliciesAsync(
+            repository, context, report.Category, now, ct).ConfigureAwait(false);
+        return AnalysisThresholdEvaluator.Evaluate(report, context, policies);
+    }
+
+    /// <summary>A metrics report's crossed rules become findings, and the findings of the rules it no longer
+    /// crosses are closed: by identity, never by sweeping the scanner, as several reports of one scanner
+    /// (a coverage report per product) each speak for their own module only.</summary>
+    private static async Task AddThresholdFindingsAsync(
+        IAnalysisRepository repository,
+        AnalysisReport report,
+        AnalysisRunContext context,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var outcome = await EvaluateThresholdsAsync(repository, report, context, now, ct).ConfigureAwait(false);
+        if (outcome.Crossed.Count > 0)
+            await AddFindingResultsAsync(
+                repository, report, context, outcome.Crossed, now, ct, sweepMissing: false).ConfigureAwait(false);
+        await repository.MarkFindingsFixedAsync(context.ProjectId, outcome.NoLongerCrossed, now, ct).ConfigureAwait(false);
+    }
+
     private static AnalysisFindingStatus? StandingDecisionStatus(AnalysisFinding finding, DateTime now) =>
         finding.Decisions
             .Where(decision => decision.RevokedAt == null && (decision.ExpiresAt == null || decision.ExpiresAt > now))
@@ -103,7 +137,8 @@ internal static class AnalysisReportNormalizer
         AnalysisRunContext context,
         IReadOnlyList<ParsedAnalysisFinding> parsed,
         DateTime now,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool sweepMissing = true)
     {
         await repository.ReopenExpiredFindingDecisionsAsync(context.ProjectId, now, ct).ConfigureAwait(false);
         var baselineBranch = string.IsNullOrWhiteSpace(context.DefaultBranch) ? "main" : context.DefaultBranch;
@@ -170,9 +205,10 @@ internal static class AnalysisReportNormalizer
             });
         }
 
-        await repository.MarkMissingFindingsFixedAsync(
-            context.ProjectId, report.ScannerKey, report.Category, context.BranchName,
-            fingerprints, now, ct).ConfigureAwait(false);
+        if (sweepMissing)
+            await repository.MarkMissingFindingsFixedAsync(
+                context.ProjectId, report.ScannerKey, report.Category, context.BranchName,
+                fingerprints, now, ct).ConfigureAwait(false);
     }
 
     private static void AddComponentResults(AnalysisReport report, string content)

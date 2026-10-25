@@ -195,9 +195,7 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
     }
 
     private static string FormatDuration(long durationMs) =>
-        TimeSpan.FromMilliseconds(durationMs) is { } duration
-            ? $"{(int)duration.TotalMinutes:00}:{duration.Seconds:00}"
-            : "00:00";
+        DisplayFormatting.Duration(TimeSpan.FromMilliseconds(durationMs));
 
     private bool CanCreate =>
         Permissions.CanWrite(ResourceType.Project)

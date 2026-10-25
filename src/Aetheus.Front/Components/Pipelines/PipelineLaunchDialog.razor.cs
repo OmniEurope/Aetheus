@@ -37,7 +37,6 @@ public partial class PipelineLaunchDialog
     private RunParameterFields? _fields;
     private List<PipelineRunParameterDto> _parameters = [];
     private string? _branch;
-    private string? _error;
     private bool _reloading;
 
     /// <summary>Bumped on every re-read so the fields component is rebuilt and re-seeds its inputs.</summary>
@@ -62,7 +61,6 @@ public partial class PipelineLaunchDialog
         if (ReloadParameters is null) return;
 
         _reloading = true;
-        _error = null;
         try
         {
             // A failed re-read keeps the previous fields rather than emptying the form: the run may
@@ -84,7 +82,7 @@ public partial class PipelineLaunchDialog
         Dictionary<string, string>? values = null;
         if (_fields is not null)
         {
-            if (!_fields.TryCollect(out var collected, out _error)) return;
+            if (!_fields.TryCollect(out var collected, out _)) return;
             values = collected.Count > 0 ? collected : null;
         }
         Dialog.Close(new PipelineLaunchChoice(_branch, values, RunToEndAllowed && _runToEnd));

@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/generate-package-sbom.mjs</c>, run through the real executor on
+/// The C# port of the former <c>generate-package-sbom.mjs</c> script, run through the real executor on
 /// every input the script itself processed (<c>TestData/package-sbom-cases.json</c>,
 /// <see cref="ScriptReferenceData"/>): the case of <c>generate-package-sbom.test.js</c>, NuGet inputs with
 /// mixed-case duplicates, requested-version fallbacks and values of other types, npm inputs with merged

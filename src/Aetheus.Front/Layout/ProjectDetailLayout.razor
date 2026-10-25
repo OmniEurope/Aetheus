@@ -16,7 +16,7 @@
 @inject Aetheus.Front.Components.Shared.ProjectDetailLoader Loader
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 @inject Microsoft.AspNetCore.Components.NavigationManager Nav
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 
 <CascadingValue Value="Loader" Name="ProjectLoader">
@@ -53,9 +53,9 @@
                     <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L[inactive.Status.ToString()]</OmniBadge>
                 }
             </Badges>
-            <Actions>
-                <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection" />
-            </Actions>
+            <ActionsContent>
+                <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" />
+            </ActionsContent>
         </OmniPageHeader>
     }
 

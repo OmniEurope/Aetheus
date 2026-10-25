@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* R-31: why a failed, timed-out or cancelled step stopped, in plain words; the raw detail the back
+   recorded stays folded underneath. R-14: the alert carries no margin of its own (the container spaces it),
+   and the headline and the folded detail are spaced by this stack's gap, not by a margin on the detail. *@
+@if (View is { } view)
+{
+    <OmniAlert Severity="@view.Severity" Title="@L["StepStopTitle"]" data-testid="step-stop-reason">
+        <OmniStack>
+            <div>@view.Headline</div>
+            @if (view.Detail is { } detail)
+            {
+                <OmniFieldset Collapsible="true" Expanded="false" data-testid="step-stop-detail">
+                    <Legend>@L["StepStopDetail"]</Legend>
+                    <ChildContent><code class="step-stop-detail-text">@detail</code></ChildContent>
+                </OmniFieldset>
+            }
+        </OmniStack>
+    </OmniAlert>
+}

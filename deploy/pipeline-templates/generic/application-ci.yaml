@@ -1,30 +1,142 @@
 # SPDX-License-Identifier: EUPL-1.2
-# Builds, tests and packages the project, then seals the payload's provenance. Nothing is required in
-# the project's repository (ADR-050, recette R3-64): the project's own build is shell written in its
-# pipeline, in APPLICATION_CI_COMMANDS (run with `sh -eu -c` from the workspace, it leaves the payload in
+# Builds, tests and packages the project, then seals the payload's provenance. Its stages follow the
+# platform's own CI, one concern per stage: checkout, the project's build, the sealed inputs, the delivery
+# contract, the artifact provenance, the verification and the publication (ADR-054). Nothing is required
+# in the project's repository (ADR-050): the project's own build is shell written in its pipeline, in
+# APPLICATION_CI_COMMANDS (run with `sh -eu -c` from the workspace, it leaves the payload in
 # .pipeline-artifacts/; a project that keeps its own build script calls it from there).
-# A project that declares no build command delivers its source tree at this commit, as
-# .pipeline-artifacts/source.tar.gz, and the step says so.
-# One step on purpose: the steps of a stage run concurrently (ADR-012), and the provenance must describe
-# the payload the build has finished writing. Every consumer (quality, QA, candidate) restores this
-# artifact, and the restore refuses a payload without source-commit, delivery-contract.json and
-# artifact-provenance.json, or built from another commit than its own run.
+# The template carries a default for a .NET repository (recette R2-1, R2-25): it keeps the source at this
+# commit as .pipeline-artifacts/source.tar.gz, then restores, builds (Release) and tests every solution it
+# finds, with the test runner global.json selects. A value the project sets in its own pipeline replaces it
+# whole. A project that sets it empty delivers its source tree only, and the step says so on the error
+# stream: that run did no build and no test, which the log must not let pass for a green one (recette R2-10).
+# The steps of a stage run concurrently (ADR-012), so every step that reads what another writes sits in a
+# later stage. Every consumer (quality, security, QA, candidate) restores this artifact, and the restore
+# refuses a payload without source-commit, delivery-contract.json and artifact-provenance.json, or built
+# from another commit than its own run.
 name: application-ci-template
 trigger: manual
 variables:
   APPLICATION_HAS_FRONTEND: "true"
   APPLICATION_HAS_BACKEND: "true"
   APPLICATION_HAS_DATABASE: "false"
-  APPLICATION_CI_COMMANDS: ""
+  APPLICATION_CI_COMMANDS: |
+    # Default build of a .NET repository: restore, build (Release) and test every solution it holds, then keep
+    # the exact source as the payload. A project that builds otherwise sets APPLICATION_CI_COMMANDS.
+    set -eu
+    mkdir -p .pipeline-artifacts
+    # The payload is taken before the build writes anything into the tree. Everyone may read it, as in a
+    # checkout: under the runner's restrictive umask the files would otherwise be sealed unreadable to the
+    # non-root user of a container they are copied into.
+    tar --exclude=./.git --exclude=./.pipeline-artifacts --mode=a+rX -czf .pipeline-artifacts/source.tar.gz .
+    DOTNET="${DOTNET:-dotnet}"
+    if ! command -v "$DOTNET" >/dev/null 2>&1; then
+      echo "The .NET SDK is not available on this agent: install it, or set APPLICATION_CI_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+    SOLUTIONS="$(find . -maxdepth 1 \( -name '*.sln' -o -name '*.slnx' \) | sort)"
+    if test -z "$SOLUTIONS"; then
+      SOLUTIONS="$(find . -maxdepth 3 \( -name '*.sln' -o -name '*.slnx' \) -not -path './.pipeline-artifacts/*' -not -path '*/node_modules/*' | sort)"
+    fi
+    if test -z "$SOLUTIONS"; then
+      echo "No solution (*.sln or *.slnx) within three levels of the repository: set APPLICATION_CI_COMMANDS in this pipeline." >&2
+      exit 1
+    fi
+    # .NET 10 repositories choose their test runner in global.json; the two runners take different arguments.
+    TEST_RUNNER=vstest
+    if grep -qs 'Microsoft.Testing.Platform' global.json; then TEST_RUNNER=mtp; fi
+    printf '%s\n' "$SOLUTIONS" | while IFS= read -r SOLUTION; do
+      echo ">>> $SOLUTION"
+      "$DOTNET" restore "$SOLUTION" -p:Configuration=Release
+      "$DOTNET" build "$SOLUTION" --configuration Release --no-restore
+      TEST_PROJECTS="$(grep -rlE 'Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject' \
+        --include='*.csproj' --include='*.fsproj' --include='*.vbproj' "$(dirname "$SOLUTION")" | sort || true)"
+      # A repository with no test project has nothing to run (the test command would fail on it): say so.
+      if test -z "$TEST_PROJECTS"; then
+        echo "WARNING: $SOLUTION holds no test project: it was built and nothing was tested." >&2
+        continue
+      fi
+      # Browser end-to-end projects (Playwright, Selenium) drive a running application, which this default does
+      # not start: they are built, named here and not run. A project that starts its stack sets the commands.
+      TESTED=0
+      for PROJECT in $TEST_PROJECTS; do
+        if grep -qE 'Microsoft\.Playwright|Selenium\.WebDriver' "$PROJECT"; then
+          echo "WARNING: $PROJECT is a browser end-to-end test project: it needs a running application, so it was built and not run." >&2
+          continue
+        fi
+        TESTED=1
+        TEST_STATUS=0
+        if test "$TEST_RUNNER" = mtp; then
+          "$DOTNET" test --project "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
+        else
+          "$DOTNET" test "$PROJECT" --configuration Release --no-build || TEST_STATUS=$?
+        fi
+        # Exit code 8 of Microsoft.Testing.Platform: the project holds no test. Said, never reported as a pass.
+        if test "$TEST_RUNNER" = mtp && test "$TEST_STATUS" -eq 8; then
+          echo "WARNING: $PROJECT ran no test." >&2
+        elif test "$TEST_STATUS" -ne 0; then
+          exit "$TEST_STATUS"
+        fi
+      done
+      if test "$TESTED" -eq 0; then
+        echo "WARNING: $SOLUTION holds only browser end-to-end test projects: it was built and nothing was tested." >&2
+      fi
+    done
+  # true when the project's build wrote its own delivery contract and provenance: they are kept as
+  # written and the two stages that would produce them are skipped.
+  APPLICATION_PAYLOAD_SEALED: "false"
+  # Published by the Find pinned SDK stage.
+  APPLICATION_DOTNET_PINNED: "false"
 
 stages:
-  - name: Application payload
-    artifact_name: ApplicationPayload-artifacts
+  - name: Checkout
     group: Build
     execution_role: build
     os: linux
-    artifacts:
-      - ".pipeline-artifacts/**"
+    steps:
+      - name: Check out the exact source
+        checkout: true
+
+  # The platform's own CI resolves the SDK global.json pins before it builds (ensure-dotnet-sdk): a runner
+  # without .NET installs it, never root, under the agent's home. A repository without global.json keeps
+  # the dotnet of the runner's PATH.
+  - name: Find pinned SDK
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Checkout]
+    steps:
+      - name: Look for the SDK manifest
+        working_directory: "$(WORKSPACE)"
+        outputs: [APPLICATION_DOTNET_PINNED]
+        shell: |
+          set -eu
+          if test -s global.json && grep -q '"version"' global.json; then
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]true"
+          else
+            echo "No global.json pins an SDK: the dotnet of the runner's PATH is used."
+            echo "##aetheus[setvariable name=APPLICATION_DOTNET_PINNED]false"
+          fi
+        timeout_seconds: 60
+
+  - name: Toolchain
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Find pinned SDK]
+    condition: "eq(variables['APPLICATION_DOTNET_PINNED'], 'true')"
+    steps:
+      - name: Resolve the pinned .NET SDK
+        type: aetheus
+        function: ensure-dotnet-sdk
+        timeout_seconds: 900
+
+  - name: Build
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Toolchain]
     steps:
       - name: Run project CI commands
         working_directory: "$(WORKSPACE)"
@@ -37,12 +149,29 @@ stages:
             APPLICATION_HAS_DATABASE="$(APPLICATION_HAS_DATABASE)" \
               sh -eu -c "$APPLICATION_CI_COMMANDS"
           else
-            echo "No build command declared (APPLICATION_CI_COMMANDS is empty): the payload is the source tree at this commit."
-            tar --exclude=./.git --exclude=./.pipeline-artifacts -czf .pipeline-artifacts/source.tar.gz .
+            echo "WARNING: no build command is declared (APPLICATION_CI_COMMANDS is empty). Nothing was built or tested;" >&2
+            echo "WARNING: the payload is the source tree at this commit. Set APPLICATION_CI_COMMANDS in this pipeline." >&2
+            tar --exclude=./.git --exclude=./.pipeline-artifacts --mode=a+rX -czf .pipeline-artifacts/source.tar.gz .
           fi
           test -d .pipeline-artifacts
           find .pipeline-artifacts -type f -print -quit | grep -q .
+        timeout_seconds: 7200
 
+  # The source commit, the integration manifest (no integration package for a generic delivery) and the
+  # list of the payload files with their SHA-256: the delivery contract seals that list, so it seals every
+  # file of the payload without a list of names in a parameter.
+  - name: Seal inputs
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Build]
+    steps:
+      - name: Seal the source commit and the payload inventory
+        working_directory: "$(WORKSPACE)"
+        outputs:
+          - APPLICATION_PAYLOAD_SEALED
+        shell: |
+          set -eu
           SOURCE_SHA="$(printf '%s' "$(BUILD_SOURCEVERSION)" | tr 'A-F' 'a-f')"
           case "$SOURCE_SHA" in
             *[!0-9a-f]*|'') echo "The run has no full source commit to seal the payload with." >&2; exit 1 ;;
@@ -54,31 +183,94 @@ stages:
           else
             printf '%s\n' "$SOURCE_SHA" > .pipeline-artifacts/source-commit
           fi
-          if ! test -s .pipeline-artifacts/artifact-provenance.json; then
-            find .pipeline-artifacts -type f \
-              ! -path .pipeline-artifacts/source-commit \
-              ! -path .pipeline-artifacts/delivery-contract.json \
-              ! -path .pipeline-artifacts/artifact-provenance.json \
-              | LC_ALL=C sort > .pipeline-payload-files
-            if grep -q '["\\]' .pipeline-payload-files; then
-              echo "A payload file name holds a quote or a backslash; rename it." >&2
-              exit 1
+          if test -s .pipeline-artifacts/delivery-contract.json && test -s .pipeline-artifacts/artifact-provenance.json; then
+            echo "##aetheus[setvariable name=APPLICATION_PAYLOAD_SEALED]true"
+            exit 0
+          fi
+          printf '{"packages":[]}\n' > .pipeline-artifacts/integration-manifest.json
+          rm -f .pipeline-artifacts/payload-manifest.txt
+          (cd .pipeline-artifacts && find . -type f ! -name source-commit ! -name integration-manifest.json \
+            ! -name delivery-contract.json ! -name artifact-provenance.json | LC_ALL=C sort | while IFS= read -r FILE; do
+            sha256sum "$FILE"; done) > .pipeline-payload-manifest
+          mv .pipeline-payload-manifest .pipeline-artifacts/payload-manifest.txt
+          printf '{"payload":[".pipeline-artifacts/payload-manifest.txt"],"contracts":[".pipeline-artifacts/source-commit",".pipeline-artifacts/integration-manifest.json",".pipeline-artifacts/delivery-contract.json"]}\n' > .pipeline-provenance-categories.json
+          echo "##aetheus[setvariable name=APPLICATION_PAYLOAD_SEALED]false"
+        timeout_seconds: 600
+
+  # The delivery contract names the candidate (c-<source commit>) and seals the payload inventory.
+  - name: Delivery contract
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Seal inputs]
+    condition: "eq(variables['APPLICATION_PAYLOAD_SEALED'], 'false')"
+    steps:
+      - name: Seal the delivery contract
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          SOURCE_SHA="$(tr -d ' \r\n' < .pipeline-artifacts/source-commit)"
+          INVENTORY_SUM="$(sha256sum .pipeline-artifacts/payload-manifest.txt | cut -d ' ' -f 1)"
+          printf '{"schemaVersion":1,"adapter":"generic","candidateVersion":"c-%s","sourceSha":"%s","payloadManifestSha256":"%s"}\n' \
+            "$SOURCE_SHA" "$SOURCE_SHA" "$INVENTORY_SUM" > .pipeline-artifacts/delivery-contract.json
+        timeout_seconds: 120
+
+  # The provenance digests every category the consumers restore, the delivery contract included, so it
+  # comes last.
+  - name: Artifact provenance
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Delivery contract]
+    condition: "eq(variables['APPLICATION_PAYLOAD_SEALED'], 'false')"
+    steps:
+      - name: Record the artifact provenance
+        type: aetheus
+        function: generate-artifact-provenance
+        with:
+          output: .pipeline-artifacts/artifact-provenance.json
+          commit: "$(BUILD_SOURCEVERSION)"
+          categories: .pipeline-provenance-categories.json
+        timeout_seconds: 900
+
+  - name: Verify artifacts
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Artifact provenance]
+    steps:
+      - name: Verify the payload carries its three seals
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          MISSING=0
+          for REQUIRED in source-commit delivery-contract.json artifact-provenance.json; do
+            if ! test -s ".pipeline-artifacts/$REQUIRED"; then
+              echo "The payload lacks .pipeline-artifacts/$REQUIRED." >&2
+              MISSING=1
             fi
-            {
-              printf '{"schemaVersion":1,"sourceCommit":"%s","files":[' "$SOURCE_SHA"
-              SEPARATOR=""
-              while IFS= read -r FILE; do
-                SUM="$(sha256sum "$FILE" | cut -d ' ' -f 1)"
-                printf '%s{"path":"%s","sha256":"%s"}' "$SEPARATOR" "${FILE#.pipeline-artifacts/}" "$SUM"
-                SEPARATOR=","
-              done < .pipeline-payload-files
-              printf ']}\n'
-            } > .pipeline-artifacts/artifact-provenance.json
-            rm -f .pipeline-payload-files
-          fi
-          if ! test -s .pipeline-artifacts/delivery-contract.json; then
-            PROVENANCE_SUM="$(sha256sum .pipeline-artifacts/artifact-provenance.json | cut -d ' ' -f 1)"
-            printf '{"schemaVersion":1,"adapter":"generic","candidateVersion":"c-%s","sourceSha":"%s","artifactProvenanceSha256":"%s"}\n' \
-              "$SOURCE_SHA" "$SOURCE_SHA" "$PROVENANCE_SUM" > .pipeline-artifacts/delivery-contract.json
-          fi
-        timeout_seconds: 7200
+          done
+          test "$MISSING" -eq 0
+          test "$(tr -d ' \r\n' < .pipeline-artifacts/source-commit)" = "$(printf '%s' "$(BUILD_SOURCEVERSION)" | tr 'A-F' 'a-f')"
+        timeout_seconds: 120
+
+  # The publication stage ends only once every artifact is uploaded, so no consumer can overtake the
+  # collection. The names are the ones the other pipelines restore.
+  - name: Publish artifacts
+    group: Build
+    execution_role: build
+    os: linux
+    depends_on: [Verify artifacts]
+    steps:
+      - name: Publish the application payload
+        type: artifacts
+        artifact_name: ApplicationPayload-artifacts
+        target_files:
+          - ".pipeline-artifacts/**"
+      - name: Publish the artifact manifest
+        type: artifacts
+        artifact_name: ArtifactManifest-artifacts
+        target_files:
+          - ".pipeline-artifacts/source-commit"
+          - ".pipeline-artifacts/delivery-contract.json"
+          - ".pipeline-artifacts/artifact-provenance.json"

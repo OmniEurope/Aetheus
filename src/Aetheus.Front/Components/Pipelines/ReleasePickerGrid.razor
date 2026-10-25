@@ -1,39 +1,87 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Pipelines
-@* The release grid exposes version, publication status and the associated run result separately.
-   Selecting a row fills the version field only when exactly one target field exists. *@
+@* The release picker shows, for each release, its version, date, publication status, the Gate's verdict and
+   grade, and the result of its last run. By default only the releases that are published, built without
+   failure and not refused by the Gate are listed; "Tout afficher" brings the others back, because any
+   release must remain deployable from the dialog. Selecting one fills the version field only when exactly
+   one target field exists.
+
+   Wide screens read it as a table; below 40rem the same releases are one card each (version, date,
+   status and verdict), since a five-column table cannot fit a phone (recette R-27). Both are in the page,
+   the stylesheet shows one of them. *@
 <div class="release-picker" data-testid="release-picker">
-    <AetheusDataGrid Data="@_page" Count="@_count" LoadData="@LoadPage" TItem="ReleaseDto" PageSize="@PageSize" ExportMarkdown="false"
-                     Virtualize="@AetheusGrid.RemoteVirtualization"
-                     VirtualData="@(() => new OmniDataGridResult<ReleaseDto>(_page, _count))"
-                     EmptyText="@L["NoDeployableRelease"]"
-                     RowClick="@(release => Pick.InvokeAsync(release.Version))"
-                     class="@(Pick.HasDelegate ? "dashboard-clickable-grid" : null)">
-        <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="ReleaseDto" Property="Version" Title="@L["Version"]" MinWidth="10rem" Filterable="true" >
-                <Template Context="release"><ShortId Value="@release.Version" Copyable="false" Class="release-version" /></Template>
-            </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="ReleaseDto" Property="CreatedAt" Title="@L["ReleasePickerCreated"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
-                <Template Context="release">@(ReleaseHelper.CreatedAt(release)?.ToLocalTime().ToString("g") ?? "-")</Template>
-            </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="ReleaseDto" Property="Status" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
-                <Template Context="release"><ReleaseStatusBadge Status="@release.Status" /></Template>
-            </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="ReleaseDto" Property="PipelineRunStatus" Title="@L["ReleasePickerLastRun"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@RunStatusText" >
-                <Template Context="release">
-                    @if (release.PipelineRunStatus is { } runStatus)
-                    {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineHelper.GetRunBadge(runStatus)"
-                                     data-testid="release-picker-run-status">@L.Localize(runStatus)</OmniBadge>
-                    }
-                    else
-                    {
-                        @("-")
-                    }
-                </Template>
-            </OmniDataGridColumn>
-        </Columns>
-    </AetheusDataGrid>
+    @if (HiddenCount > 0 || _showAll)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between"
+                   Gap="OmniSpacing.Small" Class="release-picker-bar">
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" data-testid="release-picker-hidden">
+                @(_showAll ? L["ReleasePickerShowingAll"] : string.Format(L["ReleasePickerHidden"], HiddenCount))
+            </OmniText>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ToggleShowAll" data-testid="release-picker-show-all">
+                <Icon><OmniIcon Name="@(_showAll ? OmniIconName.EyeSlash : OmniIconName.Eye)" /></Icon>
+                <ChildContent><span>@(_showAll ? L["ReleasePickerShowPublished"] : L["ReleasePickerShowAll"])</span></ChildContent>
+            </OmniButton>
+        </OmniStack>
+    }
+    <div class="release-picker-table">
+        <AetheusDataGrid @key="_showAll" Data="@_page" Count="@_count" LoadData="@LoadPage" TItem="ReleaseDto" PageSize="@PageSize" ExportMarkdown="false"
+                         Virtualize="@AetheusGrid.RemoteVirtualization"
+                         VirtualData="@(() => new OmniDataGridResult<ReleaseDto>(_page, _count))"
+                         EmptyText="@L["NoDeployableRelease"]"
+                         RowClick="@(release => Pick.InvokeAsync(release.Version))"
+                         class="@(Pick.HasDelegate ? "dashboard-clickable-grid" : null)">
+            <Columns>
+                <OmniDataGridColumn Frozen="true" TItem="ReleaseDto" Property="Version" Title="@L["Version"]" Filterable="true" >
+                    <Template Context="release"><ShortId Value="@release.Version" Copyable="false" Class="release-version" /></Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="ReleaseDto" Property="CreatedAt" Title="@L["ReleasePickerCreated"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+                    <Template Context="release">@(release.CreatedAt?.ToLocalTime().ToString("g") ?? "-")</Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="ReleaseDto" Property="Status" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
+                    <Template Context="release"><ReleaseStatusBadge Status="@release.Status" /></Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="ReleaseDto" Property="AssuranceGrade" Title="@L["ReleasePickerGate"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@GradeText" >
+                    <Template Context="release"><ReleaseGateVerdict Release="@release" /></Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="ReleaseDto" Property="PipelineRunStatus" Title="@L["ReleasePickerLastRun"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@RunStatusText" >
+                    <Template Context="release">
+                        @if (release.PipelineRunStatus is { } runStatus)
+                        {
+                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="runStatus" data-testid="release-picker-run-status" />
+                        }
+                        else
+                        {
+                            @("-")
+                        }
+                    </Template>
+                </OmniDataGridColumn>
+            </Columns>
+        </AetheusDataGrid>
+    </div>
+    <div class="release-picker-cards" data-testid="release-picker-cards">
+        @if (Visible.Count == 0)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["NoDeployableRelease"]</OmniText>
+        }
+        else
+        {
+            <OmniSelectableCardGroup TValue="string" TSelection="string" Label="@L["AvailableReleases"]" Columns="1" Class="release-picker-card-group"
+                                     Value="@SelectedVersion" ValueChanged="@PickCardAsync" ValueExpression="@(() => SelectedVersion)"
+                                     ReadOnly="@(!Pick.HasDelegate)">
+                @foreach (var release in Visible)
+                {
+                    <OmniSelectableCard @key="release.Id" Choice="@release.Version" Title="@ShortId.Shorten(release.Version)"
+                                        Description="@(release.CreatedAt?.ToLocalTime().ToString("g"))"
+                                        data-testid="release-picker-card">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-picker-card-badges">
+                            <ReleaseStatusBadge Status="@release.Status" />
+                            <ReleaseGateVerdict Release="@release" />
+                        </OmniStack>
+                    </OmniSelectableCard>
+                }
+            </OmniSelectableCardGroup>
+        }
+    </div>
     @if (TotalCount > Releases.Count)
     {
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" data-testid="release-picker-truncated">

@@ -317,7 +317,7 @@ public class PipelineRepositoryTests : IDisposable
             StartedAt = DateTime.UtcNow,
             CompletedAt = DateTime.UtcNow,
             AdditionalVariablesJson =
-                $"{{\"{PipelineRunService.CancellationRequestedVariable}\":\"true\",\"KEEP\":\"value\"}}"
+                $"{{\"{PipelineRunHelpers.CancellationRequestedVariable}\":\"true\",\"KEEP\":\"value\"}}"
         };
         _db.PipelineRuns.Add(run);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -336,7 +336,7 @@ public class PipelineRepositoryTests : IDisposable
         Assert.Equal(PipelineStatus.Running, reloadedRun.Status);
         Assert.Null(reloadedRun.CompletedAt);
         var variables = PipelineRunHelpers.DeserializeResolvedVariables(reloadedRun.AdditionalVariablesJson);
-        Assert.False(variables.ContainsKey(PipelineRunService.CancellationRequestedVariable));
+        Assert.False(variables.ContainsKey(PipelineRunHelpers.CancellationRequestedVariable));
         Assert.Equal("value", variables["KEEP"]);
         var steps = await _db.PipelineStepRuns.AsNoTracking().Where(s => s.PipelineRunId == run.Id).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(TaskExecutionStatus.Success, steps.Single(s => s.StepName == "ok").Status);
@@ -369,7 +369,7 @@ public class PipelineRepositoryTests : IDisposable
         _db.PipelineRuns.Add(run);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
         _db.PipelineStepRuns.AddRange(
-            new PipelineStepRun { PipelineRunId = run.Id, StageName = PipelineRunService.SystemPrepareStage, StepName = "Clone Repository", Order = 0, IsSystem = true, Status = TaskExecutionStatus.Success, StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow },
+            new PipelineStepRun { PipelineRunId = run.Id, StageName = PipelineRunHelpers.SystemPrepareStage, StepName = "Clone Repository", Order = 0, IsSystem = true, Status = TaskExecutionStatus.Success, StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow },
             new PipelineStepRun { PipelineRunId = run.Id, StageName = "a", StepName = "ok", Order = 1, Status = TaskExecutionStatus.Success },
             new PipelineStepRun { PipelineRunId = run.Id, StageName = "b", StepName = "ko", Order = 2, Status = TaskExecutionStatus.Failed, ExitCode = 2, StartedAt = DateTime.UtcNow, CompletedAt = DateTime.UtcNow });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -383,7 +383,7 @@ public class PipelineRepositoryTests : IDisposable
         var steps = await _db.PipelineStepRuns.AsNoTracking()
             .Where(s => s.PipelineRunId == run.Id)
             .ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        var prepare = steps.Single(s => s.StageName == PipelineRunService.SystemPrepareStage);
+        var prepare = steps.Single(s => s.StageName == PipelineRunHelpers.SystemPrepareStage);
         Assert.Equal(TaskExecutionStatus.Pending, prepare.Status);
         Assert.Null(prepare.StartedAt);
         Assert.Null(prepare.CompletedAt);
@@ -405,7 +405,7 @@ public class PipelineRepositoryTests : IDisposable
         var run = new PipelineRun { PipelineId = p.Id, Status = PipelineStatus.Failed, StartedAt = DateTime.UtcNow };
         _db.PipelineRuns.Add(run);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        _db.PipelineStepRuns.Add(new PipelineStepRun { PipelineRunId = run.Id, StageName = PipelineRunService.SystemPrepareStage, StepName = "Clone Repository", Order = 0, IsSystem = true, Status = TaskExecutionStatus.Success });
+        _db.PipelineStepRuns.Add(new PipelineStepRun { PipelineRunId = run.Id, StageName = PipelineRunHelpers.SystemPrepareStage, StepName = "Clone Repository", Order = 0, IsSystem = true, Status = TaskExecutionStatus.Success });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var count = await _repo.ResetFailedStepRunsAsync(run.Id, ct: TestContext.Current.CancellationToken);

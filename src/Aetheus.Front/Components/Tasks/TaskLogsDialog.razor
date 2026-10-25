@@ -12,7 +12,7 @@
         {
             <div class="log-entry log-level-@log.Level.ToString().ToLowerInvariant()">
                 <span class="log-timestamp">[@log.Timestamp.ToString("HH:mm:ss")]</span>
-                <span>[@L.Localize(log.Level)]</span> @log.Message
+                <span>[@L.Localize(log.Level)]</span> <OmniAnsiText Text="@log.Message" />
             </div>
         }
     }

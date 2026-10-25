@@ -47,6 +47,7 @@ public sealed record MigrationGateMigrationVerdict
 public sealed record PipelineRunMigrationGateDto
 {
     public int Id { get; init; }
+    public int RunId { get; init; }
     public string? StageName { get; init; }
     public string? StepName { get; init; }
     public MigrationGateOutcome Outcome { get; init; }

@@ -47,7 +47,7 @@ public sealed class ScannerManifestTests
         Assert.Equal("/bin/sh", zapActive.EntryPoint);
         Assert.Contains("/aetheus/harness/zap-active-automation.sh", zapActive.Arguments);
         Assert.DoesNotContain(zapActive.Arguments, argument =>
-            argument.Contains("/src/deploy/scripts/", StringComparison.Ordinal));
+            argument.Contains("/src/src/Aetheus.Agent.Core/Harnesses/", StringComparison.Ordinal));
         Assert.Contains("__AETHEUS_PROXY_HOST__", zapActive.Arguments);
         Assert.Contains("__AETHEUS_PROXY_PORT__", zapActive.Arguments);
         Assert.Contains("__AETHEUS_PROXY_USERNAME__", zapActive.Arguments);
@@ -105,6 +105,13 @@ public sealed class ScannerManifestTests
         Assert.Contains("--exclude=.claude", openGrep.Arguments);
         Assert.Contains("--exclude=src/Aetheus.Front/wwwroot/lib", openGrep.Arguments);
         Assert.Contains("--exclude=.aetheus/security-rules/tests", openGrep.Arguments);
+        // EF Core generates these model descriptions (hundreds of kilobytes of fluent calls each). They hold
+        // no hand-written logic, and parsing them cost the SAST scan about four fifths of its time.
+        Assert.Contains("--exclude=*.Designer.cs", openGrep.Arguments);
+        Assert.Contains("--exclude=*ModelSnapshot.cs", openGrep.Arguments);
+        // A raw, generated lizard capture of 2 MB (no hand-written source): OpenGrep skipped it for its
+        // size ("Scan skipped: 1 files larger than 1.0 MB", recette R-17).
+        Assert.Contains("--exclude=docs/audit/360/metrics/complexity_full.txt", openGrep.Arguments);
         Assert.Equal("{source}", openGrep.Arguments[^1]);
         var trivyIac = Assert.Single(manifest.Scanners, scanner => scanner.Key == "trivy-iac");
         var ignoreFileIndex = trivyIac.Arguments.IndexOf("--ignorefile");

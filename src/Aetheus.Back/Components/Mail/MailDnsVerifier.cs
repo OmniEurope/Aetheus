@@ -123,7 +123,7 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
         var spf = txt.Where(IsSpf).ToList();
         if (spf.Count == 0) return (MailCheckVerdict.Missing, string.Empty, spf);
         if (spf.Count > 1) return (MailCheckVerdict.Mismatch, "multiple-records", spf);
-        var terms = Terms(spf[0]);
+        var terms = MailDnsRecordFactory.Terms(spf[0]);
         if (terms.Any(t => t is "all" or "+all"))
             return (MailCheckVerdict.Mismatch, "permissive-all", spf);
         if (!terms.Any(IsSenderTerm))
@@ -139,9 +139,6 @@ public sealed class MailDnsVerifier(IMailDnsResolver resolver, TimeProvider time
 
     internal static bool IsSpf(string txt) =>
         txt.StartsWith("v=spf1 ", StringComparison.OrdinalIgnoreCase) || txt.Equals("v=spf1", StringComparison.OrdinalIgnoreCase);
-
-    internal static List<string> Terms(string spf) =>
-        [.. spf.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(t => t.ToLowerInvariant())];
 
     private static bool IsSenderTerm(string term)
     {

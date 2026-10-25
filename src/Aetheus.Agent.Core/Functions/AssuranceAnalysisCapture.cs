@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// One analysis grade of the candidate assurance contract, captured as
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c> captured it: the single summary file
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c> captured it: the single summary file
 /// of that name under the directory is copied into the evidence directory and graded; no summary, two,
 /// or one that is not JSON gives an Unavailable grade F with a generated evidence file instead. A summary
 /// whose run identity is invalid or whose commit is another one stops the generation.

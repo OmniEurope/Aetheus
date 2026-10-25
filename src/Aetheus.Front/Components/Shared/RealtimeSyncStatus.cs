@@ -50,7 +50,7 @@ public sealed class RealtimeSyncStatus(TimeProvider timeProvider) : IDisposable
             changed = _phase == Phase.Settling && Enter(Phase.Syncing, SafetyTimeout);
         }
         if (changed) Changed?.Invoke();
-        return new CatchUp(this);
+        return new CatchUp(EndCatchUp);
     }
 
     /// <summary>The page left the foreground. Whatever was showing stops: nobody is looking.</summary>
@@ -126,14 +126,14 @@ public sealed class RealtimeSyncStatus(TimeProvider timeProvider) : IDisposable
         }
     }
 
-    private sealed class CatchUp(RealtimeSyncStatus owner) : IDisposable
+    private sealed class CatchUp(Action end) : IDisposable
     {
         private int _disposed;
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                owner.EndCatchUp();
+                end();
         }
     }
 }

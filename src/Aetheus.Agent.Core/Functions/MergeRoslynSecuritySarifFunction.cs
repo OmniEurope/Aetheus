@@ -6,7 +6,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>merge-roslyn-security-sarif</c> function, port of
-/// <c>deploy/scripts/merge-roslyn-security-sarif.mjs</c>: merges the per-project Roslyn SARIF reports of
+/// the former <c>merge-roslyn-security-sarif.mjs</c> script: merges the per-project Roslyn SARIF reports of
 /// a build (<c>-p:AetheusRoslynSarif=true</c>) into the one report the pipeline publishes.
 ///
 /// It keeps ONLY the security rules: a solution-wide build emits well over a thousand analyzer results,

@@ -160,7 +160,7 @@ public sealed class PipelineCancellationIntegrationTests(PostgresFixture fixture
                 .SingleAsync(item => item.Id == runId, TestContext.Current.CancellationToken);
             var variables = PipelineRunHelpers.DeserializeResolvedVariables(
                 persistedRun.AdditionalVariablesJson);
-            Assert.Equal("true", variables[PipelineRunService.CancellationRequestedVariable]);
+            Assert.Equal("true", variables[PipelineRunHelpers.CancellationRequestedVariable]);
         }
     }
 }

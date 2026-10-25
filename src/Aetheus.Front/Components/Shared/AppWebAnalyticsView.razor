@@ -10,9 +10,9 @@
 }
 else if (_loadFailed)
 {
-    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium" Align="OmniAlignment.Start">
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium" Align="OmniAlignment.Start">
         <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniStack>
 }
 else if (_summary is null)
@@ -21,16 +21,14 @@ else if (_summary is null)
 }
 else
 {
-    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
         @* Compact tiles, a third of the row from the small breakpoint (half before). *@
-        <OmniRow Gap="OmniSpacing.Medium">
+        <OmniTileGrid Columns="4">
             @foreach (var tile in SummaryTiles)
             {
-                <OmniColumn Span="12" SmallSpan="4" LargeSpan="3">
-                    <OmniStatTile Class="web-analytics-summary-tile" Value="@tile.Value" Label="@tile.Label" />
-                </OmniColumn>
+                <OmniStatTile Class="web-analytics-summary-tile" Value="@tile.Value" Title="@tile.Label" />
             }
-        </OmniRow>
+        </OmniTileGrid>
 
         @* Show audience storage beside its ingestion budget so the amount and limit can be
            compared in one place. *@
@@ -41,12 +39,12 @@ else
                the pages viewed that same day. *@
             <OmniCard>
                 <OmniHeading Level="OmniHeadingLevel.H5">@L["AudienceDailyTitle"]</OmniHeading>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm omni-u-text-muted web-analytics-chart-caption">
+                <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm omni-u-text-muted web-analytics-chart-caption">
                     @L["AudienceDailyCaption"]
                 </OmniText>
                 @* Bound chart height so a long daily series remains readable without occupying an
                    oversized card. *@
-                <OmniChart Title="@L["AudienceDailyTitle"]" Description="@L["AudienceDailyCaption"]" AspectRatio="5">
+                <OmniChart Label="@L["AudienceDailyTitle"]" Description="@L["AudienceDailyCaption"]" AspectRatio="5">
                     <OmniLineSeries Data="@DailyVisitorPoints" ColorIndex="0"
                                       Title="@L["UniqueVisitorsPerDay"]" />
                     @* Add per-day markers so each hover identifies its date and value instead of
@@ -55,7 +53,7 @@ else
                     <OmniColumnSeries Data="@DailyPageViewPoints" ColorIndex="1"
                                         Title="@L["PageViewsPerDay"]" />
                     <OmniValueAxis Minimum="0" Maximum="@AudienceAxisMaximum" TickCount="5" />
-                    <OmniAxisTitle Text="@L["AudienceDailyValueAxis"]" Vertical="true" />
+                    <OmniAxisTitle Text="@L["AudienceDailyValueAxis"]" Orientation="OmniOrientation.Vertical" />
                     <OmniAxisTitle Text="@L["AudienceDailyCategoryAxis"]" />
                     <OmniCategoryAxis Labels="@OmniChartData.Labels(DailyVisitorPoints)" />
                     <OmniLegend />

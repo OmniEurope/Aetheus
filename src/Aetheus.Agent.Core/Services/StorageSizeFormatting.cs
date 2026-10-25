@@ -8,6 +8,6 @@ internal static class StorageSizeFormatting
 
     public static string FormatBytes(long bytes) =>
         bytes >= GiB(1)
-            ? $"{bytes / (double)GiB(1):0.##} GiB"
-            : $"{bytes / (1024d * 1024d):0.##} MiB";
+            ? $"{bytes / (double)GiB(1):0.##} Go"
+            : $"{bytes / (1024d * 1024d):0.##} Mo";
 }

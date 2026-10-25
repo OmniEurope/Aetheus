@@ -16,7 +16,8 @@ public sealed class AnalysisService(
     INotificationService notifications,
     IDependencyTrackOutbox dependencyTrackOutbox,
     IOptions<AnalysisPlatformOptions> platformOptions,
-    IOptions<DependencyTrackOptions> dependencyTrackOptions) : IAnalysisService
+    IOptions<DependencyTrackOptions> dependencyTrackOptions,
+    IAnalysisPublicationSignal? publicationSignal = null) : IAnalysisService
 {
     private readonly DependencyTrackOptions _dependencyTrackOptions = dependencyTrackOptions.Value;
     private readonly AnalysisPolicyRevisionManager _policyRevisions =
@@ -35,8 +36,21 @@ public sealed class AnalysisService(
     public async Task<AnalysisReportDto> PublishReportAsync(
         int runId,
         PublishAnalysisReportRequest request,
-        CancellationToken ct = default) =>
-        await _publisher.PublishAsync(runId, request, ct).ConfigureAwait(false);
+        CancellationToken ct = default)
+    {
+        // R1-12: the run page shows the publication while it lasts; the end is announced even when it fails.
+        if (publicationSignal is not null)
+            await publicationSignal.AnnounceAsync(runId, true, ct).ConfigureAwait(false);
+        try
+        {
+            return await _publisher.PublishAsync(runId, request, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (publicationSignal is not null)
+                await publicationSignal.AnnounceAsync(runId, false, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
 
     public async Task<AnalysisRunGateDto> GetRunGateAsync(
         int runId,

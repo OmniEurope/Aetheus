@@ -3,7 +3,6 @@ using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Rkhunter;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
-using Aetheus.Back.Services;
 using NSubstitute;
 
 namespace Aetheus.Back.Tests;

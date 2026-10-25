@@ -71,7 +71,7 @@ public sealed class PipelineRunReader(
     private async Task<PipelineRunDto> DropResolvedWarningsAsync(PipelineRun run, PipelineRunDto dto, CancellationToken ct)
     {
         if (dto.Warnings.Count == 0 || run.Status is not (PipelineStatus.Pending or PipelineStatus.Running
-                or PipelineStatus.WaitingForApproval))
+                or PipelineStatus.WaitingForApproval or PipelineStatus.AwaitingResume))
             return dto;
         var current = await variableResolver
             .DropResolvedLibraryWarningsAsync(dto.Warnings, run.Pipeline?.ProjectId, ct).ConfigureAwait(false);

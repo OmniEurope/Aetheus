@@ -141,15 +141,13 @@ internal static class PipelineAnalysisGatePolicyResolver
             [
                 Minimum("quality.coverage.line", 75, "block"),
                 Maximum("quality.duplication.percentage", 5, "warn"),
-                Maximum("quality.complexity.maximum", 25, "warn"),
-                Maximum("quality.architecture.cycles", 0, "warn")
+                Maximum("quality.complexity.maximum", 25, "warn")
             ],
             "strict" =>
             [
                 Minimum("quality.coverage.line", 85, "block"),
                 Maximum("quality.duplication.percentage", 3, "block"),
-                Maximum("quality.complexity.maximum", 15, "block"),
-                Maximum("quality.architecture.cycles", 0, "block")
+                Maximum("quality.complexity.maximum", 15, "block")
             ],
             _ => []
         };

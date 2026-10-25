@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using Aetheus.Agent.Core.Operations;
 
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-idle-frontend</c> function, port of the idle-frontend checks of
-/// <c>deploy/scripts/release-fast-deploy.sh</c>, the ones run 2247 needed: that release went live with
+/// the former <c>release-fast-deploy.sh</c> script, the ones run 2247 needed: that release went live with
 /// an index.html still carrying the SDK's <c>#[.{fingerprint}]</c> placeholders, and every smoke check
 /// passed because the page contained <c>&lt;html</c> and a versioned component-library script. Same
 /// checks, same order, same messages as the script:
@@ -19,7 +20,9 @@ namespace Aetheus.Agent.Core.Functions;
 /// <item>it references <c>_content/OmniEurope.Blazor/omnieurope.blazor.css</c>, which contains
 /// <c>.omni-</c>, and <c>_content/OmniEurope.Blazor/omniInterop.js</c> contains
 /// <c>focusFirstInvalid</c>;</item>
-/// <item>a HEAD request on the index carries a <c>Cache-Control</c> header containing <c>no-store</c>.</item>
+/// <item>a HEAD request on the index carries a <c>Cache-Control</c> header containing <c>no-cache</c> and
+/// not <c>no-store</c> (<see cref="HtmlShellCachePolicy"/>: revalidated on every use, still eligible for
+/// the browser's back/forward cache, recette R-8).</item>
 /// </list>
 /// Asset paths are appended to the URL as the script appended them to <c>FRONT_URL</c>.
 ///
@@ -120,9 +123,9 @@ public sealed partial class VerifyIdleFrontendFunction : IPipelineFunction
         var cacheControl = await HeadAsync(url, cancellationToken).ConfigureAwait(false);
         if (cacheControl is null)
             return $"Idle frontend {url} did not answer a HEAD request" + Unchanged;
-        return cacheControl.Any(value => value.Contains("no-store", StringComparison.OrdinalIgnoreCase))
+        return HtmlShellCachePolicy.IsRevalidated(cacheControl)
             ? null
-            : "Idle frontend index.html is cacheable" + Unchanged;
+            : "Idle frontend index.html is not revalidated on every use" + Unchanged;
     }
 
     /// <summary>The first line holding a match, as <c>sed -n 's/.../\1/p' | head -n 1</c> reads it.</summary>

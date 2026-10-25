@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>settle-fast-release-transaction</c> function, port of the leftover-transaction guard of
-/// <c>deploy/scripts/release-fast-deploy.sh</c>. A leftover transaction is not always a deployment in
+/// the former <c>release-fast-deploy.sh</c> script. A leftover transaction is not always a deployment in
 /// flight: run 2240 moved Apache, recorded its release and then lost the step that closes the
 /// transaction, and refusing would have locked every later fast deploy behind a directory nobody could
 /// remove without a shell on the host. So a transaction whose state is

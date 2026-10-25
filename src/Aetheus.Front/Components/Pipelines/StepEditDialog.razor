@@ -12,6 +12,6 @@
     <OmniFormField For="oe-pages-pipelines-stepeditdialog-numeric-1"><LabelContent>@L["TimeoutSeconds"]</LabelContent><ChildContent><OmniNumeric @bind-Value="_timeout" Minimum="1" Maximum="86400" Id="oe-pages-pipelines-stepeditdialog-numeric-1" /></ChildContent></OmniFormField>
 
     <DialogFooter OnCancel="@OnCancel">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSave" Disabled="@string.IsNullOrWhiteSpace(_name)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSave" Disabled="@string.IsNullOrWhiteSpace(_name)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

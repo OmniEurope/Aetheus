@@ -48,44 +48,42 @@ internal static class MailTemplateDefaults
     private const string EventEn = """
         <p>{{StatusBanner}}</p>
         <p>{{Intro}}</p>
-        <p><strong>{{Context}}</strong></p>
+        <p>{{ContextLink}}</p>
         <h3>Event details</h3>
         <p>{{Details}}</p>
         <p>{{#button Link}}{{LinkLabel}}</p>
         <p>{{LinkNote}}</p>
         <hr>
-        <p class="omni-font-size-small">Sent by Aetheus according to notification subscriptions or platform notification rules.<br><a href="{{InboxUrl}}">Open notifications</a></p>
+        <p class="omni-font-size-small">Sent by Aetheus on {{SentAt}} according to notification subscriptions or platform notification rules.<br><a href="{{InboxUrl}}">Open notifications</a></p>
         """;
 
     private const string EventFr = """
         <p>{{StatusBanner}}</p>
         <p>{{Intro}}</p>
-        <p><strong>{{Context}}</strong></p>
+        <p>{{ContextLink}}</p>
         <h3>Détails de l'événement</h3>
         <p>{{Details}}</p>
         <p>{{#button Link}}{{LinkLabel}}</p>
         <p>{{LinkNote}}</p>
         <hr>
-        <p class="omni-font-size-small">Envoyé par Aetheus selon les abonnements aux notifications ou les règles de notification de la plateforme.<br><a href="{{InboxUrl}}">Ouvrir les notifications</a></p>
+        <p class="omni-font-size-small">Envoyé par Aetheus le {{SentAt}} selon les abonnements aux notifications ou les règles de notification de la plateforme.<br><a href="{{InboxUrl}}">Ouvrir les notifications</a></p>
         """;
 
     private const string RecapEn = """
         <p class="omni-font-size-small"><strong>AETHEUS</strong> · Your daily overview</p>
         <h2>What happened on {{Date}}</h2>
-        <p>{{Period}}</p>
         <p>{{Tiles}}</p>
         <p>{{Sections}}</p>
         <hr>
-        <p class="omni-font-size-small">Sent by Aetheus from its no-reply address. Recipients, sections and send time are set in Administration &gt; Platform settings &gt; Daily recap.<br><a href="{{SettingsUrl}}">Change the recap settings</a></p>
+        <p class="omni-font-size-small">Sent by Aetheus<br><a href="{{SettingsUrl}}">Change the recap settings</a></p>
         """;
 
     private const string RecapFr = """
         <p class="omni-font-size-small"><strong>AETHEUS</strong> · Votre panorama quotidien</p>
         <h2>Ce qui s'est passé le {{Date}}</h2>
-        <p>{{Period}}</p>
         <p>{{Tiles}}</p>
         <p>{{Sections}}</p>
         <hr>
-        <p class="omni-font-size-small">Envoyé par Aetheus depuis son adresse no-reply. Destinataires, rubriques et heure d'envoi se règlent dans Administration &gt; Paramètres de la plateforme &gt; Récapitulatif quotidien.<br><a href="{{SettingsUrl}}">Régler le récap</a></p>
+        <p class="omni-font-size-small">Envoyé par Aetheus<br><a href="{{SettingsUrl}}">Régler le récap</a></p>
         """;
 }

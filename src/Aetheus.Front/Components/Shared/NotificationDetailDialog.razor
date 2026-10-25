@@ -15,6 +15,6 @@
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" data-testid="notification-copy-result">@(copied ? L["Copied"] : L["CopyFailed"])</OmniText>
     }
     <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CopyAsync"><OmniIcon Name="OmniIconName.Copy" /> <span>@L["Copy"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

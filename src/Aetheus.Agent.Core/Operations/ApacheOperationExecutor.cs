@@ -42,7 +42,10 @@ public sealed class ApacheOperationExecutor(
         OperationKind.ApacheApplyConfigSet or
         OperationKind.ApacheGetConfig or
         OperationKind.ApacheGetHtaccess or
-        OperationKind.ApacheSaveHtaccess;
+        OperationKind.ApacheSaveHtaccess or
+        OperationKind.ApacheEnableSite or
+        OperationKind.ApacheDisableSite or
+        OperationKind.ApacheDeleteSite;
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind, string target,
@@ -59,6 +62,8 @@ public sealed class ApacheOperationExecutor(
             return ConfigureProxyAsync(target, envVars, timeoutSeconds, onOutput, cancellationToken);
         if (kind == OperationKind.ApacheApplyConfigSet)
             return ApplyConfigSetAsync(envVars, timeoutSeconds, onOutput, cancellationToken);
+        if (kind is OperationKind.ApacheEnableSite or OperationKind.ApacheDisableSite or OperationKind.ApacheDeleteSite)
+            return ExecuteSiteOperationAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
         // Typed read/write of vhost config and .htaccess (replace the dead cat/printf shell builders).
         // These are pure File read/writes (like SaveConfig) - routed here, not through the no-env overload
         // whose Linux guard would short-circuit them.
@@ -70,6 +75,23 @@ public sealed class ApacheOperationExecutor(
             return SaveHtaccessAsync(target, envVars, onOutput, cancellationToken);
         return ExecuteAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
     }
+
+    /// <summary>Reads where a link points (null for anything that is not a link); replaceable because a
+    /// Windows test host cannot create symbolic links.</summary>
+    internal Func<string, string?> ReadLinkTarget { get; init; } = static path => new FileInfo(path).LinkTarget;
+
+    // Recette R-12: enable, disable or delete a site, then configtest and reload (ApacheSiteOperations).
+    private Task<ExecutorResult> ExecuteSiteOperationAsync(
+        OperationKind kind, string siteFile, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        => new ApacheSiteOperations(
+                SitesAvailablePath,
+                SitesEnabledPath,
+                CreateSiteSymbolicLink,
+                RunPrivilegedOperationAsync,
+                ReadLinkTarget,
+                IsLinux)
+            .ExecuteAsync(kind, siteFile, Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds), onOutput, ct);
 
     /// <summary>
     /// type: apache-proxy - applies a reverse-proxy vhost on the host in one step: write the rendered

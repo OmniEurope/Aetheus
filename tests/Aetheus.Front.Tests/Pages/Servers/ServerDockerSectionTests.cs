@@ -63,7 +63,26 @@ public class ServerDockerSectionTests : BunitContext
     private IRenderedComponent<ServerDockerSection> RenderDockerSection(ServerDetailDto? server = null)
     {
         server ??= MakeDockerServer();
-        var id = server.Id;
+        StubDockerApi(server.Id);
+        return Render<ServerDockerSection>(p => p
+            .Add(x => x.Server, server)
+            .Add(x => x.ServerId, server.Id)
+            .Add(x => x.DockerInitialLoaded, true));
+    }
+
+    // Recette R-29: Prune sits in the page header, rendered here with the section.
+    private IRenderedComponent<PageHeaderOutletHost> RenderDockerSectionWithHeader()
+    {
+        var server = MakeDockerServer();
+        StubDockerApi(server.Id);
+        return this.RenderWithPageHeader<ServerDockerSection>(p => p
+            .Add(x => x.Server, server)
+            .Add(x => x.ServerId, server.Id)
+            .Add(x => x.DockerInitialLoaded, true));
+    }
+
+    private void StubDockerApi(int id)
+    {
         _handler.SetJsonResponse($"api/servers/{id}/docker/containers", new List<DockerContainerDto>());
         _handler.SetJsonResponse($"api/servers/{id}/docker/action", "{}");
         _handler.SetJsonResponse($"api/servers/{id}/docker/containers/logs", "log output here");
@@ -79,11 +98,6 @@ public class ServerDockerSectionTests : BunitContext
         _handler.SetJsonResponse($"api/servers/{id}/docker/containers/abc123def456/env", "{}");
         _handler.SetJsonResponse($"api/servers/{id}/docker/containers/browse", "{}");
         _handler.SetJsonResponse($"api/servers/{id}/docker/build", "{}");
-
-        return Render<ServerDockerSection>(p => p
-            .Add(x => x.Server, server)
-            .Add(x => x.ServerId, id)
-            .Add(x => x.DockerInitialLoaded, true));
     }
 
     /// <summary>
@@ -301,11 +315,14 @@ public class ServerDockerSectionTests : BunitContext
     [Fact]
     public void R181_NoRefreshButton_TheContainersFollowTheHeartbeatInventory()
     {
-        var cut = RenderDockerSection();
-        Assert.Empty(cut.FindAll(".docker-toolbar button[title='Refresh']"));
+        // Recette R-29: the page's actions sit in the header; Prune is the only one there.
+        var header = RenderDockerSectionWithHeader().Find(".test-outlet");
+        Assert.Equal(["DockerPrune"], header.QuerySelectorAll("button").Select(b => b.TextContent.Trim()));
+        Assert.Empty(header.QuerySelectorAll("button[title='Refresh']"));
         // No polling toggle either: the heartbeat is the only source of the inventory.
-        Assert.Empty(cut.FindAll(".docker-toolbar .omni-checkbox-label"));
-        Assert.Empty(cut.FindAll(".docker-toolbar .omni-switch"));
+        Assert.Empty(header.QuerySelectorAll(".omni-checkbox-label"));
+        Assert.Empty(header.QuerySelectorAll(".omni-switch"));
+        var cut = RenderDockerSection();
         var server = MakeDockerServer();
         var pushed = server with
         {
@@ -879,7 +896,7 @@ public class ServerDockerSectionTests : BunitContext
     [Fact]
     public async Task ExecutePruneAsync_SendsRequest()
     {
-        var cut = RenderDockerSection();
+        var cut = RenderDockerSectionWithHeader();
         Dialogs(this).OpenResult = new DockerPruneDialogResult(true, true, false);
 
         await ClickAsync(ButtonLabelled(cut, "DockerPrune"));
@@ -893,7 +910,7 @@ public class ServerDockerSectionTests : BunitContext
     [Fact]
     public async Task PruneAsync_WithFlags_SendsRequest()
     {
-        var cut = RenderDockerSection();
+        var cut = RenderDockerSectionWithHeader();
         Dialogs(this).OpenResult = new DockerPruneDialogResult(true, false, true);
 
         await ClickAsync(ButtonLabelled(cut, "DockerPrune"));
@@ -902,7 +919,7 @@ public class ServerDockerSectionTests : BunitContext
         Assert.Contains("\"containers\":true", post.Body);
         Assert.Contains("\"images\":false", post.Body);
         Assert.Contains("\"volumes\":true", post.Body);
-        Assert.Empty(cut.FindAll(".docker-toolbar .btn-busy"));
+        Assert.Empty(cut.FindAll(".test-outlet .btn-busy"));
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 <OmniCard>
-    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="4"><OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["ServerId"]</OmniText></OmniColumn>
             <OmniColumn Span="8"><OmniText Element="OmniTextElement.Paragraph">@Server.Id</OmniText></OmniColumn>
@@ -28,7 +28,7 @@
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="4"><OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Type"]</OmniText></OmniColumn>
             <OmniColumn Span="8">
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                     <OmniIcon Name="@MaterialIconMap.Resolve(ServerTypeHelper.GetIcon(Server.Type))" Class="icon-sm" />
                     <OmniBadge Fill="OmniFill.Solid" Tone="@ServerTypeHelper.GetBadgeStyle(Server.Type)">@L.Localize(Server.Type)</OmniBadge>
                 </OmniStack>

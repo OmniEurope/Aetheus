@@ -3,7 +3,7 @@
 @page "/not-found"
 @layout MainLayout
 @inject IStringLocalizer<AppStrings> L
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 @inject NavigationManager Nav
 
 <PageTitle>@L["NotFound"] - Aetheus</PageTitle>
@@ -21,5 +21,5 @@
         <rect x="125" y="250" width="150" height="8" rx="4" fill="var(--omni-u-text-accent)" opacity="0.12" />
     </svg>
     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-2xl">@L["NotFoundMessage"]</OmniText>
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo("/"))" title="@L["BackToHome"]"><OmniIcon Name="OmniIconName.Home" /> <span>@L["Home"]</span></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo("/"))" title="@L["BackToHome"]"><Icon><OmniIcon Name="OmniIconName.Home" /></Icon><ChildContent><span>@L["Home"]</span></ChildContent></OmniButton>
 </div>

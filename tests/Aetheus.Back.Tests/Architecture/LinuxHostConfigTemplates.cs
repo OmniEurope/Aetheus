@@ -10,5 +10,5 @@ internal static class LinuxHostConfigTemplates
             .Replace("\r\n", "\n", StringComparison.Ordinal);
 
     public static string Installer() =>
-        File.ReadAllText(Path.Combine(RepositoryScan.Root, "deploy", "scripts", "install-agent-linux.sh"));
+        File.ReadAllText(Path.Combine(RepositoryScan.Root, "deploy", "agent-installer", "install-agent-linux.sh"));
 }

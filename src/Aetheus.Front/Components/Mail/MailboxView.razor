@@ -3,9 +3,9 @@
    by the backend in memory only); then folders, the messages of the chosen folder and the reading
    pane beside them. On a narrow screen the folders, the list and the message stack one above the other. *@
 <OmniStack Gap="OmniSpacing.Medium" Class="mailbox-view">
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-header">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-header">
         @* STD-BTN detection 11: the way back is the zone's dismiss action (Back, Secondary), Compose its one main action. *@
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@BackToMail" Class="mailbox-back"><OmniIcon Name="@MaterialIconMap.Resolve("arrow_back")" /> <span>@L["Back"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@BackToMail" Class="mailbox-back"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("arrow_back")" /></Icon><ChildContent><span>@L["Back"]</span></ChildContent></OmniButton>
         <OmniText Element="OmniTextElement.Strong" Class="mailbox-address">@(_access?.Email ?? string.Empty)</OmniText>
         @if (_access is { IsUnlocked: true, UnlockedUntil: { } until })
         {
@@ -20,7 +20,7 @@
         @if (Unlocked)
         {
             @* Recette R3-52: one main action (Écrire), the others in the menu beside it. *@
-            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => ComposeAsync(MailboxComposeMode.New))" Class="mailbox-compose"><OmniIcon Name="OmniIconName.Edit" /> <span>@L["MailboxCompose"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => ComposeAsync(MailboxComposeMode.New))" Class="mailbox-compose"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["MailboxCompose"]</span></ChildContent></OmniButton>
             <OmniOverflowMenu Label="@L["MoreActions"]" Class="mailbox-more-actions">
                 <OmniMenuItem OnClick="@RefreshAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Refresh"]</ChildContent></OmniMenuItem>
                 <OmniMenuItem OnClick="@CreateFolderAsync" Disabled="@(!CanWrite)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("note_add")" /></Icon><ChildContent>@L["MailboxNewFolder"]</ChildContent></OmniMenuItem>
@@ -40,9 +40,9 @@
     else if (!Unlocked)
     {
         <OmniAlert Severity="OmniSeverity.Warning" Class="mailbox-locked">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
                 <OmniText>@L["MailboxLocked"]</OmniText>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UnlockAsync"><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /> <span>@L["MailboxUnlock"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UnlockAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock_open")" /></Icon><ChildContent><span>@L["MailboxUnlock"]</span></ChildContent></OmniButton>
             </OmniStack>
         </OmniAlert>
     }
@@ -57,11 +57,11 @@
                         <ItemTemplate Context="folder">
                             <OmniButton Variant="@(folder.Path == _folder ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="mailbox-folder"
                                 OnClick="@(() => SelectFolderAsync(folder.Path))" aria-current="@(folder.Path == _folder ? "true" : null)">
-                                <OmniIcon Name="@MaterialIconMap.Resolve(FolderIcon(folder.Role))" /> <span class="mailbox-folder__name">@FolderLabel(folder)</span>
+                                <Icon><OmniIcon Name="@MaterialIconMap.Resolve(FolderIcon(folder.Role))" /></Icon><ChildContent><span class="mailbox-folder__name">@FolderLabel(folder)</span>
                                 @if (folder.Unread > 0)
                                 {
                                     <OmniBadge Tone="OmniTone.Accent">@folder.Unread</OmniBadge>
-                                }
+                                }</ChildContent>
                             </OmniButton>
                         </ItemTemplate>
                         <EmptyContent>@L["MailboxNoFolders"]</EmptyContent>
@@ -76,14 +76,14 @@
                     Virtualize="@AetheusGrid.RemoteVirtualization"
                     VirtualData="@(() => new OmniDataGridResult<MailboxMessageSummaryDto>(_messages, _total))">
                     <Columns>
-                        <OmniDataGridColumn TItem="MailboxMessageSummaryDto" Property="Subject" Title="@L["MailboxMessages"]" MinWidth="16rem" Sortable="false" Filterable="false">
+                        <OmniDataGridColumn TItem="MailboxMessageSummaryDto" Property="Subject" Truncate="true" Title="@L["MailboxMessages"]" MinWidth="16rem" Sortable="false" Filterable="false">
                             <Template Context="m">
                                 <OmniStack Gap="OmniSpacing.XSmall" Class="mailbox-message">
-                                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                                         <OmniText Element="@(m.IsRead ? OmniTextElement.Span : OmniTextElement.Strong)" Truncate="true" Class="mailbox-message__from">@m.From</OmniText>
                                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0 mailbox-message__date">@m.Date.ToString("g")</OmniText>
                                     </OmniStack>
-                                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                         @if (!m.IsRead)
                                         {
                                             <OmniBadge Tone="OmniTone.Accent">@L["MailboxUnread"]</OmniBadge>

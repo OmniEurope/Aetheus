@@ -3,6 +3,7 @@ using Aetheus.Agent.Core.Collectors;
 using Aetheus.Agent.Core.Executors;
 using Aetheus.Agent.Core.Extensions;
 using Aetheus.Agent.Core.Services;
+using Aetheus.Agent.Core.Workers;
 using Aetheus.Agent.Windows.Collectors;
 using Aetheus.Agent.Windows.Executors;
 using Aetheus.Agent.Windows.Services;

@@ -131,3 +131,36 @@ internal sealed class PipelineMigrationGateVerdictConfiguration : IEntityTypeCon
                .OnDelete(DeleteBehavior.Cascade);
     }
 }
+
+internal sealed class CoverageResultConfiguration : IEntityTypeConfiguration<CoverageResult>
+{
+    public void Configure(EntityTypeBuilder<CoverageResult> builder)
+    {
+        builder.HasOne(e => e.PipelineRun)
+               .WithMany(r => r.CoverageResults)
+               .HasForeignKey(e => e.PipelineRunId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class LintResultConfiguration : IEntityTypeConfiguration<LintResult>
+{
+    public void Configure(EntityTypeBuilder<LintResult> builder)
+    {
+        builder.HasOne(e => e.PipelineRun)
+               .WithMany(r => r.LintResults)
+               .HasForeignKey(e => e.PipelineRunId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class RunMetricConfiguration : IEntityTypeConfiguration<RunMetric>
+{
+    public void Configure(EntityTypeBuilder<RunMetric> builder)
+    {
+        builder.HasOne(e => e.PipelineRun)
+               .WithMany(r => r.RunMetrics)
+               .HasForeignKey(e => e.PipelineRunId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}

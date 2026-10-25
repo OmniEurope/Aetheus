@@ -398,7 +398,7 @@ public sealed class CandidateAssuranceContractTests : IDisposable
     private string SourceCommitPath => Path.Combine(_root, "artifact", ".pipeline-artifacts", "source-commit");
     private string ProvenancePath => Path.Combine(_root, "input", "ci", "artifact-provenance.json");
     private string SummaryDirectory(string name) => Path.Combine(_root, "input", name);
-    private static string Script(string name) => Path.Combine(FindRepoRoot(), "deploy", "scripts", name);
+    private static string Script(string name) => Path.Combine(FindRepoRoot(), "deploy", "pipelines", "toto-conformance-fixture", "common", "deploy", "scripts", name);
 
     // node is what the candidate pipeline itself runs to seal its assurance contract, so a host
     // without it cannot exercise these contracts at all - fail instead of skipping.

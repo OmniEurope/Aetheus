@@ -75,7 +75,7 @@ public sealed class AgentProtocolCompatibilityArchitectureTests
         var proof = Function("VerifyNMinusOneAgentContractFunction.cs");
         var session = Function("AgentContractSession.cs");
         var generateShell = File.ReadAllText(
-            Path.Combine(root, "deploy", "scripts", "generate-agent-release-manifest.sh"));
+            Path.Combine(root, "deploy", "agent-installer", "generate-agent-release-manifest.sh"));
 
         Assert.Contains("FileName = \"agent-release-manifest.json\"", manifest, StringComparison.Ordinal);
         Assert.Contains("SHA256.HashData", extract, StringComparison.Ordinal);

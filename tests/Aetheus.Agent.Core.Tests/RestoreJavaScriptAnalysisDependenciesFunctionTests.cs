@@ -7,7 +7,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/restore-javascript-analysis-dependencies.sh</c> and of the
+/// The C# port of the former <c>restore-javascript-analysis-dependencies.sh</c> script and of the
 /// <c>ensure-node-runtime.sh</c> it loads, run through the real executor on a temp directory unique to
 /// each test: the pinned Node.js taken from the host or installed under <c>$HOME/.aetheus</c> behind
 /// the installation lock, the npm and lock-file checks, and the bounded <c>npm ci</c> retries.

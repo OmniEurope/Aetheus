@@ -8,7 +8,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>run-qa-integration-suite</c> function, port of
-/// <c>deploy/scripts/run-qa-integration-suite.sh</c>: runs the prebuilt integration test project of a
+/// the former <c>run-qa-integration-suite.sh</c> script: runs the prebuilt integration test project of a
 /// restored source tree (V, or V-1 under <c>.nminus1-source</c>) and grades it.
 /// <list type="bullet">
 /// <item>The SDK is the one the workspace's <c>global.json</c> pins (<see cref="PinnedDotnetSdk"/>, the
@@ -77,10 +77,24 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
         if (await RebaseStaticWebAssetsAsync(context, suite).ConfigureAwait(false) is { } rebaseError)
             return PipelineFunctionResult.Failure(rebaseError);
 
+        // Ryuk (privileged, Docker socket) raises a Critical container alert on every run: it is disabled for
+        // this step and the scope removes the containers of this run, and the stale ones of a killed run.
+        var testcontainers = new TestcontainersRunScope(_tools, context);
+        await testcontainers.RemoveStaleAsync(cancellationToken).ConfigureAwait(false);
         var test = Dotnet(context, sdk.Executable, suite.SourceRoot, TestArguments(suite));
-        var rawExitCode = await FunctionProgress
-            .RunAsync(_tools, context, $"Integration tests ({suite.Label})", interval.Value, test, cancellationToken)
-            .ConfigureAwait(false);
+        foreach (var (name, value) in testcontainers.Variables)
+            test.Environment[name] = value;
+        int rawExitCode;
+        try
+        {
+            rawExitCode = await FunctionProgress
+                .RunAsync(_tools, context, $"Integration tests ({suite.Label})", interval.Value, test, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await testcontainers.RemoveOwnAsync().ConfigureAwait(false);
+        }
         return await GradeAsync(context, suite, rawExitCode, cancellationToken).ConfigureAwait(false);
     }
 

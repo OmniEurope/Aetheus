@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/monitoring"
 @inherits EntityLiveListBase
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 @* Show monitored applications across projects with status, online audience and the latest received
    event. *@
@@ -26,18 +26,18 @@ else
     @* Everything at a glance, all applications together, above their list. *@
     @if (_summary is not null)
     {
-        <div class="supervision-totals omni-u-mb-md">
-            <OmniStatTile Value="@Number(_summary.TotalCount)" Label="@L["MonitoredApps"]" Detail="@AppsDetail" />
+        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="supervision-totals omni-u-mb-md">
+            <OmniStatTile Value="@Number(_summary.TotalCount)" Title="@L["MonitoredApps"]" Detail="@AppsDetail" />
             @if (_summary.Audience is { } audience)
             {
-                <OmniStatTile Value="@Number(audience.OnlineVisitors)" Label="@L["CurrentVisitors"]" />
-                <OmniStatTile Value="@Number(audience.VisitorsToday)" Label="@L["UniqueVisitorsToday"]" />
-                <OmniStatTile Value="@Number(audience.VisitorsThisWeek)" Label="@L["UniqueVisitorsThisWeek"]" />
-                <OmniStatTile Value="@Number(audience.VisitorsThisMonth)" Label="@L["UniqueVisitorsThisMonth"]" />
-                <OmniStatTile Value="@Number(audience.SessionsThisMonth)" Label="@L["SessionsThisMonth"]" />
-                <OmniStatTile Value="@Number(audience.PageViewsThisMonth)" Label="@L["PageViewsThisMonth"]" />
+                <OmniStatTile Value="@Number(audience.OnlineVisitors)" Title="@L["CurrentVisitors"]" />
+                <OmniStatTile Value="@Number(audience.VisitorsToday)" Title="@L["UniqueVisitorsToday"]" />
+                <OmniStatTile Value="@Number(audience.VisitorsThisWeek)" Title="@L["UniqueVisitorsThisWeek"]" />
+                <OmniStatTile Value="@Number(audience.VisitorsThisMonth)" Title="@L["UniqueVisitorsThisMonth"]" />
+                <OmniStatTile Value="@Number(audience.SessionsThisMonth)" Title="@L["SessionsThisMonth"]" />
+                <OmniStatTile Value="@Number(audience.PageViewsThisMonth)" Title="@L["PageViewsThisMonth"]" />
             }
-        </div>
+        </OmniTileGrid>
         @if (_summary.Audience is { ApplicationCount: > 1 })
         {
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mb-md supervision-totals-note">@L["SupervisionAudienceNote"]</OmniText>

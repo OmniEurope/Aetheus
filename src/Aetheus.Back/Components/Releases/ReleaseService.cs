@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.AppBackups;
 using Aetheus.Back.Components.Artifacts;
+using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.GitGraph;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Projects;

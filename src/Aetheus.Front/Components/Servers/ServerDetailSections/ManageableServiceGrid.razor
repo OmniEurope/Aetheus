@@ -6,18 +6,18 @@
 @namespace Aetheus.Front.Components.Servers.ServerDetailSections
 @if (_selected.Count > 0)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm omni-u-p-sm omni-u-rounded service-bulk-bar">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm omni-u-p-sm omni-u-rounded service-bulk-bar">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["ServicesSelected"], _selected.Count)</OmniText>
         <div class="flex-spacer"></div>
         @* Recette R3-41: one visible action per zone (Start, or Install on the available tab); the others and
            the end of the selection sit in the "More actions" menu. *@
         @if (Installed)
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => FireBulkAsync("Start"))" Disabled="@(!ServerOnline)"><OmniIcon Name="OmniIconName.Play" /> <span>@L["Start"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => FireBulkAsync("Start"))" Disabled="@(!ServerOnline)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Start"]</span></ChildContent></OmniButton>
         }
         else
         {
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => FireBulkAsync("Install"))" Disabled="@(!ServerOnline || (!CanManagePackages && !CanInstallTeamspeak))"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Install"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => FireBulkAsync("Install"))" Disabled="@(!ServerOnline || (!CanManagePackages && !CanInstallTeamspeak))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Install"]</span></ChildContent></OmniButton>
         }
         <OmniOverflowMenu Label="@L["MoreActions"]">
             @if (Installed)
@@ -55,14 +55,14 @@
                 </span>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServiceInfoDto" Property="Name" Title="@L["Service"]" Filterable="true">
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="ServiceInfoDto" Property="Name" Title="@L["Service"]" Filterable="true">
             <Template Context="svc">
                 @if (Installed && ShowModuleLink)
                 {
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
                         @* Service management is the row's primary blue action. *@
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnOpenModule.InvokeAsync(svc.Name))" title="@($"{L["OpenModule"]}: {svc.Name}")" Label="@($"{L["OpenModule"]}: {svc.Name}")"><OmniIcon Name="OmniIconName.OpenExternal" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnOpenModule.InvokeAsync(svc.Name))" title="@($"{L["OpenModule"]}: {svc.Name}")" Label="@($"{L["OpenModule"]}: {svc.Name}")"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon></OmniButton>
                         </span>
                         <span>@svc.Name</span>
                     </OmniStack>
@@ -82,15 +82,15 @@
             <Template Context="svc">
                 @{ var action = ActionOf(svc.Name); }
                 <div>
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Start">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Start">
                     @if (Installed)
                     {
                         @* The host's word is translated, and only a failure is red. *@
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(svc.Status, svc.IsRunning)" title="@svc.Status">@StatusText(svc.Status, svc.IsRunning)</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(svc.Status, svc.IsRunning)" title="@svc.Status">@StatusText(svc.Status, svc.IsRunning)</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["NotInstalled"]</OmniBadge>
+                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["NotInstalled"]</OmniBadge>
                     }
                     @* What the action launched on this service is doing, linked to its task. *@
                     @if (action is not null)
@@ -104,21 +104,21 @@
                 </div>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ServiceInfoDto" Key="Actions" Title="@L["Actions"]" Width="8rem" Sortable="false" TextAlign="OmniDataGridTextAlign.Center">
+        <OmniDataGridColumn TItem="ServiceInfoDto" Key="Actions" Title="@L["Actions"]" Width="8rem" Sortable="false" TextAlign="OmniAlignment.Center">
             <Template Context="svc">
                 @if (Installed)
                 {
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Justify="OmniJustification.Center">
                         @* Recette R3-41: Start and Stop share the row's one visible action, according to the
                            service state; Restart, the logs and Uninstall sit in the "More actions" menu. *@
                         @if (!svc.IsRunning)
                         {
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnStart.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline)" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@ActionTitle(L["Start"].Value)" Label="@ActionTitle(L["Start"].Value)"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnStart.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline)" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@ActionTitle(L["Start"].Value)" Label="@ActionTitle(L["Start"].Value)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
                         }
                         else
                         {
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnStop.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline)" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@ActionTitle(L["Stop"].Value)" Label="@ActionTitle(L["Stop"].Value)"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnStop.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline)" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@ActionTitle(L["Stop"].Value)" Label="@ActionTitle(L["Stop"].Value)"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon></OmniButton>
                         }
                         <OmniOverflowMenu Label="@($"{L["MoreActions"]}: {svc.Name}")">
                             <OmniMenuItem OnClick="@(() => OnRestart.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline || IsBusy(svc.Name))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Restart"]</ChildContent></OmniMenuItem>
@@ -131,7 +131,7 @@
                 else
                 {
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnInstall.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline || !CanInstall(svc.Name))" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@(!ServerOnline ? L["AgentOfflineActionBlocked"].Value : InstallTitle(svc.Name))"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnInstall.InvokeAsync(svc.Name))" Disabled="@(!ServerOnline || !CanInstall(svc.Name))" Class="@(IsBusy(svc.Name) ? "btn-busy" : null)" Busy="@IsBusy(svc.Name)" title="@(!ServerOnline ? L["AgentOfflineActionBlocked"].Value : InstallTitle(svc.Name))"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon></OmniButton>
                     </span>
                 }
             </Template>

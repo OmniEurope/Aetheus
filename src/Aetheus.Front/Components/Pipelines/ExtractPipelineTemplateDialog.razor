@@ -25,7 +25,7 @@
             <MonacoEditor Value="@_model.RewrittenPipelineYaml" ValueChanged="@(value => _model.RewrittenPipelineYaml = value)" />
         }
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Extract"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Extract"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 </EditForm>

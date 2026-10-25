@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>Aetheus.WebAnalytics</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <!-- The asset path follows the package version, so a local build without parameter serves
          /_content/Aetheus.WebAnalytics/<package version>/ like the published package. -->
     <StaticAssetVersion Condition="'$(StaticAssetVersion)' == ''">$(Version)</StaticAssetVersion>

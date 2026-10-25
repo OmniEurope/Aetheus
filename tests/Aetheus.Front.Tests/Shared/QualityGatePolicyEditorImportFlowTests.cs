@@ -60,7 +60,7 @@ public sealed class QualityGatePolicyEditorImportFlowTests : BunitContext
     }
 
     private static Task SelectAsync(IRenderedComponent<QualityGatePolicyEditor> cut, IBrowserFile file) =>
-        cut.InvokeAsync(() => cut.FindComponent<OmniUpload>().Instance.FilesSelected.InvokeAsync([file]));
+        cut.InvokeAsync(() => cut.FindComponent<OmniUpload>().Instance.OnFilesSelect.InvokeAsync([file]));
 
     public static TheoryData<string, long?> RefusedFiles => new()
     {

@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits AgentInstallOptionsComponentBase
 @* Install step: instructions + download button + one-shot installer link. *@
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
     <p>@L["WizardInstallDescription"]</p>
     <WizardInstallInstructions Platform="@Platform" ServerBaseUrl="@ServerBaseUrl" SiteVersion="@SiteVersion" Token="@InstallerToken"
                                IncludePipelineRunner="@IncludePipelineRunner" IncludeServerManagement="@IncludeServerManagement"
@@ -11,7 +11,7 @@
                                IncludeDocker="@IncludeDocker" DevModeInsecureTls="@DevModeInsecureTls" />
     @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
     <OmniRow Gap="OmniSpacing.Small">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenDownloadAsync"><OmniIcon Name="OmniIconName.Download" /> <span>@DownloadLabel</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenDownloadAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@DownloadLabel</span></ChildContent></OmniButton>
         @if (!string.IsNullOrWhiteSpace(InstallerToken))
         {
             <OmniOverflowMenu Label="@L["MoreActions"]">

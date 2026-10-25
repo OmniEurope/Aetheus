@@ -4,12 +4,12 @@
    Aetheus marker and the mail ports still listening. While it runs, OE's veil lies over the card. *@
 <OmniCard Class="@(Busy ? "omni-u-mb-lg mail-leftovers omni-busy" : "omni-u-mb-lg mail-leftovers")" aria-busy="@(Busy ? "true" : "false")">
     <OmniStack Gap="OmniSpacing.Medium">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailLeftoversTitle"]</OmniHeading>
             @if (AgentCanCheck)
             {
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CheckAsync" Disabled="@AgentOffline" Busy="@Busy" Class="mail-leftovers-check">
-                    <OmniIcon Name="OmniIconName.ListChecks" /> <span>@L["MailLeftoversCheck"]</span>
+                    <Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L["MailLeftoversCheck"]</span></ChildContent>
                 </OmniButton>
             }
         </OmniStack>

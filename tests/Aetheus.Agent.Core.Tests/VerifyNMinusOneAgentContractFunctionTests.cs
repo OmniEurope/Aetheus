@@ -10,7 +10,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/verify-nminus1-agent-contract.sh</c>, run through the real executor
+/// The C# port of the former <c>verify-nminus1-agent-contract.sh</c> script, run through the real executor
 /// against an in-memory backend, a <c>tar</c> stand-in and an agent launcher that only records: the
 /// argument and manifest refusals, the admin session and registration token handed to the agent, the
 /// three proofs and their attestation, the findings (status 1) apart from the technical failures, and
@@ -129,7 +129,7 @@ public sealed class VerifyNMinusOneAgentContractFunctionTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("1", variables["AGENT_CONTRACT_STATUS"]);
-        Assert.Equal(VerifyNMinusOneAgentContractFunction.Polls, _enrollmentPoll);
+        Assert.Equal(AgentContractSession.Polls, _enrollmentPoll);
         var evidence = Evidence();
         Assert.Equal("Failed", evidence.GetProperty("status").GetString());
         Assert.False(evidence.GetProperty("proofs").GetProperty("enrollmentAndHeartbeat").GetBoolean());

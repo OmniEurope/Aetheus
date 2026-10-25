@@ -453,6 +453,49 @@ public sealed class AnalysisInsightsRepositoryTests : IDisposable
             (await _db.AnalysisFindings.AsNoTracking().FirstAsync(Ct)).Status);
     }
 
+    [Theory]
+    [InlineData(AnalysisFindingStatus.Open)]
+    [InlineData(AnalysisFindingStatus.Accepted)]
+    public async Task MarkFindingsFixedAsync_FixesExactlyTheNamedFindings(AnalysisFindingStatus before)
+    {
+        await SeedOpenFindingAsync();
+        var seeded = await _db.AnalysisFindings.FirstAsync(Ct);
+        seeded.Status = before;
+        _db.AnalysisFindings.Add(new AnalysisFinding
+        {
+            Id = 2,
+            OrganizationId = 7,
+            ProjectId = 10,
+            Fingerprint = "fp-2",
+            Category = AnalysisCategory.Coverage,
+            Status = AnalysisFindingStatus.Open,
+            Title = "another"
+        });
+        await SaveAsync();
+        _db.ChangeTracker.Clear();
+
+        await _repository.MarkFindingsFixedAsync(10, ["fp-1"], NowUtc, Ct);
+        _db.ChangeTracker.Clear();
+
+        var findings = await _db.AnalysisFindings.AsNoTracking().OrderBy(finding => finding.Id).ToListAsync(Ct);
+        Assert.Equal(AnalysisFindingStatus.Fixed, findings[0].Status);
+        Assert.Equal(NowUtc, findings[0].ResolvedAt);
+        // Not swept with the scanner: a finding that is not named stays as it was.
+        Assert.Equal(AnalysisFindingStatus.Open, findings[1].Status);
+    }
+
+    [Fact]
+    public async Task MarkFindingsFixedAsync_IgnoresAFindingOfAnotherProject_AndAnEmptyList()
+    {
+        await SeedOpenFindingAsync();
+
+        await _repository.MarkFindingsFixedAsync(11, ["fp-1"], NowUtc, Ct);
+        await _repository.MarkFindingsFixedAsync(10, [], NowUtc, Ct);
+        _db.ChangeTracker.Clear();
+
+        Assert.Equal(AnalysisFindingStatus.Open, (await _db.AnalysisFindings.AsNoTracking().FirstAsync(Ct)).Status);
+    }
+
     // ---------- metrics ----------
 
     [Fact]

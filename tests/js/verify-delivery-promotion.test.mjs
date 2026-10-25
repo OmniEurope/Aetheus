@@ -12,7 +12,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const script = join(here, "..", "..", "deploy", "scripts", "verify-delivery-promotion.mjs");
+const script = join(here, "..", "..", "deploy", "pipelines", "toto-conformance-fixture", "common", "deploy", "scripts", "verify-delivery-promotion.mjs");
 
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const canonicalize = value => {

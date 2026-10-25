@@ -7,14 +7,19 @@
    and a callback. *@
 @if (Results.Count > 0)
 {
-    <OmniCard Class="omni-u-p-md omni-u-mb-lg">
-        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">
-            <OmniIcon Name="OmniIconName.Brain" Class="run-tile-icon" /> @L["AiRunResults"]
-        </OmniText>
+    @* Recette R-25: the title sits in the card's own header band, the grid in its padded body; the old
+       inline strong title ignored every block margin and touched the table. *@
+    <OmniCard>
+        <HeaderContent>
+            <OmniHeading Level="OmniHeadingLevel.H5">
+                <OmniIcon Name="OmniIconName.Brain" Class="run-tile-icon" /> @L["AiRunResults"]
+            </OmniHeading>
+        </HeaderContent>
+        <ChildContent>
         <OmniDataGrid Items="@Results" ExportTitle="@ExportContext.Title(L["AiRunResults"])" ExportFields="@ExportContext.Fields()" TItem="AiRunResultDto"
  Class="omni-u-w-100" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="AiRunResultDto" Property="ProfileName" Title="@L["AiRunnerProfile"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="AiRunResultDto" Property="ProfileName" Title="@L["AiRunnerProfile"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">
                     <Template Context="result">
                         @result.ProfileName
                         @if (result.SendsDataExternally)
@@ -30,14 +35,15 @@
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="AiRunResultDto" Property="DurationMs" Title="@L["Duration"]" Width="6.875rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
-                <Template Context="result">@TimeSpan.FromMilliseconds(result.DurationMs).ToString(@"mm\:ss")</Template>
+                <Template Context="result">@DisplayFormatting.Duration(TimeSpan.FromMilliseconds(result.DurationMs))</Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="AiRunResultDto" Title="@L["Actions"]" Width="4.375rem" Sortable="false">
                     <Template Context="result">
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnView.InvokeAsync(result))" title="@L["View"]"><OmniIcon Name="OmniIconName.Eye" /></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OnView.InvokeAsync(result))" title="@L["View"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
                     </Template>
                 </OmniDataGridColumn>
             </Columns>
         </OmniDataGrid>
+        </ChildContent>
     </OmniCard>
 }

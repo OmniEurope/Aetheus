@@ -12,7 +12,7 @@ public sealed class ScannerBinaryManifestTests
     [Fact]
     public void RequireVerifiedDownload_AcceptsAPinnedHttpsBinary()
     {
-        var uri = ScannerOperationExecutor.RequireVerifiedDownload(new ScannerManifestEntry
+        var uri = OpenGrepSandbox.RequireVerifiedDownload(new ScannerManifestEntry
         {
             DownloadUriLinuxAmd64 = "https://example.com/opengrep",
             Sha256LinuxAmd64 = Sha,
@@ -29,7 +29,7 @@ public sealed class ScannerBinaryManifestTests
     [InlineData("https://example.com/opengrep", "abc")]
     public void RequireVerifiedDownload_RefusesAnIncompleteEntry(string? uri, string? sha)
     {
-        var error = Assert.Throws<IOException>(() => ScannerOperationExecutor.RequireVerifiedDownload(
+        var error = Assert.Throws<IOException>(() => OpenGrepSandbox.RequireVerifiedDownload(
             new ScannerManifestEntry { DownloadUriLinuxAmd64 = uri, Sha256LinuxAmd64 = sha }));
 
         Assert.Equal("Binary scanner manifest entry is incomplete.", error.Message);

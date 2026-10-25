@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Pipelines;
-using Aetheus.Back.Data;
 using Aetheus.Back.Services;
 
 namespace Aetheus.Back.Tests.Pipelines;
@@ -16,12 +15,12 @@ namespace Aetheus.Back.Tests.Pipelines;
 public sealed class HostBlueGreenTemplateTests
 {
     /// <summary>Contracts target the latest template version published by the seeder.</summary>
-    private const string Resource = "host-bluegreen-deploy-v1.yaml";
+    private const string Resource = "host-bluegreen-deploy-v2.yaml";
 
     [Fact]
     public void Resource_IsTheLatestPublishedVersion()
     {
-        var (_, _, resources) = DeliveryPipelineTemplateSeeder.Definitions["host-bluegreen-deploy"];
+        var (_, _, resources) = DeliveryTemplateCatalog.Definitions["host-bluegreen-deploy"];
 
         Assert.Equal(Resource, resources[^1]);
     }
@@ -37,14 +36,14 @@ public sealed class HostBlueGreenTemplateTests
         var definition = Parse();
 
         Assert.DoesNotContain(definition.Variables.Keys, key => key.StartsWith("BG_COMPOSE_ENV_", StringComparison.Ordinal));
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource(Resource);
+        var yaml = DeliveryTemplateCatalog.ReadResource(Resource);
         Assert.DoesNotContain("$(BG_COMPOSE_ENV_CUTOVER)", yaml, StringComparison.Ordinal);
         Assert.DoesNotContain("$(BG_COMPOSE_ENV_ROLLBACK)", yaml, StringComparison.Ordinal);
     }
 
     private static PipelineYamlDefinition Parse() =>
         YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(
-            DeliveryPipelineTemplateSeeder.ReadResource(Resource));
+            DeliveryTemplateCatalog.ReadResource(Resource));
 
     [Fact]
     public void Template_ParsesAndValidatesCleanly()
@@ -139,7 +138,7 @@ public sealed class HostBlueGreenTemplateTests
     public void RevertTemplate_RevertsThenRecordsTheReleaseItReturnedTo()
     {
         var definition = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(
-            DeliveryPipelineTemplateSeeder.ReadResource("host-bluegreen-revert-v1.yaml"));
+            DeliveryTemplateCatalog.ReadResource("host-bluegreen-revert-v1.yaml"));
         var errors = new List<string>();
         var warnings = new List<string>();
         PipelineDefinitionValidator.ValidateDefinitionBasics(definition, errors, warnings);
@@ -192,7 +191,7 @@ public sealed class HostBlueGreenTemplateTests
     [Fact]
     public void Template_CarriesNoApplicationSpecificIdentity()
     {
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource(Resource);
+        var yaml = DeliveryTemplateCatalog.ReadResource(Resource);
 
         foreach (var token in new[] { "aetheus-prod", "aetheus-demo", "sonytumen", "10025", "10029" })
             Assert.DoesNotContain(token, yaml, StringComparison.OrdinalIgnoreCase);

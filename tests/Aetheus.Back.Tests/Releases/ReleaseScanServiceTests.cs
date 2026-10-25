@@ -3,7 +3,6 @@ using Aetheus.Back.Components.Projects;
 using Aetheus.Back.Components.Releases;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
-using Aetheus.Back.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

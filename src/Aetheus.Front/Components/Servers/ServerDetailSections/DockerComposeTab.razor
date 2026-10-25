@@ -2,7 +2,7 @@
 @inject GridExportContext ExportContext
 @* Compose tab of the Docker section: the stack grid and the inline compose-file editor. The editor
    content arrives asynchronously over SignalR, so the parent forwards task output here. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredCompose.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterStacks"]" @bind-Value="_composeSearch" Placeholder="@L["FilterStacks"]" Class="docker-search" />
 </OmniStack>
@@ -19,13 +19,13 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="DockerComposeStackDto" Property="ConfigFile" Title="@L["Config"]" Filterable="true" />
-        <OmniDataGridColumn TItem="DockerComposeStackDto" Title="@L["Actions"]" MinWidth="28rem" Sortable="false" Filterable="false">
+        <OmniDataGridColumn TItem="DockerComposeStackDto" Title="@L["Actions"]" Sortable="false" Filterable="false">
             <Template Context="s">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 @* STD-BTN detection 11: Start visible with its destructive Stop, the other actions in the menu. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Up))" title="@L["Start"]" Label="@L["Start"]"><OmniIcon Name="OmniIconName.Play" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Down))" title="@L["Stop"]" Label="@L["Stop"]"><OmniIcon Name="OmniIconName.Stop" /></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
+                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Up))" title="@L["Start"]" Label="@L["Start"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Down))" title="@L["Stop"]" Label="@L["Stop"]"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => ComposeActionAsync(s.Name, DockerComposeAction.Restart))" title="@L["Restart"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Restart"]</ChildContent></OmniMenuItem>
                         <OmniMenuItem Disabled="@AgentOffline" OnClick="@(() => OpenComposeEditorAsync(s.Name))" title="@L["EditCompose"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent>@L["EditCompose"]</ChildContent></OmniMenuItem>
@@ -41,10 +41,10 @@
 {
     <OmniCard Class="omni-u-mt-md">
         <OmniStack Gap="OmniSpacing.Small">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerCompose"] - @_composeEditorStack</OmniText>
                 <div class="flex-spacer"></div>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor" title="@L["Close"]"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
             </OmniStack>
             @* Recette R3-34: a failed read says why; while the file is requested, OE's busy veil lies over
                the editor, which stays mounted underneath (R3-32, the same rule as the Apache editor). *@
@@ -63,11 +63,11 @@
             </div>
             @if (!_composeFileLoading)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
                     @if (CanAdmin)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveComposeFileAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_composeEditorContent))" Class="@(_composeDeploying ? "btn-busy" : null)" Busy="@(_composeDeploying)"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["Deploy"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveComposeFileAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_composeEditorContent))" Class="@(_composeDeploying ? "btn-busy" : null)" Busy="@(_composeDeploying)"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["Deploy"]</span></ChildContent></OmniButton>
                     }
                 </OmniStack>
             }

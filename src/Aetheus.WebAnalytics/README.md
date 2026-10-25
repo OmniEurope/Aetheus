@@ -39,7 +39,7 @@ anonymous refusal falls back to the single essential `aetheus_analytics_optout` 
 
 Include the immutable, package-versioned asset
 `/_content/Aetheus.WebAnalytics/<package version>/aetheus-web-analytics.js` in the host (for example
-`/_content/Aetheus.WebAnalytics/1.1.0/aetheus-web-analytics.js` with package 1.1.0). The script tracks initial and
+`/_content/Aetheus.WebAnalytics/1.1.1/aetheus-web-analytics.js` with package 1.1.1). The script tracks initial and
 SPA route page views without persistent browser state. Browser errors and navigation durations remain
 disabled unless `captureErrors` and `capturePerformance` are explicitly `true`; error messages, stacks,
 resource URLs and user input are never collected. Global Privacy Control and Do Not Track are honored.
@@ -59,3 +59,12 @@ openssl dgst -sha384 -binary aetheus-web-analytics.js | openssl base64 -A
 
 Use a CSP such as `script-src 'self'` when the asset is served by the host. For a separate asset origin,
 add only that exact HTTPS origin and configure the Aetheus public ingest origin allow-list accordingly.
+
+## Refused ingest key
+
+When Aetheus answers a batch with 401 or 403, the ingest key is no longer valid for the application
+(rotated, expired, or from another environment). That answer is permanent: the exporter stops sending with
+that key (batches are dropped and counted as `key_refused`), logs one warning naming the endpoint (never
+the key), and tries once more after one hour. A different key resumes sending at once; 429 and 5xx answers
+are transient and suspend nothing. Every request carries a `User-Agent` token naming the package, the site
+and the application id, so a stale emitter can be found in Aetheus' refusal log.

@@ -92,6 +92,14 @@ public sealed class PackagesApi(HttpClient http) : ApiClientBase(http)
             ct);
 
 
+    public Task<ApiStatus> UpdateRegistryVersionDeprecationAsync(
+        int packageId, int versionId, bool isDeprecated, CancellationToken ct = default)
+        => PutJsonNoBodyAsync(
+            $"api/package-registry/{packageId}/versions/{versionId}/deprecation",
+            new UpdatePackageRegistryVersionDeprecationRequest { IsDeprecated = isDeprecated },
+            ct);
+
+
     public async Task<PipelineLintSummaryDto?> GetLintSummaryAsync(int runId, CancellationToken ct = default)
     {
         try { return await Http.GetFromJsonAsync<PipelineLintSummaryDto>($"api/pipelines/runs/{runId}/lint", JsonOptions.Web, ct); }

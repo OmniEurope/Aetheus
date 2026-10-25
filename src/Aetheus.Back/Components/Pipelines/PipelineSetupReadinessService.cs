@@ -32,7 +32,10 @@ public sealed partial class PipelineSetupReadinessService(
         ArgumentNullException.ThrowIfNull(templateNames);
 
         var definitions = await LoadSelectedDefinitionsAsync(templateNames, ct).ConfigureAwait(false);
-        return await CheckDefinitionsAsync(definitions, projectId, organizationId, ct).ConfigureAwait(false);
+        // The wizard writes no command: the templates' defaults are what the new pipelines will run.
+        // Nothing exists yet to link to: a template is named by its own definition.
+        var owners = definitions.Select(definition => ((int?)null, definition.Name)).ToList();
+        return await CheckDefinitionsAsync(definitions, owners, new HashSet<string>(), projectId, organizationId, ct).ConfigureAwait(false);
     }
 
     public async Task<int?> FindPipelineProjectIdAsync(int pipelineId, CancellationToken ct = default) =>
@@ -47,19 +50,28 @@ public sealed partial class PipelineSetupReadinessService(
         CancellationToken ct = default)
     {
         var definitions = new List<PipelineYamlDefinition>();
+        // The pipeline each definition comes from, in the same order, for the tables of empty values.
+        var owners = new List<(int? Id, string Name)>();
+        // The commands a pipeline declares itself in its own YAML: their template default does not run.
+        var ownCommands = new HashSet<string>(StringComparer.Ordinal);
         int? owningOrganizationId = null;
-        foreach (var (id, _, yaml) in await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false))
+        foreach (var (id, name, yaml) in await pipelines.GetPipelineDefinitionsForProjectAsync(projectId, ct).ConfigureAwait(false))
         {
             if (pipelineId is { } only && id != only) continue;
             owningOrganizationId ??= await pipelines.GetPipelineOrganizationIdAsync(id, ct).ConfigureAwait(false);
             if (await ResolveDefinitionAsync(yaml, owningOrganizationId, ct).ConfigureAwait(false) is { } definition)
+            {
                 definitions.Add(definition);
+                owners.Add((id, name));
+            }
+            if (YamlParsingHelper.ParseAndValidate(yaml, logger) is { } own)
+                ownCommands.UnionWith(own.Variables.Keys);
         }
 
         // No pipeline, nothing a run could need: an empty verdict rather than a "no repository" for a
         // project that has not asked for anything yet.
         if (definitions.Count == 0) return new PipelineSetupReadinessDto();
-        return await CheckDefinitionsAsync(definitions, projectId, organizationId, ct).ConfigureAwait(false);
+        return await CheckDefinitionsAsync(definitions, owners, ownCommands, projectId, organizationId, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -86,6 +98,8 @@ public sealed partial class PipelineSetupReadinessService(
 
     private async Task<PipelineSetupReadinessDto> CheckDefinitionsAsync(
         List<PipelineYamlDefinition> definitions,
+        IReadOnlyList<(int? Id, string Name)> owners,
+        IReadOnlySet<string> ownCommands,
         int projectId,
         int? organizationId,
         CancellationToken ct)
@@ -101,15 +115,23 @@ public sealed partial class PipelineSetupReadinessService(
         // of what an installation must provide, rather than two inferences of the same answer.
         await CheckDeclaredRequirementsAsync(definitions, projectId, organizationId, checks, ct)
             .ConfigureAwait(false);
+        await CheckEmptyValuesAsync(definitions, owners, projectId, checks, ct).ConfigureAwait(false);
         await CheckRunnersAsync(stages, organizationId, checks, ct).ConfigureAwait(false);
         await CheckEnvironmentsAsync(stages, projectId, checks, ct).ConfigureAwait(false);
-        var (inspected, branch) = await CheckAdapterScriptsAsync(stages, projectId, checks, ct).ConfigureAwait(false);
+        var (inspected, branch, repositoryId) = await CheckAdapterScriptsAsync(stages, projectId, checks, ct).ConfigureAwait(false);
+
+        // What the templates' default commands need, read from the branch files and the fleet.
+        var detection = await new PipelineSetupDetection(pipelines, git, logger)
+            .DetectAsync(PipelineSetupDetection.DefaultCommands(definitions, ownCommands),
+                inspected ? repositoryId : null, branch, organizationId, checks, ct)
+            .ConfigureAwait(false);
 
         return new PipelineSetupReadinessDto
         {
             Checks = checks,
             RepositoryInspected = inspected,
-            InspectedBranch = branch
+            InspectedBranch = branch,
+            Detection = detection
         };
     }
 
@@ -191,6 +213,114 @@ public sealed partial class PipelineSetupReadinessService(
         // missing joins the same finding rather than opening a second one saying the same thing.
         Report(PipelineRequirementsChecker.EnvironmentKind, PipelineSetupReadinessKind.MissingEnvironments);
         Report(PipelineRequirementsChecker.CapabilityKind, PipelineSetupReadinessKind.MissingRequiredCapabilities);
+    }
+
+    /// <summary>
+    /// The values a run would read EMPTY: a copied library or vault is created with every value empty,
+    /// and an empty string is a resolved value, so no other check notices it. A vault secret is never
+    /// legitimately empty, so every empty one of a vault the pipelines read is reported; a library
+    /// entry may be empty on purpose, so it is reported only when a pipeline uses it as
+    /// <c>$(NAME)</c> without a default. These are the same rules the launch applies
+    /// (<see cref="PipelineUnresolvedVariableGuard.ValidateNoEmptyValues"/>).
+    /// </summary>
+    private async Task CheckEmptyValuesAsync(
+        List<PipelineYamlDefinition> definitions,
+        IReadOnlyList<(int? Id, string Name)> owners,
+        int projectId,
+        List<PipelineSetupReadinessCheckDto> checks,
+        CancellationToken ct)
+    {
+        // R-71/R-74: each pipeline is judged on ITS libraries and vaults only, as its launch resolves
+        // them. Merging every pipeline's libraries into one resolution let a key left empty in a
+        // library one pipeline reads (the QA library, for instance) be reported against pipelines
+        // that never read that library, and a later library overrode an earlier one's value.
+        // R-10: one row per empty value and pipeline that reads it, which is what the finding shows.
+        var empty = new List<PipelineEmptyValue>();
+        var libraryRows = new List<PipelineSetupReadinessEmptyValueDto>();
+        var vaultRows = new List<PipelineSetupReadinessEmptyValueDto>();
+        var resolvedByReads = new Dictionary<string, IReadOnlyList<PipelineEmptyValue>>(StringComparer.Ordinal);
+        for (var index = 0; index < definitions.Count; index++)
+        {
+            var definition = definitions[index];
+            var (pipelineId, pipelineName) = owners[index];
+            var libraryNames = definition.VariableLibraries.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var vaultNames = definition.Vaults.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (libraryNames.Count == 0 && vaultNames.Count == 0) continue;
+
+            var readKey = string.Join(',', libraryNames.Order(StringComparer.OrdinalIgnoreCase))
+                          + "|" + string.Join(',', vaultNames.Order(StringComparer.OrdinalIgnoreCase));
+            if (!resolvedByReads.TryGetValue(readKey, out var emptyOfDefinition))
+                resolvedByReads[readKey] = emptyOfDefinition =
+                    await requirements.FindEmptyValuesAsync(libraryNames, vaultNames, projectId, ct).ConfigureAwait(false);
+
+            // R-7: only a key the pipeline reads as $(NAME) with no default is reported; $(NAME:-) says an
+            // empty value is accepted, so that entry is optional for this pipeline and never "to fill".
+            var emptyLibraryKeys = emptyOfDefinition.Where(value => value.Kind == PipelineRequirementsChecker.LibraryKind)
+                .Select(value => value.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(definition, emptyLibraryKeys).Keys)
+            {
+                var value = emptyOfDefinition.First(item => item.Kind == PipelineRequirementsChecker.LibraryKind
+                    && string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));
+                empty.Add(value);
+                libraryRows.Add(Row(value, pipelineId, pipelineName));
+            }
+            foreach (var secret in emptyOfDefinition.Where(value => value.Kind == PipelineRequirementsChecker.VaultKind))
+            {
+                empty.Add(secret);
+                vaultRows.Add(Row(secret, pipelineId, pipelineName));
+            }
+        }
+
+        var consumed = DistinctKeys(libraryRows);
+        var secrets = DistinctKeys(vaultRows);
+
+        if (consumed.Count > 0)
+            checks.Add(new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.EmptyLibraryValues,
+                Severity = PipelineSetupReadinessSeverity.Blocking,
+                Items = consumed,
+                ItemIds = OwnerIds(empty, PipelineRequirementsChecker.LibraryKind, consumed),
+                EmptyValues = Ordered(libraryRows)
+            });
+        if (secrets.Count > 0)
+            checks.Add(new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.EmptyVaultSecrets,
+                Severity = PipelineSetupReadinessSeverity.Blocking,
+                Items = secrets,
+                ItemIds = OwnerIds(empty, PipelineRequirementsChecker.VaultKind, secrets),
+                EmptyValues = Ordered(vaultRows)
+            });
+    }
+
+    private static PipelineSetupReadinessEmptyValueDto Row(PipelineEmptyValue value, int? pipelineId, string pipelineName) => new()
+    {
+        OwnerId = value.OwnerId,
+        OwnerName = value.OwnerName ?? string.Empty,
+        Key = value.Key,
+        PipelineId = pipelineId,
+        PipelineName = pipelineName
+    };
+
+    private static List<string> DistinctKeys(IEnumerable<PipelineSetupReadinessEmptyValueDto> rows) =>
+        [.. rows.Select(row => row.Key).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase)];
+
+    private static List<PipelineSetupReadinessEmptyValueDto> Ordered(IEnumerable<PipelineSetupReadinessEmptyValueDto> rows) =>
+        [.. rows
+            .OrderBy(row => row.Key, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.PipelineName, StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>The library or vault holding each reported empty item (R2-27), so each is a link to its own page.</summary>
+    private static Dictionary<string, int> OwnerIds(
+        IReadOnlyList<PipelineEmptyValue> empty, string kind, IReadOnlyList<string> items)
+    {
+        var ids = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+            if (empty.FirstOrDefault(value => value.Kind == kind && value.OwnerId is not null
+                    && string.Equals(value.Key, item, StringComparison.OrdinalIgnoreCase))?.OwnerId is { } id)
+                ids[item] = id;
+        return ids;
     }
 
     /// <summary>
@@ -298,7 +428,7 @@ public sealed partial class PipelineSetupReadinessService(
     /// selected templates invoke. Returns whether the repository could be read at all, so the caller
     /// can say "not checked" instead of letting an empty finding list read as "all present".
     /// </summary>
-    private async Task<(bool Inspected, string? Branch)> CheckAdapterScriptsAsync(
+    private async Task<(bool Inspected, string? Branch, int? RepositoryId)> CheckAdapterScriptsAsync(
         List<PipelineStageDefinition> stages,
         int projectId,
         List<PipelineSetupReadinessCheckDto> checks,
@@ -310,7 +440,7 @@ public sealed partial class PipelineSetupReadinessService(
         // where the project's adapters live; the project's own repository (internal, or the mirror of
         // its external source) is the one read.
         var repositories = (await git.GetRepositoriesAsync(projectId, ct).ConfigureAwait(false))
-            .Where(item => !item.IsAdditionalSource)
+            .Where(item => !item.IsAdditionalSource && !item.IsConfiguration)
             .ToList();
         var repository = repositories.Find(item => !item.IsEmpty) ?? repositories.FirstOrDefault();
         var source = await gitRepositories.GetProjectRepositorySourceAsync(projectId, ct).ConfigureAwait(false);
@@ -321,7 +451,7 @@ public sealed partial class PipelineSetupReadinessService(
             if (source is { HasSource: true })
             {
                 ReportExternalNotInspected(stages, checks);
-                return (false, null);
+                return (false, null, null);
             }
 
             checks.Add(new PipelineSetupReadinessCheckDto
@@ -329,7 +459,7 @@ public sealed partial class PipelineSetupReadinessService(
                 Kind = PipelineSetupReadinessKind.NoRepository,
                 Severity = PipelineSetupReadinessSeverity.Blocking
             });
-            return (false, null);
+            return (false, null, null);
         }
 
         var branch = string.IsNullOrWhiteSpace(repository.DefaultBranch) ? "main" : repository.DefaultBranch;
@@ -338,7 +468,7 @@ public sealed partial class PipelineSetupReadinessService(
             // The mirror of an external source that holds no commit yet has not been synchronized: the
             // external repository may well carry the files, Aetheus has not fetched them.
             ReportExternalNotInspected(stages, checks);
-            return (false, branch);
+            return (false, branch, null);
         }
 
         if (repository.IsEmpty)
@@ -349,7 +479,7 @@ public sealed partial class PipelineSetupReadinessService(
                 Severity = PipelineSetupReadinessSeverity.Blocking,
                 Items = [branch]
             });
-            return (false, branch);
+            return (false, branch, null);
         }
 
         AddMissing(PipelineSetupReadinessKind.MissingAdapterScripts,
@@ -360,7 +490,7 @@ public sealed partial class PipelineSetupReadinessService(
             await FindMissingFilesAsync(repository.Id, branch, RequiredScannerFiles(stages), ct).ConfigureAwait(false),
             checks);
 
-        return (true, branch);
+        return (true, branch, repository.Id);
     }
 
     private static List<string> RequiredAdapterScripts(IEnumerable<PipelineStageDefinition> stages) =>
@@ -425,7 +555,7 @@ public sealed partial class PipelineSetupReadinessService(
 
     /// <summary>Recette R3-63, option 3: Gitleaks reads <c>.gitleaks.toml</c> when the repository has
     /// one and its built-in rules otherwise (the agent drops the <c>--config</c> of an absent file,
-    /// <c>GitleaksRepositoryConfiguration</c>), so the file is never required.</summary>
+    /// <c>ScannerOptionalRepositoryFile</c>), so the file is never required.</summary>
     private static readonly HashSet<string> OptionalConfigurationScanners =
         new(["gitleaks", "gitleaks-history"], StringComparer.OrdinalIgnoreCase);
 

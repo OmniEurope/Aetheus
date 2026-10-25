@@ -27,7 +27,8 @@ internal static class PipelineQualityPublisher
         }
 
         var parsedSources = CSharpSourceParser.Parse(sources, ct: ct);
-        var report = ComplexityAnalyzer.Analyze(parsedSources);
+        var analysis = ComplexityAnalyzer.AnalyzeDetailed(parsedSources);
+        var report = analysis.Report;
         await onOutput(
             $"Analyzed {sources.Count} files · {report.TotalMethods} methods · avg CC {report.AvgCyclomatic} · max CC {report.MaxCyclomatic} · {report.HighComplexityMethods} over {ComplexityAnalyzer.HighComplexityThreshold} · {report.TotalLinesOfCode} LOC",
             TaskLogLevel.Info).ConfigureAwait(false);
@@ -39,7 +40,7 @@ internal static class PipelineQualityPublisher
         }
         return await PublishComplexityReportAsync(
             apiClient, logger, timeProvider, envVars, runId, stageName, baseDirectory,
-            parsedSources, report, startedAt, onOutput, ct).ConfigureAwait(false);
+            parsedSources, analysis, startedAt, onOutput, ct).ConfigureAwait(false);
     }
 
     private static async Task<SourceLoadResult> LoadSourcesAsync(
@@ -65,7 +66,7 @@ internal static class PipelineQualityPublisher
                 if (sourceBytes + fileBytes > MaxSourceBytes)
                 {
                     await onOutput(
-                        $"C# analysis refused more than {MaxSourceBytes / (1024 * 1024)} MiB of source.",
+                        $"C# analysis refused more than {MaxSourceBytes / (1024 * 1024)} Mo of source.",
                         TaskLogLevel.Error).ConfigureAwait(false);
                     return SourceLoadResult.Failed(new ExecutorResult(1, false));
                 }
@@ -89,11 +90,12 @@ internal static class PipelineQualityPublisher
         string? stageName,
         string baseDirectory,
         IReadOnlyList<ParsedCSharpSource> parsedSources,
-        ComplexityReport report,
+        ComplexityAnalysis complexity,
         DateTime startedAt,
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
+        var report = complexity.Report;
         try
         {
             await apiClient.PublishComplexityAsync(runId, report.AvgCyclomatic, report.MaxCyclomatic,
@@ -136,6 +138,17 @@ internal static class PipelineQualityPublisher
             if (analysis.GateStatus is AnalysisGateStatus.Blocked or AnalysisGateStatus.Error)
                 await onOutput($"Complexity verdict deferred to the common gate: {analysis.GateStatus}.", TaskLogLevel.Warning).ConfigureAwait(false);
             await onOutput("Complexity metrics published successfully", TaskLogLevel.Info).ConfigureAwait(false);
+            // ADR-056: each method over the threshold is a finding to fix, next to the metrics.
+            var findings = await ComplexityFindingsPublisher.PublishAsync(
+                apiClient, timeProvider, runId, stageName, baseDirectory, complexity.HighMethods, startedAt, ct).ConfigureAwait(false);
+            if (findings is null)
+            {
+                await onOutput("Complexity findings publication returned no result.", TaskLogLevel.Error).ConfigureAwait(false);
+                return new ExecutorResult(1, false);
+            }
+            await onOutput(
+                $"Complexity findings published: {complexity.HighMethods.Count} methods over {ComplexityAnalyzer.HighComplexityThreshold}.",
+                TaskLogLevel.Info).ConfigureAwait(false);
             if (envVars.TryGetValue("AETHEUS_MAX_COMPLEXITY", out var maximumText)
                 && int.TryParse(maximumText, System.Globalization.NumberStyles.Integer,
                     System.Globalization.CultureInfo.InvariantCulture, out var maximum)

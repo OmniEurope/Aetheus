@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The reading half of <c>deploy/scripts/record-nightly-qualification.mjs</c>, with the script's
+/// The reading half of the former <c>record-nightly-qualification.mjs</c> script, with the script's
 /// JavaScript semantics on the parsed values (<see cref="JsJson"/>, <see cref="JsValue"/>):
 /// <c>findSummary</c>, <c>severityCount</c> and <c>describe</c>.
 /// </summary>

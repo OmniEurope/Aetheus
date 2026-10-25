@@ -139,12 +139,7 @@ public partial class Performance : IAsyncDisposable
             ? (value / 1000).ToString("0.00", CultureInfo.CurrentCulture) + " s"
             : Math.Round(value).ToString(CultureInfo.CurrentCulture) + " ms";
 
-    private static string FormatBytes(long bytes) =>
-        bytes >= 1024 * 1024
-            ? (bytes / 1024d / 1024d).ToString("0.0", CultureInfo.CurrentCulture) + " MB"
-            : bytes >= 1024
-                ? (bytes / 1024d).ToString("0.0", CultureInfo.CurrentCulture) + " kB"
-                : bytes.ToString(CultureInfo.CurrentCulture) + " B";
+    private static string FormatBytes(long bytes) => DisplayFormatting.Size(bytes);
 
     public async ValueTask DisposeAsync()
     {

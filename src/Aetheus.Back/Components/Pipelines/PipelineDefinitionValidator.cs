@@ -144,6 +144,11 @@ internal static class PipelineDefinitionValidator
             // environment.
             if (stage.ApprovalTimeoutMinutes is { } minutes && minutes is < 1 or > 1440)
                 errors.Add($"Stage '{stage.Name}': approval_timeout_minutes must be between 1 and 1440.");
+            // R-39: a missed confirmation waits for a resume at most a week; 0 turns the wait off.
+            if (stage.ResumeWindowHours is { } hours && hours is < 0 or > PipelineResumeWindow.MaxHours)
+                errors.Add($"Stage '{stage.Name}': resume_window_hours must be between 0 and {PipelineResumeWindow.MaxHours}.");
+            else if (stage.ResumeWindowHours is not null && stage.ApprovalTimeoutMinutes is null)
+                warnings.Add($"Stage '{stage.Name}': resume_window_hours has no effect without approval_timeout_minutes.");
             ValidateDeploymentRole(stage, errors);
             if (stage.Jobs.Count > 0)
                 ValidateJobs(stage, errors, warnings);
@@ -154,6 +159,9 @@ internal static class PipelineDefinitionValidator
             foreach (var step in stage.Steps)
                 ValidateArtifactsStep(errors, step, stage, $"stage '{stage.Name}'");
         ValidateArtifactNamesAreUnique(definition, errors);
+        // A condition is one supported form on its whole text; a compound or trailing text is
+        // refused here rather than half-evaluated at run time.
+        errors.AddRange(PipelineConditionEvaluator.FindDefinitionProblems(definition));
     }
 
     /// <summary>
@@ -263,6 +271,7 @@ internal static class PipelineDefinitionValidator
             ValidateStepBasics(errors, warnings, step, context, environment);
             ValidateDeclaredOutputs(errors, step, context);
             ValidateApacheConfigStep(errors, step, context);
+            ValidateEnvTemplateStep(errors, step, context);
             ValidateRestoreArtifactsStep(errors, step, context);
             ValidateTriggerStep(errors, step, context);
             ValidateAdvanceBranchStep(errors, step, context);
@@ -337,7 +346,7 @@ internal static class PipelineDefinitionValidator
         if (lineCount > InlineShellLineBudget)
             warnings.Add(
                 $"Step '{step.Name}' in {context} inlines {lineCount} lines of shell. "
-                + "Move it to a tested script under deploy/scripts/ (or a typed step) and call it: "
+                + "Move it to a tested script of the repository (or a typed step) and call it: "
                 + "a shell block in a definition is not versioned, not tested and not reusable.");
 
         if (ContainsHeredoc(step.Shell))
@@ -361,6 +370,23 @@ internal static class PipelineDefinitionValidator
             if (rest.Length > 0 && (char.IsLetter(rest[0]) || rest[0] == '_')) return true;
         }
         return false;
+    }
+
+    // env_template is the sample a shell step's environment file is rendered from (ADR-057): only a plain
+    // shell step can receive it, and its path is a versioned file below .pipeline/configs/.
+    private static void ValidateEnvTemplateStep(
+        ICollection<string> errors,
+        PipelineStepDefinition step,
+        string context)
+    {
+        if (string.IsNullOrWhiteSpace(step.EnvTemplate)) return;
+        if (!string.IsNullOrWhiteSpace(step.Type))
+            errors.Add($"Step '{step.Name}' in {context} env_template is only valid on a plain shell step, not on type '{step.Type}'.");
+        if (!step.EnvTemplate.Contains("$(", StringComparison.Ordinal)
+            && !PipelineConfigTemplateRenderer.IsSafeConfigPath(step.EnvTemplate))
+            errors.Add($"Step '{step.Name}' in {context} env_template '{step.EnvTemplate}' must be under .pipeline/configs/.");
+        if (!step.Shell.Contains(PipelineEnvFilePreparer.VariableName, StringComparison.Ordinal))
+            errors.Add($"Step '{step.Name}' in {context} has an env_template but its shell never reads {PipelineEnvFilePreparer.VariableName}, so the file would reach nobody.");
     }
 
     private static void ValidateApacheConfigStep(

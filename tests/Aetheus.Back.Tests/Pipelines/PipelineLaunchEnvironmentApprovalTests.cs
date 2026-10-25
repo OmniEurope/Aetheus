@@ -59,7 +59,7 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
     {
         var h = new Harness(approvals: []);
 
-        await h.DispatchAsync(completed: [], PipelineRunService.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [], PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
 
         await h.Repo.Received(1).AddApprovalAsync(
             Arg.Is<PipelineApproval>(a => a.Scope == ApprovalScope.Environment
@@ -80,7 +80,7 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
     {
         var h = new Harness(approvals: [ProdApproval(ApprovalStatus.Pending)]);
 
-        await h.DispatchAsync(completed: [], PipelineRunService.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [], PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
 
         await h.Repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
         await h.SystemTasks.DidNotReceive().CreateSystemTasksAsync(
@@ -94,13 +94,13 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         var h = new Harness(approvals: [ProdApproval(ApprovalStatus.Approved)]);
 
         // The resume pass: the workspace is prepared first.
-        await h.DispatchAsync(completed: [], PipelineRunService.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [], PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
         await h.SystemTasks.Received(1).CreateSystemTasksAsync(
             RunId, Arg.Any<List<PipelineStepRun>>(), Arg.Any<Dictionary<string, string>>(),
             Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<List<string>>(), Arg.Any<CancellationToken>());
 
         // Prepare done: the build goes, and nothing is asked again.
-        await h.DispatchAsync(completed: [PipelineRunService.SystemPrepareStage], "Build images", "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [PipelineRunHelpers.SystemPrepareStage], "Build images", "Deploy blue-green", "Confirm");
         await h.StepDispatcher.Received(1).CreateTasksForStageAsync(
             RunId, Arg.Any<Server>(), Arg.Any<List<PipelineStepRun>>(),
             Arg.Is<PipelineStageDefinition>(stage => stage.Name == "Build images"),
@@ -108,7 +108,7 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
             Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<IPipelineChildRunLauncher>(), Arg.Any<CancellationToken>());
 
         // Build and payload done: the deployment is not held for an approval already given.
-        await h.DispatchAsync(completed: [PipelineRunService.SystemPrepareStage, "Build images"], "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [PipelineRunHelpers.SystemPrepareStage, "Build images"], "Deploy blue-green", "Confirm");
         await h.StepDispatcher.Received(1).CreateTasksForStageAsync(
             RunId, Arg.Any<Server>(), Arg.Any<List<PipelineStepRun>>(),
             Arg.Is<PipelineStageDefinition>(stage => stage.Name == "Deploy blue-green"),
@@ -123,7 +123,7 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
         var h = new Harness(approvals: [ProdApproval(ApprovalStatus.Approved)]);
 
         await h.DispatchAsync(
-            completed: [PipelineRunService.SystemPrepareStage, "Build images", "Deploy blue-green"], "Confirm");
+            completed: [PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green"], "Confirm");
 
         await h.Repo.Received(1).AddApprovalAsync(
             Arg.Is<PipelineApproval>(a => a.Scope == ApprovalScope.Pipeline && a.StageName == "Confirm" && a.TimeoutMinutes == 10),
@@ -137,7 +137,7 @@ public sealed class PipelineLaunchEnvironmentApprovalTests
     {
         var h = new Harness(approvals: [], prodRequiresApproval: false);
 
-        await h.DispatchAsync(completed: [], PipelineRunService.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
+        await h.DispatchAsync(completed: [], PipelineRunHelpers.SystemPrepareStage, "Build images", "Deploy blue-green", "Confirm");
 
         await h.Repo.DidNotReceive().AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>());
         await h.SystemTasks.Received(1).CreateSystemTasksAsync(

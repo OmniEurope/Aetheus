@@ -44,11 +44,29 @@
                       LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-javascript.yml" />
     <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-pipeline.yml"
                       LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-pipeline.yml" />
-    <EmbeddedResource Include="..\..\deploy\scripts\zap-active-automation.sh"
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-csharp-injection.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-csharp-injection.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-csharp-crypto.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-csharp-crypto.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-csharp-web.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-csharp-web.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-csharp-data.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-csharp-data.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-razor.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-razor.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-js-injection.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-js-injection.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-js-crypto.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-js-crypto.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-csharp-api.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-csharp-api.yml" />
+    <EmbeddedResource Include="..\..\.aetheus\security-rules\opengrep\aetheus-js-web.yml"
+                      LogicalName="Aetheus.Agent.Core.AnalysisRules.opengrep.aetheus-js-web.yml" />
+    <EmbeddedResource Include="Harnesses\zap-active-automation.sh"
                       LogicalName="Aetheus.Agent.Core.AnalysisHarnesses.zap-active-automation.sh" />
-    <EmbeddedResource Include="..\..\deploy\scripts\publish-observability-package.sh"
+    <EmbeddedResource Include="Harnesses\publish-observability-package.sh"
                       LogicalName="Aetheus.Agent.Core.PublicationHarnesses.publish-observability-package.sh" />
-    <EmbeddedResource Include="..\..\deploy\scripts\promote-observability-packages.sh"
+    <EmbeddedResource Include="Harnesses\promote-observability-packages.sh"
                       LogicalName="Aetheus.Agent.Core.PublicationHarnesses.promote-observability-packages.sh" />
   </ItemGroup>
 

@@ -39,7 +39,7 @@ public sealed class AnalysisIngestGate
         try
         {
             await _global.WaitAsync(ct).ConfigureAwait(false);
-            return new Lease(this, runId, gate);
+            return new Lease(_global, gate.Semaphore, () => ReleaseReference(runId, gate));
         }
         catch
         {
@@ -67,16 +67,18 @@ public sealed class AnalysisIngestGate
         public int References { get; set; }
     }
 
-    private sealed class Lease(AnalysisIngestGate owner, int runId, RunGate gate) : IAsyncDisposable
+    /// <summary>The two slots an ingestion holds, given back once. It reaches the gate only through the
+    /// callback it is created with, so the gate and its lease do not depend on each other.</summary>
+    private sealed class Lease(SemaphoreSlim global, SemaphoreSlim runSemaphore, Action releaseReference) : IAsyncDisposable
     {
         private int _disposed;
         public ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                owner._global.Release();
-                gate.Semaphore.Release();
-                owner.ReleaseReference(runId, gate);
+                global.Release();
+                runSemaphore.Release();
+                releaseReference();
             }
             return ValueTask.CompletedTask;
         }

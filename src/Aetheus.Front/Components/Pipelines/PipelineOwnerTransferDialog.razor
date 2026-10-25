@@ -66,6 +66,6 @@
     }
     <DialogFooter OnCancel="@(() => Dialog.Close())">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnConfirmAsync" Disabled="@(!CanConfirm)" Busy="@_transferring"
-                    Class="@(_transferring ? "btn-busy" : null)"><OmniIcon Name="OmniIconName.Check" /> <span>@L["TransferOwnership"]</span></OmniButton>
+                    Class="@(_transferring ? "btn-busy" : null)"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["TransferOwnership"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

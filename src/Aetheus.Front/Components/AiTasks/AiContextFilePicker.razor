@@ -15,7 +15,7 @@
                 <li @key="path" class="ai-context-item">
                     <OmniIcon Name="@(path.EndsWith('/') ? OmniIconName.Folder : OmniIconName.Document)" />
                     <span class="ai-context-path text-mono">@path</span>
-                    <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" Label="@string.Format(L["AiContextRemove"], path)" OnClick="@(() => RemoveAsync(path))"><OmniIcon Name="OmniIconName.Close" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" Label="@string.Format(L["AiContextRemove"], path)" OnClick="@(() => RemoveAsync(path))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
                 </li>
             }
         </ul>
@@ -24,7 +24,7 @@
     @if (!_open)
     {
         <div>
-            <OmniButton Id="ai-context-add" Variant="OmniButtonVariant.Primary" OnClick="@OpenAsync" Disabled="@(Paths.Count >= MaxPaths)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+            <OmniButton Id="ai-context-add" Variant="OmniButtonVariant.Primary" OnClick="@OpenAsync" Disabled="@(Paths.Count >= MaxPaths)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
         </div>
     }
     else
@@ -53,12 +53,12 @@
                 }
                 @if (_limitReached)
                 {
-                    <OmniAlert Severity="OmniSeverity.Warning">@string.Format(L["AiContextLimit"], MaxPaths)</OmniAlert>
+                    <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-md">@string.Format(L["AiContextLimit"], MaxPaths)</OmniAlert>
                 }
             }
             <OmniRow Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_picked.Count == 0)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_picked.Count == 0)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
             </OmniRow>
         </OmniCard>
     }

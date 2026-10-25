@@ -7,6 +7,10 @@ public interface IGitLightRepository
 {
     Task<List<GitInternalRepo>> GetByProjectAsync(int projectId, CancellationToken ct = default);
 
+    /// <summary>Takes the configuration flag off every repository of the project but <paramref name="exceptId"/>
+    /// (saved with the next <see cref="SaveChangesAsync"/>): a project has one configuration repository.</summary>
+    Task ClearConfigurationFlagAsync(int projectId, int exceptId, CancellationToken ct = default);
+
     /// <summary>Repos across projects the caller can read. <paramref name="projectIds"/> null = no
     /// restriction (admin/all); an id list restricts to those projects; an empty list should be
     /// short-circuited by the caller (returns no repos).</summary>

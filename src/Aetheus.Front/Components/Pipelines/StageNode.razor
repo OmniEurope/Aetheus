@@ -72,7 +72,7 @@
     @if (!ReadOnly)
     {
         <div class="vp-node-footer">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnAddStepClicked"><OmniIcon Name="OmniIconName.Add" /> <span>@AddStepText</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnAddStepClicked"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@AddStepText</span></ChildContent></OmniButton>
         </div>
     }
 </div>

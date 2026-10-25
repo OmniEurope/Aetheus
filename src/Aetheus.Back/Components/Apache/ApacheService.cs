@@ -58,46 +58,57 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
 
     public async Task ExecuteActionAsync(int serverId, ApacheActionRequest request, CancellationToken ct = default)
     {
-        // Items #5.2/#5.3/#6: service-control actions go through typed operations (sudo +
-        // argv exact via the controlled-sudo recipe). The remaining shell-based actions
-        // (Enable/Disable site/module) still rely on the allow-list - they use `a2ensite`
-        // family commands which are single-shot, no metachars, and already covered.
-        var typedOp = request.Action switch
-        {
-            ApacheAction.Reload => OperationKind.ApacheReload,
-            ApacheAction.TestConfig => OperationKind.ApacheTestConfig,
-            ApacheAction.Start => OperationKind.ApacheStart,
-            ApacheAction.Stop => OperationKind.ApacheStop,
-            ApacheAction.Restart => OperationKind.ApacheRestart,
-            _ => (OperationKind?)null
-        };
-
-        ServerTask task;
-        if (typedOp is { } op)
-        {
-            task = ServerTaskFactory.Operation(serverId,
-                $"Apache {request.Action}",
-                op, target: "-", timeoutSeconds: 30);
-        }
-        else
-        {
-            var command = request.Action switch
-            {
-                ApacheAction.EnableSite => BuildSiteCommand(request, ApacheCommandHelper.BuildEnableSiteCommand),
-                ApacheAction.DisableSite => BuildSiteCommand(request, ApacheCommandHelper.BuildDisableSiteCommand),
-                ApacheAction.EnableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildEnableModuleCommand),
-                ApacheAction.DisableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildDisableModuleCommand),
-                _ => throw new BadRequestException($"Unknown Apache action: {request.Action}")
-            };
-            task = ServerTaskFactory.Shell(serverId,
-                $"Apache {request.Action}{(request.TargetName is not null ? $" - {request.TargetName}" : "")}",
-                command, 30);
-        }
-
-        await QueueTaskAsync(task, ct).ConfigureAwait(false);
+        await QueueTaskAsync(BuildActionTask(serverId, request), ct).ConfigureAwait(false);
         await audit.LogAsync($"Apache{request.Action}", "Apache", serverId,
             request.TargetName ?? request.Action.ToString(), ct).ConfigureAwait(false);
     }
+
+    // Items #5.2/#5.3/#6: service-control actions go through typed operations (sudo + argv exact via the
+    // controlled-sudo recipe). Recette R-12: enabling, disabling and deleting a site are typed operations
+    // too - the `a2ensite`/`a2dissite` shell strings they used to send were refused by the agent's
+    // CommandValidator. Only the module actions are still shell strings, and the allow-list refuses them as
+    // well (no typed operation exists for mods-enabled yet).
+    private static ServerTask BuildActionTask(int serverId, ApacheActionRequest request)
+    {
+        if (ServiceOperation(request.Action) is { } op)
+            return ServerTaskFactory.Operation(serverId, $"Apache {request.Action}", op, target: "-", timeoutSeconds: 30);
+
+        if (SiteOperation(request.Action) is { } siteKind)
+        {
+            var siteFile = ValidSiteFile(request);
+            // A configtest, a reload and, on failure, their rollback: more than one 30 s step.
+            return ServerTaskFactory.Operation(serverId, $"Apache {request.Action} - {siteFile}",
+                siteKind, target: siteFile, timeoutSeconds: 90);
+        }
+
+        var command = request.Action switch
+        {
+            ApacheAction.EnableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildEnableModuleCommand),
+            ApacheAction.DisableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildDisableModuleCommand),
+            _ => throw new BadRequestException($"Unknown Apache action: {request.Action}")
+        };
+        return ServerTaskFactory.Shell(serverId,
+            $"Apache {request.Action}{(request.TargetName is not null ? $" - {request.TargetName}" : "")}",
+            command, 30);
+    }
+
+    private static OperationKind? ServiceOperation(ApacheAction action) => action switch
+    {
+        ApacheAction.Reload => OperationKind.ApacheReload,
+        ApacheAction.TestConfig => OperationKind.ApacheTestConfig,
+        ApacheAction.Start => OperationKind.ApacheStart,
+        ApacheAction.Stop => OperationKind.ApacheStop,
+        ApacheAction.Restart => OperationKind.ApacheRestart,
+        _ => null
+    };
+
+    private static OperationKind? SiteOperation(ApacheAction action) => action switch
+    {
+        ApacheAction.EnableSite => OperationKind.ApacheEnableSite,
+        ApacheAction.DisableSite => OperationKind.ApacheDisableSite,
+        ApacheAction.DeleteSite => OperationKind.ApacheDeleteSite,
+        _ => null
+    };
 
     public async Task GetLogsAsync(int serverId, ApacheLogRequest request, CancellationToken ct = default)
     {
@@ -188,13 +199,15 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
         await audit.LogAsync("ApacheSaveHtaccess", "Apache", serverId, request.DocumentRoot, ct).ConfigureAwait(false);
     }
 
-    private static string BuildSiteCommand(ApacheActionRequest request, Func<string, string> commandBuilder)
+    // The agent acts on sites-available/<file> and sites-enabled/<file>: a bare ".conf" file name, no path
+    // separator, no leading dot (the shared contract the agent checks again before touching the disk).
+    private static string ValidSiteFile(ApacheActionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.TargetName))
             throw new BadRequestException("Site name is required.");
-        if (!ApacheCommandHelper.IsValidSiteName(request.TargetName))
+        if (!OperationTargetValidator.ApacheSiteFileRegex().IsMatch(request.TargetName))
             throw new BadRequestException("Invalid site name.");
-        return commandBuilder(request.TargetName);
+        return request.TargetName;
     }
 
     private static string BuildModuleCommand(ApacheActionRequest request, Func<string, string> commandBuilder)

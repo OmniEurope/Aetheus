@@ -87,7 +87,7 @@ internal sealed record AiRunConfiguration(
             required.BaseUrl,
             required.Model,
             required.ApiKey,
-            AiProviderCatalog.ParseEffort(env.GetValueOrDefault("AETHEUS_AI_EFFORT")),
+            AiEffortTokens.Parse(env.GetValueOrDefault("AETHEUS_AI_EFFORT")),
             required.MaxOutputTokens,
             required.Prompt,
             env.GetValueOrDefault("AETHEUS_AI_PROMPT_FILE"),

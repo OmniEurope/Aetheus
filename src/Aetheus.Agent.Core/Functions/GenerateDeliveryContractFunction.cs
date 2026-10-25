@@ -8,7 +8,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>generate-delivery-contract</c> function, port of
-/// <c>deploy/scripts/generate-delivery-contract.mjs</c>: seals what a candidate is. The identity holds
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-delivery-contract.mjs</c>: seals what a candidate is. The identity holds
 /// the source revision, the adapter, the schema state before (the production release's, unless this is
 /// a bootstrap) and after (the migrations of this very source tree), the enabled integration packages
 /// with the digest of the manifest declaring them, and the SHA-256 of every artifact. The candidate id

@@ -52,24 +52,6 @@ public static class AiProviderCatalog
         _ => throw new ArgumentOutOfRangeException(nameof(provider), provider, null)
     };
 
-    /// <summary>The wire value of an effort, the same three words for both providers; null for
-    /// <see cref="AiReasoningEffort.Default"/>, which sends nothing.</summary>
-    public static string? EffortToken(AiReasoningEffort effort) => effort switch
-    {
-        AiReasoningEffort.Low => "low",
-        AiReasoningEffort.Medium => "medium",
-        AiReasoningEffort.High => "high",
-        _ => null
-    };
-
-    public static AiReasoningEffort ParseEffort(string? token) => token switch
-    {
-        "low" => AiReasoningEffort.Low,
-        "medium" => AiReasoningEffort.Medium,
-        "high" => AiReasoningEffort.High,
-        _ => AiReasoningEffort.Default
-    };
-
     /// <summary>An absolute https URL with no credentials, query or fragment. Plain http is refused: the
     /// request carries the API key.</summary>
     public static bool IsValidBaseUrl(string? value, out Uri? uri)

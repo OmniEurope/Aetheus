@@ -2,7 +2,7 @@
 @inject GridExportContext ExportContext
 @* Volumes tab of the Docker section. Same shape as DockerNetworksTab: read-only over the parent's
    inventory, with only its own filter state. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredVolumes.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterVolumes"]" @bind-Value="_volumeSearch" Placeholder="@L["FilterVolumes"]" Class="docker-search" />
 </OmniStack>
@@ -10,7 +10,7 @@
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_volumeGroups"
     AllGroupsExpanded="@_allVolumeGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="DockerVolumeDto" Property="Project" Title="@L["Project"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn Frozen="true" TItem="DockerVolumeDto" Property="Project" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn TItem="DockerVolumeDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         <OmniDataGridColumn TItem="DockerVolumeDto" Property="Driver" Title="@L["Driver"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
         <OmniDataGridColumn TItem="DockerVolumeDto" Property="Mountpoint" Title="@L["Mountpoint"]" Filterable="true" />

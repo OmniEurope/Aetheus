@@ -34,6 +34,11 @@ public interface IUserNotificationRepository
 
     Task<List<UserNotificationPreference>> GetPreferencesAsync(int userId, CancellationToken ct = default);
 
+    /// <summary>The saved on/off choice of each user among <paramref name="userIds"/> for <paramref name="eventType"/>, in one
+    /// query. A user who never saved a choice for it has no entry.</summary>
+    Task<Dictionary<int, bool>> GetSavedChoicesAsync(
+        string eventType, IReadOnlyCollection<int> userIds, CancellationToken ct = default);
+
     /// <summary>Recette R1-77: the users among <paramref name="userIds"/> already e-mailed (Sent) a delivery of
     /// <paramref name="eventType"/> whose payload contains <paramref name="payloadMarker"/>.</summary>
     Task<HashSet<int>> GetRecipientsAlreadyEmailedAsync(

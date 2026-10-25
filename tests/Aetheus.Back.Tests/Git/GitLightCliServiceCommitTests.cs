@@ -39,6 +39,23 @@ public sealed class GitLightCliServiceCommitTests : IDisposable
         Assert.Contains("name: ci", blob!.Content);
     }
 
+    /// <summary>Recette R-5: mending a configuration file relies on a second commit replacing the file's content.</summary>
+    [Fact]
+    public async Task CommitFilesAsync_AFileTheRepositoryHolds_IsReplacedByTheNewContent()
+    {
+        const string path = ".pipeline/configs/env/production.env";
+        var (first, _, firstError) = await _svc.CommitFilesAsync(
+            _bare, "main", [(path, "ENV=#{ENV}#\n")], "add", "aetheus", "aetheus@test", TestContext.Current.CancellationToken);
+        Assert.True(first, firstError);
+
+        var (second, _, secondError) = await _svc.CommitFilesAsync(
+            _bare, "main", [(path, "ENV=#{DEPLOY_ENV}#\n")], "mend", "aetheus", "aetheus@test", TestContext.Current.CancellationToken);
+
+        Assert.True(second, secondError);
+        var blob = await _svc.GetBlobAsync(_bare, "main", path, ct: TestContext.Current.CancellationToken);
+        Assert.Equal("ENV=#{DEPLOY_ENV}#\n", blob!.Content);
+    }
+
     [Fact]
     public async Task CommitFileAsync_RejectsPathTraversal()
     {

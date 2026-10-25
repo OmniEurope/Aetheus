@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Back.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
 

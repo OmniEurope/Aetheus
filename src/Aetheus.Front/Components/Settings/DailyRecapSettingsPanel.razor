@@ -13,7 +13,7 @@ else if (_settings is null)
 else
 {
     <OmniSettingsSection Title="@L["DailyRecapTitle"]" Description="@L["DailyRecapDescription"]" Class="daily-recap-settings">
-        <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+        <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
             <OmniAlert Severity="@LastSeverity" Title="@L["DailyRecapLastTitle"]" Class="daily-recap-last">
                 <ChildContent>@LastText</ChildContent>
             </OmniAlert>
@@ -22,7 +22,7 @@ else
 
             <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="SaveAsync">
                 <OmniDataAnnotationsValidator Localizer="@L" />
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
                     <OmniSwitch @bind-Value="_model.Enabled" Class="daily-recap-enabled">@L["DailyRecapEnabled"]</OmniSwitch>
 
                     <OmniRow Gap="OmniSpacing.Large">
@@ -57,12 +57,11 @@ else
 
                     <OmniFormField Label="@L["DailyRecapRecipients"]" For="daily-recap-new-recipient" Required="true"
                                    Help="@RecipientsHint" Error="@_recipientError" Class="omni-u-w-100 daily-recap-recipients">
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                             <OmniTextBox Id="daily-recap-new-recipient" Type="OmniTextBoxType.Email" @bind-Value="_model.NewRecipient"
                                          Placeholder="@L["DailyRecapRecipientPlaceholder"]" Autocomplete="off" Class="daily-recap-new-recipient" />
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => AddRecipient())" Class="daily-recap-add-recipient">
-                                <OmniIcon Name="OmniIconName.Add" />
-                                <span>@L["DailyRecapAddRecipient"]</span>
+                                <Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["DailyRecapAddRecipient"]</span></ChildContent>
                             </OmniButton>
                         </OmniStack>
                     </OmniFormField>
@@ -72,7 +71,7 @@ else
                                 <span class="daily-recap-recipient-address">@address</span>
                                 <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" OnClick="@(() => RemoveRecipient(address))"
                                             Class="daily-recap-remove-recipient" Label="@L["DailyRecapRemoveRecipient", address]" title="@L["DailyRecapRemoveRecipient", address]">
-                                    <OmniIcon Name="OmniIconName.Delete" />
+                                    <Icon><OmniIcon Name="OmniIconName.Delete" /></Icon>
                                 </OmniButton>
                             </div>
                         </ItemTemplate>
@@ -84,17 +83,15 @@ else
 
                     <div>
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving" Class="daily-recap-save">
-                            <OmniIcon Name="OmniIconName.Save" />
-                            <span>@L["Save"]</span>
+                            <Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent>
                         </OmniButton>
                     </div>
                 </OmniStack>
             </OmniTemplateForm>
 
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="daily-recap-actions">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="daily-recap-actions">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="SendNowAsync" Busy="@_sending" Class="daily-recap-send-now" title="@SendNowHint">
-                    <OmniIcon Name="OmniIconName.PaperPlaneRight" />
-                    <span>@L["DailyRecapSendNow"]</span>
+                    <Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent><span>@L["DailyRecapSendNow"]</span></ChildContent>
                 </OmniButton>
                 @* STD-BTN detection 11: DailyRecapSendNow visible, the other actions in the menu. *@
                 <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -114,7 +111,7 @@ else
 
             @if (_preview is { } preview)
             {
-                <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Small" Class="daily-recap-preview">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small" Class="daily-recap-preview">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 daily-recap-preview-subject">@L["DailyRecapPreviewTitle", preview.Subject]</OmniText>
                     <div @ref="_previewHost" class="daily-recap-preview-frame"></div>
                 </OmniStack>

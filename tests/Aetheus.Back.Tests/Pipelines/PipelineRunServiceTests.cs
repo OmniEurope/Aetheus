@@ -16,6 +16,7 @@ using Aetheus.Back.Hubs;
 using Aetheus.Back.Services;
 using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -99,11 +100,14 @@ public class PipelineRunServiceTests
     private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
     private readonly ILogger<PipelineRunService> _loggerMock = Substitute.For<ILogger<PipelineRunService>>();
     private readonly IPipelineGitService _pipelineGitMock = Substitute.For<IPipelineGitService>();
+    private readonly IProjectConfigRepositoryService _configRepositoryMock = Substitute.For<IProjectConfigRepositoryService>();
     private readonly IPipelineWorkspaceSourceResolver _workspaceSourcesMock = Substitute.For<IPipelineWorkspaceSourceResolver>();
     private readonly Aetheus.Back.Components.Artifacts.IArtifactRepository _artifactRepoMock = Substitute.For<Aetheus.Back.Components.Artifacts.IArtifactRepository>();
     private readonly IArtifactStorageService _artifactStorageMock = Substitute.For<IArtifactStorageService>();
     private readonly IHttpClientFactory _httpClientFactoryMock = Substitute.For<IHttpClientFactory>();
     private readonly IPostgresLeaderLease _operationLockMock = Substitute.For<IPostgresLeaderLease>();
+    // Null in the engine every test shares; a test that exercises env_template sets it and builds its own engine.
+    private IPipelineEnvFilePreparer? _envFiles;
     private readonly IPipelineVariableResolver _variableResolverMock;
     private readonly IClientProxy _clientProxyMock = Substitute.For<IClientProxy>();
     private readonly PipelineRunService _sut;
@@ -267,7 +271,7 @@ public class PipelineRunServiceTests
             TimeProvider.System, Substitute.For<ILogger<PipelineTriggerStepCoordinator>>());
 
         var stepDispatcher = new PipelineStepTaskDispatcher(
-            _repoMock, servers, taskBuilder, finalizer, triggerSteps, _branchAdvanceStepMock,
+            _repoMock, servers, taskBuilder, triggerSteps, _branchAdvanceStepMock,
             new PipelineAnalysisTaskFactory(taskBuilder),
             new PipelineDotnetTestTaskFactory(taskBuilder),
             new PipelineFunctionTaskFactory(taskBuilder, TimeProvider.System),
@@ -282,7 +286,8 @@ public class PipelineRunServiceTests
             new PipelineScannerTaskFactory(_repoMock, encryption, TimeProvider.System),
             Substitute.For<Aetheus.Back.Components.AiTasks.IAiTaskService>(),
             encryption, deployEnv, config, _secretMaskingMock, TimeProvider.System,
-            Substitute.For<ILogger<PipelineStepTaskDispatcher>>());
+            Substitute.For<ILogger<PipelineStepTaskDispatcher>>(),
+            _envFiles);
 
         var systemTasks = new PipelineSystemTaskFactory(
             _repoMock, servers, finalizer, definitions, _variableResolverMock,
@@ -330,7 +335,8 @@ public class PipelineRunServiceTests
 
         var launcher = new PipelineRunLauncher(
             _repoMock, _hubMock, _variableResolverMock, _auditMock, _authzMock, gitGraph,
-            config, runReader, planner, parameters, preparation, preflight, portGuard,
+            config, runReader, planner, parameters, preparation, preflight,
+            new PipelineConfigTemplatePreflight(pipelineGit, _configRepositoryMock), portGuard,
             new PipelineRefusedLaunchRecorder(
                 _repoMock, _hubMock, _auditMock,
                 new PipelineRunNotificationPublisher(_repoMock, _userNotifications), TimeProvider.System,
@@ -341,7 +347,7 @@ public class PipelineRunServiceTests
         return new PipelineRunService(
             _repoMock, _variableResolverMock, _loggerMock,
             finalizer, parameters, checkpoints, preparation,
-            new PipelineRunControlService(_repoMock, _hubMock, definitions, _auditMock),
+            new PipelineRunControlService(_repoMock, _hubMock, definitions, _auditMock, TimeProvider.System),
             triggerSteps, launcher, scheduler, preflight,
             new PipelineAdvisoryPreflightBuilder(
                 _repoMock, servers,
@@ -351,6 +357,28 @@ public class PipelineRunServiceTests
             runReader, definitions);
     }
 
+    /// <summary>A second engine over the same mocked repository, for a test that changes a collaborator the
+    /// shared engine is built without (<see cref="_envFiles"/>).</summary>
+    private PipelineRunService BuildSutWithOwnCollaborators()
+    {
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["GitLight:RunTokenKey"] = "pipeline-run-service-tests-signing-key"
+            })
+            .Build();
+        var encryption = Substitute.For<Aetheus.Back.Services.IEncryptionService>();
+        encryption.EncryptValue(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
+        encryption.DecryptValue(Arg.Any<string>()).Returns(ci => ci.Arg<string>());
+        var gitGraph = Substitute.For<IGitGraphRecorder>();
+        gitGraph.ResolveRunLinksAsync(Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns((new List<CommitLinkDto>(), new List<BranchLinkDto>()));
+        var domainEvents = Substitute.For<IDomainEventDispatcher>();
+        domainEvents
+            .DispatchAsync(Arg.Any<Aetheus.Back.Components.Pipelines.Events.PipelineRunCompletedEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        return BuildSut(config, _pipelineGitMock, encryption, gitGraph, domainEvents, out _);
+    }
     // --- TriggerRunAsync ---
 
     [Fact]
@@ -1577,7 +1605,7 @@ public class PipelineRunServiceTests
                 PipelineId = 1,
                 Status = PipelineStatus.Running,
                 AdditionalVariablesJson =
-                    $"{{\"{PipelineRunService.CancellationRequestedVariable}\":\"true\"}}",
+                    $"{{\"{PipelineRunHelpers.CancellationRequestedVariable}\":\"true\"}}",
                 Pipeline = new Pipeline
                 {
                     YamlDefinition = """
@@ -1623,7 +1651,7 @@ public class PipelineRunServiceTests
         {
             Id = 2,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -1670,7 +1698,7 @@ public class PipelineRunServiceTests
         {
             Id = 2,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -1771,8 +1799,8 @@ public class PipelineRunServiceTests
             [new PipelineStepRun { Id = 1, StageName = "e2e", StepName = "browser-test", Status = TaskExecutionStatus.Failed }]);
         _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([teardown]);
-        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunService.SystemPrepareStage, "integration"]);
-        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunService.SystemPrepareStage, "integration", "e2e"]);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage, "integration"]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage, "integration", "e2e"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -1834,10 +1862,10 @@ public class PipelineRunServiceTests
         _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([evidence, commit, rollback]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "Switch"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Switch"]);
         // Commit has not settled, so the rollback that names it is not eligible yet.
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "Switch"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Switch"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -1872,9 +1900,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => tracked.Where(step => step.Status == TaskExecutionStatus.Pending).ToList());
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage, "Switch" });
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage, "Switch" });
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage, "Switch", "Evidence" }
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage, "Switch", "Evidence" }
                 .Concat(tracked.Where(step => step.Status != TaskExecutionStatus.Pending).Select(step => step.StageName))
                 .ToList());
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
@@ -1980,9 +2008,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => tracked.Where(step => step.Status == TaskExecutionStatus.Pending).ToList());
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage });
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage });
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage, "Verify" }
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage, "Verify" }
                 .Concat(tracked.Where(step => step.Status != TaskExecutionStatus.Pending).Select(step => step.StageName))
                 .ToList());
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
@@ -2069,9 +2097,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => tracked.Where(step => step.Status == TaskExecutionStatus.Pending).ToList());
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage, "Evidence" });
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage, "Evidence" });
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => new List<string> { PipelineRunService.SystemPrepareStage, "Evidence" }
+            .Returns(_ => new List<string> { PipelineRunHelpers.SystemPrepareStage, "Evidence" }
                 .Concat(tracked.Where(step => step.Status != TaskExecutionStatus.Pending).Select(step => step.StageName))
                 .ToList());
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
@@ -2105,6 +2133,186 @@ public class PipelineRunServiceTests
         _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
     }
 
+    /// <summary>Recette R-39: blue-green with a confirmation window and its rollback (release-fast shape).</summary>
+    private const string ConfirmedBlueGreenYaml = """
+        name: release
+        trigger: manual
+        stages:
+          - name: Up
+            agent: linux-01
+            steps:
+              - name: start
+                type: bluegreen-up
+          - name: Confirm
+            agent: linux-01
+            approval_timeout_minutes: 10
+            depends_on: [Up]
+            steps:
+              - name: confirmed
+                shell: echo confirmed
+          - name: Rollback
+            agent: linux-01
+            condition: "failed()"
+            depends_on: [Confirm]
+            steps:
+              - name: restore
+                type: bluegreen-rollback
+        """;
+
+    /// <summary>The engine state once the rollback of a missed confirmation finished: only the workspace
+    /// cleanup is left. <paramref name="rollbackSucceeded"/> decides whether the previous version is back.</summary>
+    private (PipelineRun Run, PipelineStepRun Cleanup) ArrangeRollbackOfAMissedConfirmation(
+        bool rollbackSucceeded, ApprovalStatus decision = ApprovalStatus.TimedOut, DateTime? resumeDeadline = null)
+    {
+        var cleanup = new PipelineStepRun
+        {
+            Id = 9,
+            PipelineRunId = 1,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
+            StepName = "Cleanup",
+            Status = TaskExecutionStatus.Pending,
+            IsSystem = true
+        };
+        var run = new PipelineRun
+        {
+            Id = 1,
+            PipelineId = 1,
+            Status = PipelineStatus.Running,
+            ResolvedVariablesJson = "{}",
+            ResumeDeadline = resumeDeadline,
+            Pipeline = new Pipeline { YamlDefinition = ConfirmedBlueGreenYaml }
+        };
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "Rollback", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "Rollback", Arg.Any<CancellationToken>()).Returns(rollbackSucceeded
+            ? []
+            : [new PipelineStepRun { Id = 4, StageName = "Rollback", StepName = "restore", Status = TaskExecutionStatus.Failed }]);
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
+            .Returns(_ => cleanup.Status == TaskExecutionStatus.Pending ? [cleanup] : []);
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new PipelineApproval
+            {
+                Id = 7, PipelineRunId = 1, Scope = ApprovalScope.Pipeline, StageName = "Confirm", Status = decision,
+                TimeoutMinutes = 10, ResolvedAt = DateTime.UtcNow.AddMinutes(-3)
+            }
+        ]);
+        _repoMock.GetBlockingFailedStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns(rollbackSucceeded ? ["Confirm"] : ["Confirm", "Rollback"]);
+        _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
+        // Every user stage has settled: Confirm failed on its timeout, the rollback ran after it.
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns(rollbackSucceeded
+            ? [PipelineRunHelpers.SystemPrepareStage, "Up", "Rollback"]
+            : [PipelineRunHelpers.SystemPrepareStage, "Up"]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Up", "Confirm", "Rollback"]);
+        _repoMock.DidStagesAllSucceedAsync(1, Arg.Is<IReadOnlyCollection<string>>(s => s.Contains("Up")), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _repoMock.DidStagesAllSucceedAsync(1, Arg.Is<IReadOnlyCollection<string>>(s => s.Contains("Rollback")), Arg.Any<CancellationToken>())
+            .Returns(rollbackSucceeded);
+        _repoMock.TryParkRunAwaitingResumeAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetRunAffinityServerIdAsync(1, Arg.Any<CancellationToken>()).Returns(10);
+        _repoMock.FindOnlineServerByIdAsync(10, OsType.Unknown, Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 10, Name = "linux-01", OsType = OsType.Linux });
+        return (run, cleanup);
+    }
+
+    [Fact]
+    public async Task R39_AdvanceStageAsync_RolledBackAfterAMissedConfirmation_WaitsForAResumeInsteadOfEnding()
+    {
+        var (_, cleanup) = ArrangeRollbackOfAMissedConfirmation(rollbackSucceeded: true);
+
+        await _sut.AdvanceStageAsync(1, "Rollback", ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).TryParkRunAwaitingResumeAsync(
+            1, Arg.Is<DateTime>(deadline => deadline > DateTime.UtcNow.AddHours(23) && deadline <= DateTime.UtcNow.AddHours(24)),
+            Arg.Any<CancellationToken>());
+        // The workspace stays for the resume: the cleanup is not dispatched and the run is not finalized.
+        _repoMock.DidNotReceive().TrackTask(Arg.Is<ServerTask>(task => task.Name == "Cleanup"));
+        Assert.Equal(TaskExecutionStatus.Pending, cleanup.Status);
+        await _repoMock.DidNotReceive().UpdatePipelineRunStatusAsync(1, Arg.Any<PipelineStatus>(), Arg.Any<CancellationToken>());
+        await _clientProxyMock.Received(1).SendCoreAsync(
+            "PipelineRunAwaitingResume", Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A rollback that failed keeps today's behaviour: the cleanup runs and the run fails.</summary>
+    [Fact]
+    public async Task R39_AdvanceStageAsync_FailedRollbackAfterAMissedConfirmation_DoesNotWait()
+    {
+        var (_, cleanup) = ArrangeRollbackOfAMissedConfirmation(rollbackSucceeded: false);
+
+        await _sut.AdvanceStageAsync(1, "Rollback", ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.DidNotReceive().TryParkRunAwaitingResumeAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "Cleanup"));
+        Assert.Equal(TaskExecutionStatus.Assigned, cleanup.Status);
+    }
+
+    [Fact]
+    public async Task R39_AdvanceStageAsync_RefusedConfirmation_DoesNotWait()
+    {
+        var (_, cleanup) = ArrangeRollbackOfAMissedConfirmation(rollbackSucceeded: true, decision: ApprovalStatus.Rejected);
+
+        await _sut.AdvanceStageAsync(1, "Rollback", ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.DidNotReceive().TryParkRunAwaitingResumeAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "Cleanup"));
+        Assert.Equal(TaskExecutionStatus.Assigned, cleanup.Status);
+    }
+
+    /// <summary>The expiry sweep re-opened the run with its deadline past: this pass ends it (cleanup,
+    /// then the RolledBack status its steps earned) instead of parking it again.</summary>
+    [Fact]
+    public async Task R39_AdvanceStageAsync_AfterTheResumeWindowElapsed_CleansUpInsteadOfWaitingAgain()
+    {
+        var (_, cleanup) = ArrangeRollbackOfAMissedConfirmation(
+            rollbackSucceeded: true, resumeDeadline: DateTime.UtcNow.AddMinutes(-1));
+
+        await _sut.AdvanceStageAsync(1, "Rollback", ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.DidNotReceive().TryParkRunAwaitingResumeAsync(1, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "Cleanup"));
+        Assert.Equal(TaskExecutionStatus.Assigned, cleanup.Status);
+    }
+
+    [Fact]
+    public async Task R39_ResumeAwaitingRunAsync_GoesThroughTheControlService_WithTheEngineScheduler()
+    {
+        var run = new PipelineRun
+        {
+            Id = 1,
+            PipelineId = 1,
+            Status = PipelineStatus.AwaitingResume,
+            ResolvedVariablesJson = "{}",
+            Pipeline = new Pipeline { Id = 1, Name = "release", YamlDefinition = ConfirmedBlueGreenYaml }
+        };
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
+        _repoMock.ReopenAwaitingRunAsync(1, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                run.Status = PipelineStatus.Running;
+                return ResumeReopenOutcome.Reopened;
+            });
+        // The replayed stages are Pending again; no runner is online, so the pass dispatches nothing yet.
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new PipelineStepRun { Id = 2, PipelineRunId = 1, StageName = "Up", StepName = "start" },
+            new PipelineStepRun { Id = 3, PipelineRunId = 1, StageName = "Confirm", StepName = "confirmed" },
+            new PipelineStepRun { Id = 4, PipelineRunId = 1, StageName = "Rollback", StepName = "restore" }
+        ]);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage]);
+
+        await _sut.ResumeAwaitingRunAsync(1, "alice", TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).ReopenAwaitingRunAsync(
+            1, Arg.Is<IReadOnlyCollection<string>>(stages => stages.SequenceEqual(new[] { "Up", "Confirm", "Rollback" })),
+            Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
+        await _auditMock.Received(1).LogAsync("Resumed", "PipelineRun", 1, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        // The engine scheduler ran a dispatch pass over the replayed stages.
+        await _repoMock.Received().GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AdvanceStageAsync_FailureHandlerAlreadyRunning_DoesNotDispatchSystemCleanup()
     {
@@ -2129,7 +2337,7 @@ public class PipelineRunServiceTests
         {
             Id = 3,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -2220,7 +2428,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "deploy-app", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01", PipelineRunnerEnabled = true });
         ServerTask? dispatched = null;
@@ -2402,7 +2610,7 @@ public class PipelineRunServiceTests
         Assert.True(lint.ContinueOnError);
         Assert.False(lint.ContinueOnErrorForced);
         // The workspace clone stays blocking: without it nothing can run.
-        Assert.False(steps.Single(step => step.StageName == PipelineRunService.SystemPrepareStage).ContinueOnError);
+        Assert.False(steps.Single(step => step.StageName == PipelineRunHelpers.SystemPrepareStage).ContinueOnError);
     }
 
     [Fact]
@@ -2527,8 +2735,8 @@ public class PipelineRunServiceTests
         _repoMock.FindOnlineServerByIdAsync(22, OsType.Unknown, Arg.Any<CancellationToken>()).Returns((Server?)null);
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => scan.Status == TaskExecutionStatus.Pending ? [scan] : []);
-        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunService.SystemPrepareStage, "build"]);
-        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunService.SystemPrepareStage, "build"]);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.HasFailedArtifactCollectionAsync(1, Arg.Any<CancellationToken>()).Returns(true);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -2612,7 +2820,7 @@ public class PipelineRunServiceTests
         {
             Id = 2,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -2638,6 +2846,929 @@ public class PipelineRunServiceTests
         Assert.Equal(TaskExecutionStatus.Assigned, cleanup.Status);
         await _repoMock.DidNotReceive().UpdatePipelineRunStatusAsync(
             1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+    }
+
+    // R-38: a vault the run needs vanished after it started. Resolving the variables for the next stage refuses
+    // (BadRequestException), which used to escape the scheduler: the run stayed Running with Pending steps, and the
+    // recovery sweep re-drove it every minute, logging the same Critical until the one-hour stuck-run backstop. The
+    // refusal now stops the run with its reason, as the variable guard intends ("must stop the run").
+    private const string MissingVaultYaml = """
+        name: vault-gone
+        trigger: manual
+        vaults:
+          - gone-vault
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+        """;
+
+    private PipelineStepRun ArrangeRunWhoseNextStageIsRefused(PipelineStepRun pending)
+    {
+        _vaultMock.ResolveVaultSecretsWithCrossAccessAndNamesAsync(Arg.Any<List<string>>(), 7, Arg.Any<CancellationToken>())
+            .Returns((new Dictionary<string, string>(), new HashSet<string>()));
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([pending]);
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(
+            new PipelineRun
+            {
+                Id = 1,
+                PipelineId = 7,
+                Status = PipelineStatus.Running,
+                ResolvedVariablesJson = "{}",
+                Pipeline = new Pipeline { Id = 7, YamlDefinition = MissingVaultYaml }
+            });
+        return pending;
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenTheNextStageIsRefused_StopsTheRunWithTheReasonInsteadOfThrowing()
+    {
+        var build = ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun
+        {
+            Id = 3,
+            PipelineRunId = 1,
+            StageName = "build",
+            StepName = "compile",
+            Status = TaskExecutionStatus.Pending
+        });
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).AppendRunWarningsAsync(1,
+            Arg.Is<IReadOnlyCollection<string>>(warnings =>
+                warnings.Single().Contains("gone-vault", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        Assert.Equal(TaskExecutionStatus.Failed, build.Status);
+        Assert.Contains("gone-vault", build.FailureReason, StringComparison.Ordinal);
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task AdvanceStageAsync_WhenTheNextStageIsRefused_StopsTheRunSoTheCompletingTaskIsNotRejected()
+    {
+        var build = ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun
+        {
+            Id = 3,
+            PipelineRunId = 1,
+            StageName = "build",
+            StepName = "compile",
+            Status = TaskExecutionStatus.Pending
+        });
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "prepare", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "prepare", Arg.Any<CancellationToken>()).Returns([]);
+
+        await _sut.AdvanceStageAsync(1, "prepare", TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, build.Status);
+        Assert.Contains("gone-vault", build.FailureReason, StringComparison.Ordinal);
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenTheNextStageIsRefused_CancelsTheCleanupItCannotRunAndSaysSo()
+    {
+        var cleanup = new PipelineStepRun
+        {
+            Id = 4,
+            PipelineRunId = 1,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
+            StepName = "Cleanup",
+            Status = TaskExecutionStatus.Pending,
+            IsSystem = true
+        };
+        var build = new PipelineStepRun
+        {
+            Id = 3,
+            PipelineRunId = 1,
+            StageName = "build",
+            StepName = "compile",
+            Status = TaskExecutionStatus.Pending
+        };
+        ArrangeRunWhoseNextStageIsRefused(build);
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([build, cleanup]);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, build.Status);
+        Assert.Contains("gone-vault", build.FailureReason, StringComparison.Ordinal);
+        // The cleanup resolves the same variables: it would be refused too, so it is cancelled, not left Pending.
+        Assert.Equal(TaskExecutionStatus.Cancelled, cleanup.Status);
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+        await _repoMock.Received(1).AppendRunWarningsAsync(1,
+            Arg.Is<IReadOnlyCollection<string>>(warnings =>
+                warnings.Single().Contains("cleanup was not run", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenTheNextStageIsRefusedWhileAnotherStepRuns_LeavesTheRunToThatStep()
+    {
+        var build = ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun
+        {
+            Id = 3,
+            PipelineRunId = 1,
+            StageName = "build",
+            StepName = "compile",
+            Status = TaskExecutionStatus.Pending
+        });
+        _repoMock.HasAnyRunningStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Pending, build.Status);
+        await _repoMock.DidNotReceive().UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_AfterTheCleanupOfARefusedRun_FinalizesFailedFromItsFailedSteps()
+    {
+        // The pass that follows the cleanup completion: no step is pending, the refused steps are Failed.
+        // The variables are still refused, but nothing is left to dispatch, so the run just finalizes.
+        ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun { Id = 3, PipelineRunId = 1, StageName = "build", StepName = "compile" });
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Success, Arg.Any<CancellationToken>());
+    }
+
+    // R-38 (follow-up): the refusal of the first R-38 fix came from resolving the run's variables. The same
+    // BadRequestException is raised from every other place a scheduling pass can refuse the run's
+    // configuration while it creates a stage's tasks: a configuration template the renderer refuses, a
+    // repository or configuration read refused, the variables of the cleanup, of a resume or of an artifact
+    // collection. Each used to escape the scheduler the same way: the run stayed Running with Pending steps,
+    // the recovery sweep re-drove it every minute and logged a Critical each time. Every one now stops the run.
+    private const string ExposeApacheProxyYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: expose
+            agent: linux-01
+            steps:
+              - name: proxy
+                type: apache-proxy
+                server_name: app.example.com
+                upstream: http://127.0.0.1:8080
+        """;
+
+    private const string ExposeApacheConfigYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: expose
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo exposing
+              - name: config
+                type: apache-config
+                config_files:
+                  "app.example.com.conf": ".pipeline/configs/apache/site.conf"
+        """;
+
+    private static PipelineStepRun ExposeStep(int id, string name) => new()
+    {
+        Id = id,
+        PipelineRunId = 1,
+        StageName = "expose",
+        StepName = name,
+        Status = TaskExecutionStatus.Pending
+    };
+
+    private void ArrangeRunningStage(string yaml, string variablesJson, params PipelineStepRun[] steps)
+        => ArrangeAdvanceToStageWithVariables(yaml, "expose", variablesJson, PipelineStatus.Running, steps);
+    private async Task AssertTheRunWasStoppedAsync(string reasonFragment, params PipelineStepRun[] failedSteps)
+    {
+        foreach (var step in failedSteps)
+        {
+            Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+            Assert.Contains(reasonFragment, step.FailureReason, StringComparison.Ordinal);
+        }
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await _repoMock.Received().AppendRunWarningsAsync(1,
+            Arg.Is<IReadOnlyCollection<string>>(warnings =>
+                warnings.Any(warning => warning.Contains(reasonFragment, StringComparison.Ordinal))),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenAnApacheProxyTemplateIsRefusedByTheRenderer_StopsTheRunInsteadOfThrowing()
+    {
+        var proxy = ExposeStep(2, "proxy");
+        ArrangeRunningStage(ExposeApacheProxyYaml, "{}", proxy);
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/reverse-proxy-http.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns("ServerName #{NOT_DEFINED}#\n");
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("'NOT_DEFINED' is not defined", proxy);
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Theory]
+    [InlineData("ServerName #{NOT_DEFINED}#\n", "'NOT_DEFINED' is not defined")]
+    [InlineData("ServerName #{WITH_BREAK}#\n", "forbidden line break")]
+    [InlineData("ServerName #{ SPACED }#\n", "invalid or unresolved token")]
+    [InlineData("OVERSIZE", "safety limit")]
+    public async Task ReconcileRunAsync_WhenAnApacheConfigTemplateIsRefusedByTheRenderer_StopsTheRunInsteadOfThrowing(
+        string template, string reasonFragment)
+    {
+        var config = ExposeStep(3, "config");
+        ArrangeRunningStage(ExposeApacheConfigYaml, "{\"WITH_BREAK\":\"a\\nb\"}", config);
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/site.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns(template == "OVERSIZE" ? new string('x', 256 * 1024 + 1) : template);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync(reasonFragment, config);
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenTheTemplateReadIsRefused_StopsTheRunInsteadOfThrowing()
+    {
+        // The read refuses (several repositories in the project, a source repository detached since the run
+        // started...) with the same BadRequestException the renderer raises.
+        var proxy = ExposeStep(2, "proxy");
+        ArrangeRunningStage(ExposeApacheProxyYaml, "{}", proxy);
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/reverse-proxy-http.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns(Task.FromException<string?>(new BadRequestException(
+                "Project 7 has multiple repositories; select an explicit pipeline source repository.")));
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("multiple repositories", proxy);
+    }
+
+    [Fact]
+    public async Task AdvanceStageAsync_WhenTheTemplateReadIsRefused_StopsTheRunSoTheCompletingTaskIsNotRejected()
+    {
+        var notify = ExposeStep(2, "notify");
+        var config = ExposeStep(3, "config");
+        ArrangeRunningStage(ExposeApacheConfigYaml, "{}", notify, config);
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/site.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns(Task.FromException<string?>(new BadRequestException(
+                "Source repository 11 does not belong to project 7.")));
+
+        await _sut.AdvanceStageAsync(1, "build", ct: TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("does not belong to project 7", config);
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenALaterStepOfTheStageIsRefused_FailsTheWholeStageAndKeepsNoTaskOfIt()
+    {
+        // 'notify' is dispatched first (its task is tracked), then 'config' is refused: nothing of the stage
+        // may stay behind, neither the tracked task nor the half-dispatched step.
+        var notify = ExposeStep(2, "notify");
+        var config = ExposeStep(3, "config");
+        ArrangeRunningStage(ExposeApacheConfigYaml, "{}", notify, config);
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/site.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns("ServerName #{NOT_DEFINED}#\n");
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        _repoMock.Received(1).DiscardUnsavedInsertsSince(Arg.Any<UnsavedInsertsMark>());
+        await AssertTheRunWasStoppedAsync("'NOT_DEFINED' is not defined", notify, config);
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenALaterStepOfTheStageIsRefused_SavesNoTaskOfTheStage()
+    {
+        // The unit of work behind the mocked repository is a real one (EF in-memory), so what the stop saves is
+        // what the database would receive: the task of 'notify', tracked before 'config' was refused, must
+        // not be in it, and the step must not keep the link to it.
+        var options = new DbContextOptionsBuilder<Aetheus.Back.Data.AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var db = new Aetheus.Back.Data.AppDbContext(options);
+        var unitOfWork = new PipelineRepository(
+            db, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PipelineRepository>.Instance,
+            new Aetheus.Back.Components.Tasks.PipelineTaskLifecycleRepository(db, TimeProvider.System),
+            new PipelineRunLineageRepository(db));
+        var notify = ExposeStep(0, "notify");
+        var config = ExposeStep(0, "config");
+        db.PipelineStepRuns.AddRange(notify, config);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        ArrangeRunningStage(ExposeApacheConfigYaml, "{}", notify, config);
+        _repoMock.When(repository => repository.TrackTask(Arg.Any<ServerTask>()))
+            .Do(call => unitOfWork.TrackTask(call.Arg<ServerTask>()));
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => unitOfWork.SaveChangesAsync(call.Arg<CancellationToken>()));
+        _repoMock.MarkUnsavedInserts().Returns(_ => unitOfWork.MarkUnsavedInserts());
+        _repoMock.When(repository => repository.DiscardUnsavedInsertsSince(Arg.Any<UnsavedInsertsMark>()))
+            .Do(call => unitOfWork.DiscardUnsavedInsertsSince(call.Arg<UnsavedInsertsMark>()));
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/site.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns("ServerName #{NOT_DEFINED}#\n");
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Empty(await db.Tasks.ToListAsync(TestContext.Current.CancellationToken));
+        var saved = await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, step =>
+        {
+            Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+            Assert.Null(step.TaskId);
+        });
+    }
+
+    private const string ExposeGateWithoutStatusesYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: expose
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo exposing
+              - name: gate
+                type: gate-status
+        """;
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenALaterStepFactoryRefusesItsStep_SavesNoTaskOfTheStage()
+    {
+        // Sibling of the test above for a refusal that is not a BadRequestException: a step factory (here
+        // gate-status without any status variable) returns its reason, and the run is failed by
+        // FailRunOnFactoryErrorAsync. The task of 'notify', tracked before 'gate' was refused, must not be
+        // saved by the failing run's own save.
+        var options = new DbContextOptionsBuilder<Aetheus.Back.Data.AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var db = new Aetheus.Back.Data.AppDbContext(options);
+        var unitOfWork = new PipelineRepository(
+            db, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PipelineRepository>.Instance,
+            new Aetheus.Back.Components.Tasks.PipelineTaskLifecycleRepository(db, TimeProvider.System),
+            new PipelineRunLineageRepository(db));
+        var notify = ExposeStep(0, "notify");
+        var gate = ExposeStep(0, "gate");
+        db.PipelineStepRuns.AddRange(notify, gate);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        ArrangeRunningStage(ExposeGateWithoutStatusesYaml, "{}", notify, gate);
+        _repoMock.When(repository => repository.TrackTask(Arg.Any<ServerTask>()))
+            .Do(call => unitOfWork.TrackTask(call.Arg<ServerTask>()));
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => unitOfWork.SaveChangesAsync(call.Arg<CancellationToken>()));
+        _repoMock.MarkUnsavedInserts().Returns(_ => unitOfWork.MarkUnsavedInserts());
+        _repoMock.When(repository => repository.DiscardUnsavedInsertsSince(Arg.Any<UnsavedInsertsMark>()))
+            .Do(call => unitOfWork.DiscardUnsavedInsertsSince(call.Arg<UnsavedInsertsMark>()));
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        Assert.Empty(await db.Tasks.ToListAsync(TestContext.Current.CancellationToken));
+        var saved = await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, step =>
+        {
+            Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+            Assert.Null(step.TaskId);
+        });
+    }
+
+    private const string ExposeAiAfterAShellStepYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: expose
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo exposing
+              - name: review
+                type: ai
+                profile: claude-sonnet
+                prompt: Review the commits.
+        """;
+
+    private const string ExposeMatrixYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: expose
+            matrix:
+              os: [linux, windows]
+            steps:
+              - name: pkg
+                shell: echo pkg
+        """;
+
+    /// <summary>A real unit of work (EF in-memory) behind the mocked repository, so what a failing run saves is
+    /// what the database would receive. The steps are persisted first, as a launched run has them. Call it AFTER ArrangeRunningStage, which stubs SaveChangesAsync itself.</summary>
+    private async Task<Aetheus.Back.Data.AppDbContext> ArrangeRealUnitOfWorkAsync(params PipelineStepRun[] steps)
+    {
+        var options = new DbContextOptionsBuilder<Aetheus.Back.Data.AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var db = new Aetheus.Back.Data.AppDbContext(options);
+        var unitOfWork = new PipelineRepository(
+            db, TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PipelineRepository>.Instance,
+            new Aetheus.Back.Components.Tasks.PipelineTaskLifecycleRepository(db, TimeProvider.System),
+            new PipelineRunLineageRepository(db));
+        db.PipelineStepRuns.AddRange(steps);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        _repoMock.When(repository => repository.TrackTask(Arg.Any<ServerTask>()))
+            .Do(call => unitOfWork.TrackTask(call.Arg<ServerTask>()));
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(call => unitOfWork.SaveChangesAsync(call.Arg<CancellationToken>()));
+        _repoMock.MarkUnsavedInserts().Returns(_ => unitOfWork.MarkUnsavedInserts());
+        _repoMock.When(repository => repository.DiscardUnsavedInsertsSince(Arg.Any<UnsavedInsertsMark>()))
+            .Do(call => unitOfWork.DiscardUnsavedInsertsSince(call.Arg<UnsavedInsertsMark>()));
+        _repoMock.CancelActiveTasksOfStepRunsAsync(
+                Arg.Any<int>(), Arg.Any<IReadOnlyCollection<int>>(), Arg.Any<CancellationToken>())
+            .Returns(call => unitOfWork.CancelActiveTasksOfStepRunsAsync(
+                call.ArgAt<int>(0), call.ArgAt<IReadOnlyCollection<int>>(1), call.ArgAt<CancellationToken>(2)));
+        return db;
+    }
+
+    private static async Task AssertNoTaskWasSavedAndTheStepsFailedAsync(
+        Aetheus.Back.Data.AppDbContext db, int expectedStepCount)
+    {
+        Assert.Empty(await db.Tasks.ToListAsync(TestContext.Current.CancellationToken));
+        var saved = await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(expectedStepCount, saved.Count);
+        Assert.All(saved, step =>
+        {
+            Assert.Equal(TaskExecutionStatus.Failed, step.Status);
+            Assert.Null(step.TaskId);
+        });
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenALaterStepIsANonAdvisoryAiStepWithNoProfile_SavesNoTaskOfTheStage()
+    {
+        // Same defect class as the factory refusal: 'notify' is tracked, then the AI step is refused (the
+        // pipeline belongs to no organization, so no AI runner profile can be resolved) and the run is failed
+        // by CreateAiTaskAsync. The task of 'notify' must not be saved by that failing save.
+        var notify = ExposeStep(0, "notify");
+        var review = ExposeStep(0, "review");
+        ArrangeRunningStage(ExposeAiAfterAShellStepYaml, "{}", notify, review);
+        await using var db = await ArrangeRealUnitOfWorkAsync(notify, review);
+        _repoMock.GetPipelineOrganizationIdAsync(1, Arg.Any<CancellationToken>()).Returns((int?)null);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await AssertNoTaskWasSavedAndTheStepsFailedAsync(db, 2);
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenALaterMatrixLegHasNoRunner_SavesNoTaskOfTheStage()
+    {
+        // The linux leg is dispatched (its task is tracked), then the windows leg finds no online runner and
+        // the run is failed from ResolveAndValidateLegAsync's error. Nothing of the stage may be saved, and
+        // the steps of the leg already dispatched fail with the stage, not only those of the refused leg.
+        var linux = ExposeStep(0, "pkg [linux]");
+        linux.MatrixLeg = "linux";
+        var windows = ExposeStep(0, "pkg [windows]");
+        windows.MatrixLeg = "windows";
+        ArrangeRunningStage(ExposeMatrixYaml, "{}", linux, windows);
+        await using var db = await ArrangeRealUnitOfWorkAsync(linux, windows);
+        _repoMock.FindAnyOnlineRunnerAsync(Arg.Any<int?>(), OsType.Windows, Arg.Any<CancellationToken>())
+            .Returns((Server?)null);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "pkg [linux]"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await AssertNoTaskWasSavedAndTheStepsFailedAsync(db, 2);
+    }
+
+    private const string TwoIndependentStagesSecondRefusedYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: alpha
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo alpha
+          - name: beta
+            agent: linux-01
+            steps:
+              - name: gate
+                type: gate-status
+        """;
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenASecondIndependentStageOfThePassIsRefused_SavesNoTaskOfTheFirstStage()
+    {
+        // Two stages without depends_on are ready in the same pass. 'alpha' is valid and its task is queued;
+        // 'beta' is refused (gate-status without any status variable). The run is failed, so the task of
+        // 'alpha' must not be written by the failing save: an agent could otherwise execute a task of a
+        // failed run. Both stages' steps fail with the reason and none keeps a link to a task.
+        var notify = ExposeStep(0, "notify");
+        notify.StageName = "alpha";
+        var gate = ExposeStep(0, "gate");
+        gate.StageName = "beta";
+        ArrangeRunningStage(TwoIndependentStagesSecondRefusedYaml, "{}", notify, gate);
+        await using var db = await ArrangeRealUnitOfWorkAsync(notify, gate);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await AssertNoTaskWasSavedAndTheStepsFailedAsync(db, 2);
+    }
+
+    private const string ThreeIndependentStagesMiddleSkippedLastRefusedYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: alpha
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo alpha
+          - name: beta
+            agent: linux-01
+            condition: cancelled()
+            steps:
+              - name: skipped
+                shell: echo beta
+          - name: gamma
+            agent: linux-01
+            steps:
+              - name: gate
+                type: gate-status
+        """;
+
+    /// <summary>Every task of the database that an agent could still pick up or keep running.</summary>
+    private static async Task<List<ServerTask>> ExecutableTasksAsync(Aetheus.Back.Data.AppDbContext db) =>
+        (await db.Tasks.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken))
+            .Where(task => task.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned
+                or TaskExecutionStatus.Running)
+            .ToList();
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenAStageSkippedByItsConditionSavesMidPassAndALaterStageIsRefused_LeavesNoExecutableTask()
+    {
+        // 'alpha' is valid and its task is queued. 'beta' is skipped for its false condition, which saves
+        // mid-pass and so writes alpha's queued task. 'gamma' is then refused (gate-status without status
+        // variables): the discard of the unsaved inserts can no longer reach alpha's task, which is already
+        // in the database for a run that is failed. No agent may be able to execute it.
+        var notify = ExposeStep(0, "notify");
+        notify.StageName = "alpha";
+        var skipped = ExposeStep(0, "skipped");
+        skipped.StageName = "beta";
+        var gate = ExposeStep(0, "gate");
+        gate.StageName = "gamma";
+        ArrangeRunningStage(ThreeIndependentStagesMiddleSkippedLastRefusedYaml, "{}", notify, skipped, gate);
+        await using var db = await ArrangeRealUnitOfWorkAsync(notify, skipped, gate);
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        Assert.Empty(await ExecutableTasksAsync(db));
+        var saved = (await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken))
+            .ToDictionary(step => step.StepName);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["notify"].Status);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["gate"].Status);
+        Assert.Equal(TaskExecutionStatus.Cancelled, saved["skipped"].Status);
+        Assert.NotNull(saved["skipped"].SkippedCondition);
+    }
+
+    private const string ValidEnvironmentStageThenRefusedStageYaml = """
+        name: expose
+        trigger: manual
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: compile
+                shell: dotnet build
+          - name: alpha
+            agent: linux-01
+            steps:
+              - name: notify
+                shell: echo alpha
+          - name: beta
+            environment: prod
+            steps:
+              - name: publish
+                shell: echo beta
+          - name: gamma
+            agent: linux-01
+            steps:
+              - name: gate
+                type: gate-status
+        """;
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenAnEnvironmentCheckFailureSavesMidPassAndALaterStageIsRefused_LeavesNoExecutableTask()
+    {
+        // The failed required check of 'beta' saves its Failed steps mid-pass, which writes the task queued
+        // for 'alpha'; 'gamma' is then refused. The saved task of 'alpha' must be cancelled with the run.
+        var notify = ExposeStep(0, "notify");
+        notify.StageName = "alpha";
+        var publish = ExposeStep(0, "publish");
+        publish.StageName = "beta";
+        var gate = ExposeStep(0, "gate");
+        gate.StageName = "gamma";
+        ArrangeRunningStage(ValidEnvironmentStageThenRefusedStageYaml, "{}", notify, publish, gate);
+        await using var db = await ArrangeRealUnitOfWorkAsync(notify, publish, gate);
+        ArrangeEnvironment(new EnvironmentCheck
+        {
+            Name = "unsupported",
+            Type = EnvironmentCheckType.TemplateRequirement,
+            IsRequired = true
+        });
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        Assert.Empty(await ExecutableTasksAsync(db));
+        var saved = (await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken))
+            .ToDictionary(step => step.StepName);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["notify"].Status);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["publish"].Status);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["gate"].Status);
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenAnApprovalSavesMidPassAndALaterStageIsRefused_LeavesNoExecutableTask()
+    {
+        // The approval row of 'beta' is added through the shared unit of work, which saves and so writes the
+        // task queued for 'alpha'. The run was no longer Running (the transition is refused), so the pass
+        // goes on, dispatches 'beta' too, and 'gamma' is refused. Neither saved task may stay executable.
+        var notify = ExposeStep(0, "notify");
+        notify.StageName = "alpha";
+        var publish = ExposeStep(0, "publish");
+        publish.StageName = "beta";
+        var gate = ExposeStep(0, "gate");
+        gate.StageName = "gamma";
+        ArrangeRunningStage(ValidEnvironmentStageThenRefusedStageYaml, "{}", notify, publish, gate);
+        await using var db = await ArrangeRealUnitOfWorkAsync(notify, publish, gate);
+        ArrangeEnvironment();
+        _repoMock.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new Aetheus.Back.Data.Entities.Environment { Id = 6, Name = "prod", RequireApproval = true });
+        _repoMock.GetApprovalsAsync(1, Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.AddApprovalAsync(Arg.Any<PipelineApproval>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                db.PipelineApprovals.Add(call.Arg<PipelineApproval>());
+                await db.SaveChangesAsync(call.Arg<CancellationToken>());
+            });
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Single(await db.PipelineApprovals.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken));
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "notify"));
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        Assert.Empty(await ExecutableTasksAsync(db));
+        var saved = (await db.PipelineStepRuns.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken))
+            .ToDictionary(step => step.StepName);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["notify"].Status);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["publish"].Status);
+        Assert.Equal(TaskExecutionStatus.Failed, saved["gate"].Status);
+    }
+
+    [Fact]
+    public async Task ReconcileRunAsync_WhenATemplateIsRefusedAndTheCleanupCanRun_PurgesTheWorkspaceBeforeEndingTheRun()
+    {
+        // The refusal does not come from the variables, so the cleanup is not refused: it is dispatched, and its
+        // completion finalizes the run from the failed step (the run is not closed under it).
+        var config = ExposeStep(3, "config");
+        var cleanup = new PipelineStepRun
+        {
+            Id = 4,
+            PipelineRunId = 1,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
+            StepName = "Cleanup",
+            Status = TaskExecutionStatus.Pending,
+            IsSystem = true
+        };
+        ArrangeRunningStage(ExposeApacheConfigYaml, "{}", config);
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([config, cleanup]);
+        _repoMock.GetRunAffinityServerIdAsync(1, Arg.Any<CancellationToken>()).Returns(10);
+        _repoMock.FindOnlineServerByIdAsync(10, OsType.Unknown, Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 10, Name = "linux-01", OsType = OsType.Linux });
+        _pipelineGitMock.ReadProjectConfigAtRevisionAsync(
+                7, ".pipeline/configs/apache/site.conf", DefaultCommit, Arg.Any<CancellationToken>(), 11)
+            .Returns("ServerName #{NOT_DEFINED}#\n");
+
+        await _sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, config.Status);
+        Assert.Equal(TaskExecutionStatus.Assigned, cleanup.Status);
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "Cleanup"));
+        await _repoMock.DidNotReceive().UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().AppendRunWarningsAsync(1,
+            Arg.Is<IReadOnlyCollection<string>>(warnings =>
+                warnings.Any(warning => warning.Contains("cleanup was not run", StringComparison.Ordinal))),
+            Arg.Any<CancellationToken>());
+    }
+    [Fact]
+    public async Task ReconcileRunAsync_WhenTheEnvTemplateReadIsRefused_StopsTheRunInsteadOfThrowing()
+    {
+        const string yaml = """
+            name: expose
+            trigger: manual
+            stages:
+              - name: build
+                agent: linux-01
+                steps:
+                  - name: compile
+                    shell: dotnet build
+              - name: expose
+                agent: linux-01
+                steps:
+                  - name: start
+                    shell: ./start.sh
+                    env_template: .pipeline/configs/app.env
+            """;
+        var start = ExposeStep(2, "start");
+        ArrangeRunningStage(yaml, "{}", start);
+        var configRepository = Substitute.For<IProjectConfigRepositoryService>();
+        configRepository.ReadAsync(
+                7, ".pipeline/configs/app.env", Arg.Any<string?>(), 11, Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<string?>(new BadRequestException(
+                "Project 7 has multiple repositories; select an explicit pipeline source repository.")));
+        _envFiles = new PipelineEnvFilePreparer(_repoMock, configRepository, _secretMaskingMock);
+        var sut = BuildSutWithOwnCollaborators();
+
+        await sut.ReconcileRunAsync(1, TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("multiple repositories", start);
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task ResumeAfterApprovalAsync_WhenTheRunsConfigurationIsRefused_StopsTheRunInsteadOfThrowing()
+    {
+        var build = ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun
+        {
+            Id = 3,
+            PipelineRunId = 1,
+            StageName = "build",
+            StepName = "compile",
+            Status = TaskExecutionStatus.Pending
+        });
+        // Read waiting for the approval first, then running again once the resume flipped it.
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(
+            new PipelineRun
+            {
+                Id = 1,
+                PipelineId = 7,
+                Status = PipelineStatus.WaitingForApproval,
+                ResolvedVariablesJson = "{}",
+                Pipeline = new Pipeline { Id = 7, YamlDefinition = MissingVaultYaml }
+            },
+            new PipelineRun
+            {
+                Id = 1,
+                PipelineId = 7,
+                Status = PipelineStatus.Running,
+                ResolvedVariablesJson = "{}",
+                Pipeline = new Pipeline { Id = 7, YamlDefinition = MissingVaultYaml }
+            });
+        _repoMock.TryTransitionPipelineRunStatusAsync(
+                1, PipelineStatus.WaitingForApproval, PipelineStatus.Running, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        await _sut.ResumeAfterApprovalAsync(1, ct: TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("gone-vault", build);
+    }
+
+    [Fact]
+    public async Task AdvanceStageAsync_WhenTheCleanupOfAFailedRunIsRefused_StopsTheRunInsteadOfThrowing()
+    {
+        var cleanup = new PipelineStepRun
+        {
+            Id = 4,
+            PipelineRunId = 1,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
+            StepName = "Cleanup",
+            Status = TaskExecutionStatus.Pending,
+            IsSystem = true
+        };
+        ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun { Id = 3, PipelineRunId = 1, StageName = "build", StepName = "compile" });
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([cleanup]);
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "build", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "build", Arg.Any<CancellationToken>()).Returns(
+            [new PipelineStepRun { Id = 3, StageName = "build", StepName = "compile", Status = TaskExecutionStatus.Failed }]);
+
+        await _sut.AdvanceStageAsync(1, "build", ct: TestContext.Current.CancellationToken);
+
+        // The cleanup resolves the variables the run is refused: it is cancelled, and the warning says so.
+        Assert.Equal(TaskExecutionStatus.Cancelled, cleanup.Status);
+        await _repoMock.Received(1).UpdatePipelineRunStatusAsync(
+            1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+        await _repoMock.Received().AppendRunWarningsAsync(1,
+            Arg.Is<IReadOnlyCollection<string>>(warnings =>
+                warnings.Any(warning => warning.Contains("cleanup was not run", StringComparison.Ordinal))),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AdvanceStageAsync_WhenTheArtifactCollectionOfAStageIsRefused_StopsTheRunInsteadOfThrowing()
+    {
+        const string yaml = """
+            name: artifacts
+            trigger: manual
+            vaults:
+              - gone-vault
+            stages:
+              - name: build
+                artifacts:
+                  - out/**
+                steps:
+                  - name: compile
+                    shell: dotnet build
+            """;
+        var producer = new Server { Id = 22, Name = "producer", OrganizationId = 10, OsType = OsType.Linux };
+        ArrangeRunWhoseNextStageIsRefused(new PipelineStepRun { Id = 3, PipelineRunId = 1, StageName = "build", StepName = "compile" });
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(
+            new PipelineRun
+            {
+                Id = 1,
+                PipelineId = 7,
+                Status = PipelineStatus.Running,
+                ResolvedVariablesJson = "{}",
+                Pipeline = new Pipeline { Id = 7, Name = "artifacts", YamlDefinition = yaml }
+            });
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "build", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "build", Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.GetPipelineOrganizationIdAsync(7, Arg.Any<CancellationToken>()).Returns(10);
+        _repoMock.GetStageProducerServerIdAsync(1, "build", Arg.Any<CancellationToken>()).Returns(22);
+        _repoMock.FindOnlineServerByIdAsync(22, OsType.Unknown, Arg.Any<CancellationToken>()).Returns(producer);
+
+        await _sut.AdvanceStageAsync(1, "build", ct: TestContext.Current.CancellationToken);
+
+        await AssertTheRunWasStoppedAsync("gone-vault");
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
     }
 
     [Fact]
@@ -2688,7 +3819,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([pendingStep]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
         _repoMock.TrackTask(Arg.Any<ServerTask>());
@@ -2902,7 +4033,7 @@ public class PipelineRunServiceTests
                 new PipelineStepRun { Id = 4, StageName = "jobC", StepName = "c", PipelineRunId = 1 }
             ]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns([]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
@@ -2963,7 +4094,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 3, StageName = "jobB", StepName = "b", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         // jobA is currently running - fills the single max_parallel slot.
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns(["jobA"]);
@@ -3041,7 +4172,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "ship", StepName = "tag-release", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns([]);
         _repoMock.GetPipelineProjectIdAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>())
@@ -3096,12 +4227,12 @@ public class PipelineRunServiceTests
             Pipeline = new Pipeline { Id = 1, ProjectId = 7, YamlDefinition = yaml }
         };
 
-        _repoMock.AreAllStepsInStageCompletedAsync(1, PipelineRunService.SystemPrepareStage, Arg.Any<CancellationToken>()).Returns(true);
-        _repoMock.GetFailedStepRunsInStageAsync(1, PipelineRunService.SystemPrepareStage, Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.AreAllStepsInStageCompletedAsync(1, PipelineRunHelpers.SystemPrepareStage, Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, PipelineRunHelpers.SystemPrepareStage, Arg.Any<CancellationToken>()).Returns([]);
         _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns(
             [new PipelineStepRun { Id = 2, StageName = "rollback", StepName = "redeploy", PipelineRunId = 1 }]);
-        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunService.SystemPrepareStage]);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([PipelineRunHelpers.SystemPrepareStage]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([]);
         _repoMock.GetPipelineProjectIdAsync(run.Pipeline, Arg.Any<CancellationToken>()).Returns(7);
         _repoMock.FindOnlineDeployTargetAsync(null, null, "linux-01", Arg.Any<OsType>(), Arg.Is<int?>(organization => organization == null), Arg.Any<int?>(), Arg.Any<CancellationToken>())
@@ -3112,7 +4243,7 @@ public class PipelineRunServiceTests
                 new PipelineArtifact { Id = 42, Name = "release", FilePath = "7/1/1/release.zip" }, 4));
         _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-        await _sut.AdvanceStageAsync(1, PipelineRunService.SystemPrepareStage, ct: TestContext.Current.CancellationToken);
+        await _sut.AdvanceStageAsync(1, PipelineRunHelpers.SystemPrepareStage, ct: TestContext.Current.CancellationToken);
 
         await _artifactRepoMock.Received(1).FindReleaseArtifactSelectionAsync(
             7, "4", null, Arg.Any<CancellationToken>());
@@ -3939,7 +5070,7 @@ public class PipelineRunServiceTests
             task.Operation == OperationKind.PipelineRestoreArtifacts));
         await _repoMock.Received(1).AppendRunWarningsAsync(
             1,
-            Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Any(message => message.Contains("explicit fallback", StringComparison.Ordinal))),
+            Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Any(message => PipelineRunNotices.CodeOf(message) == PipelineRunNotices.BaselineAbsent)),
             Arg.Any<CancellationToken>());
     }
 
@@ -4037,7 +5168,7 @@ public class PipelineRunServiceTests
             task.Operation == OperationKind.PipelineRestoreArtifacts));
         await _repoMock.Received(1).AppendRunWarningsAsync(
             1,
-            Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Any(message => message.Contains("explicit fallback", StringComparison.Ordinal))),
+            Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Any(message => PipelineRunNotices.CodeOf(message) == PipelineRunNotices.BaselineAbsent)),
             Arg.Any<CancellationToken>());
     }
 
@@ -4258,14 +5389,14 @@ public class PipelineRunServiceTests
             TimeoutSeconds = 5,
             Configuration = "{\"url\":\"https://1.1.1.1/health\"}"
         });
-        _httpClientFactoryMock.CreateClient(PipelinesModuleExtensions.EnvironmentCheckHttpClient)
+        _httpClientFactoryMock.CreateClient(PipelineEnvironmentCheckGuard.EnvironmentCheckHttpClient)
             .Returns(new HttpClient(new StaticResponseHandler(System.Net.HttpStatusCode.NoContent)));
 
         await _sut.AdvanceStageAsync(1, "build", ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(TaskExecutionStatus.Assigned, step.Status);
         _repoMock.Received(1).TrackTask(Arg.Any<ServerTask>());
-        _httpClientFactoryMock.Received(1).CreateClient(PipelinesModuleExtensions.EnvironmentCheckHttpClient);
+        _httpClientFactoryMock.Received(1).CreateClient(PipelineEnvironmentCheckGuard.EnvironmentCheckHttpClient);
     }
 
     [Fact]
@@ -4308,7 +5439,7 @@ public class PipelineRunServiceTests
                 new PipelineStepRun { Id = 3, StageName = "fan", StepName = "pkg [windows]", MatrixLeg = "windows", PipelineRunId = 1 }
             ]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns([]);
         // Stage resolves to a Linux runner (no os constraint); the windows leg resolves its own.
@@ -4366,7 +5497,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "fan", StepName = "pkg [windows]", MatrixLeg = "windows", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns([]);
         // Stage resolves to a Linux runner; there is NO Windows runner for the windows leg.
@@ -4530,7 +5661,7 @@ public class PipelineRunServiceTests
         var cleanupStep = new PipelineStepRun
         {
             Id = 3,
-            StageName = PipelineRunService.SystemCleanupStage,
+            StageName = PipelineRunHelpers.SystemCleanupStage,
             StepName = "Cleanup",
             PipelineRunId = 1,
             IsSystem = true
@@ -4538,9 +5669,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([triggerStep], [cleanupStep]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build", "ci"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build", "ci"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false, true);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([]);
         _repoMock.GetPipelineIdForRunAsync(1, Arg.Any<CancellationToken>()).Returns(1);
@@ -4617,7 +5748,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "deploy-app", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         // Container isolation requires a Docker-capable runner (fail-closed enforcement).
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01", DockerAvailable = true });
@@ -4682,7 +5813,7 @@ public class PipelineRunServiceTests
                 PipelineRunId = 1
             }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "prepare"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "prepare"]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server
             {
@@ -4740,7 +5871,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "deploy-app", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         // Runner has NO Docker - container isolation must block, not silently downgrade.
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01", DockerAvailable = false });
@@ -4761,6 +5892,123 @@ public class PipelineRunServiceTests
             Arg.Is<IReadOnlyCollection<string>>(w => w.Any(m => m.Contains("no Docker available"))),
             Arg.Any<CancellationToken>());
         await _repoMock.Received(1).UpdatePipelineRunStatusAsync(1, PipelineStatus.Failed, Arg.Any<CancellationToken>());
+    }
+
+    // R-32: aetheus-demo reset the demo, then was refused at its vhost stage on a template token the
+    // libraries no longer defined. The template a later stage renders is checked before the run exists.
+    private const string DestructiveThenVhostYaml = """
+        name: demo
+        trigger: manual
+        variables:
+          APP_HOST: app.example.test
+        stages:
+          - name: build
+            agent: linux-01
+            steps:
+              - name: run
+                shell: echo reset the demo
+          - name: vhosts
+            agent: linux-01
+            depends_on: [build]
+            steps:
+              - name: Apply the versioned HTTP vhosts
+                type: apache-config
+                config_files:
+                  "$(APP_HOST).conf": ".pipeline/configs/apache/app-http.conf"
+        """;
+
+    [Fact]
+    public async Task R32_TriggerRunAsync_ConfigTemplateUsesAnUndefinedVariable_RefusedBeforeAnyStageRuns()
+    {
+        SetupTriggerRunMocks(DestructiveThenVhostYaml);
+        _configRepositoryMock.ReadAsync(
+                7, ".pipeline/configs/apache/app-http.conf", DefaultCommit, Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns("ServerName #{APP_HOST}#\nServerAlias #{API_HOST_ALIAS}#\n");
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.TriggerRunAsync(1, ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("'API_HOST_ALIAS'", error.Message, StringComparison.Ordinal);
+        Assert.Contains(".pipeline/configs/apache/app-http.conf", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Apply the versioned HTTP vhosts", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("'APP_HOST'", error.Message, StringComparison.Ordinal);
+        await _repoMock.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task R32_TriggerRunAsync_ConfigTemplateTokensAllDefined_Launches()
+    {
+        SetupTriggerRunMocks(DestructiveThenVhostYaml);
+        _configRepositoryMock.ReadAsync(
+                7, ".pipeline/configs/apache/app-http.conf", DefaultCommit, Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns("ServerName #{APP_HOST}#\nDocumentRoot #{WORKSPACE}#\n");
+
+        await _sut.TriggerRunAsync(1, ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>R-20: the optional parameter that names the target has no value and no default. At the REAL
+    /// launch (manual, scheduled, webhook, trigger step: they all end here) the stage would be left with
+    /// no selector and dispatch would hand it the first online runner, a deployment on a server nobody
+    /// chose. The launch is refused, before any run row exists, and says which parameter is empty.</summary>
+    [Fact]
+    public async Task R20_TriggerRunAsync_TargetParameterIsEmpty_RefusesTheLaunchInsteadOfUsingAnyRunner()
+    {
+        SetupTriggerRunMocks(DeployServerParameterYaml);
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => _sut.TriggerRunAsync(
+            1, parameters: new Dictionary<string, string> { ["candidateVersion"] = "1.0.0" },
+            ct: TestContext.Current.CancellationToken));
+
+        Assert.Contains("'deployServer'", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Prepare host", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Deploy", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("${{", error.Message, StringComparison.Ordinal);
+        await _repoMock.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+        await _repoMock.DidNotReceive().FindAnyOnlineRunnerAsync(
+            Arg.Any<int?>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R20_TriggerRunAsync_TargetParameterIsFilled_Launches()
+    {
+        SetupTriggerRunMocks(DeployServerParameterYaml);
+        _repoMock.FindOnlineServerByAgentAsync("vps-prod", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 9, Name = "vps-prod" });
+
+        await _sut.TriggerRunAsync(
+            1, parameters: new Dictionary<string, string> { ["candidateVersion"] = "1.0.0", ["deployServer"] = "vps-prod" },
+            ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A stage that never named a target keeps taking any online runner: only a target BUILT FROM
+    /// a parameter that is empty is refused.</summary>
+    [Fact]
+    public async Task R20_TriggerRunAsync_StageWithoutAnyTarget_StillLaunches()
+    {
+        const string yaml = """
+            name: build
+            trigger: manual
+            parameters:
+              - name: note
+                type: string
+                required: false
+            stages:
+              - name: build
+                steps:
+                  - name: compile
+                    shell: dotnet build
+            """;
+        SetupTriggerRunMocks(yaml);
+
+        await _sut.TriggerRunAsync(1, ct: TestContext.Current.CancellationToken);
+
+        await _repoMock.Received(1).AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
     }
 
     // --- ResolveVariablesAsync tests (via TriggerRunAsync) ---
@@ -5333,6 +6581,96 @@ public class PipelineRunServiceTests
             Arg.Any<string>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>());
     }
 
+    private const string DeployServerParameterYaml = """
+        name: deploy
+        trigger: manual
+        parameters:
+          - name: candidateVersion
+            display_name: Candidate release version
+            display_name_fr: Version de la release candidate
+            type: string
+            required: true
+          - name: deployServer
+            display_name: Production server
+            display_name_fr: Serveur de production
+            type: string
+            required: false
+        stages:
+          - name: Prepare host
+            agent: "${{ parameters.deployServer }}"
+            steps:
+              - name: prepare
+                shell: prepare.sh
+          - name: Deploy
+            agent: "${{ parameters.deployServer }}"
+            steps:
+              - name: publish
+                shell: deploy.sh
+        """;
+
+    /// <summary>R-20: the optional parameter that names the target has no value and no default. The launch
+    /// turns it into an empty string, so the preview must say that parameter is empty, not look for an
+    /// agent literally called "${{ parameters.deployServer }}" and report it offline.</summary>
+    [Fact]
+    public async Task PreflightAsync_EmptyTargetParameter_IsReportedAsEmpty_AndNoAgentIsSearched()
+    {
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline { Id = 1, Name = "Deploy", YamlDefinition = DeployServerParameterYaml, Runs = [] });
+
+        var result = await _sut.PreflightAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Stages.Count);
+        Assert.All(result.Stages, stage =>
+        {
+            Assert.False(stage.Resolved);
+            var empty = Assert.IsType<PreflightEmptyParameterDto>(stage.EmptyTargetParameter);
+            Assert.Equal("deployServer", empty.Name);
+            Assert.Equal("Production server", empty.Label);
+            Assert.Equal("Serveur de production", empty.LabelFr);
+            Assert.DoesNotContain("${{", stage.Reason, StringComparison.Ordinal);
+            Assert.DoesNotContain("${{", stage.Target, StringComparison.Ordinal);
+        });
+        await _repoMock.DidNotReceive().FindOnlineServerByAgentAsync(
+            Arg.Any<string>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().FindAnyOnlineRunnerAsync(
+            Arg.Any<int?>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>R-26: the preview runs before the user has answered, so a required parameter that has no
+    /// value yet is not a warning (the launch enforces it, and the dialog says so under the field).</summary>
+    [Fact]
+    public async Task PreflightAsync_MissingRequiredParameter_RaisesNoWarning()
+    {
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline { Id = 1, Name = "Deploy", YamlDefinition = DeployServerParameterYaml, Runs = [] });
+
+        var result = await _sut.PreflightAsync(1, ct: TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(result!.Warnings, warning => warning.Contains("candidateVersion", StringComparison.Ordinal));
+    }
+
+    /// <summary>The value the user chose in the launch dialog names the target, exactly as the launch
+    /// reads it.</summary>
+    [Fact]
+    public async Task PreflightAsync_SuppliedTargetParameter_ResolvesTheNamedServer()
+    {
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>())
+            .Returns(new Pipeline { Id = 1, Name = "Deploy", YamlDefinition = DeployServerParameterYaml, Runs = [] });
+        _repoMock.FindOnlineServerByAgentAsync("vps-prod", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 9, Name = "vps-prod" });
+
+        var result = await _sut.PreflightAsync(
+            1, new Dictionary<string, string> { ["deployServer"] = "vps-prod" }, TestContext.Current.CancellationToken);
+
+        Assert.All(result!.Stages, stage =>
+        {
+            Assert.True(stage.Resolved);
+            Assert.Equal("vps-prod", stage.ServerName);
+            Assert.Null(stage.EmptyTargetParameter);
+        });
+    }
+
     // --- Shared setup helper ---
 
     private void SetupTriggerRunMocks(string yaml)
@@ -5347,7 +6685,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 1, StageName = "build", StepName = "run", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
         _repoMock.FindAnyOnlineRunnerAsync(Arg.Any<int?>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>())
@@ -5524,7 +6862,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "deploy-app", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
         _repoMock.TrackTask(Arg.Any<ServerTask>());
@@ -5588,7 +6926,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([scannerStep], [nextStep]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage], [PipelineRunService.SystemPrepareStage, "dast"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage], [PipelineRunHelpers.SystemPrepareStage, "dast"]);
         _repoMock.FindOnlineServerInEnvironmentInOrganizationAsync(
                 "qa", OsType.Unknown, 4, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01", OrganizationId = 4 });
@@ -5732,7 +7070,7 @@ public class PipelineRunServiceTests
             1, UserCancellation, Arg.Any<CancellationToken>());
         await _repoMock.Received(1).CancelPendingStepRunsExceptStagesAsync(
             1, Arg.Is<IReadOnlyCollection<string>>(stages =>
-                stages.Contains(PipelineRunService.SystemCleanupStage)),
+                stages.Contains(PipelineRunHelpers.SystemCleanupStage)),
             Arg.Any<CancellationToken>());
         await _repoMock.DidNotReceive().AppendRunWarningsAsync(
             1, Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<CancellationToken>());
@@ -5748,7 +7086,7 @@ public class PipelineRunServiceTests
             Id = 1,
             Status = PipelineStatus.Running,
             AdditionalVariablesJson =
-                $"{{\"{PipelineRunService.CancellationRequestedVariable}\":\"true\"}}"
+                $"{{\"{PipelineRunHelpers.CancellationRequestedVariable}\":\"true\"}}"
         };
         _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.HasAnyRunningStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(true);
@@ -5759,7 +7097,7 @@ public class PipelineRunServiceTests
         await _repoMock.Received(1).CancelOrphanedRunningStepRunsExceptStagesAsync(
             1,
             Arg.Is<IReadOnlyCollection<string>>(stages =>
-                stages.Contains(PipelineRunService.SystemCleanupStage)),
+                stages.Contains(PipelineRunHelpers.SystemCleanupStage)),
             Arg.Any<CancellationToken>());
     }
 
@@ -5832,7 +7170,7 @@ public class PipelineRunServiceTests
         await _repoMock.Received(1).CancelPendingStepRunsExceptStagesAsync(
             1,
             Arg.Is<IReadOnlyCollection<string>>(stages =>
-                stages.Contains("Teardown") && stages.Contains(PipelineRunService.SystemCleanupStage)),
+                stages.Contains("Teardown") && stages.Contains(PipelineRunHelpers.SystemCleanupStage)),
             Arg.Any<CancellationToken>());
     }
 
@@ -5880,7 +7218,7 @@ public class PipelineRunServiceTests
             new() { StageName = "test" }
         };
 
-        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunService.SystemPrepareStage]);
+        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunHelpers.SystemPrepareStage]);
 
         Assert.Equal(2, result.Count);
         Assert.Contains("build", result);
@@ -5903,7 +7241,7 @@ public class PipelineRunServiceTests
             new() { StageName = "deploy" }
         };
 
-        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunService.SystemPrepareStage]);
+        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunHelpers.SystemPrepareStage]);
 
         Assert.Single(result);
         Assert.Equal("build", result[0]);
@@ -5921,7 +7259,7 @@ public class PipelineRunServiceTests
         };
         var pendingSteps = new List<PipelineStepRun> { new() { StageName = "deploy" } };
 
-        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunService.SystemPrepareStage, "build"]);
+        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunHelpers.SystemPrepareStage, "build"]);
 
         Assert.Single(result);
         Assert.Equal("deploy", result[0]);
@@ -5954,7 +7292,7 @@ public class PipelineRunServiceTests
         };
         var pendingSteps = new List<PipelineStepRun> { new() { StageName = "deploy" } };
 
-        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunService.SystemPrepareStage, "build", "test"]);
+        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunHelpers.SystemPrepareStage, "build", "test"]);
 
         Assert.Single(result);
         Assert.Equal("deploy", result[0]);
@@ -5971,7 +7309,7 @@ public class PipelineRunServiceTests
         };
         var pendingSteps = new List<PipelineStepRun> { new() { StageName = "deploy" } };
 
-        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunService.SystemPrepareStage, "build"]);
+        var result = InvokeFindReadyStages(pendingSteps, definition, [PipelineRunHelpers.SystemPrepareStage, "build"]);
 
         Assert.Empty(result);
     }
@@ -5992,8 +7330,8 @@ public class PipelineRunServiceTests
         var result = InvokeFindReadyStages(
             pendingSteps,
             definition,
-            [PipelineRunService.SystemPrepareStage],
-            [PipelineRunService.SystemPrepareStage, "e2e"]);
+            [PipelineRunHelpers.SystemPrepareStage],
+            [PipelineRunHelpers.SystemPrepareStage, "e2e"]);
 
         Assert.Equal(["teardown"], result);
     }
@@ -6014,8 +7352,8 @@ public class PipelineRunServiceTests
         var result = InvokeFindReadyStages(
             pendingSteps,
             definition,
-            [PipelineRunService.SystemPrepareStage],
-            [PipelineRunService.SystemPrepareStage, "e2e"]);
+            [PipelineRunHelpers.SystemPrepareStage],
+            [PipelineRunHelpers.SystemPrepareStage, "e2e"]);
 
         Assert.Empty(result);
     }
@@ -6033,16 +7371,16 @@ public class PipelineRunServiceTests
         };
         var pendingSteps = new List<PipelineStepRun>
         {
-            new() { StageName = PipelineRunService.SystemCleanupStage, IsSystem = true }
+            new() { StageName = PipelineRunHelpers.SystemCleanupStage, IsSystem = true }
         };
 
         var result = InvokeFindReadyStages(
             pendingSteps,
             definition,
-            [PipelineRunService.SystemPrepareStage, "teardown"],
-            [PipelineRunService.SystemPrepareStage, "e2e", "teardown"]);
+            [PipelineRunHelpers.SystemPrepareStage, "teardown"],
+            [PipelineRunHelpers.SystemPrepareStage, "e2e", "teardown"]);
 
-        Assert.Equal([PipelineRunService.SystemCleanupStage], result);
+        Assert.Equal([PipelineRunHelpers.SystemCleanupStage], result);
     }
 
     [Fact]
@@ -6058,14 +7396,14 @@ public class PipelineRunServiceTests
         };
         var pendingSteps = new List<PipelineStepRun>
         {
-            new() { StageName = PipelineRunService.SystemCleanupStage, IsSystem = true }
+            new() { StageName = PipelineRunHelpers.SystemCleanupStage, IsSystem = true }
         };
 
         var result = InvokeFindReadyStages(
             pendingSteps,
             definition,
-            [PipelineRunService.SystemPrepareStage],
-            [PipelineRunService.SystemPrepareStage, "deploy"]);
+            [PipelineRunHelpers.SystemPrepareStage],
+            [PipelineRunHelpers.SystemPrepareStage, "deploy"]);
 
         Assert.Empty(result);
     }
@@ -6238,9 +7576,9 @@ public class PipelineRunServiceTests
             ]
         };
 
-        Assert.Equal(["Rollback"], PipelineRunScheduler.RollbackStageNames(definition));
+        Assert.Equal(["Rollback"], PipelineDeploymentStages.RollbackNames(definition));
         // A rollback only counts after the new colour was started; 2383 failed before that.
-        Assert.Equal(["Deploy"], PipelineRunScheduler.StartStageNames(definition));
+        Assert.Equal(["Deploy"], PipelineDeploymentStages.StartNames(definition));
     }
 
     [Fact]
@@ -6289,7 +7627,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([deployStep]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -6362,10 +7700,10 @@ public class PipelineRunServiceTests
             .Returns(_ => ++pendingCall == 1 ? [optional] : [deploy]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => ++completedCall == 1
-                ? [PipelineRunService.SystemPrepareStage, "source"]
-                : [PipelineRunService.SystemPrepareStage, "source", "optional-artifact"]);
+                ? [PipelineRunHelpers.SystemPrepareStage, "source"]
+                : [PipelineRunHelpers.SystemPrepareStage, "source", "optional-artifact"]);
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns(_ => [PipelineRunService.SystemPrepareStage, "source", "optional-artifact"]);
+            .Returns(_ => [PipelineRunHelpers.SystemPrepareStage, "source", "optional-artifact"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -6433,9 +7771,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns(_ => [javascript, python]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "Checkout"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Checkout"]);
         _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "Checkout"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Checkout"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -6451,6 +7789,119 @@ public class PipelineRunServiceTests
         Assert.Null(javascript.SkippedCondition);
         _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "javascript"));
         _repoMock.DidNotReceive().TrackTask(Arg.Is<ServerTask>(task => task.Name == "python"));
+    }
+
+    // A condition the engine cannot read (here a compound it used to cut at its first eq) fails the
+    // stage: it is never read as met (the steps would run) nor as not met (they would be skipped).
+    [Fact]
+    public async Task AdvanceStageAsync_StageConditionUnsupported_FailsTheStageStepsWithoutDispatching()
+    {
+        var yaml = """
+            name: compound-stage
+            trigger: manual
+            stages:
+              - name: source
+                agent: linux-01
+                steps:
+                  - name: resolve
+                    shell: git rev-parse HEAD
+              - name: deploy
+                agent: linux-01
+                depends_on: [source]
+                condition: "or(eq(variables['A'], 'x'), eq(variables['B'], 'y'))"
+                steps:
+                  - name: ship
+                    shell: deploy.sh
+            """;
+        var ship = new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "ship", PipelineRunId = 1 };
+        var pendingCall = 0;
+
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "source", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "source", Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineRun
+        {
+            Id = 1,
+            PipelineId = 1,
+            Status = PipelineStatus.Running,
+            // The first operand would have matched: the former engine dispatched this stage.
+            AdditionalVariablesJson = "{\"A\":\"x\",\"B\":\"n\"}",
+            Pipeline = new Pipeline { YamlDefinition = yaml }
+        });
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
+            .Returns(_ => ++pendingCall == 1 ? [ship] : []);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "source"]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "source"]);
+        _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 10, Name = "linux-01" });
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.AdvanceStageAsync(1, "source", TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, ship.Status);
+        Assert.Equal(TaskFailureCodes.InfrastructureMismatch, ship.FailureCode);
+        Assert.StartsWith("Stage 'deploy': condition 'or(", ship.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("is not supported", ship.FailureReason, StringComparison.Ordinal);
+        Assert.Null(ship.SkippedCondition);
+        _repoMock.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
+    }
+
+    [Fact]
+    public async Task AdvanceStageAsync_StepConditionWithTrailingText_FailsOnlyThatStep()
+    {
+        var yaml = """
+            name: trailing-step
+            trigger: manual
+            stages:
+              - name: Checkout
+                agent: linux-01
+                steps:
+                  - name: resolve
+                    shell: git rev-parse HEAD
+              - name: Lint
+                agent: linux-01
+                depends_on: [Checkout]
+                steps:
+                  - name: javascript
+                    condition: "eq(variables['HAS_JAVASCRIPT'], 'true')"
+                    shell: eslint .
+                  - name: python
+                    condition: "eq(variables['HAS_PYTHON'], 'true') and ne(variables['SKIP'], 'true')"
+                    shell: ruff check .
+            """;
+        var javascript = new PipelineStepRun { Id = 2, StageName = "Lint", StepName = "javascript", PipelineRunId = 1 };
+        var python = new PipelineStepRun { Id = 3, StageName = "Lint", StepName = "python", PipelineRunId = 1 };
+
+        _repoMock.AreAllStepsInStageCompletedAsync(1, "Checkout", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.GetFailedStepRunsInStageAsync(1, "Checkout", Arg.Any<CancellationToken>()).Returns([]);
+        _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(new PipelineRun
+        {
+            Id = 1,
+            PipelineId = 1,
+            Status = PipelineStatus.Running,
+            AdditionalVariablesJson = "{\"HAS_JAVASCRIPT\":\"true\",\"HAS_PYTHON\":\"true\",\"SKIP\":\"true\"}",
+            Pipeline = new Pipeline { YamlDefinition = yaml }
+        });
+        _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns(_ => [javascript, python]);
+        _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Checkout"]);
+        _repoMock.GetTerminalStageNamesAsync(1, Arg.Any<CancellationToken>())
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "Checkout"]);
+        _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
+            .Returns(new Server { Id = 10, Name = "linux-01" });
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.AdvanceStageAsync(1, "Checkout", TestContext.Current.CancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Failed, python.Status);
+        Assert.Equal(TaskFailureCodes.InfrastructureMismatch, python.FailureCode);
+        Assert.StartsWith("Step 'python': condition 'eq(", python.FailureReason, StringComparison.Ordinal);
+        Assert.Null(python.SkippedCondition);
+        _repoMock.DidNotReceive().TrackTask(Arg.Is<ServerTask>(task => task.Name == "python"));
+        _repoMock.Received(1).TrackTask(Arg.Is<ServerTask>(task => task.Name == "javascript"));
     }
 
     [Fact]
@@ -6491,9 +7942,9 @@ public class PipelineRunServiceTests
         _repoMock.GetPipelineRunWithPipelineAsync(220, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.GetPendingStepRunsAsync(220, Arg.Any<CancellationToken>()).Returns([ciStep]);
         _repoMock.GetCompletedStageNamesAsync(220, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "source"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "source"]);
         _repoMock.GetTerminalStageNamesAsync(220, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "source"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "source"]);
         _repoMock.HasAnyFailedStepInRunAsync(220, Arg.Any<CancellationToken>()).Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("linux-01", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(new Server { Id = 10, Name = "linux-01" });
@@ -6575,7 +8026,7 @@ public class PipelineRunServiceTests
         {
             Id = 1,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemPrepareStage,
+            StageName = PipelineRunHelpers.SystemPrepareStage,
             StepName = "Clone Repository",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -6630,7 +8081,7 @@ public class PipelineRunServiceTests
         {
             Id = 1,
             PipelineRunId = 1,
-            StageName = PipelineRunService.SystemPrepareStage,
+            StageName = PipelineRunHelpers.SystemPrepareStage,
             StepName = "Clone Repository",
             Status = TaskExecutionStatus.Pending,
             IsSystem = true
@@ -6708,7 +8159,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "ship", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("nonexistent-agent", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
@@ -6765,7 +8216,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>())
             .Returns([new PipelineStepRun { Id = 2, StageName = "deploy", StepName = "ship", PipelineRunId = 1 }]);
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.HasAnyFailedStepInRunAsync(1, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.FindOnlineServerByAgentAsync("nonexistent-agent", Arg.Any<OsType>(), Arg.Any<CancellationToken>())
@@ -7817,11 +9268,17 @@ public class PipelineRunServiceTests
         return (bool)method.Invoke(null, [failedSteps])!;
     }
 
+    // Every condition these tests read is a supported form: the verdict must carry no error.
     private static bool InvokeEvaluateCondition(string? condition, Dictionary<string, string> variables, List<string> completedStages, bool previousStageFailed)
-        => PipelineRunHelpers.EvaluateCondition(condition, variables, completedStages, previousStageFailed);
+    {
+        Assert.Empty(completedStages);
+        var verdict = PipelineRunHelpers.EvaluateCondition(condition, variables, previousStageFailed);
+        Assert.Null(verdict.Error);
+        return verdict.Met;
+    }
 
     private static bool InvokeEvaluateVariableCondition(string condition, Dictionary<string, string> variables)
-        => PipelineRunHelpers.EvaluateVariableCondition(condition, variables);
+        => InvokeEvaluateCondition(condition, variables, [], previousStageFailed: false);
 
     private static Dictionary<string, string> InvokeParseOutputVariables(string? output)
         => PipelineRunHelpers.ParseOutputVariablesFromLogs(output);
@@ -7960,10 +9417,14 @@ public class PipelineRunServiceTests
     }
 
     [Fact]
-    public void EvaluateVariableCondition_UnknownFormat_ReturnsFalse()
+    public void EvaluateVariableCondition_UnknownFormat_IsInvalidAndNeverMet()
     {
-        // Fail-closed: unknown condition syntax should NOT permit the stage to run.
-        Assert.False(InvokeEvaluateVariableCondition("something_unknown()", new Dictionary<string, string>()));
+        // Fail-closed: unknown condition syntax never permits the stage to run, and comes back as an
+        // error the engine fails the stage with, not as a plain "not met".
+        var verdict = PipelineRunHelpers.EvaluateCondition(
+            "something_unknown()", new Dictionary<string, string>(), previousStageFailed: false);
+        Assert.False(verdict.Met);
+        Assert.NotNull(verdict.Error);
     }
 
     // --- ParseOutputVariables ---
@@ -8244,11 +9705,17 @@ public class PipelineRunServiceTests
 
     private void ArrangeAdvanceToStageWithVariables(
         string yaml, string stageName, string resolvedVariablesJson, params PipelineStepRun[] steps)
+        => ArrangeAdvanceToStageWithVariables(yaml, stageName, resolvedVariablesJson, PipelineStatus.Pending, steps);
+
+    private void ArrangeAdvanceToStageWithVariables(
+        string yaml, string stageName, string resolvedVariablesJson, PipelineStatus runStatus,
+        params PipelineStepRun[] steps)
     {
         var run = new PipelineRun
         {
             Id = 1,
             PipelineId = 1,
+            Status = runStatus,
             AdditionalVariablesJson = resolvedVariablesJson,
             ResolvedVariablesJson = resolvedVariablesJson,
             CommitHash = DefaultCommit,
@@ -8273,7 +9740,7 @@ public class PipelineRunServiceTests
         _repoMock.GetPipelineRunWithPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(run);
         _repoMock.GetPendingStepRunsAsync(1, Arg.Any<CancellationToken>()).Returns(steps.ToList());
         _repoMock.GetCompletedStageNamesAsync(1, Arg.Any<CancellationToken>())
-            .Returns([PipelineRunService.SystemPrepareStage, "build"]);
+            .Returns([PipelineRunHelpers.SystemPrepareStage, "build"]);
         _repoMock.GetActiveStageNamesAsync(1, Arg.Any<CancellationToken>()).Returns([]);
         _repoMock.FindOnlineServerByAgentAsync(Arg.Any<string>(), Arg.Any<OsType>(), Arg.Any<CancellationToken>())
             .Returns(server);

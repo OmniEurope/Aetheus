@@ -208,7 +208,7 @@ public sealed class ServerHeartbeatRepository(AppDbContext db) : IServerHeartbea
         var resyncedAt = await db.MailStates.AsNoTracking().Where(s => s.ServerId == serverId)
             .Select(s => s.QuotaResyncedAt).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (state is not null)
-            state.QuotaResyncedAt = state.HelperVersion >= Mail.MailService.QuotaMinimumHelperVersion ? resyncedAt : null;
+            state.QuotaResyncedAt = state.HelperVersion >= MailHelperVersions.QuotaMinimum ? resyncedAt : null;
         if (db.Database.IsRelational())
             await db.MailStates.Where(s => s.ServerId == serverId).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         else

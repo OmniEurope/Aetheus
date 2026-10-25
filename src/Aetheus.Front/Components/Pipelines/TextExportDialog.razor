@@ -9,6 +9,6 @@
         <OmniOverflowMenu Label="@L["MoreActions"]">
             <OmniMenuItem OnClick="@CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["Copy"]</ChildContent></OmniMenuItem>
         </OmniOverflowMenu>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DownloadAsync"><OmniIcon Name="OmniIconName.Download" /> <span>@L["Download"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DownloadAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

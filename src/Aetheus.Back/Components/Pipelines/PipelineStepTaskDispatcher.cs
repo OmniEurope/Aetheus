@@ -18,9 +18,11 @@ public interface IPipelineStepTaskDispatcher
     /// <summary>Creates the tasks for a stage's steps, across every matrix leg.</summary>
     /// <param name="launcher">Passed through to the trigger coordinator - see
     /// <see cref="IPipelineChildRunLauncher"/> for why it travels as a parameter.</param>
-    /// <returns><c>true</c> when this stage ALREADY finalized the run (a fail-closed matrix-leg or
-    /// isolation violation failed it here), so the caller must not re-fail it.</returns>
-    Task<bool> CreateTasksForStageAsync(
+    /// <returns>The refusal when the stage cannot be dispatched (a fail-closed matrix-leg or isolation
+    /// violation, a step refused by its factory), otherwise <c>null</c>. The dispatcher does not fail the
+    /// run itself: the tasks it already queued, and those of the stages dispatched before it in the same
+    /// pass, belong to a run that is being failed, so the caller drops them and fails the run once.</returns>
+    Task<StageDispatchRefusal?> CreateTasksForStageAsync(
         int runId, Server server, List<PipelineStepRun> stageSteps, PipelineStageDefinition stageDef,
         Dictionary<string, string> resolvedVars, List<string> completedStages, bool previousStageFailed,
         HashSet<string> secretKeys, int? organizationId, int? projectId,
@@ -28,20 +30,25 @@ public interface IPipelineStepTaskDispatcher
 }
 
 /// <summary>
+/// Why a stage was refused while it was creating its tasks, and the step it was refused for (null when
+/// the refusal belongs to the stage, a matrix leg without a runner for instance).
+/// </summary>
+public sealed record StageDispatchRefusal(string Reason, PipelineStepRun? RefusedStep);
+
+/// <summary>
 /// The step dispatcher, extracted from <see cref="PipelineRunService"/>. Every step type that is not a
 /// plain agent command lands here - release, substitute, AI, and the extended host/deployment/analysis/
 /// artifact/scanner families delegated to their factories - together with the matrix-leg fan-out that
 /// decides which runner each leg goes to.
 ///
-/// It builds and reports; it never advances a stage (ADR-041). The one exception is spelled out in its
-/// return value: a fail-closed leg or isolation violation finalizes the run here, and the caller is told
-/// so it does not fail it twice.
+/// It builds and reports; it never advances a stage nor fails a run (ADR-041). A refusal is returned,
+/// not acted on: it takes the whole pass down with it, so the planner that owns the pass drops what the
+/// pass queued and fails the run once.
 /// </summary>
 public sealed class PipelineStepTaskDispatcher(
     IPipelineRepository repo,
     IPipelineDispatchServerResolver dispatchServers,
     IPipelineStepTaskBuilder taskBuilder,
-    IPipelineRunFinalizer finalizer,
     IPipelineTriggerStepCoordinator triggerSteps,
     IPipelineBranchAdvanceStep branchAdvanceSteps,
     IPipelineAnalysisTaskFactory analysisTasks,
@@ -58,10 +65,13 @@ public sealed class PipelineStepTaskDispatcher(
     IConfiguration configuration,
     ISecretMaskingService secretMasking,
     TimeProvider timeProvider,
-    ILogger<PipelineStepTaskDispatcher> logger) : IPipelineStepTaskDispatcher
+    ILogger<PipelineStepTaskDispatcher> logger,
+    IPipelineEnvFilePreparer? envFiles = null) : IPipelineStepTaskDispatcher
 {
     private sealed class StageTaskCreationState
     {
+        /// <summary>Set when the stage is refused; nothing more is dispatched for it.</summary>
+        public StageDispatchRefusal? Refusal { get; set; }
         public PipelineRun? ReleaseRun { get; set; }
         public int? ReleaseProjectId { get; set; }
         public string? ReleasePattern { get; set; }
@@ -70,9 +80,7 @@ public sealed class PipelineStepTaskDispatcher(
         public bool PipelineAiProfileFetched { get; set; }
     }
 
-    // Returns true when this stage ALREADY finalized the run (a fail-closed matrix-leg / isolation
-    // violation calls FailRunWithUnmatchedStagesAsync itself), so the caller must not re-fail it.
-    public async Task<bool> CreateTasksForStageAsync(
+    public async Task<StageDispatchRefusal?> CreateTasksForStageAsync(
         int runId, Server server, List<PipelineStepRun> stageSteps, PipelineStageDefinition stageDef,
         Dictionary<string, string> resolvedVars, List<string> completedStages, bool previousStageFailed,
         HashSet<string> secretKeys, int? organizationId, int? projectId,
@@ -92,16 +100,13 @@ public sealed class PipelineStepTaskDispatcher(
                 runId, stageDef, legGroup.Key, legVars, server, stageIsContainer, organizationId, projectId, ct)
                 .ConfigureAwait(false);
             if (resolution.Error is not null)
-            {
-                await finalizer.FailRunWithUnmatchedStagesAsync(runId, [resolution.Error], legSteps, ct).ConfigureAwait(false);
-                return true;
-            }
+                return new StageDispatchRefusal(resolution.Error, RefusedStep: null);
             if (await DispatchLegStepsAsync(
                     runId, resolution.Server!, legSteps, stageDef, legVars, completedStages,
                     previousStageFailed, stageIsContainer, secretKeys, organizationId, creationState, launcher, ct)
-                .ConfigureAwait(false)) return true;
+                .ConfigureAwait(false)) return creationState.Refusal;
         }
-        return false; // the run was not finalized by this stage
+        return null; // the stage was not refused
     }
 
     private async Task<Dictionary<string, string>> BuildStageVariablesAsync(
@@ -117,7 +122,7 @@ public sealed class PipelineStepTaskDispatcher(
             stageVars["AETHEUS_EXECUTION_ROLE"] = stageDef.ExecutionRole.Trim().ToLowerInvariant();
         if (string.Equals(stageDef.ExecutionRole, "deploy", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(configuration["AppMonitoring:IngestBaseUrl"]))
-            await AddDeployObservabilityVariablesAsync(runId, stageVars, ct).ConfigureAwait(false);
+            await AddDeployObservabilityVariablesAsync(runId, stageDef.Environment, stageVars, ct).ConfigureAwait(false);
         if (stageIsContainer)
         {
             stageVars[PipelineRunService.HostWorkspaceVariable] = PipelineCommandBuilder.GetDefaultWorkspace(runId, isWindows: false);
@@ -127,15 +132,12 @@ public sealed class PipelineStepTaskDispatcher(
     }
 
     internal async Task AddDeployObservabilityVariablesAsync(
-        int runId, IDictionary<string, string> stageVars, CancellationToken ct)
+        int runId, string? environmentName, IDictionary<string, string> stageVars, CancellationToken ct)
     {
-        var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
-        var projectId = run?.Pipeline is null
-            ? null
-            : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);
-        if (projectId is null) return;
+        var target = await DeployObservabilityTarget.ResolveAsync(repo, runId, environmentName, ct).ConfigureAwait(false);
+        if (target is null) return;
         var observabilityEnv = await appDeployEnv
-            .GetDeployEnvAsync(projectId.Value, environmentId: null, runId, ct).ConfigureAwait(false);
+            .GetDeployEnvAsync(target.Value.ProjectId, target.Value.EnvironmentId, runId, ct).ConfigureAwait(false);
         foreach (var (key, value) in observabilityEnv) stageVars[key] = value;
     }
 
@@ -211,7 +213,15 @@ public sealed class PipelineStepTaskDispatcher(
                 FailMissingStepDefinition(runId, stepRun, stageDef.Name);
                 continue;
             }
-            if (!EvaluateCondition(stepDef.Condition, legVars, completedStages, previousStageFailed))
+            var verdict = EvaluateCondition(stepDef.Condition, legVars, previousStageFailed);
+            if (verdict.Error is { } conditionError)
+            {
+                // An unsupported condition fails the step: never read as met, never as not met.
+                MarkSystemStepFailed(stepRun, TaskFailureCodes.InfrastructureMismatch,
+                    $"Step '{stepRun.StepName}': {conditionError}", timeProvider.GetUtcNow().UtcDateTime);
+                continue;
+            }
+            if (!verdict.Met)
             {
                 MarkStepConditionNotMet(runId, stepRun, stepDef, legVars, secretKeys);
                 continue;
@@ -219,7 +229,7 @@ public sealed class PipelineStepTaskDispatcher(
             var dispatchResult = await DispatchStepAsync(
                 runId, server, stepRun, stepDef, legVars, stageDef, stageIsContainer,
                 secretKeys, organizationId, creationState, launcher, ct).ConfigureAwait(false);
-            if (dispatchResult == StepDispatchResult.RunFinalized) return true;
+            if (dispatchResult == StepDispatchResult.StageRefused) return true;
         }
         return false;
     }
@@ -290,10 +300,10 @@ public sealed class PipelineStepTaskDispatcher(
         }
         var (handled, factoryError) = CreateFactoryTask(type, runId, legServer, stepRun, stepDef, legVars, stageDef);
         if (handled)
-            return await FailRunOnFactoryErrorAsync(runId, stepRun, factoryError, ct).ConfigureAwait(false);
+            return RefuseOnFactoryError(stepRun, factoryError, creationState);
         return await DispatchExtendedStepAsync(
             type, runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer,
-            secretKeys, launcher, ct).ConfigureAwait(false);
+            secretKeys, creationState, launcher, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -311,20 +321,30 @@ public sealed class PipelineStepTaskDispatcher(
             _ => (false, null)
         };
 
-    /// <summary>A factory that refused its step returns the reason; the run fails with it, here.</summary>
-    private async Task<StepDispatchResult> FailRunOnFactoryErrorAsync(
-        int runId, PipelineStepRun stepRun, string? factoryError, CancellationToken ct)
+    /// <summary>
+    /// A factory that refused its step returns the reason; the stage is refused with it. Dropping the queued
+    /// tasks and failing the steps and the run is the planner's job (it owns the whole pass).
+    /// </summary>
+    private static StepDispatchResult RefuseOnFactoryError(
+        PipelineStepRun stepRun, string? factoryError, StageTaskCreationState state)
     {
         if (factoryError is null) return StepDispatchResult.Handled;
-        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [factoryError], [stepRun], ct).ConfigureAwait(false);
-        return StepDispatchResult.RunFinalized;
+        return Refuse(factoryError, stepRun, state);
+    }
+
+    /// <summary>Records a refusal met while the stage was creating its tasks (a factory, an AI step without a
+    /// profile, an environment sample that cannot be rendered).</summary>
+    private static StepDispatchResult Refuse(string reason, PipelineStepRun refusedStep, StageTaskCreationState state)
+    {
+        state.Refusal = new StageDispatchRefusal(reason, refusedStep);
+        return StepDispatchResult.StageRefused;
     }
 
     private async Task<StepDispatchResult> DispatchExtendedStepAsync(
         string? type, int runId, Server legServer, PipelineStepRun stepRun,
         PipelineStepDefinition stepDef, Dictionary<string, string> legVars,
         PipelineStageDefinition stageDef, bool stageIsContainer, HashSet<string> secretKeys,
-        IPipelineChildRunLauncher launcher, CancellationToken ct)
+        StageTaskCreationState creationState, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         switch (type)
         {
@@ -350,7 +370,7 @@ public sealed class PipelineStepTaskDispatcher(
                 return StepDispatchResult.Handled;
             case "deploy":
                 await deploymentTasks.CreateDeployTaskAsync(
-                    runId, legServer, stepRun, stepDef, legVars, ct).ConfigureAwait(false);
+                    runId, legServer, stepRun, stepDef, legVars, stageDef.Environment, ct).ConfigureAwait(false);
                 return StepDispatchResult.Handled;
             case "apache-proxy":
                 await hostTasks.CreateApacheProxyTaskAsync(
@@ -370,7 +390,7 @@ public sealed class PipelineStepTaskDispatcher(
                 return StepDispatchResult.Handled;
             case string blueGreenType when blueGreenType.StartsWith("bluegreen-", StringComparison.Ordinal):
                 await hostTasks.CreateBlueGreenTaskAsync(
-                    type, runId, legServer, stepRun, stepDef, legVars, ct).ConfigureAwait(false);
+                    type, runId, legServer, stepRun, stepDef, legVars, stageDef.Environment, ct).ConfigureAwait(false);
                 return StepDispatchResult.Handled;
             case "trigger":
                 await triggerSteps.CreateTriggerStepAsync(
@@ -380,16 +400,31 @@ public sealed class PipelineStepTaskDispatcher(
                 await branchAdvanceSteps.ExecuteAsync(runId, stepRun, stepDef, legVars, ct).ConfigureAwait(false);
                 return StepDispatchResult.Handled;
             default:
-                return DispatchCommandStep(
-                    runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer, secretKeys);
+                return await DispatchCommandStepAsync(
+                    runId, legServer, stepRun, stepDef, legVars, stageDef, stageIsContainer, secretKeys, creationState, ct)
+                    .ConfigureAwait(false);
         }
     }
 
-    private StepDispatchResult DispatchCommandStep(
+    private async Task<StepDispatchResult> DispatchCommandStepAsync(
         int runId, Server legServer, PipelineStepRun stepRun,
         PipelineStepDefinition stepDef, Dictionary<string, string> legVars,
-        PipelineStageDefinition stageDef, bool stageIsContainer, HashSet<string> secretKeys)
+        PipelineStageDefinition stageDef, bool stageIsContainer, HashSet<string> secretKeys,
+        StageTaskCreationState creationState, CancellationToken ct)
     {
+        // The versioned environment sample is rendered here, on the control plane, and handed to this step
+        // alone; a sample that cannot be rendered fails the run with the reason (ADR-057).
+        if (!string.IsNullOrWhiteSpace(stepDef.EnvTemplate))
+        {
+            var prepared = envFiles is null
+                ? new EnvFilePreparation(null, null, "env_template is not available on this backend.")
+                : await envFiles.PrepareAsync(runId, stepDef, legVars, secretKeys, ct).ConfigureAwait(false);
+            if (prepared.Error is not null)
+                return Refuse($"Step '{stepRun.StepName}': {prepared.Error}", stepRun, creationState);
+            legVars = prepared.Variables!;
+            secretKeys = prepared.SecretKeys!;
+        }
+
         // A type written for a newer backend validates with a warning; with no command of its own
         // it would reach the agent empty, so it fails here, by name.
         if (!string.IsNullOrWhiteSpace(stepDef.Type)
@@ -528,8 +563,7 @@ public sealed class PipelineStepTaskDispatcher(
                     $"Advisory step not run: {reason}", timeProvider.GetUtcNow().UtcDateTime);
                 return StepDispatchResult.Handled;
             }
-            await finalizer.FailRunWithUnmatchedStagesAsync(runId, [reason], [stepRun], ct).ConfigureAwait(false);
-            return StepDispatchResult.RunFinalized;
+            return Refuse(reason, stepRun, state);
         }
         // Never silent: a profile picked by fallback is also recorded on the run, so it shows even when the
         // agent that runs the step predates the step-log line.

@@ -168,4 +168,67 @@ public class PipelineUnresolvedVariableGuardTests
         Assert.Contains("HAS_DOTNET", deferred);
         Assert.Contains("HAS_JAVA", deferred);
     }
+
+    private static HashSet<string> Keys(params string[] keys) => new(keys, StringComparer.OrdinalIgnoreCase);
+
+    [Fact]
+    public void AnEmptyLibraryEntryTheRunUses_IsRefusedWithWhatUsesIt()
+    {
+        var definition = Definition(new PipelineStepDefinition { Name = "render", Shell = "echo $(API_HOST)" }) with
+        {
+            Variables = new Dictionary<string, string> { ["URL"] = "https://$(API_HOST)/" }
+        };
+
+        var exception = Assert.Throws<BadRequestException>(() => PipelineUnresolvedVariableGuard.ValidateNoEmptyValues(
+            definition, Resolved(("API_HOST", ""), ("URL", "https:///")), NoSecrets, Keys("API_HOST")));
+
+        Assert.Contains("'API_HOST' (used by step 'render', variable URL)", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnEmptyLibraryEntryNobodyUses_OrUsedWithADefault_IsAccepted()
+    {
+        var definition = Definition(new PipelineStepDefinition { Name = "render", Shell = "echo $(MAYBE:-) $(OTHER:-x)" });
+
+        PipelineUnresolvedVariableGuard.ValidateNoEmptyValues(
+            definition, Resolved(("MAYBE", ""), ("OTHER", ""), ("UNUSED", "")), NoSecrets, Keys("MAYBE", "OTHER", "UNUSED"));
+    }
+
+    /// <summary>R-7: a host prefix empty by design (production) is never "to fill" for a pipeline that
+    /// reads it with <c>$(HOST_PREFIX:-)</c>, in a step or a variable, and is for one that reads it bare.</summary>
+    [Fact]
+    public void AnEmptyHostPrefix_IsOptionalWithADefaultAndRequiredWithout()
+    {
+        var withDefault = Definition(new PipelineStepDefinition { Name = "render", Shell = "echo $(HOST_PREFIX:-)api" }) with
+        {
+            Variables = new Dictionary<string, string> { ["API_HOST"] = "$(HOST_PREFIX:-)api.example.test" }
+        };
+        var withoutDefault = Definition(new PipelineStepDefinition { Name = "render", Shell = "echo $(HOST_PREFIX)api" });
+
+        Assert.Empty(PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(withDefault, Keys("HOST_PREFIX")));
+        var consumed = PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(withoutDefault, Keys("HOST_PREFIX"));
+        Assert.Equal(["HOST_PREFIX"], consumed.Keys);
+        Assert.Equal(["step 'render'"], consumed["HOST_PREFIX"]);
+    }
+
+    [Fact]
+    public void AnEmptyLibraryEntrySuppliedAnotherValueForTheRun_IsAccepted()
+    {
+        var definition = Definition(new PipelineStepDefinition { Name = "render", Shell = "echo $(API_HOST)" });
+
+        PipelineUnresolvedVariableGuard.ValidateNoEmptyValues(
+            definition, Resolved(("API_HOST", "api.example.test")), NoSecrets, Keys("API_HOST"));
+    }
+
+    [Fact]
+    public void AnEmptyVaultSecret_IsRefusedEvenWhenNoStepWritesItsName()
+    {
+        var definition = Definition(new PipelineStepDefinition { Name = "render", Shell = "sh deploy.sh" });
+
+        var exception = Assert.Throws<BadRequestException>(() => PipelineUnresolvedVariableGuard.ValidateNoEmptyValues(
+            definition, Resolved(("DB_PASSWORD", ""), ("API_KEY", "set")), Keys("DB_PASSWORD", "API_KEY"), Keys()));
+
+        Assert.Contains("vault secrets 'DB_PASSWORD'", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("API_KEY", exception.Message, StringComparison.Ordinal);
+    }
 }

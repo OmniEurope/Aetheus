@@ -59,7 +59,10 @@ internal sealed class PipelineRunLiveConnection(
         _hub.On<int, int>("PipelineRunStarted", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int, PipelineStatus>("PipelineRunCompleted", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int>("PipelineRunCancelled", _ => invokeAsync(ScheduleReloadAsync));
+        // Recette R-39: the run rolled back after a missed confirmation and now waits for a resume.
+        _hub.On<int, DateTime>("PipelineRunAwaitingResume", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int>("StepStarted", HandleStepStartedAsync);
+        _hub.On<int, bool>("AnalysisPublishing", (publishingRunId, inProgress) => invokeAsync(() => HandleAnalysisPublishing(publishingRunId, inProgress)));
         _hub.On<int, TaskExecutionStatus>("StepCompleted", (_, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int, string, string>("ApprovalRequired", (_, _, _) => invokeAsync(ScheduleReloadAsync));
         _hub.On<int, string, string>("ApprovalResolved", (_, _, _) => invokeAsync(ScheduleReloadAsync));
@@ -70,6 +73,7 @@ internal sealed class PipelineRunLiveConnection(
         {
             if (_disposed) return;
             _joined.Clear();
+            _publishing.Clear();
             await JoinGroupsAsync();
             await _reload.RunNowAsync();
         }));
@@ -212,6 +216,20 @@ internal sealed class PipelineRunLiveConnection(
             try { await _hub.InvokeAsync("JoinPipelineRunGroup", id); }
             catch (Exception ex) { _joined.Remove(id); logger.LogDebug(ex, "[PipelineRun] Join run group {Id} failed", id); }
         }
+    }
+
+    /// <summary>R1-12: whether an analysis report is being published for this run or one of its child runs;
+    /// the run page veils its timeline and says so while it lasts.</summary>
+    public bool AnalysisPublishing => _publishing.Count > 0;
+
+    private readonly HashSet<int> _publishing = [];
+
+    internal Task HandleAnalysisPublishing(int publishingRunId, bool inProgress)
+    {
+        var changed = inProgress ? _publishing.Add(publishingRunId) : _publishing.Remove(publishingRunId);
+        if (changed)
+            onLiveStateChanged?.Invoke();
+        return Task.CompletedTask;
     }
 
     internal Task HandleStepStartedAsync(int stepId)

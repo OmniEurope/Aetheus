@@ -1,27 +1,28 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @inject GridExportContext ExportContext
 
-<OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Large">
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-            <OmniIcon Name="OmniIconName.ShieldCheck" />
-            @if (_firewall is not null && _firewall.Installed)
-            {
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(!_firewall.StatusKnown ? OmniTone.Warning : _firewall.Active ? OmniTone.Success : OmniTone.Neutral)">@(!_firewall.StatusKnown ? L["FirewallStatusUnknown"] : _firewall.Active ? L["FirewallActive"] : L["FirewallInactive"])</OmniBadge>
-            }
-        </OmniStack>
-        @if (CanManage && _firewall is { Installed: true, StatusKnown: true })
+@* Recette R-29: the page's main action sits in the page header, on the title line. *@
+@if (CanManage && _firewall is { Installed: true, StatusKnown: true })
+{
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        @if (_firewall.Active)
         {
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                @if (_firewall.Active)
-                {
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ToggleAsync(false))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.ShieldWarning" /> <span>@L["FirewallDisable"]</span></OmniButton>
-                }
-                else
-                {
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleAsync(true))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.ShieldCheck" /> <span>@L["FirewallEnable"]</span></OmniButton>
-                }
-            </OmniStack>
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => ToggleAsync(false))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon><ChildContent><span>@L["FirewallDisable"]</span></ChildContent></OmniButton>
+        }
+        else
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleAsync(true))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["FirewallEnable"]</span></ChildContent></OmniButton>
+        }
+    </SectionContent>
+}
+
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+        <OmniIcon Name="OmniIconName.ShieldCheck" />
+        @if (_firewall is not null && _firewall.Installed)
+        {
+            <OmniBadge Fill="OmniFill.Solid" Tone="@(!_firewall.StatusKnown ? OmniTone.Warning : _firewall.Active ? OmniTone.Success : OmniTone.Neutral)">@(!_firewall.StatusKnown ? L["FirewallStatusUnknown"] : _firewall.Active ? L["FirewallActive"] : L["FirewallInactive"])</OmniBadge>
         }
     </OmniStack>
 
@@ -63,10 +64,11 @@
                         </ChildContent></OmniFormField>
                         @* One submit, the rule's action chosen beside it (user decision, 2026-10-17). *@
                         <OmniFormField For="oe-pages-servers-serverdetailsections-serverfirewallsection-action"><LabelContent>@L["FirewallActionColumn"]</LabelContent><ChildContent>
-                            <OmniSelectBar TValue="FirewallRuleAction" @bind-Value="_rule.Action" Options="@RuleActionOptions" IconFor="@RuleActionIcon"
-                                           Id="oe-pages-servers-serverdetailsections-serverfirewallsection-action" />
+                            <OmniSelectBar TValue="FirewallRuleAction" @bind-Value="_rule.Action" Options="@RuleActionOptions" Id="oe-pages-servers-serverdetailsections-serverfirewallsection-action">
+                                <IconTemplate Context="action"><OmniIcon Name="@RuleActionIcon(action)" /></IconTemplate>
+                            </OmniSelectBar>
                         </ChildContent></OmniFormField>
-                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["FirewallAddRule"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["FirewallAddRule"]</span></ChildContent></OmniButton>
                     </OmniRow>
                 </OmniTemplateForm>
             </OmniCard>
@@ -85,11 +87,11 @@
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="FirewallRuleDto" Property="Source" Title="@L["FirewallSource"]"  Filterable="true"/>
-                <OmniDataGridColumn TItem="FirewallRuleDto" Title="@L["Actions"]" MinWidth="9rem" Sortable="false">
+                <OmniDataGridColumn TItem="FirewallRuleDto" Title="@L["Actions"]" Sortable="false">
                     <Template Context="r">
                         @if (CanManage && IsDeletable(r))
                         {
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                         }
                     </Template>
                 </OmniDataGridColumn>

@@ -63,6 +63,18 @@ public class VariableLibraryEditExtendedTests : BunitContext
         Assert.Contains("BASE_URL", cut.Markup);
     }
 
+    /// <summary>R1-4: an entry row keeps one visible action (Edit); History and Delete are in its menu.</summary>
+    [Fact]
+    public void AnEntryRowShowsEditAsItsOnlyAction_AndKeepsTheOthersInTheMenu()
+    {
+        var cut = RenderExisting();
+
+        Assert.Single(cut.FindAll("button[title='Edit']"));
+        Assert.Empty(cut.FindAll("button[title='History'], button[title='Delete']"));
+        Assert.NotNull(cut.FindMenuItem("History"));
+        Assert.NotNull(cut.FindMenuItem("Delete"));
+    }
+
     [Fact]
     public void Renders_NewLibrary_ShowsForm()
     {

@@ -103,7 +103,7 @@ public class ServerCronSectionExtendedTests : BunitContext
     [Fact]
     public void ValidateCronExpression_InvalidExpression_ReturnsError()
     {
-        var result = ServerCronSection.ValidateCronExpression("bad");
+        var result = CronSchedulePreview.ValidateCronExpression("bad");
         Assert.False(result.IsValid);
         Assert.NotNull(result.Error);
     }

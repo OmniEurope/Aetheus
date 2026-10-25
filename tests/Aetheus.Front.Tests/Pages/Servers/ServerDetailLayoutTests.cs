@@ -112,6 +112,15 @@ public class ServerDetailLayoutTests : BunitContext
     }
 
     [Fact]
+    public void R1_5_TheToolsMenuEntryAndTheDialogTitle_AreNamedUpdateComponents()
+    {
+        var resources = new System.Resources.ResourceManager("Aetheus.Front.Resources.AppStrings", typeof(Aetheus.Front.Resources.AppStrings).Assembly);
+
+        Assert.Equal("Mettre à jour les composants", resources.GetString("EnableAgentCapabilities", System.Globalization.CultureInfo.GetCultureInfo("fr-FR")));
+        Assert.Equal("Update components", resources.GetString("EnableAgentCapabilities", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
     public void R3_58_ToolsMenu_DoesNotOfferTheCapabilityActivation_OnAWindowsServer()
     {
         var cut = RenderLayout(MakeServer() with { OsDescription = "Microsoft Windows Server 2022" });

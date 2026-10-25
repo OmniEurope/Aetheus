@@ -41,6 +41,72 @@ public class HomeTests : BunitContext
         Assert.Contains("2", cut.Markup);
     }
 
+    private static PipelineRunDto Run(int id, PipelineStatus status, int? triggers = null) => new()
+    {
+        Id = id,
+        PipelineId = id,
+        PipelineName = $"p{id}",
+        Status = status,
+        StartedAt = DateTime.UtcNow.AddMinutes(-id),
+        Steps = triggers is { } child ? [new PipelineStepRunDto { Id = id, StageName = "s", StepName = "t", TriggeredRunId = child }] : []
+    };
+
+    [Fact]
+    public void R36_RecentRunsTile_CountsOnlyRootRunsRunning_AndShowsNoSuccessOrFailedBadge()
+    {
+        _handler.SetJsonResponse("monitoring/dashboard", new DashboardOverviewDto
+        {
+            // Run 1 is running and triggered run 2, also running: a single root, so "1" and not "2".
+            RecentRuns = [Run(1, PipelineStatus.Running, triggers: 2), Run(2, PipelineStatus.Running), Run(3, PipelineStatus.Success), Run(4, PipelineStatus.Failed)],
+            Servers = [],
+            Projects = []
+        });
+
+        var cut = Render<Home>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.FindAll(".dashboard-tile").Single(t => t.TextContent.Contains("RecentRuns", StringComparison.Ordinal));
+            var badges = tile.QuerySelectorAll(".status-count-badge");
+            var running = Assert.Single(badges);
+            Assert.Equal("1", running.QuerySelector(".status-count-badge__count")!.TextContent);
+            Assert.Contains("Enum_PipelineStatus_Running", running.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void R36_RecentRunsTile_ShowsNoRunningBadge_WhenNoRootRunIsRunning()
+    {
+        _handler.SetJsonResponse("monitoring/dashboard", new DashboardOverviewDto
+        {
+            RecentRuns = [Run(3, PipelineStatus.Success), Run(4, PipelineStatus.Failed)],
+            Servers = [],
+            Projects = []
+        });
+
+        var cut = Render<Home>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.FindAll(".dashboard-tile").Single(t => t.TextContent.Contains("RecentRuns", StringComparison.Ordinal));
+            Assert.NotEmpty(tile.QuerySelectorAll(".omni-data-grid"));
+            Assert.Empty(tile.QuerySelectorAll(".status-count-badge"));
+        });
+    }
+
+    [Fact]
+    public void R35_DashboardPanels_AreNotForcedToAnEqualHeight()
+    {
+        _handler.SetJsonResponse("monitoring/dashboard", new DashboardOverviewDto { RecentRuns = [], Servers = [], Projects = [] });
+
+        var cut = Render<Home>();
+
+        cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".dashboard-tile").Count));
+        // The OE tile grid and the equal-height row class are what forced the same height.
+        Assert.Empty(cut.FindAll(".omni-tile-grid"));
+        Assert.Empty(cut.FindAll(".dashboard-tile-row"));
+    }
+
     [Fact]
     public void DoesNotRenderOrLoadAiRunsTile()
     {

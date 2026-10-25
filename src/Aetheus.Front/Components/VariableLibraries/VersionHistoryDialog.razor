@@ -2,9 +2,9 @@
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniAlert>
 }
@@ -17,7 +17,7 @@
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="VariableEntryVersionDto" Property="Version" Title="#" Width="4.5rem" Filterable="false" />
         <OmniDataGridColumn TItem="VariableEntryVersionDto" Property="Key" Title="@L["Key"]" Filterable="true" />
-        <OmniDataGridColumn TItem="VariableEntryVersionDto" Property="Value" Title="@L["Value"]" Filterable="true" />
+        <OmniDataGridColumn TItem="VariableEntryVersionDto" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true" />
         <OmniDataGridColumn TItem="VariableEntryVersionDto" Property="ChangedAt" Value="@LocalChangedAt" Title="@L["Date"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true">
             <Template Context="v">
                 @* Versions written before the date was recorded have none (0001-01-01): nothing rather than year 1. *@
@@ -29,7 +29,7 @@
                 @if (v.Version != _currentVersion && v.ChangeType != ChangeType.Deleted)
                 {
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RestoreAsync(v))" Class="@(_restoring ? "btn-busy" : null)"
-                                title="@L["RestoreVersion"]" Label="@L["RestoreVersion"]"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
+                                title="@L["RestoreVersion"]" Label="@L["RestoreVersion"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
                 }
             </Template>
         </OmniDataGridColumn>

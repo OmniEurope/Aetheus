@@ -14,7 +14,7 @@
 {
     <OmniCard Class="@($"omni-u-mb-lg agent-update-progress-card {(_fadingOut ? "is-fading-out" : "")}")">
         <OmniStack Gap="OmniSpacing.Small">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniIcon Name="@MaterialIconMap.Resolve(PhaseIcon(_phase))" Class="@PhaseIconClass(_phase)" />
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
                     @(_phase == AgentUpdatePhase.Failed ? L["AgentUpdateFailed"] : L["AgentUpdateInProgress"])
@@ -22,16 +22,11 @@
                 <div class="flex-spacer"></div>
                 <OmniBadge Fill="OmniFill.Solid" Tone="@PhaseBadge(_phase)">@L[PhaseLabel(_phase)]</OmniBadge>
             </OmniStack>
-            @* D11: a bar only where there is a percentage to show. While the agent is offline there
-               is none, so it is the loader that says "we are waiting", like everywhere else. *@
-            @if (_phase == AgentUpdatePhase.AgentOffline || _checking)
+            @* R-46: the percentage froze between two reports, so the bar only moves along its track (the end
+               is not known); a failed update shows no bar. *@
+            @if (_phase != AgentUpdatePhase.Failed)
             {
-                <AetheusLoader Size="OmniControlSize.Small" />
-            }
-            else
-            {
-                <OmniProgressBar Value="@_percent" Maximum="100" ShowValue="false"
-                    Class="metric-bar metric-bar-thin" />
+                <OmniProgressBar Indeterminate="true" ShowValue="false" Class="metric-bar metric-bar-thin" />
             }
             @if (!string.IsNullOrWhiteSpace(_message))
             {
@@ -45,12 +40,12 @@
                         @string.Format(L["AgentUpdateVersionTransition"], Request.ObservedVersion, Request.TargetVersion)
                     </OmniText>
                 }
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
                     @if (_requestId is not null && Auth.IsAdmin)
                     {
                         <OmniLink Href="@FailureLogsPath" Class="notification-log-link"><OmniIcon Name="OmniIconName.Document" /> @L["Logs"]</OmniLink>
                     }
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Reset" /> <span>@L["Retry"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
                 </OmniStack>
             }
         </OmniStack>

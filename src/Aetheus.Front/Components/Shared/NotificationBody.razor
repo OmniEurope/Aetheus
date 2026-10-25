@@ -9,7 +9,7 @@
         <span @onclick:stopPropagation="true">
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OpenAsync"
                         Class="notification-body-more">
-                <OmniIcon Name="OmniIconName.ChevronDown" /> @L["ShowMore"]
+                <Icon><OmniIcon Name="OmniIconName.ChevronDown" /></Icon><ChildContent>@L["ShowMore"]</ChildContent>
             </OmniButton>
         </span>
     }

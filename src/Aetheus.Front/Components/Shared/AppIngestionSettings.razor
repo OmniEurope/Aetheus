@@ -24,12 +24,12 @@
 
     @if (_generatedKey is not null)
     {
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm omni-u-text-warning">@L["IngestKeyShownOnce"]</OmniText>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-xs">
+        <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm omni-u-text-warning">@L["IngestKeyShownOnce"]</OmniText>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-xs">
             <OmniTextBox aria-label="@L["IngestionKey"]" Value="@_generatedKey" ReadOnly="true" Class="omni-u-w-100"  ValueExpression="@(() => _generatedKey)"/>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyKeyAsync" title="@L["Copy"]" Label="@L["Copy"]"><OmniIcon Name="OmniIconName.Copy" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyKeyAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
         </OmniStack>
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">
+        <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">
             <code>OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=@MetricsEndpoint</code><br />
             <code>OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=@LogsEndpoint</code><br />
             <code>OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=@TracesEndpoint</code><br />
@@ -40,13 +40,13 @@
 
     @if (CanWrite)
     {
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
             @* Use red for regeneration because it invalidates the existing key; initial generation
                is the area's primary blue action. *@
-            <OmniButton Variant="@(App?.HasIngestKey == true ? OmniButtonVariant.Danger : OmniButtonVariant.Primary)" OnClick="@GenerateKeyAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="OmniIconName.Key" /> <span>@(App?.HasIngestKey == true ? L["RegenerateKey"] : L["GenerateKey"])</span></OmniButton>
+            <OmniButton Variant="@(App?.HasIngestKey == true ? OmniButtonVariant.Danger : OmniButtonVariant.Primary)" OnClick="@GenerateKeyAsync" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent><span>@(App?.HasIngestKey == true ? L["RegenerateKey"] : L["GenerateKey"])</span></ChildContent></OmniButton>
             @if (App?.HasIngestKey == true)
             {
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@RevokeKeyAsync" title="@L["RevokeIngestKey"]"><OmniIcon Name="OmniIconName.LockOpen" /> <span>@L["Revoke"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@RevokeKeyAsync" title="@L["RevokeIngestKey"]"><Icon><OmniIcon Name="OmniIconName.LockOpen" /></Icon><ChildContent><span>@L["Revoke"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
     }
@@ -106,8 +106,8 @@
             }
             @if (CanWrite)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAnalyticsConfigurationAsync" Class="@(_analyticsBusy ? "btn-busy" : null)" Busy="@(_analyticsBusy)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAnalyticsConfigurationAsync" Class="@(_analyticsBusy ? "btn-busy" : null)" Busy="@(_analyticsBusy)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                     @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
                     @if ((_analyticsConfiguration?.PseudonymKeyVersion ?? 0) > 0)
                     {
@@ -133,14 +133,14 @@
         @* The status column reads IsBreached, so it filters on breached / OK. *@
         <OmniDataGridColumn TItem="AppMetricThresholdDto" Property="IsBreached" Title="@L["Status"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@BreachedText">
             <Template Context="t">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(t.IsBreached ? OmniTone.Danger : OmniTone.Success)">@(t.IsBreached ? L["Breached"] : L["OK"])</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(t.IsBreached ? OmniTone.Danger : OmniTone.Success)">@(t.IsBreached ? L["Breached"] : L["OK"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         @if (CanWrite)
         {
             <OmniDataGridColumn TItem="AppMetricThresholdDto" Title="" Width="3.75rem" Sortable="false" Filterable="false">
                 <Template Context="t">
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteThresholdAsync(t.Id))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteThresholdAsync(t.Id))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 </Template>
             </OmniDataGridColumn>
         }
@@ -149,7 +149,7 @@
 
 @if (CanWrite)
 {
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
         <OmniStack Gap="OmniSpacing.XSmall">
             <OmniLabel For="analytics-threshold-metric">@L["Metric"]</OmniLabel>
             <OmniTextBox Id="analytics-threshold-metric" @bind-Value="_newThreshold.MetricName"
@@ -164,6 +164,6 @@
             <OmniLabel For="analytics-threshold-value">@L["Threshold"]</OmniLabel>
             <OmniNumeric Id="analytics-threshold-value" @bind-Value="_newThreshold.Threshold" Class="w-rem-8" />
         </OmniStack>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddThresholdAsync" title="@L["AddThreshold"]"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddThresholdAsync" title="@L["AddThreshold"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </OmniStack>
 }

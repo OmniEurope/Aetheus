@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
-using Aetheus.Back.Components.Mail;
 using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;

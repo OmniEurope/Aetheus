@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Alerts;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Vaults;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
-using Aetheus.Back.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

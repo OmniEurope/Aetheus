@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text.Json;
+using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Tasks;
 

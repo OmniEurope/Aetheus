@@ -10,9 +10,9 @@ public static class TasksModuleExtensions
         services.AddScoped<IPipelineTaskLifecycle, PipelineTaskLifecycleRepository>();
         services.AddScoped<ITaskQueueNotifier, TaskQueueNotifier>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<ITaskServerReader>(sp => sp.GetRequiredService<ITaskService>());
         services.AddScoped<IUnexecutableTaskRefuser, UnexecutableTaskRefuser>();
         services.AddScoped<Services.DomainEvents.IDomainEventHandler<ReleaseDeployedEvent>, ReleaseDeployedNotificationHandler>();
-        services.AddHostedService<TaskTimeoutService>();
         return services;
     }
 }

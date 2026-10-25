@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -25,7 +26,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
         _handler.SetJsonResponse("api/servers/7/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
 
         var ps = new PortsentryDataDto { IsInstalled = false };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, ps));
 
@@ -54,7 +55,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
             Mode = "atcp",
             BlockedCount = 3
         };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, ps));
 
@@ -80,7 +81,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
             TotalCount = 2
         });
 
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = true, IsRunning = true, BlockedCount = 2 }));
 
@@ -100,7 +101,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
         _handler.SetJsonResponse("api/servers/7/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
         _handler.SetJsonResponse("api/servers/7/portsentry/blocked", new PaginatedResult<PortsentryBlockedIpDto>());
         var ps = new PortsentryDataDto { IsInstalled = true, IsRunning = true, BlockedCount = 0 };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, ps));
         Assert.Contains("BlockedIps", cut.Markup);
@@ -112,7 +113,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
         _handler.SetJsonResponse("api/servers/7/portsentry/whitelist", new PaginatedResult<PortsentryWhitelistIpDto>());
         _handler.SetJsonResponse("api/servers/7/portsentry/blocked", new PaginatedResult<PortsentryBlockedIpDto>());
         var ps = new PortsentryDataDto { IsInstalled = true, IsRunning = true, BlockedCount = 25 };
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 7)
             .Add(x => x.Ps, ps));
         Assert.Contains("25", cut.Markup);
@@ -125,7 +126,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
     {
         _handler.SetJsonResponse("api/servers/8/rkhunter/warnings", new List<RkhunterWarningDto>());
         var rk = new RkhunterDataDto { IsInstalled = false };
-        var cut = Render<ServerRkhunterSection>(p => p
+        var cut = this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, 8)
             .Add(x => x.Rk, rk));
 
@@ -145,7 +146,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
             LastScanTime = DateTime.UtcNow.AddDays(-1),
             WarningCount = 2
         };
-        var cut = Render<ServerRkhunterSection>(p => p
+        var cut = this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, 8)
             .Add(x => x.Rk, rk));
 
@@ -167,7 +168,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
             Version = "1.4.6",
             WarningCount = 3
         };
-        var cut = Render<ServerRkhunterSection>(p => p
+        var cut = this.RenderWithPageHeader<ServerRkhunterSection>(p => p
             .Add(x => x.ServerId, 8)
             .Add(x => x.Rk, rk));
 

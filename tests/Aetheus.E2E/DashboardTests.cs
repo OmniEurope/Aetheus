@@ -88,10 +88,11 @@ public class DashboardTests : E2ETestBase
         await Expect(appTitle).ToBeVisibleAsync(new() { Timeout = 5000 });
         await Expect(appTitle).ToContainTextAsync("Aetheus");
 
-        // Signed in, the mode is a row of OE's application menu (light, dark, system), not a standalone
-        // header button.
+        // Signed in, the mode is one row of OE's application menu (since OE 1.9.0: three joined icon buttons, light,
+        // dark and system), not a standalone header button.
         await Page.Locator(".omni-app-menu__trigger").ClickAsync();
-        var themeRow = Page.Locator(".omni-app-menu__modes");
+        var themeRow = Page.Locator(".omni-app-menu__mode");
         await Expect(themeRow).ToBeVisibleAsync(new() { Timeout = 5000 });
+        await Expect(themeRow.GetByRole(AriaRole.Radio)).ToHaveCountAsync(3);
     }
 }

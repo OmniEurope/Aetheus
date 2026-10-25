@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -64,7 +65,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
     public async Task Apache_TestConfig_IsFollowedFromTheClickToItsTask()
     {
         _handler.SetJsonResponse("api/servers/30/apache/action", "{}");
-        var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server()).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p => p.Add(x => x.Server, Server()).Add(x => x.ServerId, 30));
 
         await cut.InvokeAsync(() => cut.FindMenuItem("TestConfig")!.Click());
         cut.WaitForAssertion(() => Assert.Contains("ServerTaskRequested", cut.Find(".server-task-follower").TextContent));
@@ -78,7 +79,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
     public async Task Apache_ARefusedLaunch_LeavesNothingToFollow()
     {
         _handler.SetResponse("api/servers/30/apache/action", System.Net.HttpStatusCode.InternalServerError);
-        var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server()).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p => p.Add(x => x.Server, Server()).Add(x => x.ServerId, 30));
 
         await cut.InvokeAsync(() => cut.FindMenuItem("TestConfig")!.Click());
 
@@ -93,7 +94,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
         _handler.SetPaginatedJsonResponse("api/servers/30/portsentry/whitelist", new List<PortsentryWhitelistIpDto>());
         _handler.SetJsonResponse("api/servers/30/portsentry/filter-values", new PortsentryFilterValuesDto());
         _handler.SetJsonResponse("api/servers/30/portsentry/logs", "{}");
-        var cut = Render<ServerPortsentrySection>(p => p
+        var cut = this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 30)
             .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = true, IsRunning = true })
             .AddCascadingValue("ServerLoader", loader));
@@ -148,7 +149,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
     public async Task Certbot_RenewalCheck_IsFollowedFromTheClickToItsTask()
     {
         _handler.SetJsonResponse("api/servers/30/certbot/action", "{}");
-        var cut = Render<ServerCertbotSection>(p => p.Add(x => x.Server, CertbotServer()).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, CertbotServer()).Add(x => x.ServerId, 30));
 
         await cut.InvokeAsync(() => cut.FindMenuItem("CertbotRenewalCheck")!.Click());
         cut.WaitForAssertion(() => Assert.Contains("ServerTaskRequested", cut.Find(".server-task-follower").TextContent));
@@ -161,7 +162,7 @@ public sealed class ServerTaskFollowerWiringTests : BunitContext
     public async Task Certbot_ARefusedLaunch_LeavesNothingToFollow()
     {
         _handler.SetResponse("api/servers/30/certbot/action", System.Net.HttpStatusCode.InternalServerError);
-        var cut = Render<ServerCertbotSection>(p => p.Add(x => x.Server, CertbotServer()).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, CertbotServer()).Add(x => x.ServerId, 30));
 
         await cut.InvokeAsync(() => cut.FindMenuItem("CertbotRenewalCheck")!.Click());
 

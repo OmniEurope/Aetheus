@@ -25,9 +25,6 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props NuGet.config ./
 COPY scanner-manifest.json ./
 COPY .aetheus/security-rules/opengrep/ .aetheus/security-rules/opengrep/
-COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh deploy/scripts/promote-observability-packages.sh
 COPY src/Aetheus.Shared/Aetheus.Shared.csproj src/Aetheus.Shared/
 COPY src/Aetheus.Analyzers/Aetheus.Analyzers.csproj src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/Aetheus.Agent.Core.csproj src/Aetheus.Agent.Core/
@@ -40,9 +37,6 @@ COPY src/Aetheus.Analyzers/ src/Aetheus.Analyzers/
 COPY src/Aetheus.Agent.Core/ src/Aetheus.Agent.Core/
 COPY src/Aetheus.Agent.Linux/ src/Aetheus.Agent.Linux/
 COPY src/Aetheus.Agent.Functions.Cli/ src/Aetheus.Agent.Functions.Cli/
-COPY deploy/scripts/zap-active-automation.sh deploy/scripts/zap-active-automation.sh
-COPY deploy/scripts/publish-observability-package.sh deploy/scripts/publish-observability-package.sh
-COPY deploy/scripts/promote-observability-packages.sh deploy/scripts/promote-observability-packages.sh
 # aetheus-fn (PLAN-002 lot 1.0g), as Dockerfile.back ships it: the pipeline functions that run inside a
 # step container, one binary per Linux C library, at <agent dir>/aetheus-fn/<rid>/aetheus-fn.
 RUN dotnet publish src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj \
@@ -55,7 +49,7 @@ RUN dotnet publish src/Aetheus.Agent.Linux/Aetheus.Agent.Linux.csproj \
         && chmod 755 "/agentpkg/aetheus-fn/$rid/aetheus-fn" \
         || exit 1; \
     done
-COPY deploy/scripts/install-agent-linux.sh /agentpkg/install-agent-linux.sh
+COPY deploy/agent-installer/install-agent-linux.sh /agentpkg/install-agent-linux.sh
 # Ships host-configuration templates beside the installer so it can render the agent configuration.
 COPY deploy/agent-host-config/ /agentpkg/agent-host-config/
 
@@ -264,7 +258,7 @@ RUN mkdir -p /run/sshd \
 # final runtime stage ships no .NET (the agent published self-contained), so this
 # adds a usable SDK on demand. Installs via Microsoft's official version-pinned
 # dotnet-install.sh - the same mechanism + SDK version the agent's pipeline-
-# runner module uses (deploy/scripts/install-agent-linux.sh). Placed last so
+# runner module uses (deploy/agent-installer/install-agent-linux.sh). Placed last so
 # toggling -net10 only rebuilds this cheap tail layer.
 ARG INSTALL_DOTNET=0
 ARG DOTNET_INSTALLER_URL=https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh

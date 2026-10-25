@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
-using Aetheus.Back.Services;
+using Aetheus.Back.Components.Servers;
 using Microsoft.Extensions.Hosting;
 
 namespace Aetheus.Back.Tests.Architecture;

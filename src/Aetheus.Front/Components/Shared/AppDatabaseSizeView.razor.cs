@@ -7,7 +7,6 @@ namespace Aetheus.Front.Components.Shared;
 
 public partial class AppDatabaseSizeView
 {
-    private const double Megabyte = 1024d * 1024d;
 
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -68,18 +67,12 @@ public partial class AppDatabaseSizeView
     internal static string TableName(AppDatabaseTableSizeDto table) =>
         string.IsNullOrEmpty(table.Schema) || table.Schema == "public" ? table.Name : $"{table.Schema}.{table.Name}";
 
-    /// <summary>Megabytes of 1,048,576 bytes, the unit of <c>pg_size_pretty</c>, so the figures read like
-    /// the <c>psql</c> measurement; under one megabyte, kilobytes.</summary>
-    internal string Bytes(long? bytes) => bytes switch
-    {
-        null => "-",
-        < 1024 * 1024 => string.Format(CultureInfo.CurrentCulture, L["SizeKilobytes"], (bytes.Value / 1024d).ToString("N0", CultureInfo.CurrentCulture)),
-        _ => string.Format(CultureInfo.CurrentCulture, L["SizeMegabytes"], (bytes.Value / Megabyte).ToString("N0", CultureInfo.CurrentCulture))
-    };
+    /// <summary>The site size format (<see cref="DisplayFormatting.Size"/>), "-" without a measurement.</summary>
+    internal static string Bytes(long? bytes) => bytes is { } value ? DisplayFormatting.Size(value) : "-";
 
     internal static string Rows(long? rows) => rows?.ToString("N0", CultureInfo.CurrentCulture) ?? "-";
 
-    /// <summary>"+12 MB", "-3 MB", or "-" without an earlier measurement.</summary>
+    /// <summary>"+12 Mo", "-3 Mo", or "-" without an earlier measurement.</summary>
     internal string Trend(long? now, long? before)
     {
         if (now is null || before is null) return "-";

@@ -96,7 +96,7 @@ public sealed class DockerStorageMaintenanceService(
             {
                 throw new InvalidOperationException(
                     $"Docker build refused after bounded cache maintenance: only {FormatBytes(freeBytes)} free; " +
-                    $"the configured safety floor is {_options.MinFreeSpaceGiB} GiB.");
+                    $"the configured safety floor is {_options.MinFreeSpaceGiB} Go.");
             }
         }
         catch

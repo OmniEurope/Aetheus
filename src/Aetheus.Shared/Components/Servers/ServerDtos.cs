@@ -174,6 +174,10 @@ public sealed record ServerDetailDto : ServerDto
     public double DiskTotalGb { get; init; }
     /// <summary>Fullest inode table of the last metric, in percent; null when unknown.</summary>
     public double? InodeUsedPercent { get; init; }
+    /// <summary>The distinct filesystems of the last heartbeat, for the storage section; empty until the
+    /// agent reported them.</summary>
+    [MaxLength(64)]
+    public List<DiskInfoDto> Disks { get; init; } = [];
     /// <summary>Agent clock offset against the backend's, in milliseconds (positive = agent ahead),
     /// and its uncertainty; both null when unknown (PLAN-010 lot 1).</summary>
     public double? ClockOffsetMs { get; init; }
@@ -342,6 +346,51 @@ public sealed record DiskInfoDto
     /// </summary>
     public long? InodesTotal { get; init; }
     public long? InodesUsed { get; init; }
+
+    /// <summary>
+    /// Identity of the device behind the mount (<c>/dev/sda1</c>, or its major:minor number), so that
+    /// several mounts of one device are known to be the same storage. Null from an agent predating the
+    /// field or on a platform that cannot tell.
+    /// </summary>
+    [StringLength(260)]
+    public string? DeviceId { get; init; }
+
+    /// <summary>
+    /// The disks that are distinct storage. A mount of a device already listed is dropped: same
+    /// <see cref="DeviceId"/>, or, from an agent that does not report it, the same size, the same inode
+    /// table (a fixed property of a formatted filesystem) and the same use within 0.1 Go, which a
+    /// second mount of one device always has and two different volumes hardly ever do. The first
+    /// listed wins, so "/" stays ahead of a bind mount of it.
+    /// </summary>
+    public static List<DiskInfoDto> Distinct(IEnumerable<DiskInfoDto> disks)
+    {
+        ArgumentNullException.ThrowIfNull(disks);
+        var kept = new List<DiskInfoDto>();
+        foreach (var disk in disks)
+        {
+            if (!kept.Exists(other => SameStorage(other, disk))) kept.Add(disk);
+        }
+        return kept;
+    }
+
+    /// <summary>Used and total space of the distinct storage among <paramref name="disks"/>, in Go
+    /// (1024³ bytes, the unit the agent reports): what the server really holds, each device counted once.</summary>
+    public static (double UsedGb, double TotalGb) Totals(IEnumerable<DiskInfoDto> disks)
+    {
+        var distinct = Distinct(disks);
+        return (distinct.Sum(disk => disk.UsedGb), distinct.Sum(disk => disk.TotalGb));
+    }
+
+    private static bool SameStorage(DiskInfoDto first, DiskInfoDto second)
+    {
+        if (first.DeviceId is { Length: > 0 } && second.DeviceId is { Length: > 0 })
+            return string.Equals(first.DeviceId, second.DeviceId, StringComparison.Ordinal);
+        if (first.DeviceId is { Length: > 0 } || second.DeviceId is { Length: > 0 }) return false;
+        return first.InodesTotal is > 0
+            && first.InodesTotal == second.InodesTotal
+            && first.TotalGb == second.TotalGb
+            && Math.Abs(first.UsedGb - second.UsedGb) <= 0.1;
+    }
 
     /// <summary>
     /// The fullest inode table among <paramref name="disks"/>, in percent. Inodes run out per

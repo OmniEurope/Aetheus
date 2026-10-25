@@ -20,9 +20,11 @@ internal sealed class PipelineRunLauncher(
     /// </summary>
     public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, string? sourceBranch)
     {
-        if (!await runGate.ConfirmPreflightAsync(pipelineId, sourceBranch)) return null;
+        // The parameters come first: the preview resolves the targets they name (the production server)
+        // from them, and a required one nobody answered yet is not a warning to show beforehand.
         var (proceed, parameters) = await dialogs.ResolveDefaultParametersAsync(pipelineId, sourceBranch);
         if (!proceed) return null;
+        if (!await runGate.ConfirmPreflightAsync(pipelineId, sourceBranch, parameters)) return null;
         return await TriggerAsync(pipelineId, sourceBranch, parameters);
     }
 
@@ -32,7 +34,7 @@ internal sealed class PipelineRunLauncher(
     /// </summary>
     public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, PipelineLaunchChoice choice)
     {
-        if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch)) return null;
+        if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch, choice.Parameters)) return null;
         return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters, choice.RunToEnd);
     }
 

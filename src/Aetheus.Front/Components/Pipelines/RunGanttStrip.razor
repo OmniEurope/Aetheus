@@ -47,7 +47,7 @@
                                     Label="@ToggleText(bar, expanded)" title="@ToggleText(bar, expanded)"
                                     aria-expanded="@(expanded ? "true" : "false")"
                                     aria-controls="@StepsId(bar)">
-                            <OmniIcon Name="@(expanded ? OmniIconName.ChevronDown : OmniIconName.ChevronRight)" />
+                            <Icon><OmniIcon Name="@(expanded ? OmniIconName.ChevronDown : OmniIconName.ChevronRight)" /></Icon>
                         </OmniButton>
                     }
                     else
@@ -130,7 +130,7 @@
                             <span class="run-gantt-cols">
                                 @foreach (var column in columns)
                                 {
-                                    <span class="run-gantt-col" data-column="@column.Kind">@(column.Kind == GanttColumn.Duration && step.HasBar ? FormatDuration(step.Duration) : string.Empty)</span>
+                                    <span class="run-gantt-col" data-column="@column.Kind">@(column.Kind == GanttColumn.Duration && step.HasBar ? DisplayFormatting.PreciseDuration(step.Duration) : string.Empty)</span>
                                 }
                             </span>
                         </div>

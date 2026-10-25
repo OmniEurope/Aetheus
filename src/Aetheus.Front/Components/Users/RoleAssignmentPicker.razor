@@ -32,7 +32,7 @@
         <OmniSwitch TValue="bool" Value="@_assignedOnly" ValueExpression="@(() => _assignedOnly)" ValueChanged="@OnAssignedOnlyChanged" Class="role-assignment-filter">@L["AssignedRolesOnly"]</OmniSwitch>
         @if (!string.IsNullOrWhiteSpace(_search))
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearSearchAsync"><OmniIcon Name="OmniIconName.Close" /> <span>@L["ClearFilters"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearSearchAsync"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
         }
     </div>
 
@@ -44,7 +44,7 @@
             Virtualize="@AetheusGrid.RemoteVirtualization"
             VirtualData="@(() => new OmniDataGridResult<RoleDto>(_roles, _totalCount))">
             <Columns>
-                <OmniDataGridColumn Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Role"]" MinWidth="240px" Filterable="true" >
+                <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Role"]" Filterable="true" >
                     <Template Context="role">
                         @{ var isSelected = IsSelected(role.Name); }
                         <OmniCheckBox TValue="bool" Value="isSelected" ValueExpression="@(() => isSelected)" ValueChanged="@(selected => OnRoleToggledAsync(role.Name, selected))" Class="role-assignment-toggle" Disabled="@Disabled">@role.Name</OmniCheckBox>

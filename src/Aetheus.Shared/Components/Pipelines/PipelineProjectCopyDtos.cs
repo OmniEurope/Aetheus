@@ -104,7 +104,20 @@ public enum PipelineCopyIssueKind
     InvalidDefinition = 6,
 
     /// <summary>The target project already has a pipeline of this name.</summary>
-    NameTaken = 7
+    NameTaken = 7,
+
+    /// <summary>The source pipeline had a <c>schedule</c> or <c>webhook</c> trigger: the copy is created
+    /// with <c>trigger: manual</c> so it does not run on its own. <see cref="PipelineCopyIssueDto.Detail"/>
+    /// holds the original trigger; the user enables the copy explicitly.</summary>
+    TriggerDisabled = 8,
+
+    /// <summary>Identifiers the copy rewrote from the source project to the new one (variable values and
+    /// environment names that are a bare identifier starting with the source prefix). Informational.</summary>
+    IdentifiersRenamed = 9,
+
+    /// <summary>The definition refers to files of the source repository (scripts, configurations,
+    /// compose files): the copy does not carry them, the new project's repository has to provide them.</summary>
+    RepositoryFileDependency = 10
 }
 
 /// <summary>A library or vault of the source project the copied pipelines use: its structure is copied

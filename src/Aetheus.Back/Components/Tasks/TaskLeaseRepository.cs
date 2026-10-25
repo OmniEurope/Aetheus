@@ -6,7 +6,7 @@ namespace Aetheus.Back.Components.Tasks;
 
 internal sealed class TaskLeaseRepository(AppDbContext db, TimeProvider timeProvider)
 {
-    private static readonly TimeSpan AgentSessionLeaseDuration = TimeSpan.FromMinutes(2);
+    internal static readonly TimeSpan AgentSessionLeaseDuration = TimeSpan.FromMinutes(2);
 
     // The task is assigned to this agent session and fencing token, and that session still holds a live
     // lease on the task's server: the precondition of every lease-guarded task transition.

@@ -440,7 +440,7 @@ public static class DbInitializer
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Back.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Front.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
-                              sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
+                              sh $(WORKSPACE)/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
                             timeout_seconds: 300
                       # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
                       - name: CoverageReport
@@ -548,7 +548,7 @@ public static class DbInitializer
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Back.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Front.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
                               dotnet test --project $(WORKSPACE)/tests/Aetheus.Agent.Core.Tests --no-build -c Release --coverlet --results-directory $(WORKSPACE)/coverage &&
-                              sh $(WORKSPACE)/deploy/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
+                              sh $(WORKSPACE)/scripts/normalize-coverage-report.sh $(WORKSPACE)/coverage
                             timeout_seconds: 300
                       # The coverage report reads the files Collect Coverage writes: steps of one stage run concurrently (ADR-012).
                       - name: CoverageReport

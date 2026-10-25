@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text;
+using Aetheus.Back.Components.Git.Events;
 using Microsoft.AspNetCore.Http;
 
 namespace Aetheus.Back.Components.Git;

@@ -8,7 +8,7 @@ public sealed record AssuranceVerdict(AnalysisGrade? Grade, bool? Deployable, in
 /// <summary>
 /// F1: reads the CANDIDATE_ASSURANCE_GRADE / CANDIDATE_DEPLOYABLE / CANDIDATE_BLOCKING_TESTS output
 /// variables the AssuranceSeal stage published on a run (see
-/// <c>deploy/scripts/generate-candidate-assurance-contract.mjs</c> and the inline seal step of
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c> and the inline seal step of
 /// <c>.pipeline/aetheus-candidate.yaml</c>), the same output-variable scan
 /// <see cref="PipelineRunGradeAggregation"/> already uses for the run list's grade column. Extracted out
 /// of <see cref="ReleaseService"/> (over the file-size budget), not for reuse elsewhere yet.

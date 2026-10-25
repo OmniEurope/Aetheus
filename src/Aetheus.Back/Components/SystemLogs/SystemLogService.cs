@@ -68,7 +68,7 @@ public class SystemLogService : ISystemLogService
             var info = new FileInfo(filePath);
             if (info.Length > MaxFileSizeBytes)
             {
-                _logger.LogWarning("Skipping oversized log file {FilePath} ({SizeMB:F1} MB)",
+                _logger.LogWarning("Skipping oversized log file {FilePath} ({SizeMB:F1} Mo)",
                     filePath, info.Length / (1024.0 * 1024.0));
                 continue;
             }

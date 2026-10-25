@@ -6,7 +6,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/ensure-dotnet-sdk.sh</c>, run through the real executor on a temp
+/// The C# port of <c>scripts/ensure-dotnet-sdk.sh</c>, run through the real executor on a temp
 /// directory unique to each test: manifest checks, the host SDK kept when it resolves the exact pinned
 /// version from the manifest's directory, the version-isolated cache, the pinned installer (digest,
 /// bash, exit code, post-install check) and the step timeout reaching a running tool. One test runs

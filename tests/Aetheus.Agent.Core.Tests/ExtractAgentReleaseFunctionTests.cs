@@ -8,7 +8,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/extract-agent-release-from-image.sh</c>, run through the real
+/// The C# port of the former <c>extract-agent-release-from-image.sh</c> script, run through the real
 /// executor against a Docker CLI stand-in whose <c>docker cp</c> lays out the release the image serves:
 /// the argument refusals, the copy and the container always removed, each manifest check with the
 /// script's message, the protocol policies, <c>full</c> and <c>manifest-only</c>, and the defaults the

@@ -10,9 +10,9 @@
 }
 else if (_loadFailed)
 {
-    <OmniStack Orientation="OmniStackOrientation.Vertical" Gap="OmniSpacing.Medium" Align="OmniAlignment.Start">
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium" Align="OmniAlignment.Start">
         <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniStack>
 }
 else if (_summary is null)

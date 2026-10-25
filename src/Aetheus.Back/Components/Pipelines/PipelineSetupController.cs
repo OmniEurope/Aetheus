@@ -15,6 +15,7 @@ namespace Aetheus.Back.Components.Pipelines;
 public class PipelineSetupController(
     IPipelineSetupReadinessService setupReadiness,
     IPipelineRequirementsProvisioner provisioner,
+    IPipelineProductionSetupService productionSetup,
     IPipelineProjectCopyService projectCopy,
     IPipelineOwnerAuthorization ownerAuthz,
     IResourceAuthorizationService authz) : ControllerBase
@@ -157,6 +158,49 @@ public class PipelineSetupController(
 
         return Ok(await provisioner.ProvisionUnmetAsync(
             projectId, scope.OrganizationId, scope.ReadableLibraries, scope.ReadableVaults, ct));
+    }
+
+    /// <summary>What the production deployment of the project needs, read from the Compose file of its repository:
+    /// the files found, the variables that file reads and where each value comes from, the servers. Gated on WRITE
+    /// access to the project, like the readiness check, since it reads the repository.</summary>
+    [HttpPost("production-analysis")]
+    public async Task<ActionResult<PipelineProductionAnalysisDto>> AnalyzeProduction(
+        [FromBody] PipelineProductionAnalysisRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, request.ProjectId, Permission.Write, ct))
+            return Forbid();
+
+        return Ok(await productionSetup.AnalyzeAsync(request.ProjectId, request.ComposeFile, ct));
+    }
+
+    /// <summary>Creates the variables, secrets and ports the Compose file asks for and the project's configuration
+    /// repository with its versioned files. It writes to the project, its libraries and its vaults, so all three
+    /// rights are needed, as for provisioning; a value the operator gave for a secret goes to the vault only.</summary>
+    [HttpPost("production-apply")]
+    public async Task<ActionResult<PipelineProductionApplyResultDto>> ApplyProduction(
+        [FromBody] PipelineProductionApplyRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (await AuthorizeProvisioningAsync(request.ProjectId, ct) is null)
+            return Forbid();
+
+        return Ok(await productionSetup.ApplyAsync(request, ct));
+    }
+
+    /// <summary>Mends the environment sample the project's configuration repository already holds: a refused variable
+    /// name becomes its scoped name there and in the library <c>prod</c>. It writes to the project's configuration
+    /// repository and to its library, so both rights are needed (no vault is touched).</summary>
+    [HttpPost("production-repair")]
+    public async Task<ActionResult<PipelineProductionRepairResultDto>> RepairProductionEnvSample(
+        [FromBody] PipelineProductionRepairRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await authz.HasPermissionAsync(User, ResourceType.Project, request.ProjectId, Permission.Write, ct)
+            || !await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct))
+            return Forbid();
+
+        return Ok(await productionSetup.RepairEnvSampleAsync(request.ProjectId, ct));
     }
 
     // An admin sees the whole fleet; anyone else is answered about their own organization, so a

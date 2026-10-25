@@ -80,6 +80,9 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         /// when they diverge, the UI can offer a per-port action.</summary>
         public ApacheVirtualHostDto Primary => Members[0];
 
+        /// <summary>Recette R-13: the number of VirtualHost blocks carrying this server name, in its own column.</summary>
+        public int BlockCount => Members.Count;
+
         /// <summary>Comma-separated DocumentRoot list when members disagree, else the single value.</summary>
         public string DocumentRootsCompact =>
             string.Join(", ",
@@ -105,8 +108,21 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
     {
         ApacheAction.EnableSite or ApacheAction.EnableModule => $"{L["Enable"]} {targetName}",
         ApacheAction.DisableSite or ApacheAction.DisableModule => $"{L["Disable"]} {targetName}",
+        ApacheAction.DeleteSite => $"{L["Delete"]} {targetName}",
         _ => L[action.ToString()]
     };
+
+    /// <summary>The distinct site files of a row (its :80 and :443 blocks often share one).</summary>
+    internal static IReadOnlyList<string> SiteFiles(ApacheVirtualHostGroup group) =>
+        group.Members.Select(member => Path.GetFileName(member.ConfigFile))
+            .Where(file => !string.IsNullOrEmpty(file))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    // Recette R-12: deleting a disabled site's file is destructive, so it is confirmed (red verb, "Revenir").
+    private Task ConfirmDeleteSite(string file) =>
+        ShowDestructiveConfirm(L["ApacheDeleteSiteTitle"], string.Format(L["ApacheDeleteSiteConfirm"], file),
+            () => ExecuteActionAsync(ApacheAction.DeleteSite, file), L["Delete"].Value, OmniIconName.Delete);
 
     private async Task FetchLogsAsync()
     {

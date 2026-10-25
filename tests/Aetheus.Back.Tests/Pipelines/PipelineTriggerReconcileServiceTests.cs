@@ -271,6 +271,23 @@ public class PipelineTriggerReconcileServiceTests
             43, Arg.Any<ApprovalDecisionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>R-39: a run waiting for a resume past its window is closed by the sweep, one run failing
+    /// to close not stopping the next.</summary>
+    [Fact]
+    public async Task R39_ExpiredResumeWaits_AreClosed_OneFailureDoesNotStopTheNext()
+    {
+        _repo.GetExpiredResumeWaitRunIdsAsync(Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns([51, 52]);
+        _runService.CloseExpiredResumeWaitAsync(51, Arg.Any<CancellationToken>())
+            .Returns<Task<bool>>(_ => throw new InvalidOperationException("transient failure"));
+        _runService.CloseExpiredResumeWaitAsync(52, Arg.Any<CancellationToken>()).Returns(true);
+
+        await _sut.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        await _runService.Received(1).CloseExpiredResumeWaitAsync(51, Arg.Any<CancellationToken>());
+        await _runService.Received(1).CloseExpiredResumeWaitAsync(52, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Reconcile_NothingStuck_TouchesNothing()
     {

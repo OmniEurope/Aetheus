@@ -5,8 +5,8 @@ namespace Aetheus.Shared.Components.Vaults;
 
 /// <summary>
 /// Generates cryptographically secure values for the well-known secret keys the deployment
-/// scripts expect. The recipes mirror <c>deploy/scripts/deploy.sh</c> and
-/// <c>deploy/scripts/prod-deploy-prepare.sh</c> byte for byte, so a value generated here is
+/// scripts expect. The recipes mirror <c>deploy/remote-deploy/deploy.sh</c> and
+/// the <c>prod-deploy-prepare.sh</c> heredoc of <c>.pipeline/aetheus-deploy-prod.yaml</c> byte for byte, so a value generated here is
 /// interchangeable with one a deployment generated on the host. An unknown key falls back to
 /// the generic profile rather than refusing: a strong random value is always better than a
 /// hand-typed one.

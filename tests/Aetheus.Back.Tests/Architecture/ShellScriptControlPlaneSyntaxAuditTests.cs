@@ -27,22 +27,34 @@ public class ShellScriptControlPlaneSyntaxAuditTests
     private static readonly Regex TemplateExpression = new(
         @"\$\{\{", RegexOptions.Compiled);
 
+    /// <summary>Where the repository's shell scripts live (the former deploy/scripts directory was split by role).</summary>
+    private static readonly string[][] ScriptDirectories =
+    [
+        ["deploy", "agent-installer"],
+        ["deploy", "remote-deploy"],
+        ["scripts"],
+        [".github", "scripts"],
+        ["src", "Aetheus.Agent.Core", "Harnesses"],
+    ];
+
     private static readonly string[] KnownLiveScripts =
     [
-        "deploy/scripts/deploy.sh",
-        "deploy/scripts/release-fast-deploy.sh",
-        "deploy/scripts/install-agent-linux.sh",
+        "deploy/remote-deploy/deploy.sh",
+        "deploy/agent-installer/install-agent-linux.sh",
     ];
 
     [Fact]
     public void NoDeliveryScript_ContainsControlPlaneSubstitution()
     {
-        var scriptsDir = Path.Combine(RepositoryScan.Root, "deploy", "scripts");
-        Assert.True(Directory.Exists(scriptsDir), $"Scripts dir not found: {scriptsDir}");
+        var scriptDirectories = ScriptDirectories
+            .Select(parts => Path.Combine([RepositoryScan.Root, .. parts]))
+            .ToList();
+        foreach (var scriptsDir in scriptDirectories)
+            Assert.True(Directory.Exists(scriptsDir), $"Scripts dir not found: {scriptsDir}");
 
         var offenders = new List<string>();
         var scanned = new List<string>();
-        foreach (var file in RepositoryScan.Enumerate(scriptsDir, "*.sh"))
+        foreach (var file in scriptDirectories.SelectMany(directory => RepositoryScan.Enumerate(directory, "*.sh")))
         {
             var relative = Path.GetRelativePath(RepositoryScan.Root, file);
             scanned.Add(relative.Replace('\\', '/'));
@@ -60,9 +72,9 @@ public class ShellScriptControlPlaneSyntaxAuditTests
         }
 
         // A path bug shows as known live scripts missing from the scan, whatever the number of scripts:
-        // the manual deployment (README), the pipeline-run fast release, and the agent installer
+        // the manual deployment (README) and the agent installer
         // (launch-linux.sh, Dockerfile.back).
-        Assert.True(scanned.Count > 0, $"Scanner found no shell script under {scriptsDir} - likely a path bug.");
+        Assert.True(scanned.Count > 0, $"Scanner found no shell script under {string.Join(", ", scriptDirectories)} - likely a path bug.");
         foreach (var known in KnownLiveScripts)
             Assert.True(scanned.Contains(known), $"Scanner did not see {known} - likely a path bug.");
         Assert.True(

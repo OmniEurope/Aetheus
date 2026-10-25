@@ -27,7 +27,7 @@ public sealed class FirewallCollector(
         try
         {
             // `ufw status` needs root; go through the helper (only works when the grant is present).
-            var res = await Shell.RunExecAsync("sudo", ["-n", FirewallOperationExecutor.HelperPath, "status"], ct).ConfigureAwait(false);
+            var res = await Shell.RunExecAsync("sudo", ["-n", AgentHelperPaths.FirewallHelper, "status"], ct).ConfigureAwait(false);
             if (res.ExitCode != 0)
             {
                 return new FirewallDataDto

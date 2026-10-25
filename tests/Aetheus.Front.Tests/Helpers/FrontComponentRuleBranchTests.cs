@@ -63,54 +63,6 @@ public sealed class FrontComponentRuleBranchTests
     }
 
     [Theory]
-    [InlineData("GreaterThan", "8", "policy.key: finding = 40 (> 8)")]
-    [InlineData("GreaterThanOrEqual", "8", "policy.key: finding = 40 (≥ 8)")]
-    [InlineData("LessThan", "8", "policy.key: finding = 40 (< 8)")]
-    [InlineData("LessThanOrEqual", "8", "policy.key: finding = 40 (≤ 8)")]
-    [InlineData("Equal", "8", "policy.key: finding = 40 (= 8)")]
-    [InlineData("Equals", "8", "policy.key: finding = 40 (= 8)")]
-    [InlineData("Between", "8", "policy.key: finding = 40 (Between 8)")]
-    [InlineData("GreaterThan", null, "policy.key: finding = 40")]
-    [InlineData("GreaterThan", " ", "policy.key: finding = 40")]
-    public void ViolationText_ReadsAsTheRuleAndItsThreshold(string op, string? threshold, string expected)
-    {
-        var violation = new AnalysisRunGateViolationDto
-        {
-            PolicyKey = "policy.key",
-            TargetKind = "metric",
-            TargetKey = "finding",
-            ObservedValue = "40",
-            Operator = op,
-            Threshold = threshold,
-        };
-
-        Assert.Equal(expected, PipelineRunGateFindings.ViolationText(violation));
-    }
-
-    [Fact]
-    public void ViolationText_AFindingTargetReadsAsItsRuleNotItsFingerprint()
-    {
-        var violation = new AnalysisRunGateViolationDto
-        {
-            PolicyKey = "quality.cycles",
-            TargetKind = "Finding",
-            TargetKey = "architecture.cycles.type:abc123",
-            Operator = "GreaterThan",
-            Threshold = "0",
-        };
-
-        Assert.Equal("quality.cycles: architecture.cycles.type = - (> 0)", PipelineRunGateFindings.ViolationText(violation));
-    }
-
-    [Fact]
-    public void ViolationText_WithoutTargetKey_UsesTheTargetKind()
-    {
-        var violation = new AnalysisRunGateViolationDto { PolicyKey = "p", TargetKind = "run", ObservedValue = "1" };
-
-        Assert.Equal("p: run = 1", PipelineRunGateFindings.ViolationText(violation));
-    }
-
-    [Theory]
     [InlineData("analysis.completed", "Quality")]
     [InlineData("app.down", "Monitoring")]
     [InlineData("alert.fired", "Monitoring")]

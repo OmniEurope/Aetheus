@@ -21,6 +21,15 @@ internal static class PipelineConfigTemplateRenderer
                 .Any(segment => segment is "." or "..");
     }
 
+    /// <summary>The <c>#{NAME}#</c> tokens <see cref="RenderStrict"/> will have to resolve, so a launch can
+    /// refuse a template it could never render before the run executes anything (R-32).</summary>
+    public static IEnumerable<string> FindTokenNames(string template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        foreach (Match match in TokenRegex.Matches(template))
+            yield return match.Groups[1].Value;
+    }
+
     public static string RenderStrict(
         string template,
         IReadOnlyDictionary<string, string> variables)

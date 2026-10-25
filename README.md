@@ -152,8 +152,8 @@ powershell -ExecutionPolicy Bypass -File .\install-agent-windows.ps1
 ## Deployment
 
 ```powershell
-.\deploy\scripts\local.ps1            # local Docker stack: build and start
-.\deploy\scripts\local.ps1 -Down      # stop it
+.\deploy\compose\local.ps1            # local Docker stack: build and start
+.\deploy\compose\local.ps1 -Down      # stop it
 ```
 
 `deploy.sh` assumes no host: `SERVERNAME` (the public domain) and `GITREMOTE` (the repository to
@@ -162,10 +162,10 @@ deploy) are required, and the script stops when either is missing.
 ```bash
 export SERVERNAME=aetheus.example.com
 export GITREMOTE=https://git.example.com/you/aetheus.git
-sh deploy/scripts/deploy.sh           # remote Linux deployment, production, branch main
-sh deploy/scripts/deploy.sh -b develop
-sh deploy/scripts/deploy.sh -r        # rebuild without cache
-sh deploy/scripts/deploy.sh -d        # stop
+sh deploy/remote-deploy/deploy.sh           # remote Linux deployment, production, branch main
+sh deploy/remote-deploy/deploy.sh -b develop
+sh deploy/remote-deploy/deploy.sh -r        # rebuild without cache
+sh deploy/remote-deploy/deploy.sh -d        # stop
 ```
 
 `deploy/apache/` holds reverse-proxy templates using `example.com` placeholders. Replace the

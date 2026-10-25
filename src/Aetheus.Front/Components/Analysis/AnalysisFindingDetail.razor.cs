@@ -157,6 +157,13 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         }
     }
 
+    /// <summary>A fixed finding has nothing left to decide (recette R1-35): its Decision tab is not offered.</summary>
+    private bool ShowsDecisionTab => _finding?.Status != AnalysisFindingStatus.Fixed;
+
+    private string[] TabSlugs => ShowsDecisionTab
+        ? ["overview", "prompt", "occurrences", "decisions"]
+        : ["overview", "prompt", "occurrences"];
+
     /// <summary>A decision is in force (not revoked) and the finding still carries it.</summary>
     private bool HasRevertibleDecision => _finding is not null
         && AnalysisFindingDecisionRevert.CanRevert(_finding.Status)
@@ -219,8 +226,6 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         return QueryHelpers.AddQueryString($"/git-repositories/{source.RepositoryId}", query);
     }
 
-    private void SelectDecisionStatus(AnalysisFindingStatus status) => _decision.Status = status;
-
     private string DecisionStatusText(AnalysisFindingStatus status) => L[$"AnalysisFindingStatus{status}"];
     private string DecisionStatusDescription(AnalysisFindingStatus status) => L[$"AnalysisDecision{status}Description"];
     private static string DecisionStatusIcon(AnalysisFindingStatus status) => status switch
@@ -229,16 +234,6 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         AnalysisFindingStatus.FalsePositive => "fact_check",
         AnalysisFindingStatus.Mitigated => "health_and_safety",
         _ => "gavel"
-    };
-
-    private static OmniButtonVariant DecisionStatusStyle(AnalysisFindingStatus status) => status switch
-    {
-        AnalysisFindingStatus.Accepted => OmniButtonVariant.Warning,
-        AnalysisFindingStatus.FalsePositive => OmniButtonVariant.Secondary,
-        // STD-BTN (revised 2026-09-28): never the success colour on a button, the selected
-        // "mitigated" choice is blue.
-        AnalysisFindingStatus.Mitigated => OmniButtonVariant.Primary,
-        _ => OmniButtonVariant.Ghost
     };
 
     private static OmniTone DecisionStatusBadgeStyle(AnalysisFindingStatus status) =>

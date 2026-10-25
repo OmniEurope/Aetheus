@@ -419,6 +419,38 @@ public class OwnerTypeSelectorTests : BunitContext
         Assert.Equal(1, ProjectDropDown(cut).Instance.Value);
     }
 
+    // An existing environment (or server) owner: picking another project clears every owner id in the
+    // parent, and the kind the owner implied must stay chosen instead of falling back to Global.
+    [Theory]
+    [InlineData("Environment", OwnerTypeSelector.OwnerKind.Environment)]
+    [InlineData("ProjectServer", OwnerTypeSelector.OwnerKind.ProjectServer)]
+    public async Task PickingAnotherProjectOfAnExistingOwner_KeepsTheOwnerKind(string owner, OwnerTypeSelector.OwnerKind expected)
+    {
+        _handler.SetJsonResponse("api/environments/10", new EnvironmentDto { Id = 10, Name = "Staging", ProjectId = 1 });
+        SetupEnvStub(1);
+        SetupEnvStub(2);
+        SetupProjectServersStub(1);
+        SetupProjectServersStub(2);
+        var cut = Render<OwnerTypeSelector>(p =>
+        {
+            p.Add(x => x.Projects, MakeProjects());
+            if (owner == "Environment") p.Add(x => x.EnvironmentId, 10);
+            else p.Add(x => x.ProjectServerId, 20);
+        });
+        cut.WaitForAssertion(() => Assert.Equal(1, ProjectDropDown(cut).Instance.Value));
+
+        await cut.InvokeAsync(() => ProjectDropDown(cut).Instance.ValueChanged.InvokeAsync(2));
+        // What the parent does with the cleared ids the selector just reported.
+        cut.Render(p => p
+            .Add(x => x.Projects, MakeProjects())
+            .Add(x => x.ProjectId, (int?)null)
+            .Add(x => x.EnvironmentId, (int?)null)
+            .Add(x => x.ProjectServerId, (int?)null));
+
+        Assert.Equal(expected, ReadKind(cut.Instance));
+        Assert.Equal(2, ProjectDropDown(cut).Instance.Value);
+    }
+
     private static IRenderedComponent<OmniEurope.Blazor.Components.OmniDropDown<int?>> ProjectDropDown(IRenderedComponent<OwnerTypeSelector> cut)
         => cut.FindComponents<OmniEurope.Blazor.Components.OmniDropDown<int?>>().Single(d => d.Instance.Id == "owner-project");
 

@@ -13,7 +13,7 @@ namespace Aetheus.Agent.Core.Operations;
 /// project as a bare argument, <c>--logger trx</c> and <c>--collect</c>; Microsoft.Testing.Platform
 /// refuses those and takes <c>--project</c>, <c>--report-trx</c> and <c>--coverlet</c>. A step that
 /// always spoke VSTest could not run a single suite of this repository, whose own
-/// <c>deploy/scripts/run-unit-suite.sh</c> speaks the platform's dialect.
+/// the former <c>run-unit-suite.sh</c> script speaks the platform's dialect.
 /// </para>
 /// </summary>
 internal static class DotnetTestCommandLine
@@ -154,7 +154,7 @@ internal static class DotnetTestCommandLine
 
     /// <summary>
     /// Gives each stamped coverlet.MTP report the layout coverlet.collector wrote, exactly as
-    /// deploy/scripts/normalize-coverage-report.sh does: <c>coverage.cobertura.&lt;digits&gt;.xml</c>
+    /// scripts/normalize-coverage-report.sh does: <c>coverage.cobertura.&lt;digits&gt;.xml</c>
     /// moves to <c>&lt;digits&gt;/coverage.cobertura.xml</c>. The classifier, and every later reader of
     /// the evidence, look for that exact name. A directory with no stamped report is left alone:
     /// whether coverage is missing is the classifier's verdict to give.

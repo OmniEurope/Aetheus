@@ -172,6 +172,33 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         Assert.Contains("analysis-finding-prompt-preview", cut.Markup);
     }
 
+    [Theory]
+    [InlineData(AnalysisFindingStatus.Open, true)]
+    [InlineData(AnalysisFindingStatus.Accepted, true)]
+    [InlineData(AnalysisFindingStatus.Fixed, false)]
+    public void R135_TheDecisionTab_IsHiddenForAFixedFinding(AnalysisFindingStatus status, bool shown)
+    {
+        Services.GetRequiredService<PermissionService>().SetPermissions([], isAdmin: true);
+        _handler.SetJsonResponse("api/analysis/findings/12", new AnalysisFindingDto
+        {
+            Id = 12,
+            ProjectId = 1,
+            RuleId = "security.fixed",
+            Title = "Already fixed",
+            Message = "Gone from the code.",
+            Category = AnalysisCategory.Sast,
+            Severity = AnalysisSeverity.Medium,
+            Status = status
+        });
+        _handler.SetJsonResponse("api/analysis/findings/12/occurrences?take=100", new List<AnalysisFindingOccurrenceDto>());
+        _handler.SetJsonResponse("api/analysis/findings/12/decisions", new List<AnalysisFindingDecisionDto>());
+
+        var cut = Render<AnalysisFindingDetail>(parameters => parameters.Add(component => component.Id, 12));
+
+        cut.WaitForState(() => cut.Markup.Contains("analysis-finding-tabs", StringComparison.Ordinal));
+        Assert.Equal(shown, cut.Find(".omni-tabs__viewport").TextContent.Contains("AnalysisDecision", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void DecisionTab_RendersDecisionFormAndHistory()
     {
@@ -197,14 +224,23 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("analysis-decision-card", StringComparison.Ordinal));
         // Omit arbitration instructions and required or optional hints.
         Assert.DoesNotContain("AnalysisDecisionHelp", cut.Find(".analysis-decision-card").TextContent);
-        Assert.Equal(3, cut.FindAll(".analysis-decision-choice").Count);
+        // R1-34: the three outcomes are OE selectable tiles, each with its icon, title and description.
+        var tiles = cut.FindAll(".analysis-decision-choices .omni-selectable-card");
+        Assert.Equal(3, tiles.Count);
+        Assert.All(tiles, tile =>
+        {
+            Assert.NotNull(tile.QuerySelector(".omni-selectable-card__icon"));
+            Assert.NotNull(tile.QuerySelector(".omni-selectable-card__title"));
+            Assert.NotNull(tile.QuerySelector(".omni-selectable-card__description"));
+            Assert.Empty(tile.QuerySelectorAll(".omni-button"));
+        });
         Assert.Equal(2, cut.FindAll(".analysis-decision-details .omni-form-field").Count);
         Assert.Empty(cut.FindAll(".analysis-decision-outcome .omni-drop-down"));
         Assert.DoesNotContain("AnalysisDecisionReasonHint", cut.Find(".analysis-decision-card").TextContent);
         Assert.DoesNotContain("AnalysisDecisionExpirationHint", cut.Find(".analysis-decision-card").TextContent);
         // An open finding reads as open; nothing is chosen until the reviewer picks.
         Assert.Contains("AnalysisFindingStatusOpen", cut.Find(".analysis-decision-selected").TextContent);
-        Assert.Empty(cut.FindAll(".analysis-decision-choice.is-selected"));
+        Assert.Empty(cut.FindAll(".omni-selectable-card--selected"));
         Assert.Contains("AnalysisDecisionHistory", cut.Markup);
     }
 
@@ -244,7 +280,9 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.Find(".analysis-decision-form form").Submit();
         Assert.DoesNotContain(_handler.Requests, request => request.Method == "POST");
 
-        cut.Find(".analysis-decision-choice .omni-button").Click();
+        // The whole tile is the click target, not a button inside it.
+        cut.Find("[data-testid='analysis-decision-Accepted']").Click();
+        Assert.Single(cut.FindAll(".omni-selectable-card--selected"));
         cut.Find(".analysis-decision-form form").Submit();
 
         cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>

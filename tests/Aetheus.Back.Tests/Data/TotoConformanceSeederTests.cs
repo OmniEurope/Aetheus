@@ -9,6 +9,7 @@ using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Seeding;
 using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -25,9 +26,9 @@ public sealed class TotoConformanceSeederTests
     {
         var pipelines = TotoConformanceSeeder.LoadPipelineFiles();
         var vulnerablePipelines = TotoConformanceSeeder.LoadVulnerablePipelineFiles();
-        var baseline = TotoConformanceSeeder.MergeRepositoryFiles("v1", pipelines);
-        var current = TotoConformanceSeeder.MergeRepositoryFiles("v2", pipelines);
-        var vulnerable = TotoConformanceSeeder.MergeVulnerableRepositoryFiles(vulnerablePipelines);
+        var baseline = TotoConformanceContent.MergeRepositoryFiles("v1", pipelines);
+        var current = TotoConformanceContent.MergeRepositoryFiles("v2", pipelines);
+        var vulnerable = TotoConformanceContent.MergeVulnerableRepositoryFiles(vulnerablePipelines);
 
         Assert.Equal(TotoConformanceSeeder.PipelineNames.Length, pipelines.Count);
         Assert.All(TotoConformanceSeeder.PipelineNames, name =>
@@ -186,7 +187,7 @@ public sealed class TotoConformanceSeederTests
         var yaml = pipelines[".pipeline/toto-conformance.yaml"];
 
         Assert.Contains("inherit_source: false", yaml, StringComparison.Ordinal);
-        Assert.Contains($"source_branch: {TotoConformanceSeeder.BaselineBranch}", yaml, StringComparison.Ordinal);
+        Assert.Contains($"source_branch: {TotoConformanceContent.BaselineBranch}", yaml, StringComparison.Ordinal);
         Assert.Contains("pipeline: toto-candidate", yaml, StringComparison.Ordinal);
         Assert.Contains("pipeline: toto-promote-accept", yaml, StringComparison.Ordinal);
     }
@@ -341,23 +342,23 @@ public sealed class TotoConformanceSeederTests
         git.ResolveDiskPath(3, vulnerableRepository.Slug).Returns("C:\\git\\toto-vulnerable.git");
         git.GetTagsAsync(repository.Id, Arg.Any<CancellationToken>()).Returns(
         [
-            new GitLightTagDto { Name = TotoConformanceSeeder.BaselineTag, Sha = new string('a', 40) },
-            new GitLightTagDto { Name = TotoConformanceSeeder.CurrentTag, Sha = new string('b', 40) }
+            new GitLightTagDto { Name = TotoConformanceContent.BaselineTag, Sha = new string('a', 40) },
+            new GitLightTagDto { Name = TotoConformanceContent.CurrentTag, Sha = new string('b', 40) }
         ]);
         git.GetBranchesAsync(repository.Id, Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightBranchDto { Name = "main", IsDefault = true },
-            new GitLightBranchDto { Name = TotoConformanceSeeder.BaselineBranch },
-            new GitLightBranchDto { Name = TotoConformanceSeeder.DevelopBranch }
+            new GitLightBranchDto { Name = TotoConformanceContent.BaselineBranch },
+            new GitLightBranchDto { Name = TotoConformanceContent.DevelopBranch }
         ]);
         git.GetTagsAsync(vulnerableRepository.Id, Arg.Any<CancellationToken>()).Returns(
         [
-            new GitLightTagDto { Name = TotoConformanceSeeder.VulnerableTag, Sha = new string('d', 40) }
+            new GitLightTagDto { Name = TotoConformanceContent.VulnerableTag, Sha = new string('d', 40) }
         ]);
         git.GetBranchesAsync(vulnerableRepository.Id, Arg.Any<CancellationToken>()).Returns(
         [
             new GitLightBranchDto { Name = "main", IsDefault = true },
-            new GitLightBranchDto { Name = TotoConformanceSeeder.DevelopBranch }
+            new GitLightBranchDto { Name = TotoConformanceContent.DevelopBranch }
         ]);
         gitCli.CommitFilesAsync(
                 Arg.Any<string>(), Arg.Any<string>(),

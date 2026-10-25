@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using System.Net.Sockets;
-using Aetheus.Back.Components.AppMonitoring.Ingest;
 
 namespace Aetheus.Back.Components.AppMonitoring;
 
 public static class AppMonitoringModuleExtensions
 {
-    /// <summary>Named HttpClient for backend black-box probing of off-fleet apps (public URLs only).</summary>
-    public const string ProbeHttpClientName = "app-probe";
-
     public static IServiceCollection AddAppMonitoringModule(this IServiceCollection services)
     {
         services.AddScoped<IAppMonitoringRepository, AppMonitoringRepository>();
@@ -40,7 +36,7 @@ public static class AppMonitoringModuleExtensions
 
         // SSRF-hardened probe client: no redirects, no cookies, and connect-time IP revalidation so a
         // DNS-rebind between validation and connect still cannot reach a private/loopback address.
-        services.AddHttpClient(ProbeHttpClientName, client =>
+        services.AddHttpClient(AppProbeService.ProbeHttpClientName, client =>
         {
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Aetheus-AppProbe/1.0");
         }).ConfigurePrimaryHttpMessageHandler(_ => new SocketsHttpHandler

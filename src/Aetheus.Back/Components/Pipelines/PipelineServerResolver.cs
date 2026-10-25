@@ -473,7 +473,8 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
             : releases.Where(release => release.Version == releaseSelector);
         return await releases
             .OrderByDescending(release => release.DetectedAt)
-            .Select(release => new DeploymentGateRelease(release.Id, release.Version, release.AssuranceGrade))
+            .Select(release => new DeploymentGateRelease(
+                release.Id, release.Version, release.AssuranceGrade, release.Deployable))
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 

@@ -1,43 +1,58 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-@foreach (var p in Parameters)
-{
-    var label = ParameterText.Pick(p.DisplayName, p.DisplayNameFr);
-    var description = ParameterText.Pick(p.Description, p.DescriptionFr);
-    var describedBy = DescriptionId(p.Name, description);
-    var stringValue = StringValue(p.Name);
-    var numberValue = NumberValue(p.Name);
-    var boolValue = BoolValue(p.Name);
-    @* The required mark and the "?" of the description are OE's: Required and Help of the field. *@
-    <OmniFormField For="@p.Name" Id="@FieldId(p.Name)" Label="@label" Required="@p.Required" Help="@description" Class="run-params-field">
-        @switch (p.Type?.ToLowerInvariant())
-        {
-            case "boolean":
-                <OmniSwitch Id="@p.Name" TValue="bool" Value="boolValue" ValueExpression="@(() => boolValue)"
-                            ValueChanged="@(value => _bools[p.Name] = value)" AriaDescribedBy="@describedBy"
-                            aria-labelledby="@($"{p.Name}-label")" />
-                break;
-            case "choice":
-                <OmniDropDown Id="@p.Name" aria-label="@label" TValue="string" Value="@stringValue"
-                                ValueChanged="@(value => _strings[p.Name] = value)"
-                                ValueExpression="@(() => stringValue)"
-                                Options="@(p.AllowedValues.ToOptions(item => (string)item, item => item))" name="@p.Name" AriaDescribedBy="@describedBy"
-                                AllowEmpty="!p.Required" Class="run-params-input" />
-                break;
-            case "number":
-                <OmniNumeric TValue="decimal?" Value="@numberValue"
-                               ValueChanged="@(value => _numbers[p.Name] = value)"
-                               ValueExpression="@(() => numberValue)"
-                               Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
-                break;
-            default:
-                <OmniTextBox Value="@stringValue"
-                               ValueChanged="@(value => _strings[p.Name] = value)"
-                               ValueExpression="@(() => stringValue)"
-                               Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
-                break;
+@{
+    // One parameter field. The required mark and the "?" of the description are OE's (Required and Help of
+    // the field); a refused submit puts its message under the field (Error), not in an alert (R-26).
+    RenderFragment<PipelineRunParameterDto> field = p =>
+    @<text>
+        @{
+            var label = ParameterText.Pick(p.DisplayName, p.DisplayNameFr);
+            var description = ParameterText.Pick(p.Description, p.DescriptionFr);
+            var describedBy = DescriptionId(p.Name, description);
+            var stringValue = StringValue(p.Name);
+            var numberValue = NumberValue(p.Name);
+            var boolValue = BoolValue(p.Name);
         }
-    </OmniFormField>
+        <OmniFormField For="@p.Name" Id="@FieldId(p.Name)" Label="@label" Required="@p.Required" Help="@description"
+                       Error="@ErrorOf(p.Name)" Class="run-params-field">
+            @switch (p.Type?.ToLowerInvariant())
+            {
+                case "boolean":
+                    <OmniSwitch Id="@p.Name" TValue="bool" Value="boolValue" ValueExpression="@(() => boolValue)"
+                                ValueChanged="@(value => SetBool(p.Name, value))" AriaDescribedBy="@describedBy"
+                                aria-labelledby="@($"{p.Name}-label")" />
+                    break;
+                case "choice":
+                    <OmniDropDown Id="@p.Name" aria-label="@label" TValue="string" Value="@stringValue"
+                                    ValueChanged="@(value => SetString(p.Name, value))"
+                                    ValueExpression="@(() => stringValue)"
+                                    Options="@(p.AllowedValues.ToOptions(item => (string)item, item => item))" name="@p.Name" AriaDescribedBy="@describedBy"
+                                    AllowEmpty="!p.Required" Class="run-params-input" />
+                    break;
+                case "number":
+                    <OmniNumeric TValue="decimal?" Value="@numberValue"
+                                   ValueChanged="@(value => SetNumber(p.Name, value))"
+                                   ValueExpression="@(() => numberValue)"
+                                   Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
+                    break;
+                default:
+                    <OmniTextBox Value="@stringValue"
+                                   ValueChanged="@(value => SetString(p.Name, value))"
+                                   ValueExpression="@(() => stringValue)"
+                                   Id="@p.Name" AriaDescribedBy="@describedBy" Class="run-params-input" />
+                    break;
+            }
+        </OmniFormField>
+        @if (p.Name == FillTargetName && ConcernText is { } concern)
+        {
+            @* Not blocking: the release stays deployable, the user is only told what the Gate said. *@
+            <OmniAlert Severity="OmniSeverity.Warning" Class="run-params-release-warning" data-testid="release-gate-warning">@concern</OmniAlert>
+        }
+    </text>;
+}
+@foreach (var p in Parameters.Where(parameter => !parameter.Advanced))
+{
+    @field(p)
 }
 @if (AvailableReleases is not null)
 {
@@ -46,6 +61,20 @@
             @(FillTargetName is not null ? L["AvailableReleasesClickToFill"] : L["AvailableReleases"])
         </OmniText>
         <ReleasePickerGrid Releases="@AvailableReleases" TotalCount="@AvailableReleaseTotal"
+                           SelectedVersion="@(FillTargetName is { } target ? StringValue(target) : null)"
                            Pick="@(FillTargetName is not null ? EventCallback.Factory.Create<string>(this, FillFromRelease) : default)" />
     </div>
+}
+@if (Parameters.Any(parameter => parameter.Advanced))
+{
+    @* Rarely changed options stay folded, so the dialog asks for the version and nothing else (R-25). *@
+    <OmniFieldset Collapsible="true" Expanded="false" Class="run-params-advanced" data-testid="run-params-advanced">
+        <Legend>@L["RunParametersAdvanced"]</Legend>
+        <ChildContent>
+            @foreach (var p in Parameters.Where(parameter => parameter.Advanced))
+            {
+                @field(p)
+            }
+        </ChildContent>
+    </OmniFieldset>
 }

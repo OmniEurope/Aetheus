@@ -11,7 +11,14 @@
             @* Item #1 - migrated from legacy `?section=` query strings to real routes. *@
             <OmniPanelMenuItem Text="@L["Overview"]" Icon="@IconFor("dashboard")" Href="@($"servers/{serverId}/overview")" />
             <OmniPanelMenuItem Text="@L["Services"]" Icon="@IconFor("engineering")" Href="@($"servers/{serverId}/services")" />
-            @* Docker / Apache / Certbot / Mail / TeamSpeak / Portsentry / Rkhunter are listed in the Services tab as manageable modules. *@
+            @* R1-28: the mail configuration of this server, right under Services, only once its mail stack is installed
+               (the general "Mailboxes" entry below stays the cross-server directory). Docker / Apache / Certbot /
+               TeamSpeak / Portsentry / Rkhunter are listed in the Services tab as manageable modules. *@
+            @if (HasServerMail(serverId))
+            {
+                <OmniPanelMenuItem Text="@L["Mail"]" Icon="@IconFor("mail")" Href="@($"servers/{serverId}/mail")" Match="OmniNavMatch.Exact" />
+            }
+            <OmniPanelMenuItem Text="@L["PatchTitle"]" Icon="@IconFor("system_update")" Href="@($"servers/{serverId}/updates")" />
             <OmniPanelMenuItem Text="@L["Projects"]" Icon="@IconFor("folder")" Href="@($"servers/{serverId}/projects")" />
             <OmniPanelMenuItem Text="@L["Pipelines"]" Icon="@IconFor("account_tree")" Href="@($"servers/{serverId}/pipelines")" />
             <OmniPanelMenuItem Text="@L["Libraries"]" Icon="@IconFor("library_books")" Href="@($"servers/{serverId}/libraries")" />
@@ -31,7 +38,7 @@
                 @if (AlertNotify.UnreadCount > 0)
                 {
                     <OmniBadge Fill="OmniFill.Solid" Id="nav-alert-count" Tone="OmniTone.Danger" Class="nav-alert-count">
-                        @AlertNotify.UnreadCount
+                        @DisplayFormatting.BadgeCount(AlertNotify.UnreadCount)
                     </OmniBadge>
                 }
             </div>

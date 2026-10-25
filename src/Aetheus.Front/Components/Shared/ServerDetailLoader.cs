@@ -109,9 +109,10 @@ public sealed class ServerDetailLoader : IAsyncDisposable
 
     private async Task LoadAsync(int id, CancellationToken ct)
     {
-        // Switching servers: tear down the previous hub group + cancel any in-flight load
-        // so an out-of-order response cannot overwrite the new server's data.
-        await TeardownAsync().ConfigureAwait(false);
+        // Switching servers: empty the loader and cancel any in-flight load so an out-of-order response
+        // cannot overwrite the new server's data. The old connection leaves its group on its own: the
+        // new server's first display never waits for a hub that is slow to answer (R-16).
+        _ = TeardownAsync();
 
         _currentId = id;
         _loadCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -185,8 +186,12 @@ public sealed class ServerDetailLoader : IAsyncDisposable
 
     private void ReloadAgentUpdate(int serverId, int id, CancellationToken ct)
     {
-        if (serverId == id) _ = ReloadAgentUpdateAsync(id, ct);
+        if (serverId == id && !IsStale(id, ct)) _ = ReloadAgentUpdateAsync(id, ct);
     }
+
+    // The connection of a server the reader left keeps delivering events until its background teardown
+    // closes it (R-16): such an event belongs to a load that was cancelled, or to another server now.
+    private bool IsStale(int id, CancellationToken ct) => ct.IsCancellationRequested || _currentId != id;
 
     /// <summary>Refresh agent version, compatibility and persisted update request without
     /// overwriting live heartbeat fields; a failed read retains the displayed state for the next
@@ -271,7 +276,8 @@ public sealed class ServerDetailLoader : IAsyncDisposable
 
         hub.On<ServerHeartbeatDto>("Heartbeat", h =>
         {
-            if (Server is null) return;
+            // A connection being closed (the load it belongs to was cancelled) must not feed the next server.
+            if (Server is null || IsStale(id, ct)) return;
             var capabilities = ResolveSudoersCapabilities(Server, h);
             var clock = h.ClockSample?.Estimate();
             Server = Server with
@@ -281,9 +287,10 @@ public sealed class ServerDetailLoader : IAsyncDisposable
                 ClockOffsetUncertaintyMs = clock?.UncertaintyMs,
                 MemoryUsedMb = h.MemoryUsedMb,
                 MemoryTotalMb = h.MemoryTotalMb,
-                DiskUsedGb = h.Disks.Sum(d => d.UsedGb),
-                DiskTotalGb = h.Disks.Sum(d => d.TotalGb),
+                DiskUsedGb = DiskInfoDto.Totals(h.Disks).UsedGb,
+                DiskTotalGb = DiskInfoDto.Totals(h.Disks).TotalGb,
                 InodeUsedPercent = DiskInfoDto.MaxInodeUsedPercent(h.Disks),
+                Disks = DiskInfoDto.Distinct(h.Disks),
                 Services = h.Services,
                 Docker = h.Docker,
                 Apache = h.Apache,
@@ -323,7 +330,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
 
         hub.On<int>("ServerOffline", serverId =>
         {
-            if (Server is null || serverId != id) return;
+            if (Server is null || serverId != id || IsStale(id, ct)) return;
             Server = Server with { Status = ServerStatus.Offline };
             OnChanged?.Invoke();
             // The backend announces the transition after its external probe (PLAN-010 lot 1).
@@ -332,7 +339,7 @@ public sealed class ServerDetailLoader : IAsyncDisposable
 
         hub.On<TaskCompletedNotification>("TaskCompleted", async notification =>
         {
-            if (notification.ServerId != id) return;
+            if (notification.ServerId != id || IsStale(id, ct)) return;
             var handlers = OnTaskCompleted?.GetInvocationList()
                 .Cast<Func<TaskCompletedNotification, Task>>()
                 .Select(handler => handler(notification))
@@ -524,35 +531,33 @@ public sealed class ServerDetailLoader : IAsyncDisposable
             return; // the loader itself is gone
         }
 
+        // The gate is held for the state only: the connection closes after it is released, so a reader
+        // coming back to the server never waits behind the hub's answer (R-16).
+        Task closing = Task.CompletedTask;
         try
         {
             if (!OnServerPages)
-                await TeardownAsync().ConfigureAwait(false);
+                closing = TeardownAsync();
         }
         finally
         {
             _gate.Release();
         }
+
+        await closing.ConfigureAwait(false);
     }
 
-    private async Task TeardownAsync()
+    /// <summary>Cancels the load and empties the loader at once (the cancelled token also silences the
+    /// old connection's heartbeats). The returned task is the old connection leaving its group and
+    /// closing; it never faults, and only a disposing caller waits for it.</summary>
+    private Task TeardownAsync()
     {
         try { _loadCts?.Cancel(); }
         catch (ObjectDisposedException) { /* already disposed */ }
         _loadCts?.Dispose();
         _loadCts = null;
         var hub = Interlocked.Exchange(ref _hub, null);
-        if (hub is not null)
-        {
-            try
-            {
-                if (_currentId.HasValue)
-                    await hub.InvokeAsync("LeaveServerGroup", _currentId.Value).ConfigureAwait(false);
-            }
-            catch (Exception ex) { _logger.LogDebug(ex, "[ServerDetailLoader] LeaveServerGroup failed"); }
-            try { await hub.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogDebug(ex, "[ServerDetailLoader] hub dispose failed"); }
-        }
+        var leftId = _currentId;
 
         _currentId = null;
         Server = null;
@@ -561,6 +566,19 @@ public sealed class ServerDetailLoader : IAsyncDisposable
         MetricsReceived = false;
         InitialLoadCompleted = false;
         OnChanged?.Invoke();
+
+        return hub is null ? Task.CompletedTask : CloseHubAsync(hub, leftId);
+    }
+
+    private async Task CloseHubAsync(HubConnection hub, int? serverId)
+    {
+        try
+        {
+            if (serverId.HasValue)
+                await hub.InvokeAsync("LeaveServerGroup", serverId.Value).ConfigureAwait(false);
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "[ServerDetailLoader] LeaveServerGroup failed"); }
+        await DisposeQuietlyAsync(hub).ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

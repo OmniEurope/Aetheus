@@ -444,9 +444,8 @@ public partial class QualityGatePolicyEditor
         MetricPreset("quality.duplication.percentage", "Duplication", "duplication.percentage",
             AnalysisPolicyOperator.GreaterThan, strict ? 3 : 5, strict),
         MetricPreset("quality.complexity.maximum", "Maximum complexity", "complexity.cyclomatic.maximum",
-            AnalysisPolicyOperator.GreaterThan, strict ? 15 : 25, strict),
-        MetricPreset("quality.architecture.cycles", "Architecture cycles", "architecture.cycles*",
-            AnalysisPolicyOperator.GreaterThan, 0, strict)
+            AnalysisPolicyOperator.GreaterThan, strict ? 15 : 25, strict)
+        // No cycles rule (ADR-056): a group of cycles is a finding of its own, handled like any finding.
     ];
 
     private static UpsertAnalysisPolicyRequest MetricPreset(

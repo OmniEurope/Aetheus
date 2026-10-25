@@ -4,7 +4,7 @@ using Aetheus.Agent.Core.Functions;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/convert-dotnet-format-report.mjs</c> and the scope rules of
+/// The C# port of the former <c>convert-dotnet-format-report.mjs</c> script and the scope rules of
 /// <c>run-affected-dotnet-format.sh</c>, on literal inputs: the SARIF the helper wrote, byte for byte,
 /// its defaults and refusals, and which <c>git diff --name-status</c> listings narrow the check.
 /// </summary>

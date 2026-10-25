@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/analysis"
-@inject Aetheus.Front.Layout.BreadcrumbService Breadcrumb
+@inject Aetheus.Front.Components.Shared.BreadcrumbService Breadcrumb
 
 <PageTitle>@L["AnalysisPortfolio"] - Aetheus</PageTitle>
 
@@ -19,7 +19,8 @@
 }
 else
 {
-    <section class="analysis-portfolio-projects" aria-label="@L["Projects"]">
+    @* R-5: the project tiles are OE tiles of one OmniTileGrid (same width, same height, nothing spills). *@
+    <OmniTileGrid Columns="3" Class="analysis-portfolio-projects" role="group" aria-label="@L["Projects"]">
         @foreach (var project in _projectSummaries)
         {
             <OmniCard Class="analysis-portfolio-project-card">
@@ -49,7 +50,7 @@ else
                 </OmniText>
             </OmniCard>
         }
-    </section>
+    </OmniTileGrid>
 }
 </ChildContent></OmniTabsItem>
 <OmniTabsItem Key="runs" Title="@L["Runs"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>
@@ -63,11 +64,11 @@ else
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="AnalysisPortfolioRowDto" Property="PipelineRunId" Title="@L["PipelineRun"]" Width="7rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" ><Template Context="item">@if (item.PipelineRunId.HasValue) { <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"pipelines/runs/{item.PipelineRunId}")">@($"#{item.PipelineRunId}")</OmniLink></span> }</Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="OrganizationName" Title="@L["Organization"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Organizations" FilterSearchable="true" />
-        <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Projects" FilterSearchable="true" ><Template Context="item">@* SITE-FUNC-HOME-CAPABILITY-001: the link goes to the project, not to the run the row opens. *@<span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"projects/{item.ProjectId}/quality")">@item.ProjectName</OmniLink></span></Template></OmniDataGridColumn>
+        <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="AnalysisPortfolioRowDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Projects" FilterSearchable="true" ><Template Context="item">@* SITE-FUNC-HOME-CAPABILITY-001: the link goes to the project, not to the run the row opens. *@<span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"projects/{item.ProjectId}/quality")">@item.ProjectName</OmniLink></span></Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true" />
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="Category" Title="@L["Posture"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@CategoryText" ><Template Context="item"><OmniBadge Fill="OmniFill.Solid" Tone="@PostureStyle(item.Category)">@Posture(item.Category)</OmniBadge></Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="ScannerName" Title="@L["AnalysisScanner"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Scanners" FilterSearchable="true" />
-        <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="GateStatus" Title="Gate" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@GateText" ><Template Context="item"><OmniBadge Fill="OmniFill.Solid" Tone="@GateStyle(item.GateStatus)">@(item.GateStatus?.ToString() ?? L["NotAvailable"])</OmniBadge></Template></OmniDataGridColumn>
+        <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="GateStatus" Title="Gate" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@GateText" ><Template Context="item"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GateStyle(item.GateStatus)">@(item.GateStatus?.ToString() ?? L["NotAvailable"])</OmniBadge></Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="Grade" Title="@L["AnalysisGrade"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@GradeText" ><Template Context="item"><GradeBadge Value="@item.Grade" /></Template></OmniDataGridColumn>
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="FindingCount" Title="@L["AnalysisFindings"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         <OmniDataGridColumn TItem="AnalysisPortfolioRowDto" Property="NewFindingCount" Title="@L["New"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />

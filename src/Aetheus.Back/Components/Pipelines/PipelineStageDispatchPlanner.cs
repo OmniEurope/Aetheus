@@ -129,7 +129,12 @@ public sealed class PipelineStageDispatchPlanner(
             return false;
         var state = new NextStageDispatchState(
             await repo.GetRunAffinityServerIdAsync(runId, ct).ConfigureAwait(false),
-            activeStageNames, projectId);
+            activeStageNames, projectId)
+        {
+            // ONE mark for the whole pass: a refusal in any stage drops the tasks of the stages dispatched
+            // before it too, since they all belong to the run that is then failed.
+            QueuedBeforePass = repo.MarkUnsavedInserts()
+        };
         foreach (var stageName in readyStageNames)
             if (await DispatchReadyStageAsync(
                     runId, stageName, definition, resolvedVars, pendingSteps, organizationId,
@@ -167,11 +172,44 @@ public sealed class PipelineStageDispatchPlanner(
             runId, stageName, stageDef, stageSteps, resolvedVars, organizationId, state, ct)
             .ConfigureAwait(false);
         if (server is null) return false;
-        if (await stepDispatcher.CreateTasksForStageAsync(
-                runId, server, stageSteps, stageDef, resolvedVars, completedStages,
-                previousStageFailed, secretKeys, organizationId, state.ProjectId, launcher, ct).ConfigureAwait(false)) return true;
+        state.TouchedStageSteps.AddRange(stageSteps);
+        var refusal = await stepDispatcher.CreateTasksForStageAsync(
+            runId, server, stageSteps, stageDef, resolvedVars, completedStages,
+            previousStageFailed, secretKeys, organizationId, state.ProjectId, launcher, ct).ConfigureAwait(false);
+        if (refusal is not null)
+        {
+            await FailPassOnRefusalAsync(runId, refusal, state, ct).ConfigureAwait(false);
+            return true;
+        }
         await RecordStageDispatchAsync(stageSteps, stageDef, state, ct).ConfigureAwait(false);
         return false;
+    }
+
+    /// <summary>
+    /// A stage was refused while creating its tasks: the run fails, once. Every task the pass queued, for
+    /// this stage and for the ready stages dispatched before it, belongs to a run that is being failed, so
+    /// they are dropped before the failing save (an agent must not execute a task of a failed run), and the
+    /// refused step plus every step still waiting or assigned in the stages the pass touched fail with the
+    /// reason. A step that was skipped for its condition keeps that outcome.
+    ///
+    /// The discard only reaches what is still unsaved. Every collaborator shares the one unit of work, and
+    /// several of them must save in the middle of the pass (the cancellation of a skipped stage, an
+    /// approval, an environment lock, a trigger step's child run, an audit entry, a run warning), which
+    /// writes the tasks already queued. Those are cancelled in the database: the steps of the stages the
+    /// pass touched were Pending when it began, so any active task linked to one of them was created by it.
+    /// </summary>
+    private async Task FailPassOnRefusalAsync(
+        int runId, StageDispatchRefusal refusal, NextStageDispatchState state, CancellationToken ct)
+    {
+        repo.DiscardUnsavedInsertsSince(state.QueuedBeforePass);
+        await repo.CancelActiveTasksOfStepRunsAsync(
+            runId, [.. state.TouchedStageSteps.Where(step => step.Id > 0).Select(step => step.Id)], ct)
+            .ConfigureAwait(false);
+        var failedSteps = state.TouchedStageSteps
+            .Where(step => ReferenceEquals(step, refusal.RefusedStep)
+                || step.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned)
+            .ToList();
+        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [refusal.Reason], failedSteps, ct).ConfigureAwait(false);
     }
 
     private async Task<bool> HandleSystemStageAsync(
@@ -190,6 +228,7 @@ public sealed class PipelineStageDispatchPlanner(
             runId, stageName, stageSteps, resolvedVars, definition, organizationId,
             completedStages, flattenedStages, state.ProjectId, ct).ConfigureAwait(false);
         if (!dispatch.Handled) return false;
+        state.TouchedStageSteps.AddRange(stageSteps);
         state.AnyTaskCreated |= dispatch.TaskCreated;
         state.AnyRunnerTemporarilyUnavailable |= dispatch.RunnerTemporarilyUnavailable;
         if (dispatch.RunnerTemporarilyUnavailable)
@@ -215,6 +254,37 @@ public sealed class PipelineStageDispatchPlanner(
             && !await repo.DidAnyStepStartInStagesAsync(runId, startStages, ct).ConfigureAwait(false);
     }
 
+    /// <summary>True when the stage does not run: its condition is not met (the steps are skipped with
+    /// the evidence), or its condition is not a supported form (the steps FAIL with the reason, so an
+    /// unreadable condition on an approval, a rollback or a deployment never reads as met or as not
+    /// met).</summary>
+    private async Task<bool> SkipOnConditionAsync(
+        int runId,
+        PipelineStageDefinition stageDef,
+        List<PipelineStepRun> stageSteps,
+        Dictionary<string, string> resolvedVars,
+        bool previousStageFailed,
+        HashSet<string> secretKeys,
+        NextStageDispatchState state,
+        CancellationToken ct)
+    {
+        var verdict = EvaluateCondition(stageDef.Condition, resolvedVars, previousStageFailed);
+        if (verdict.Met) return false;
+        if (verdict.Error is { } error)
+        {
+            var now = timeProvider.GetUtcNow().UtcDateTime;
+            foreach (var step in stageSteps)
+                MarkSystemStepFailed(step, TaskFailureCodes.InfrastructureMismatch, $"Stage '{stageDef.Name}': {error}", now);
+        }
+        else
+        {
+            finalizer.MarkStepsConditionNotMet(runId, stageSteps, stageDef.Condition!, resolvedVars, secretKeys);
+        }
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        state.AnyStageCancelled = true;
+        return true;
+    }
+
     private async Task<ReadyStagePreparation> PrepareReadyStageAsync(
         int runId,
         string stageName,
@@ -229,13 +299,9 @@ public sealed class PipelineStageDispatchPlanner(
     {
         var stageDef = flattenedStages.FirstOrDefault(stage => stage.Name == stageName);
         if (stageDef is null) return ReadyStagePreparation.Skip;
-        if (!EvaluateCondition(stageDef.Condition, resolvedVars, completedStages, previousStageFailed))
-        {
-            finalizer.MarkStepsConditionNotMet(runId, stageSteps, stageDef.Condition!, resolvedVars, secretKeys);
-            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
-            state.AnyStageCancelled = true;
+        if (await SkipOnConditionAsync(runId, stageDef, stageSteps, resolvedVars, previousStageFailed, secretKeys, state, ct)
+                .ConfigureAwait(false))
             return ReadyStagePreparation.Skip;
-        }
         if (await NothingStartedToUndoAsync(runId, stageDef, flattenedStages, ct).ConfigureAwait(false))
         {
             finalizer.MarkStepsConditionNotMet(runId, stageSteps, NothingToUndoCondition, resolvedVars, secretKeys);
@@ -340,6 +406,12 @@ public sealed class PipelineStageDispatchPlanner(
         public bool AnyEnvironmentCheckFailed { get; set; }
         public bool SystemTaskDispatchFailed { get; set; }
         public int? AffinityServerId { get; set; } = affinityServerId;
+
+        /// <summary>The inserts already queued when the pass began creating tasks.</summary>
+        public UnsavedInsertsMark QueuedBeforePass { get; init; }
+
+        /// <summary>The steps of every stage the pass has dispatched so far (system stages included).</summary>
+        public List<PipelineStepRun> TouchedStageSteps { get; } = [];
         public List<string> ActiveStageNames { get; } = activeStageNames;
         public Dictionary<string, int> DispatchedPerGroup { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<string> UnmatchedReasons { get; } = [];
@@ -407,7 +479,7 @@ public sealed class PipelineStageDispatchPlanner(
                 .Select(stage => stage.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var blockedAfterFailure = pendingSteps
-                .Where(step => step.StageName != PipelineRunService.SystemCleanupStage
+                .Where(step => step.StageName != PipelineRunHelpers.SystemCleanupStage
                     && !failureHandlerStages.Contains(step.StageName))
                 .ToList();
             if (blockedAfterFailure.Count > 0)
@@ -463,7 +535,7 @@ public sealed class PipelineStageDispatchPlanner(
         int? projectId,
         CancellationToken ct)
     {
-        if (stageName is not (PipelineRunService.SystemPrepareStage or PipelineRunService.SystemCleanupStage))
+        if (stageName is not (PipelineRunHelpers.SystemPrepareStage or PipelineRunHelpers.SystemCleanupStage))
             return new(false, false, false, false, [], []);
         if (await systemTasks.CreateSystemTasksAsync(
                 runId, stageSteps, resolvedVars, definition, organizationId, projectId, completedStages, ct)
@@ -471,7 +543,7 @@ public sealed class PipelineStageDispatchPlanner(
             return new(true, true, false, false, [], []);
 
         var firstStage = flattenedStages.FirstOrDefault();
-        var configuredTargets = stageName == PipelineRunService.SystemPrepareStage && firstStage is not null
+        var configuredTargets = stageName == PipelineRunHelpers.SystemPrepareStage && firstStage is not null
             ? await repo.FindCandidateTargetServerIdsAsync(
                 firstStage.Pool, firstStage.Environment, firstStage.Agent,
                 OsTypeHelper.Parse(firstStage.Os), organizationId, false, projectId, ct).ConfigureAwait(false)
@@ -543,7 +615,7 @@ public sealed class PipelineStageDispatchPlanner(
     {
         // A trigger-only pipeline injects no System:Prepare (see RequiresWorkspace), so its user stages
         // must not wait on a prepare stage that will never complete - treat prepare as done in that case.
-        var prepareCompleted = !PipelineRunPreparationService.RequiresWorkspace(definition) || completedStages.Contains(PipelineRunService.SystemPrepareStage);
+        var prepareCompleted = !PipelineRunPreparationService.RequiresWorkspace(definition) || completedStages.Contains(PipelineRunHelpers.SystemPrepareStage);
         // Flatten once: re-flattening the YAML inside the Where lambda cost a full
         // stages>jobs walk per pending stage on every scheduling pass.
         var flattenedStages = YamlParsingHelper.FlattenJobs(definition);
@@ -557,8 +629,8 @@ public sealed class PipelineStageDispatchPlanner(
             .Distinct()
             .Where(stageName =>
             {
-                if (stageName == PipelineRunService.SystemPrepareStage) return true;
-                if (stageName == PipelineRunService.SystemCleanupStage) return allUserStagesTerminal;
+                if (stageName == PipelineRunHelpers.SystemPrepareStage) return true;
+                if (stageName == PipelineRunHelpers.SystemCleanupStage) return allUserStagesTerminal;
                 if (!prepareCompleted) return false;
                 var stageDef = flattenedStages.FirstOrDefault(s => s.Name == stageName);
                 if (stageDef is null) return false;

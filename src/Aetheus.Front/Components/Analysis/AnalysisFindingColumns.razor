@@ -10,7 +10,7 @@
     <Template Context="finding">@L.Localize(finding.Category)</Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="RuleId" Title="@L["AnalysisRule"]" Width="12rem" Filterable="true" />
-<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Title" Title="@L["Title"]" MinWidth="18rem" Filterable="true">
+<OmniDataGridColumn TItem="AnalysisFindingDto" Property="Title" Truncate="true" Title="@L["Title"]" MinWidth="18rem" Filterable="true">
     @* Keep the title on one line within the fixed-height row; expose the message on hover. *@
     <Template Context="finding">
         <a href="@FindingHref(finding.Id, RunId)" class="pipeline-name-link analysis-finding-grid-title" title="@TitleTooltip(finding)" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@finding.Title</a>
@@ -34,7 +34,7 @@
 @if (ShowStatus)
 {
     <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Status" ExportValue="@StatusExport" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" DefaultFilterValue="@Defaults?.Status">
-        <Template Context="finding"><OmniBadge Fill="OmniFill.Solid" Tone="@AnalysisPresentation.FindingStatusBadge(finding.Status)">@L.Localize(finding.Status)</OmniBadge></Template>
+        <Template Context="finding"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.FindingStatusBadge(finding.Status)">@L.Localize(finding.Status)</OmniBadge></Template>
     </OmniDataGridColumn>
 }
 @* The "New" shortcut filters on this column, so it is a filter the user can see and lift. *@
@@ -50,8 +50,8 @@
     @* Opening the finding is the primary row action. Stop the button click from also triggering
        row navigation. *@
     @* A decided finding shown with its status can be reopened from its row. *@
-    <Template Context="finding"><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" class="analysis-finding-row-actions"><OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Open(finding))" title="@L["AnalysisGateOpenFinding"]"><OmniIcon Name="OmniIconName.OpenExternal" /></OmniButton>@if (CanRevertDecisions && AnalysisFindingDecisionRevert.CanRevert(finding.Status))
+    <Template Context="finding"><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true" class="analysis-finding-row-actions"><OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Open(finding))" title="@L["AnalysisGateOpenFinding"]"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon></OmniButton>@if (CanRevertDecisions && AnalysisFindingDecisionRevert.CanRevert(finding.Status))
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RevertDecision.InvokeAsync(finding))" title="@L["AnalysisRevertDecision"]" Label="@L["AnalysisRevertDecision"]" Class="analysis-finding-revert-decision"><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RevertDecision.InvokeAsync(finding))" title="@L["AnalysisRevertDecision"]" Label="@L["AnalysisRevertDecision"]" Class="analysis-finding-revert-decision"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
         }</span></Template>
 </OmniDataGridColumn>

@@ -30,6 +30,17 @@ public interface IPipelineRunPreflightService
         CancellationToken ct);
 
     /// <summary>
+    /// R-20: the launch refusals for stages whose target is built from a run parameter that holds no
+    /// value. Read on the definition BEFORE its parameters are substituted: once they are, the stage has
+    /// no selector and dispatch would silently give it the first online runner (a deployment on a server
+    /// nobody chose). A stage that never named a target is not concerned and keeps that behaviour.
+    /// </summary>
+    IReadOnlyList<string> FindEmptyTargetParameterProblems(
+        PipelineYamlDefinition declaredDefinition,
+        IReadOnlyDictionary<string, string> launchVariables,
+        IReadOnlyDictionary<string, string> effectiveParameters);
+
+    /// <summary>
     /// Refuses two deploy steps that would land the same app on the same target. Two stages resolving
     /// to one runner make the second deployment overwrite the first, which reads as a mysterious
     /// rollback rather than a configuration error.
@@ -88,6 +99,19 @@ public sealed class PipelineRunPreflightService(
         };
     }
 
+    public IReadOnlyList<string> FindEmptyTargetParameterProblems(
+        PipelineYamlDefinition declaredDefinition,
+        IReadOnlyDictionary<string, string> launchVariables,
+        IReadOnlyDictionary<string, string> effectiveParameters)
+    {
+        ArgumentNullException.ThrowIfNull(declaredDefinition);
+        ArgumentNullException.ThrowIfNull(launchVariables);
+        ArgumentNullException.ThrowIfNull(effectiveParameters);
+        return PipelineStageTargetParameters.FindEmptyTargets(declaredDefinition, launchVariables, effectiveParameters)
+            .Select(empty => dispatchServers.BuildEmptyTargetParameterRefusal(empty.Stage.Name, empty.Parameter.Name))
+            .ToList();
+    }
+
     private async Task CheckOnePipelineAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
@@ -104,6 +128,10 @@ public sealed class PipelineRunPreflightService(
         // missing library is a launch refusal rather than the fourth stage failing on an empty value.
         await CheckDeclaredRequirementsAsync(definition, organizationId, projectId, problems, state, ct)
             .ConfigureAwait(false);
+
+        // A definition synchronized from a repository was never through the editor's validation: an
+        // unsupported condition refuses the launch instead of failing the run at that stage.
+        problems.AddRange(PipelineConditionEvaluator.FindDefinitionProblems(definition));
 
         var stages = YamlParsingHelper.FlattenJobs(definition).ToList();
 

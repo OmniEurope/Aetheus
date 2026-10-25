@@ -20,7 +20,7 @@ else if (_preview is not null)
             <MonacoEditor Value="@_model.YamlContent" ValueChanged="@(value => _model.YamlContent = value)" />
             <OmniCheckBox @bind-Value="_model.RebaseSourcePipeline">@L["RebaseSourcePipeline"]</OmniCheckBox>
             <DialogFooter OnCancel="@Cancel">
-                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Upload" /> <span>@L["PublishVersion"]</span></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent><span>@L["PublishVersion"]</span></ChildContent></OmniButton>
             </DialogFooter>
         </OmniStack>
     </EditForm>
@@ -39,6 +39,6 @@ else if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger">@L["LoadError"]</OmniAlert>
     <DialogFooter OnCancel="@Cancel">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadPreviewAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadPreviewAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </DialogFooter>
 }

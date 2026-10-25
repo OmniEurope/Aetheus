@@ -27,6 +27,16 @@ public class PipelineRunTests : BunitContext
 
     private readonly BunitTestHelper.TestHandler _handler;
 
+    /// <summary>A link is followed by the browser, not by bUnit: goes to its address as the router does.</summary>
+    private void Follow<TComponent>(IRenderedComponent<TComponent> cut, AngleSharp.Dom.IElement link)
+        where TComponent : Microsoft.AspNetCore.Components.IComponent
+    {
+        Assert.Equal("a", link.TagName.ToLowerInvariant());
+        var address = link.GetAttribute("href")!;
+        cut.InvokeAsync(() => Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo(address))
+            .GetAwaiter().GetResult();
+    }
+
     [Fact]
     public void ReleaseEnrichmentFailure_DoesNotAbortRunPageInitialization()
     {
@@ -121,7 +131,7 @@ public class PipelineRunTests : BunitContext
         var breadcrumb = Services.GetRequiredService<BreadcrumbService>();
 
         cut.WaitForAssertion(() => Assert.Equal(
-            ["Projects", "Toto", "Pipelines", "CI Build", "PipelineRun #80"],
+            ["Projects", "Toto", "Pipelines", "CI Build", "#80 PipelineRun"],
             breadcrumb.Items.Select(item => item.Text)));
         Assert.Equal("/pipelines/5?projectId=2", breadcrumb.Items[3].Href);
     }
@@ -211,10 +221,14 @@ public class PipelineRunTests : BunitContext
         var gate = cut.Markup.IndexOf("AnalysisGateTab", logs, StringComparison.Ordinal);
         Assert.True(overview >= 0 && overview < logs && logs < gate);
         Assert.DoesNotContain("AnalysisFindingsReport", cut.Find(".omni-tabs__viewport").TextContent);
-        var gateTile = cut.Find(".run-overview-tiles .analysis-run-gate-tile");
+        var gateTile = cut.Find(".run-overview-tiles > .analysis-run-gate-tile");
         Assert.Contains("AnalysisGateOverview", gateTile.TextContent);
-        Assert.Contains("AnalysisGateFindingsCount", gateTile.TextContent);
-        gateTile.Click();
+        // R-28: the findings are a row of the fact tile, its term then its count.
+        var findings = Assert.Single(gateTile.QuerySelectorAll(".omni-fact-tile__row"), row => row.TextContent.Contains("AnalysisGateFindings", StringComparison.Ordinal));
+        Assert.Equal("1", findings.QuerySelector(".omni-fact-tile__value")!.TextContent.Trim());
+        // The tile is itself the link to the Gate tab (OmniFactTile.Href), a direct child of the tile grid.
+        Assert.Contains("tab=gate", gateTile.GetAttribute("href"), StringComparison.Ordinal);
+        Follow(cut, gateTile);
         // The gate heading and findings establish that the requested tab opened.
         cut.WaitForState(() => cut.Markup.Contains("analysis-run-gate-page", StringComparison.Ordinal));
         Assert.Contains("/analysis/findings/17", cut.Markup);
@@ -268,16 +282,22 @@ public class PipelineRunTests : BunitContext
         cut.WaitForState(() => cut.FindAll(".run-parameters-tile").Count == 1);
 
         Assert.DoesNotContain("run-params-grid", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("RunParametersCount", cut.Find(".run-parameters-tile").TextContent);
+        // R-28: the count is a row of the fact tile, its term then the number of parameters.
+        var count = Assert.Single(cut.Find(".run-parameters-tile").QuerySelectorAll(".omni-fact-tile__row"));
+        Assert.Contains("RunTileCount", count.TextContent, StringComparison.Ordinal);
+        Assert.Equal("2", count.QuerySelector(".omni-fact-tile__value")!.TextContent.Trim());
+
+        // The tile opens a dialog, so it is a button (OmniFactTile.OnClick), a direct child of the tile grid.
+        var tile = cut.Find(".run-overview-tiles > .run-parameters-tile");
+        Assert.Equal("button", tile.TagName.ToLowerInvariant());
+        Assert.Contains("omni-fact-tile--action", tile.ClassName, StringComparison.Ordinal);
 
         var dialog = Services.GetRequiredService<OmniDialogService>();
         var opened = false;
         dialog.OnOpen += (_, _, _, _) => opened = true;
-        var method = typeof(PipelineRun).GetMethod("ShowParameters", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var task = cut.InvokeAsync(() => (Task)method.Invoke(cut.Instance, [])!);
-        await cut.InvokeAsync(() => dialog.Close(null));
-        await task;
+        await cut.InvokeAsync(() => tile.Click());
         Assert.True(opened);
+        await cut.InvokeAsync(() => dialog.Close(null));
     }
 
     [Fact]
@@ -318,6 +338,8 @@ public class PipelineRunTests : BunitContext
             FindingCount = 4,
             Findings = [new AnalysisRunGateFindingDto { FindingId = 71, Title = "Child finding" }]
         });
+        // The figures of the merged gate are the database's over the whole tree, not the findings listed.
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings", new AnalysisRunFindingsPageDto { OpenCount = 4 });
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 710));
 
@@ -327,7 +349,8 @@ public class PipelineRunTests : BunitContext
         {
             var tile = cut.Find(".analysis-run-gate-tile");
             Assert.Contains("AnalysisGateStatusWarning", tile.TextContent);
-            Assert.Contains("AnalysisGateFindingsCount", tile.TextContent);
+            var findings = Assert.Single(tile.QuerySelectorAll(".omni-fact-tile__row"), row => row.TextContent.Contains("AnalysisGateFindings", StringComparison.Ordinal));
+            Assert.Equal("4", findings.QuerySelector(".omni-fact-tile__value")!.TextContent.Trim());
         });
     }
 
@@ -350,16 +373,47 @@ public class PipelineRunTests : BunitContext
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 712));
         cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1);
 
-        var tile = Assert.Single(cut.FindAll(".run-artifacts-tile"));
+        var tile = Assert.Single(cut.FindAll(".run-overview-tiles > .run-artifacts-tile"));
         Assert.Contains("Artifacts", tile.TextContent);
         Assert.Contains("2", tile.TextContent);
-        tile.Click();
+        Assert.Contains("tab=artifacts", tile.GetAttribute("href"), StringComparison.Ordinal);
+        Follow(cut, tile);
 
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("app.zip", cut.Markup);
             Assert.Contains("coverage.xml", cut.Markup);
         });
+    }
+
+    [Fact]
+    public void R1_20_OverviewTiles_AreOneOeTileGrid_AndTheOnesThatLeadSomewhereAreThemselvesTheLink()
+    {
+        _handler.SetJsonResponse("api/pipelines/runs/714", new PipelineRunDto
+        {
+            Id = 714,
+            PipelineId = 5,
+            PipelineName = "tiles",
+            Status = PipelineStatus.Success,
+            StartedAt = DateTime.UtcNow
+        });
+
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 714));
+        cut.WaitForState(() => cut.FindAll(".omni-tile-grid.run-overview-tiles").Count == 1);
+
+        // Every tile is an OE fact tile (R-28) sitting directly in the grid: no wrapper element around a tile.
+        var tiles = cut.FindAll(".run-overview-tiles > *").ToList();
+        Assert.NotEmpty(tiles);
+        Assert.All(tiles, tile => Assert.Contains("omni-fact-tile", tile.ClassName, StringComparison.Ordinal));
+        Assert.Empty(cut.FindAll(".run-tile-link"));
+        Assert.Empty(cut.FindAll(".run-overview-tiles [role='button']"));
+
+        // Status and steps: one tile that is the link to the logs tab.
+        var status = Assert.Single(tiles, tile => tile.TextContent.Contains("Status", StringComparison.Ordinal));
+        Assert.Equal("a", status.TagName.ToLowerInvariant());
+        Assert.Contains("tab=logs", status.GetAttribute("href"), StringComparison.Ordinal);
+        Follow(cut, status);
+        cut.WaitForAssertion(() => Assert.Contains("tab=logs", Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -386,7 +440,7 @@ public class PipelineRunTests : BunitContext
 
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 713));
         cut.WaitForState(() => cut.FindAll(".run-artifacts-tile").Count == 1);
-        Assert.Single(cut.FindAll(".run-artifacts-tile")).Click();
+        Follow(cut, Assert.Single(cut.FindAll(".run-artifacts-tile")));
 
         cut.WaitForAssertion(() => Assert.Contains("app.zip", cut.Markup));
         // Shortened on screen, complete in the title, so it can be copied and compared.
@@ -491,7 +545,7 @@ public class PipelineRunTests : BunitContext
         // The header title is the run identity: it has to follow the parameter change, not just the
         // body. "child-ci" appears in the run card before the header re-renders, so wait on the title.
         cut.WaitForAssertion(
-            () => Assert.Contains("PipelineRun #318", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal));
+            () => Assert.Contains("#318 PipelineRun", cut.Find(".omni-page-header__title").TextContent, StringComparison.Ordinal));
         Assert.Contains("child-ci", cut.Markup);
         Assert.DoesNotContain("parent-release", cut.Markup);
     }
@@ -509,7 +563,7 @@ public class PipelineRunTests : BunitContext
         });
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 51));
         cut.WaitForState(() => cut.FindComponents<PipelineRunLiveDuration>().Any(component =>
-            typeof(Aetheus.Front.Components.Pipelines.LiveDurationComponentBase).GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
+            typeof(Aetheus.Front.Components.Shared.LiveDurationComponentBase).GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(component.Instance) is not null));
         _handler.SetJsonResponse("api/pipelines/runs/51", new PipelineRunDto
         {
@@ -526,7 +580,7 @@ public class PipelineRunTests : BunitContext
         await cut.InvokeAsync(async () => await (Task)reload.Invoke(cut.Instance, [])!);
 
         Assert.All(cut.FindComponents<PipelineRunLiveDuration>(), component =>
-            Assert.Null(typeof(Aetheus.Front.Components.Pipelines.LiveDurationComponentBase).GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
+            Assert.Null(typeof(Aetheus.Front.Components.Shared.LiveDurationComponentBase).GetField("_timer", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(component.Instance)));
     }
 
@@ -659,9 +713,9 @@ public class PipelineRunTests : BunitContext
         var cut = Render<PipelineRun>(p => p.Add(x => x.RunId, 3));
         cut.WaitForState(() => cut.Markup.Contains("Full"));
 
-        // Each stage step spans 5 minutes, so a rendered "5m ..s" duration must appear in the timeline.
+        // Each stage step spans 5 minutes, so a rendered "5min" duration must appear in the timeline.
         Assert.Contains("run-tl-dur", cut.Markup);
-        Assert.Matches(@"\d+m \d+s", cut.Markup);
+        Assert.Matches(@"\d+min", cut.Markup);
     }
 
     // --- Static method tests ---

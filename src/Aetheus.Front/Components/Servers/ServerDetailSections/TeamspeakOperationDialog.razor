@@ -76,6 +76,6 @@
         }
     </OmniStack>
     <DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="@SubmitStyle" ButtonType="OmniButtonType.Submit"><OmniIcon Name="@MaterialIconMap.Resolve(SubmitIcon)" /> <span>@SubmitText</span></OmniButton>
+        <OmniButton Variant="@SubmitStyle" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(SubmitIcon)" /></Icon><ChildContent><span>@SubmitText</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniTemplateForm>

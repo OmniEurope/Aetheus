@@ -50,7 +50,7 @@ public sealed class MailStateReconciler(
     private async Task<MailReconciliationResult> ReconcileCoreAsync(int serverId, MailDataDto mail, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var pass = new Pass(now, await repo.GetRecentRemovalTargetsAsync(serverId, now - Grace, ct).ConfigureAwait(false));
+        var pass = new Pass(now, Grace, await repo.GetRecentRemovalTargetsAsync(serverId, now - Grace, ct).ConfigureAwait(false));
         // "Réinstaller la messagerie": the purge dropped the rows it is erasing on the host. A heartbeat taken
         // while it runs (or just after) still lists them and would adopt them back.
         if (pass.IsBeingRemoved(OperationKind.MailPurge, "-"))
@@ -208,7 +208,7 @@ public sealed class MailStateReconciler(
 
     private static string DomainOf(string email) => email[(email.IndexOf('@') + 1)..];
 
-    private sealed class Pass(DateTime now, HashSet<(OperationKind Kind, string Target)> removals)
+    private sealed class Pass(DateTime now, TimeSpan grace, HashSet<(OperationKind Kind, string Target)> removals)
     {
         public DateTime Now { get; } = now;
         public int Created { get; set; }
@@ -233,7 +233,7 @@ public sealed class MailStateReconciler(
                 Restored++;
                 return;
             }
-            if (missingSince is not null || getCreated(row) > Now - Grace) return;
+            if (missingSince is not null || getCreated(row) > Now - grace) return;
             setMissing(row, Now);
             setActive(row, false);
             MarkedMissing++;

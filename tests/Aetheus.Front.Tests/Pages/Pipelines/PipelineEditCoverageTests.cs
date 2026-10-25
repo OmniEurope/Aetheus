@@ -462,6 +462,23 @@ public class PipelineEditCoverageTests : BunitContext
     }
 
     [Fact]
+    public void R37_TheRunsOfAPipeline_ShowTheirStatusBadgeWithAnIcon()
+    {
+        SetupEditStubs(30);
+
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 30));
+
+        cut.WaitForAssertion(() =>
+        {
+            var badges = cut.FindAll(".pipeline-runs-grid .omni-badge")
+                .Where(badge => badge.TextContent.Contains("Enum_PipelineStatus_", StringComparison.Ordinal))
+                .ToList();
+            Assert.NotEmpty(badges);
+            Assert.All(badges, badge => Assert.NotNull(badge.QuerySelector(".omni-icon")));
+        });
+    }
+
+    [Fact]
     public void RunRowControls_DoNotReachTheRow()
     {
         // SITE-FUNC-HOME-CAPABILITY-001: a link, button or form control in a clickable row stops click and

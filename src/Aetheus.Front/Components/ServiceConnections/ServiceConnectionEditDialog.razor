@@ -40,7 +40,7 @@ else
             </OmniColumn>
         </OmniRow>
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><OmniIcon Name="@MaterialIconMap.Resolve((IsEdit ? "save" : "add"))" /> <span>@(IsEdit ? L["Save"] : L["Create"])</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((IsEdit ? "save" : "add"))" /></Icon><ChildContent><span>@(IsEdit ? L["Save"] : L["Create"])</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniTemplateForm>
 }

@@ -5,7 +5,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-immutable-source</c> function, port of
-/// <c>deploy/scripts/security/verify-immutable-source.sh</c>: <c>git rev-parse HEAD</c> must be the
+/// the former <c>verify-immutable-source.sh</c> script: <c>git rev-parse HEAD</c> must be the
 /// requested revision and, in <c>full</c> mode, a shallow checkout is first deepened with
 /// <c>git fetch --unshallow origin</c> and must then hold the complete history, so a secret scan cannot
 /// report on history it never received. Same Git commands, in the same order, as the script.

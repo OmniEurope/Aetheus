@@ -52,7 +52,7 @@ public class ReleaseDetailTests : BunitContext
         // pushes the rest of the header off a phone screen.
         var full = "c-0123456789abcdef0123456789abcdef01234567";
         _handler.SetJsonResponse("api/releases/7", Sample() with { Version = full, TagName = null });
-        var breadcrumb = Services.GetRequiredService<Aetheus.Front.Layout.BreadcrumbService>();
+        var breadcrumb = Services.GetRequiredService<Aetheus.Front.Components.Shared.BreadcrumbService>();
 
         var cut = Render<ReleaseDetail>(p => p.Add(c => c.ReleaseId, 7));
 

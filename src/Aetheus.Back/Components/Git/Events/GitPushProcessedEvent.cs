@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Aetheus.Back.Services.DomainEvents;
-
 namespace Aetheus.Back.Components.Git.Events;
 
 /// <summary>Announces a committed Git push so Pipelines can handle orchestration without an upward
@@ -20,4 +18,4 @@ public sealed record GitPushProcessedEvent(
     string RepositoryName,
     string? DefaultBranch,
     string DiskPath,
-    IReadOnlyList<GitRefUpdate> RefUpdates) : IDomainEvent;
+    IReadOnlyList<GitRefUpdate> RefUpdates) : IGitRefUpdatesEvent;

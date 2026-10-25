@@ -12,7 +12,7 @@ internal sealed record FormatScope(bool Full, IReadOnlyList<string> Files)
 }
 
 /// <summary>
-/// The scope decision of <c>deploy/scripts/run-affected-dotnet-format.sh</c>, fail-closed exactly as
+/// The scope decision of the former <c>run-affected-dotnet-format.sh</c> script, fail-closed exactly as
 /// the script decides it: only a 40-hex head and a 40-hex baseline that Git knows, that is an ancestor
 /// of the head, and whose diff adds or modifies files only (no deletion, rename or copy, no path with
 /// whitespace, no formatting configuration, solution or project file) narrows the check to the added

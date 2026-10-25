@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Services;
+
 namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>Implementation of <see cref="IPipelineRunLookupReader"/> (the run status query moved unchanged

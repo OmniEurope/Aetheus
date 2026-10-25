@@ -4,8 +4,8 @@ using Aetheus.Back.Components.Monitoring;
 using Aetheus.Back.Components.Pipelines.Events;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Exceptions;
 using Aetheus.Back.Hubs;
-using Aetheus.Back.Services.DomainEvents;
 using Microsoft.AspNetCore.SignalR;
 using static Aetheus.Back.Components.Pipelines.PipelineRunHelpers;
 
@@ -84,6 +84,8 @@ public sealed class PipelineRunScheduler(
     TimeProvider timeProvider,
     ILogger<PipelineRunScheduler> logger) : IPipelineRunScheduler
 {
+    private readonly PipelineResumeWindow _resumeWindow = new(repo, pipelineHub, timeProvider, logger);
+
     public async Task AdvanceStageAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         await operationLock.RunSerializedAsync(
@@ -203,7 +205,10 @@ public sealed class PipelineRunScheduler(
             ct).ConfigureAwait(false);
     }
 
-    private async Task AdvanceStageLockedAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
+    private Task AdvanceStageLockedAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct) =>
+        StopRunIfRefusedAsync(pipelineRunId, () => AdvanceStageCoreAsync(pipelineRunId, completedStageName, launcher, ct), ct);
+
+    private async Task AdvanceStageCoreAsync(int pipelineRunId, string completedStageName, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         if (!await repo.IsRunStillRunningAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
 
@@ -259,9 +264,9 @@ public sealed class PipelineRunScheduler(
 
         if (collectionStatus != TaskExecutionStatus.Success)
         {
-            await FailForMissingArtifactAsync(pipelineRunId,
+            await StopRunIfRefusedAsync(pipelineRunId, () => FailForMissingArtifactAsync(pipelineRunId,
                 $"Artifact collection ended with status {collectionStatus}; the run cannot publish its declared artifact.",
-                launcher, ct).ConfigureAwait(false);
+                launcher, ct), ct).ConfigureAwait(false);
             return;
         }
 
@@ -288,7 +293,7 @@ public sealed class PipelineRunScheduler(
         if (await TryContinueWithFailureHandlersAsync(pipelineRunId, launcher, ct).ConfigureAwait(false))
             return;
         var blockedSteps = (await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false))
-            .Where(step => step.StageName != PipelineRunService.SystemCleanupStage)
+            .Where(step => step.StageName != PipelineRunHelpers.SystemCleanupStage)
             .ToList();
         if (blockedSteps.Count > 0)
         {
@@ -344,19 +349,6 @@ public sealed class PipelineRunScheduler(
         return swallowedFailure ? PipelineStatus.Partial : PipelineStatus.Success;
     }
 
-    /// <summary> The stages that undo a deployment - a failure handler (<c>condition: failed()</c>)
-    /// that runs a <c>bluegreen-rollback</c> step or declares <c>deployment_role: rollback</c> (R-14).
-    /// Recognised by that rather than by a name, so a failure handler that only notifies never turns a
-    /// failed run into a rolled-back one.
-    /// </summary>
-    internal static List<string> RollbackStageNames(PipelineYamlDefinition definition) =>
-        [.. YamlParsingHelper.FlattenJobs(definition).Where(PipelineDeploymentStages.IsRollback).Select(stage => stage.Name)];
-
-    /// <summary>The stages that start the new colour (a <c>bluegreen-up</c> step, or
-    /// <c>deployment_role: start</c>).</summary>
-    internal static List<string> StartStageNames(PipelineYamlDefinition definition) =>
-        [.. YamlParsingHelper.FlattenJobs(definition).Where(PipelineDeploymentStages.IsStart).Select(stage => stage.Name)];
-
     // Recette R2-146 / R1-80: the run sealed its own result as not deployable, or one of its controls
     // ran its suite and found failures (a required test gate published non-zero, possibly by a child
     // run whose outputs its trigger step carries). An advisory step never refuses anything.
@@ -377,8 +369,8 @@ public sealed class PipelineRunScheduler(
     /// </summary>
     private async Task<bool> WasRolledBackAsync(int pipelineRunId, PipelineYamlDefinition definition, CancellationToken ct)
     {
-        var rollback = RollbackStageNames(definition);
-        var started = StartStageNames(definition);
+        var rollback = PipelineDeploymentStages.RollbackNames(definition);
+        var started = PipelineDeploymentStages.StartNames(definition);
         return rollback.Count > 0 && started.Count > 0
             && await repo.DidStagesAllSucceedAsync(pipelineRunId, started, ct).ConfigureAwait(false)
             && await repo.DidStagesAllSucceedAsync(pipelineRunId, rollback, ct).ConfigureAwait(false);
@@ -427,7 +419,7 @@ public sealed class PipelineRunScheduler(
         if (!pendingSteps.Any(step => failureHandlerStages.Contains(step.StageName))) return false;
 
         var blockedSteps = pendingSteps
-            .Where(step => step.StageName != PipelineRunService.SystemCleanupStage && !failureHandlerStages.Contains(step.StageName))
+            .Where(step => step.StageName != PipelineRunHelpers.SystemCleanupStage && !failureHandlerStages.Contains(step.StageName))
             .ToList();
         if (blockedSteps.Count > 0)
         {
@@ -442,7 +434,12 @@ public sealed class PipelineRunScheduler(
 
     // Retries and resumes use the same per-step secret scoping as initial dispatch, exposing only
     // referenced secrets.
-    public async Task DispatchNextStageWithScopedSecretsAsync(
+    public Task DispatchNextStageWithScopedSecretsAsync(
+        PipelineRun run, PipelineYamlDefinition definition,
+        IPipelineChildRunLauncher launcher, CancellationToken ct) =>
+        StopRunIfRefusedAsync(run.Id, () => DispatchNextStageCoreAsync(run, definition, launcher, ct), ct);
+
+    private async Task DispatchNextStageCoreAsync(
         PipelineRun run, PipelineYamlDefinition definition,
         IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
@@ -458,7 +455,11 @@ public sealed class PipelineRunScheduler(
         await planner.CreateTasksForNextStageAsync(run.Id, definition, resolvedVars, pendingSteps, organizationId, secretKeys, launcher, ct).ConfigureAwait(false);
     }
 
-    public async Task AdvanceToNextStageOrCompleteAsync(
+    public Task AdvanceToNextStageOrCompleteAsync(
+        int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct) =>
+        StopRunIfRefusedAsync(pipelineRunId, () => AdvanceToNextStageCoreAsync(pipelineRunId, launcher, ct), ct);
+
+    private async Task AdvanceToNextStageCoreAsync(
         int pipelineRunId, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         var run = await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false);
@@ -467,7 +468,22 @@ public sealed class PipelineRunScheduler(
         var definition = definitions.Parse(run);
         if (definition is null) return;
 
-        var (resolvedVars, secretKeys) = await ResolveFullVariablesWithSecretsForRunAsync(run, definition, ct).ConfigureAwait(false);
+        // R-38: this resolution re-reads the run's libraries and vaults and refuses (BadRequestException)
+        // when one was deleted or emptied since the run started. That refusal is final for the run, not a
+        // transient fault: let it escape and the run stays Running with Pending steps, the recovery sweep
+        // re-drives it every minute and logs the same Critical until the stuck-run backstop. It stops the
+        // run below, once we know a stage is still waiting to be dispatched. This is a sanctioned catch:
+        // nobody is in front of a scheduling pass to read the refusal, a failed run has to carry it.
+        (Dictionary<string, string> Resolved, HashSet<string> SecretKeys)? variables = null;
+        string? refusal = null;
+        try
+        {
+            variables = await ResolveFullVariablesWithSecretsForRunAsync(run, definition, ct).ConfigureAwait(false);
+        }
+        catch (BadRequestException exception)
+        {
+            refusal = exception.Message;
+        }
 
         // A360-15: the run was loaded WITH its pipeline three lines above, so asking the database which
         // pipeline this run belongs to was a round trip for a value already in hand.
@@ -482,30 +498,128 @@ public sealed class PipelineRunScheduler(
             if (guard > 0 && !await finalizer.IsRunActiveAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
 
             var pendingSteps = await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false);
+            // R-39: a missed confirmation that was rolled back waits for a resume, before the cleanup.
+            if (await _resumeWindow.TryParkAsync(run, definition, pendingSteps, ct).ConfigureAwait(false)) return;
             if (pendingSteps.Count == 0)
             {
-                var continuableFailures =
-                    await repo.GetContinuableFailedStepsInRunAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [];
-                // A step that only went on because of "run to end" fails the run all the same: the
-                // mode tests everything, it never turns a failure into a Partial or a Success.
-                var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false)
-                    || continuableFailures.Any(step => step.ContinueOnErrorForced)
-                    || await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
-                var finalStatus = DecideFinalStatus(
-                    cancelled: HasCancellationRequest(run.AdditionalVariablesJson),
-                    blockingFailure: blockingFailure,
-                    swallowedFailure: HasNonAdvisoryFailure(continuableFailures, AdvisoryStepKeys(definition)),
-                    rolledBack: blockingFailure && await WasRolledBackAsync(pipelineRunId, definition, ct).ConfigureAwait(false),
-                    rejected: !blockingFailure && await WasRejectedAsync(pipelineRunId, definition, ct).ConfigureAwait(false));
-                await finalizer.CompleteRunAsync(pipelineRunId, finalStatus, ct).ConfigureAwait(false);
-                if (finalStatus == PipelineStatus.Success)
-                    await pipelineHub.Clients.Groups(HubGroups.PipelineRunUpdates(pipelineRunId, run.Pipeline.Id)).SendAsync("PipelineRunCompleted", pipelineRunId, PipelineStatus.Success, ct).ConfigureAwait(false);
+                await CompleteRunWithNothingPendingAsync(run, definition, ct).ConfigureAwait(false);
                 return;
             }
 
-            var hadCancelled = await planner.CreateTasksForNextStageAsync(pipelineRunId, definition, resolvedVars, pendingSteps, organizationId, secretKeys, launcher, ct).ConfigureAwait(false);
+            if (variables is not { } resolution)
+            {
+                await StopRunRefusedByItsConfigurationAsync(
+                    pipelineRunId, pendingSteps, refusal ?? string.Empty, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var hadCancelled = await planner.CreateTasksForNextStageAsync(pipelineRunId, definition, resolution.Resolved, pendingSteps, organizationId, resolution.SecretKeys, launcher, ct).ConfigureAwait(false);
             if (!hadCancelled) return;
         }
+    }
+
+    /// <summary>No step is left to dispatch: the run ends with the status its steps earned.</summary>
+    private async Task CompleteRunWithNothingPendingAsync(PipelineRun run, PipelineYamlDefinition definition, CancellationToken ct)
+    {
+        var pipelineRunId = run.Id;
+        var continuableFailures =
+            await repo.GetContinuableFailedStepsInRunAsync(pipelineRunId, ct).ConfigureAwait(false) ?? [];
+        // A step that only went on because of "run to end" fails the run all the same: the
+        // mode tests everything, it never turns a failure into a Partial or a Success.
+        var blockingFailure = await repo.HasAnyFailedStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false)
+            || continuableFailures.Any(step => step.ContinueOnErrorForced)
+            || await repo.HasFailedArtifactCollectionAsync(pipelineRunId, ct).ConfigureAwait(false);
+        var finalStatus = DecideFinalStatus(
+            cancelled: HasCancellationRequest(run.AdditionalVariablesJson),
+            blockingFailure: blockingFailure,
+            swallowedFailure: HasNonAdvisoryFailure(continuableFailures, AdvisoryStepKeys(definition)),
+            rolledBack: blockingFailure && await WasRolledBackAsync(pipelineRunId, definition, ct).ConfigureAwait(false),
+            rejected: !blockingFailure && await WasRejectedAsync(pipelineRunId, definition, ct).ConfigureAwait(false));
+        await finalizer.CompleteRunAsync(pipelineRunId, finalStatus, ct).ConfigureAwait(false);
+        if (finalStatus == PipelineStatus.Success)
+            await pipelineHub.Clients.Groups(HubGroups.PipelineRunUpdates(pipelineRunId, run.Pipeline!.Id)).SendAsync("PipelineRunCompleted", pipelineRunId, PipelineStatus.Success, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// R-38: a scheduling pass the run's configuration refuses (<see cref="BadRequestException"/>: a library or a
+    /// vault it needs is gone, a configuration template or a repository read is refused...) is final for the
+    /// run, not a transient fault. Let it escape and the run stays Running with Pending steps and nothing in
+    /// flight: the recovery sweep re-drives it every minute, logs the same Critical each time, and the inserts
+    /// the pass had queued stay in the change tracker for the next save of the same scope to write. The pass
+    /// is dropped, with what it had queued, and the run stops carrying the reason. Any other exception still
+    /// escapes to the sweep. This is a sanctioned catch: nobody is in front of a scheduling pass to read the
+    /// refusal, so a failed run has to carry it.
+    /// </summary>
+    private async Task StopRunIfRefusedAsync(int pipelineRunId, Func<Task> pass, CancellationToken ct)
+    {
+        var queuedBefore = repo.MarkUnsavedInserts();
+        try
+        {
+            await pass().ConfigureAwait(false);
+        }
+        catch (BadRequestException exception)
+        {
+            repo.DiscardUnsavedInsertsSince(queuedBefore);
+            logger.LogWarning(
+                exception, "Run {RunId}: a scheduling pass was refused ({ExceptionType}: {Reason}); stopping the run",
+                pipelineRunId, nameof(BadRequestException), exception.Message);
+            if (!await finalizer.IsRunActiveAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
+            var pendingSteps = await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false);
+            await StopRunRefusedByItsConfigurationAsync(pipelineRunId, pendingSteps, exception.Message, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// R-38: the next stage cannot be dispatched because the run's configuration is refused. The steps still
+    /// waiting fail with the reason and the run ends Failed carrying it. The workspace cleanup is still
+    /// dispatched when it can be: it resolves the run's variables itself, so a refusal that comes from them
+    /// (a library or a vault gone) refuses it too, and it is then cancelled with a warning saying so.
+    /// A step of another stage still running ends first: its completion re-enters the scheduler and lands here.
+    /// </summary>
+    private async Task StopRunRefusedByItsConfigurationAsync(
+        int pipelineRunId, List<PipelineStepRun> pendingSteps, string refusal, CancellationToken ct)
+    {
+        if (await repo.HasAnyRunningStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false))
+            return;
+
+        // A step the pass already skipped for its condition keeps that outcome; the others never ran.
+        var blocked = pendingSteps
+            .Where(step => step.StageName != SystemCleanupStage
+                && step.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned)
+            .ToList();
+        var cleanup = pendingSteps.Where(step => step.StageName == SystemCleanupStage).ToList();
+        var reason = $"The run was stopped: its next stage could not be dispatched. {refusal}";
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        foreach (var step in blocked)
+            MarkSystemStepFailed(step, TaskFailureCodes.InfrastructureMismatch, reason, now);
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        var cleanupRefused = false;
+        var cleanupDispatched = false;
+        if (cleanup.Count > 0)
+        {
+            var queuedBefore = repo.MarkUnsavedInserts();
+            try
+            {
+                cleanupDispatched = await systemTasks.DispatchCleanupIfPendingAsync(pipelineRunId, ct).ConfigureAwait(false);
+            }
+            catch (BadRequestException)
+            {
+                repo.DiscardUnsavedInsertsSince(queuedBefore);
+                cleanupRefused = true;
+                finalizer.MarkStepsAs(cleanup, TaskExecutionStatus.Cancelled);
+                await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+        }
+
+        await repo.AppendRunWarningsAsync(
+            pipelineRunId,
+            [cleanupRefused ? $"{reason} The workspace cleanup was not run: it needs the same variables." : reason],
+            ct).ConfigureAwait(false);
+        logger.LogWarning("Run {RunId} stopped: its next stage could not be dispatched. {Refusal}", pipelineRunId, refusal);
+        // A cleanup now running or queued reports back and finalizes the run from its failed steps.
+        if (!cleanupDispatched)
+            await finalizer.CompleteRunAsync(pipelineRunId, PipelineStatus.Failed, ct).ConfigureAwait(false);
     }
 
     /// <summary>Returns true if any stage was cancelled (condition=false), signaling the caller to re-evaluate.</summary>

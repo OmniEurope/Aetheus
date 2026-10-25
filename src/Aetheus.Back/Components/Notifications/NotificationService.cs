@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Aetheus.Back.Components.Notifications.Events;
+using Aetheus.Back.Components.Notifications.MailTemplates;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.DomainEvents;
 using Aetheus.Back.Services.Email;

@@ -1,0 +1,20 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R1-29: the mail status lives in its own "State" tab; when the stack is NOT compliant the failing lines
+   also show at the top of the page, with the one action that leads to the tab. Nothing renders when
+   everything passes or while the state is not read yet. *@
+@if (Visible && Failing.Count > 0)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["MailNotCompliantTitle"]" Class="omni-u-mb-lg mail-compliance-banner">
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniStack Gap="OmniSpacing.XSmall" Class="mail-compliance-lines">
+                @foreach (var item in Failing)
+                {
+                    <MailCheckLine Label="@MailUiText.DiagnosticLabel(L, item.Key)" IsOk="false" Detail="@MailUiText.Detail(L, item.Detail)" />
+                }
+            </OmniStack>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ShowState" Class="mail-compliance-open"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L["MailNotCompliantOpen"]</span></ChildContent></OmniButton>
+            </OmniStack>
+        </OmniStack>
+    </OmniAlert>
+}

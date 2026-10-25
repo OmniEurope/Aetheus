@@ -157,9 +157,9 @@ public sealed class AgentPureHelperSweepTests
     [Fact]
     public void FormatBytes_SwitchesToGibibytesAtTheBoundary()
     {
-        Assert.Equal("512 MiB", StorageSizeFormatting.FormatBytes(512L * 1024 * 1024));
-        Assert.Equal("1 GiB", StorageSizeFormatting.FormatBytes(StorageSizeFormatting.GiB(1)));
-        Assert.Equal("1,5 GiB".Replace(',', '.'), StorageSizeFormatting.FormatBytes(
+        Assert.Equal("512 Mo", StorageSizeFormatting.FormatBytes(512L * 1024 * 1024));
+        Assert.Equal("1 Go", StorageSizeFormatting.FormatBytes(StorageSizeFormatting.GiB(1)));
+        Assert.Equal("1,5 Go".Replace(',', '.'), StorageSizeFormatting.FormatBytes(
             StorageSizeFormatting.GiB(1) + 512L * 1024 * 1024).Replace(',', '.'));
     }
 

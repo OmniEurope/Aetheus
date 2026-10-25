@@ -90,6 +90,12 @@ public sealed record SshConfigStatusDto
     /// <summary>When this snapshot was first reported (it has been unchanged since).</summary>
     public DateTime ObservedAt { get; init; }
 
+    /// <summary>R-50: when the agent last sent an SSH report that was collected, whether or not it
+    /// differed from the stored one (refreshed at most every
+    /// <see cref="SshConfigLimits.LastReportedRefreshMinutes"/> minutes). Null for a state stored
+    /// before this field existed: the date shows again with the next report.</summary>
+    public DateTime? LastReportedAt { get; init; }
+
     /// <summary>When the first snapshot, the baseline, was recorded.</summary>
     public DateTime BaselineAt { get; init; }
 
@@ -113,4 +119,8 @@ public sealed record SshConfigChangeDto
 public static class SshConfigLimits
 {
     public const int MaxStoredChanges = 20;
+
+    /// <summary>How often an unchanged report refreshes <see cref="SshConfigStatusDto.LastReportedAt"/>,
+    /// so the freshness costs one write per interval, not one per heartbeat.</summary>
+    public const int LastReportedRefreshMinutes = 5;
 }

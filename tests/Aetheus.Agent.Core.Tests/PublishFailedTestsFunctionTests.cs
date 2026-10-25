@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/publish-failed-tests.sh</c> and of <c>list-failed-tests.mjs</c>,
+/// The C# port of the former <c>publish-failed-tests.sh</c> script and of <c>list-failed-tests.mjs</c>,
 /// with the cases of <c>list-failed-tests.test.mjs</c> and of the publication half of
 /// <c>failed-tests-publication.test.mjs</c>: the failed names of TRX files and lists, made safe for one
 /// setvariable line, published under the variable the step names, and never a failed step.

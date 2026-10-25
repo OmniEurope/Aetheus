@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Mail;
+using Aetheus.Back.Components.Mail.Mailbox;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Settings;
+using Aetheus.Back.Components.Shared;
 using Aetheus.Back.Components.Tasks;
 using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
@@ -122,7 +124,7 @@ public sealed class MailNoReplySenderIntegrationTests(PostgresFixture fixture) :
             ServerId = server.Id,
             Hostname = "mail.example.org",
             IsManagedByAetheus = true,
-            HelperVersion = MailService.QuotaMinimumHelperVersion
+            HelperVersion = MailHelperVersions.QuotaMinimum
         });
         var domain = new MailDomain { ServerId = server.Id, Name = "example.org" };
         domain.Accounts.Add(account);

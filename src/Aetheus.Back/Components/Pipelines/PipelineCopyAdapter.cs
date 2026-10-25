@@ -5,9 +5,12 @@ using Aetheus.Back.Services;
 namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>Rewrites whole-token references to copied pipelines, libraries, vaults and
-/// APPLICATION_PREFIX while preserving YAML formatting. Other content remains unchanged, with
-/// source-project references, pinned execution targets, repository sources, addresses and uncopied
-/// pipeline references reported for review.</summary>
+/// APPLICATION_PREFIX while preserving YAML formatting, renames the identifiers the structure marks as
+/// the source project's own (<see cref="PipelineCopyIdentifierRenamer"/>) and sets a webhook or
+/// schedule trigger to manual (<see cref="PipelineCopyTriggers"/>). Other content remains unchanged,
+/// with source-project references, pinned execution targets, repository sources, addresses, uncopied
+/// pipeline references and source repository files (<see cref="PipelineCopyRepositoryFiles"/>)
+/// reported for review.</summary>
 internal static partial class PipelineCopyAdapter
 {
     private const int MaxDetails = 5;
@@ -64,7 +67,17 @@ internal static partial class PipelineCopyAdapter
                     RegexOptions.Multiline | RegexOptions.CultureInvariant)
                 .Replace(adapted, "${lead}" + prefix.Replace("$", "$$", StringComparison.Ordinal));
 
+        // Identifiers the structure identifies as the source project's own, then the triggers: a
+        // copy never starts on its own.
+        var (renamedYaml, renamed) = PipelineCopyIdentifierRenamer.Rename(adapted, sourcePrefix, prefix);
+        var (untriggeredYaml, originalTrigger) = PipelineCopyTriggers.Disable(renamedYaml);
+        adapted = untriggeredYaml;
+
         var issues = new List<PipelineCopyIssueDto>();
+        if (originalTrigger is not null)
+            issues.Add(new PipelineCopyIssueDto { Kind = PipelineCopyIssueKind.TriggerDisabled, Detail = originalTrigger });
+        AddIssue(issues, PipelineCopyIssueKind.IdentifiersRenamed, renamed);
+        AddIssue(issues, PipelineCopyIssueKind.RepositoryFileDependency, PipelineCopyRepositoryFiles.Find(adapted));
         AddIssue(issues, PipelineCopyIssueKind.SourceProjectNameRemains,
             RemainingMentions(adapted, sourcePrefix, renames.Values.Append(prefix)));
         if (YamlParsingHelper.ParseAndValidate(adapted) is { } definition)
@@ -72,6 +85,10 @@ internal static partial class PipelineCopyAdapter
         AddIssue(issues, PipelineCopyIssueKind.HardCodedHost, Hosts(adapted));
         return (adapted, issues);
     }
+
+    /// <summary>A finding that tells what the copy did and asks nothing of the user: it does not make the
+    /// copy "to review".</summary>
+    internal static bool IsInformational(PipelineCopyIssueKind kind) => kind == PipelineCopyIssueKind.IdentifiersRenamed;
 
     private static Regex Token(string name) => new(
         @"(?<![A-Za-z0-9_-])" + Regex.Escape(name) + @"(?![A-Za-z0-9_-])",

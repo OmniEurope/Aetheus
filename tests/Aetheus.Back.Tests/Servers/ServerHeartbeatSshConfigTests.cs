@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.AgentUpdate;
+using Aetheus.Back.Components.Alerts;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Servers;
 using Aetheus.Back.Components.Servers.Events;
-using Aetheus.Back.Components.Servers.Handlers;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Hubs;
 using Aetheus.Back.Services;
@@ -113,16 +113,52 @@ public sealed class ServerHeartbeatSshConfigTests
     }
 
     [Fact]
-    public async Task SameSnapshot_ChangesNothing()
+    public async Task SameSnapshot_WithinTheRefreshInterval_ChangesNothing()
     {
         await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
         var before = _server.SshConfigStateJson;
-        _time.Advance(TimeSpan.FromMinutes(5));
+        _time.Advance(TimeSpan.FromMinutes(SshConfigLimits.LastReportedRefreshMinutes - 1));
 
         await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
 
         Assert.Equal(before, _server.SshConfigStateJson);
         Assert.Empty(SshAlerts());
+    }
+
+    /// <summary>R-50: an unchanged report keeps the reference and the alerts as they are but records
+    /// when the agent last reported, so a stale page can be told from a quiet host.</summary>
+    [Fact]
+    public async Task SameSnapshot_AfterTheRefreshInterval_OnlyMovesTheLastReportedDate()
+    {
+        await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
+        var first = Stored();
+        _time.Advance(TimeSpan.FromMinutes(SshConfigLimits.LastReportedRefreshMinutes));
+
+        await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
+
+        var stored = Stored();
+        Assert.Equal(_time.GetUtcNow().UtcDateTime, stored.LastReportedAt);
+        Assert.Equal(first.LastReportedAt, first.ObservedAt);
+        Assert.Equal(first.ObservedAt, stored.ObservedAt);
+        Assert.Equal(first.BaselineAt, stored.BaselineAt);
+        Assert.Equal(
+            System.Text.Json.JsonSerializer.Serialize(first.Snapshot),
+            System.Text.Json.JsonSerializer.Serialize(stored.Snapshot));
+        Assert.Empty(stored.RecentChanges);
+        Assert.Empty(SshAlerts());
+    }
+
+    /// <summary>R-50: a state stored before the field existed gets its date on the next report.</summary>
+    [Fact]
+    public async Task StateStoredBeforeTheField_GetsItsLastReportedDate_OnTheNextReport()
+    {
+        await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
+        _server.SshConfigStateJson = System.Text.Json.JsonSerializer.Serialize(Stored() with { LastReportedAt = null });
+        Assert.Null(Stored().LastReportedAt);
+
+        await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
+
+        Assert.Equal(_time.GetUtcNow().UtcDateTime, Stored().LastReportedAt);
     }
 
     [Fact]
@@ -181,6 +217,55 @@ public sealed class ServerHeartbeatSshConfigTests
         Assert.Equal($"new key added to {RootKeys} (ssh-ed25519 {KeyB})", Assert.Single(SshAlerts()).Message);
     }
 
+    // R-50: a deleted account drops out of the agent's report (it leaves /etc/passwd); its files used to
+    // stay in "recent changes" as "no longer readable" for ever, and the removal itself said nothing.
+    [Fact]
+    public async Task R50_AccountDeletedOnTheHost_FoldsItsHistoryIntoOneRemovalEvent()
+    {
+        const string bobKeys = "/home/nodebb/.ssh/authorized_keys";
+        SshConfigDataDto WithBob(AuthorizedKeysFileState state)
+        {
+            var snapshot = Snapshot(aliceKeys: KeyA);
+            return snapshot with
+            {
+                AuthorizedKeys = [.. snapshot.AuthorizedKeys, new AuthorizedKeysFileDto { User = "nodebb", Path = bobKeys, State = state }]
+            };
+        }
+        await HeartbeatAsync(WithBob(AuthorizedKeysFileState.Read));
+        await HeartbeatAsync(WithBob(AuthorizedKeysFileState.Unreadable));
+        Assert.Contains(Stored().RecentChanges, c => c.Message == $"{bobKeys} is no longer readable by the agent: its keys are unknown");
+
+        await HeartbeatAsync(Snapshot(aliceKeys: KeyA));
+
+        var stored = Stored();
+        Assert.DoesNotContain(stored.Snapshot.AuthorizedKeys, f => f.Path == bobKeys);
+        Assert.DoesNotContain(stored.RecentChanges, c => c.Message.Contains("no longer readable", StringComparison.Ordinal));
+        var change = Assert.Single(stored.RecentChanges, c => c.Message.Contains(bobKeys, StringComparison.Ordinal));
+        Assert.Equal($"{bobKeys} is no longer watched", change.Message);
+        Assert.Equal("Info", change.Severity);
+    }
+
+    [Fact]
+    public async Task R50_ReadableFileThatVanishes_IsAWarningRemoval()
+    {
+        const string bobKeys = "/home/nodebb/.ssh/authorized_keys";
+        var snapshot = Snapshot(aliceKeys: KeyA);
+        await HeartbeatAsync(snapshot with
+        {
+            AuthorizedKeys = [.. snapshot.AuthorizedKeys, new AuthorizedKeysFileDto { User = "nodebb", Path = bobKeys, State = AuthorizedKeysFileState.Read }]
+        });
+
+        await HeartbeatAsync(snapshot);
+
+        var alert = Assert.Single(SshAlerts());
+        Assert.Equal("Warning", alert.Severity);
+        Assert.Equal($"{bobKeys} was removed", alert.Message);
+        // The mail words a change from its code: without one the alert mail had no diagnostic row.
+        var notice = Assert.Single(Assert.Single(SshEvents()).Changes!);
+        Assert.Equal("KeysFileRemoved", notice.Code);
+        Assert.Equal([bobKeys], notice.Args);
+    }
+
     [Fact]
     public async Task ValueBecomingUnknown_IsAWarning_NeverSilent()
     {
@@ -221,11 +306,23 @@ public sealed class ServerHeartbeatSshConfigTests
     {
         var users = Substitute.For<IUserNotificationService>();
         var channels = Substitute.For<INotificationService>();
-        var handler = new SshConfigChangeNotificationHandler(users, channels);
+        var occurrences = Substitute.For<IAlertOccurrenceService>();
+        occurrences.RecordAsync(Arg.Any<NewAlertOccurrence>(), Arg.Any<CancellationToken>()).Returns(42L);
+        var handler = new SshConfigChangeNotificationHandler(users, channels, occurrences);
 
         await handler.HandleAsync(
             new SshConfigChangedEvent(7, "web-1", "Critical", "PermitRootLogin changed to yes (was no)", _time.GetUtcNow().UtcDateTime),
             TestContext.Current.CancellationToken);
+
+        await occurrences.Received(1).RecordAsync(
+            Arg.Is<NewAlertOccurrence>(occurrence => occurrence.ServerId == 7
+                && occurrence.Metric == "SshConfigChange"
+                && occurrence.Severity == AlertSeverity.Critical),
+            Arg.Any<CancellationToken>());
+        await channels.Received(1).SendEventAsync(
+            "alert.triggered",
+            Arg.Is<object>(payload => System.Text.Json.JsonSerializer.Serialize(payload).Contains("\"AlertId\":42", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
 
         await users.Received(1).RecordAdministratorEventAsync(
             "alert.triggered",

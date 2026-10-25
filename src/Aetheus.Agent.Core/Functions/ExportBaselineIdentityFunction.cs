@@ -9,7 +9,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>export-baseline-identity</c> function, port of
-/// <c>deploy/scripts/candidate/export-baseline-identity.sh</c> and of the Node program it embedded:
+/// the former <c>export-baseline-identity.sh</c> script and of the Node program it embedded:
 /// publishes the source revision and the schema state (fingerprint and migration list) of the deployed
 /// baseline read from its restored delivery contract, so qualification migrates from what production
 /// actually stands on, or attests a bootstrap when no contract was restored. A legacy contract without

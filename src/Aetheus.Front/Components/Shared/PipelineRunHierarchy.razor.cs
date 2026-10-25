@@ -6,15 +6,6 @@ namespace Aetheus.Front.Components.Shared;
 
 public partial class PipelineRunHierarchy
 {
-    private static OmniTone StatusVariant(PipelineStatus status) => status switch
-    {
-        PipelineStatus.Success => OmniTone.Success,
-        PipelineStatus.Failed => OmniTone.Danger,
-        PipelineStatus.Running => OmniTone.Accent,
-        PipelineStatus.Partial or PipelineStatus.RolledBack or PipelineStatus.Rejected => OmniTone.Warning,
-        _ => OmniTone.Neutral
-    };
-
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter, EditorRequired] public IReadOnlyList<PipelineRunTableItem> Items { get; set; } = [];

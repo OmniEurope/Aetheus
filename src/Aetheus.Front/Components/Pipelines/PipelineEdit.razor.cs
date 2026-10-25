@@ -46,11 +46,6 @@ public partial class PipelineEdit : IAsyncDisposable
     /// <summary>Runs tab tiles, from the first block of runs: the grid scrolls virtually.</summary>
     private PipelineRunsSummary RunsSummary => PipelineRunsSummary.Create(_firstRunsPage);
 
-    /// <summary>A summary tile that opens a run draws as the other clickable tiles.</summary>
-    private static string SummaryCardClass(int? runId) => runId is null
-        ? "analysis-summary-card pipeline-runs-summary-card"
-        : "analysis-summary-card pipeline-runs-summary-card tile-clickable";
-
     private List<PipelineRunDto> _firstRunsPage = [];
 
     /// <summary>Sort and column filters currently applied to the runs grid. Held across reloads so a
@@ -62,6 +57,8 @@ public partial class PipelineEdit : IAsyncDisposable
     private bool _isNew => Id is null or 0;
     private bool _saving;
     private bool _loading;
+    private bool _notFound;
+    private bool _deleting;
     private bool _validating;
     private bool? _yamlValid;
     private int _selectedTab;
@@ -195,13 +192,28 @@ public partial class PipelineEdit : IAsyncDisposable
         if (generation == _loadGeneration) ReassertNavContext();
     }
 
-    private async Task ResetEditorStateAsync()
+    /// <summary>R-34: the page of a pipeline that no longer exists, a state of its own and not a failure.</summary>
+    private void ShowNotFound()
+    {
+        _pipeline = null;
+        _notFound = true;
+        _loading = false;
+    }
+
+    private async Task StopLiveUpdatesAsync()
     {
         if (_liveRuns is not null) await _liveRuns.DisposeAsync();
         if (_definitionSync is not null) await _definitionSync.DisposeAsync();
         _liveRuns = null;
         _definitionSync = null;
+    }
+
+    private async Task ResetEditorStateAsync()
+    {
+        await StopLiveUpdatesAsync();
+        _deleting = false;
         _changedElsewhere = false;
+        _notFound = false;
         _pipeline = null;
         _source = null;
         _sourceBranches = [];
@@ -237,11 +249,24 @@ public partial class PipelineEdit : IAsyncDisposable
         var projectsTask = Api.Projects.GetAllProjectsAsync();
         var sourceTask = Api.Pipelines.GetPipelineSourceAsync(Id.Value);
         var templatesTask = LoadTemplatesSafeAsync();
-        await Task.WhenAll(pipelineTask, runsTask, projectsTask, sourceTask, templatesTask);
+        var siblings = Task.WhenAll(runsTask, projectsTask, sourceTask, templatesTask);
+        var found = await pipelineTask;
+        if (found is null)
+        {
+            // R-34: a pipeline that no longer exists (deleted, or a wrong address) is a page of its own,
+            // not a failure. The requests started beside it answer 404 for it as well: they are
+            // awaited only so that nothing is left unobserved, their outcome is of no use.
+            await siblings.ContinueWith(static _ => { }, TaskScheduler.Default);
+            if (generation != _loadGeneration) return;
+            PageState.Forget<PipelinePageState>(address);
+            ShowNotFound();
+            return;
+        }
+        await siblings;
         if (generation != _loadGeneration) return;
         // What the reader typed or filtered while the refresh ran stays theirs.
         var editorUntouched = !restored || string.Equals(_model.YamlDefinition, _savedYaml, StringComparison.Ordinal);
-        _pipeline = await pipelineTask;
+        _pipeline = found;
         if (!restored || _runsQuery is null) ApplyRunsPage(await runsTask, 1, _runsPageSize);
         _projects = await projectsTask;
         _templates = await templatesTask;
@@ -284,12 +309,6 @@ public partial class PipelineEdit : IAsyncDisposable
         _baseTemplateYaml = state.BaseTemplateYaml;
         _fleetItem = state.FleetItem;
     }
-
-    /// <summary>What the pipeline page shows, kept for a return to it.</summary>
-    private sealed record PipelinePageState(
-        PipelineDto Pipeline, List<PipelineRunDto> FirstRuns, int RunsTotalCount, List<ProjectDto> Projects,
-        List<PipelineTemplateSummaryDto> Templates, PipelineSourceDto? Source, List<string> SourceBranches,
-        string? BaseTemplateYaml, PipelineFleetItemDto? FleetItem);
 
     private void ApplyPipelineModel(PipelineDto pipeline)
     {
@@ -513,16 +532,18 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task OnRefresh()
     {
-        if (_isNew || Id is null) return;
-        await RefreshRunsAsync();
+        if (_isNew || Id is null || _deleting) return;
         _pipeline = await Api.Pipelines.GetPipelineAsync(Id.Value);
         _changedElsewhere = false;
-        if (_pipeline is not null)
+        if (_pipeline is null)
         {
-            ApplyPipelineModel(_pipeline);
-            await LoadBaseTemplateYamlAsync();
-            await LoadFleetItemAsync();
+            ShowNotFound(); // deleted elsewhere while this page was open
+            return;
         }
+        await RefreshRunsAsync();
+        ApplyPipelineModel(_pipeline);
+        await LoadBaseTemplateYamlAsync();
+        await LoadFleetItemAsync();
         if (_liveRuns is not null) await _liveRuns.SyncGroupsAsync();
     }
 
@@ -602,9 +623,16 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task ReloadRunsAsync()
     {
-        if (Id is null) return;
+        if (Id is null || _deleting) return;
+        var pipeline = await Api.Pipelines.GetPipelineAsync(Id.Value);
+        if (pipeline is null)
+        {
+            ShowNotFound(); // deleted elsewhere while this page was open: the runs go with it
+            StateHasChanged();
+            return;
+        }
         await RefreshRunsAsync();
-        _pipeline = await Api.Pipelines.GetPipelineAsync(Id.Value);
+        _pipeline = pipeline;
         if (_liveRuns is not null) await _liveRuns.SyncGroupsAsync();
         StateHasChanged();
     }
@@ -663,17 +691,23 @@ public partial class PipelineEdit : IAsyncDisposable
     {
         var confirmed = await Dialog.Confirm(L["DeletePipelineConfirm"].Value, L["DeletePipeline"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
-        if (confirmed != true) return;
+        if (confirmed != true || _deleting) return;
+        // R-34: the live connections stop before the pipeline goes. Deleting it raises events for its
+        // runs, and each one reloaded this page from a pipeline that no longer exists, leaving the page
+        // on a deleted pipeline instead of going back to the list.
+        _deleting = true;
+        await StopLiveUpdatesAsync();
         var status = await Api.Pipelines.DeletePipelineAsync(Id!.Value);
-        if (!status.Success) { Toast.Error("Error", "DeleteFailed"); return; }
+        if (!status.Success && !status.NotFound)
+        {
+            _deleting = false;
+            Toast.Error("Error", "DeleteFailed");
+            await EnsureHubAsync();
+            return;
+        }
         Cache.InvalidatePrefix("pipelines:");
         PageState.Forget<PipelinePageState>($"pipelines/{Id}");
         Toast.Success("Deleted", "Deleted");
         Nav.NavigateTo("/pipelines");
     }
-
-    // The export writes the duration and the server the cells show.
-    private static readonly Func<PipelineRunDto, object?> RunDurationExport = run => PipelineRunFormatting.FormatDuration(run.StartedAt, run.CompletedAt);
-    private static readonly Func<PipelineRunDto, object?> RunServerExport = run =>
-        run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerName is not null)?.ServerName ?? string.Empty;
 }

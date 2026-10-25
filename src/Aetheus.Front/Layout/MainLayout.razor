@@ -19,7 +19,7 @@
               data-viewport="@(_viewportKnown ? "ready" : "pending")"
               Class="@(_viewportKnown ? "viewport-ready" : "viewport-pending")">
     <OmniHeader>
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                    Gap="OmniSpacing.None" Class="header-bar">
             @if (AuthenticatedChromeReady)
             {
@@ -40,7 +40,7 @@
                    app.css) so it stays mid-bar whatever the left/right content widths are -
                    a single chip lands dead-centre too. Order: environment, then label, then
                    branch; each chip shows only when its value is present. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                            Gap="OmniSpacing.Small" Class="dev-env-banner">
                     <span class="dev-env-chip dev-env-chip-env" title="@L["DevBannerEnvTooltip"]">
                         <OmniIcon Name="OmniIconName.Database" Class="dev-env-chip-icon" />
@@ -64,7 +64,7 @@
             }
             @if (AuthenticatedChromeReady)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                            Gap="OmniSpacing.XSmall" Class="header-actions">
                     @{
                         var connected = BackendConnected;
@@ -81,7 +81,7 @@
                        than ship a dead control (SR7M). Reinstate the input here once search is implemented. *@
                     <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="NavigateToHelp"
                                 title="@L["Help"]" Label="@L["Help"]" Class="header-action-btn">
-                        <OmniIcon Name="OmniIconName.Question" />
+                        <Icon><OmniIcon Name="OmniIconName.Question" /></Icon>
                     </OmniButton>
                     <PendingApprovalsIndicator />
                     <TaskTrackerWidget />
@@ -92,7 +92,7 @@
                     <OmniAppMenu Class="header-app-menu" Open="@_userMenuOpen" OpenChanged="@(open => _userMenuOpen = open)"
                                  UserName="@Auth.Username" Role="@(Auth.IsAdmin ? L["Admin"] : L["User"])"
                                  Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
-                                 OnTheme="@OnThemeMenuClick" OnSettings="@OnSettingsMenuClick"
+                                 OnThemeOpen="@OnThemeMenuClick" OnSettingsOpen="@OnSettingsMenuClick"
                                  Version="@($"Aetheus v{_version}")" OnSignOut="@OnLogout">
                         @if (Orgs.IsLoaded && Orgs.Available.Count > 0)
                         {
@@ -107,9 +107,9 @@
                         }
                         else if (Auth.IsAdmin && Orgs.IsLoaded)
                         {
-                            <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+                            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                                        Justify="OmniJustification.Between" Gap="OmniSpacing.Small" Class="user-menu-all-orgs">
-                                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                                     <OmniIcon Name="OmniIconName.Buildings" />
                                     <OmniText>@L["ActiveOrganization"]</OmniText>
                                 </OmniStack>
@@ -125,7 +125,7 @@
                    icon; the mode, the theme and the language stay at the right of the bar. *@
                 <OmniAppMenu Class="header-app-menu" Open="@_userMenuOpen" OpenChanged="@(open => _userMenuOpen = open)"
                              Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
-                             OnTheme="@OnThemeMenuClick" />
+                             OnThemeOpen="@OnThemeMenuClick" />
             }
         </OmniStack>
         <PageLoadProgressBar />
@@ -135,7 +135,7 @@
     @if (AuthenticatedChromeReady && !Auth.MustChangePassword)
     {
         <OmniSidebar Id="app-sidebar" Open="@_sidebarExpanded" OpenChanged="@OnSidebarOpenChanged"
-                     Position="OmniSidebarPosition.Start"
+                     Placement="OmniSidebarPlacement.Start"
                      Reveal="@SidebarReveal"
                      Collapse="@(_isMobile ? OmniSidebarCollapse.Hidden : OmniSidebarCollapse.Icons)"
                      Transition="OmniSidebarTransition.Smooth"
@@ -143,8 +143,8 @@
                      CloseLabel="@L["CloseSidebar"]">
             @* The mobile drawer overlays the app bar and exposes its own close button and logo. OE
                hides this header when the desktop sidebar is pushed. *@
-            <Header>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center"
+            <HeaderContent>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                            Gap="OmniSpacing.None" Class="header-bar sidebar-drawer-header">
                     <OmniSidebarToggle Controls="app-sidebar" Open="@_sidebarExpanded" Reveal="@SidebarReveal"
                                        OpenChanged="@OnSidebarOpenChanged" Label="@L["CloseSidebar"]" />
@@ -153,7 +153,7 @@
                         <OmniText Class="app-title">@L["Aetheus"]</OmniText>
                     </a>
                 </OmniStack>
-            </Header>
+            </HeaderContent>
             <ChildContent>
                 @* OE closes a floating drawer itself when an entry is chosen (any navigation), on its veil
                    and on Escape, through OpenChanged. *@
@@ -162,7 +162,9 @@
         </OmniSidebar>
     }
 
-    <OmniMain Id="main-content" Scrollable="true">
+    @* The centred column the user can choose in the Theme window (R1-25); full width, the default, makes
+       OmniMain ignore ContentWidth. *@
+    <OmniMain Id="main-content" Scrollable="true" ContentWidth="OmniLayoutWidth.Wide">
         <div class="omni-u-px-md omni-u-py-md app-body-wrapper">
             @if (_newVersionAvailable)
             {
@@ -171,7 +173,7 @@
                     <ChildContent>
                         <OmniText Class="version-alert-bar-text">@L["NewVersionAvailable"]</OmniText>
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OnReloadClick">
-                            <OmniIcon Name="OmniIconName.Refresh" /> @L["ReloadNow"]
+                            <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["ReloadNow"]</ChildContent>
                         </OmniButton>
                     </ChildContent>
                 </OmniAlert>
@@ -201,7 +203,7 @@
                                         <pre class="dev-exception-pre">@exception.ToString()</pre>
                                     }
                                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="RecoverError">
-                                        <OmniIcon Name="OmniIconName.Refresh" /> @L["Recover"]
+                                        <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Recover"]</ChildContent>
                                     </OmniButton>
                                 </OmniStack>
                             </OmniCard>

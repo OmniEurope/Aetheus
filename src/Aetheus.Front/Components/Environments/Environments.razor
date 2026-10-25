@@ -4,7 +4,7 @@
 <PageTitle>@L["Environments"] - Aetheus</PageTitle>
 
 <OmniPageHeader Title="@L["Environments"]" Subtitle="@Breadcrumb.Subtitle()">
-    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("layers")" /></Icon><Actions><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection" /></Actions>
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("layers")" /></Icon><ActionsContent><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" /></ActionsContent>
 </OmniPageHeader>
 
 @* 0-a: the global environments list is the shared EnvironmentsList with no scope filter. *@

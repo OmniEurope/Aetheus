@@ -174,6 +174,63 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         Assert.Equal(shown, AnalysisGradeBreakdown.IsShown(Measure(key, value, AnalysisGrade.A)));
     }
 
+    private static AnalysisGradeMeasureDto OpenFindingsMeasure(AnalysisGradeFindingCountsDto counts, AnalysisGrade grade) => new()
+    {
+        Key = "grade.security.findings",
+        Observed = true,
+        ObservedValue = AnalysisFindingScore.Total(counts),
+        Grade = grade,
+        CountedFindingScore = true,
+        FindingCounts = counts
+    };
+
+    private static AnalysisGradeMeasureDto SeverityMeasure(string key, AnalysisSeverity severity, double value, AnalysisGrade grade) => new()
+    {
+        Key = key,
+        Severity = severity,
+        Observed = true,
+        ObservedValue = value,
+        Grade = grade
+    };
+
+    [Fact]
+    public void R2_TheOpenFindingsLine_IsLeftOut_WhenTheMediumLineSaysTheSame()
+    {
+        // Recette R-2 (Gate #2857): "Constats ouverts 2" and "Failles de sévérité moyenne 2" were one fact.
+        var shown = AnalysisGradeBreakdown.ShownMeasures(
+        [
+            OpenFindingsMeasure(new AnalysisGradeFindingCountsDto { Medium = 2 }, AnalysisGrade.B),
+            SeverityMeasure("grade.security.medium", AnalysisSeverity.Medium, 2, AnalysisGrade.B)
+        ]);
+
+        Assert.Equal(["grade.security.medium"], shown.Select(measure => measure.Key));
+    }
+
+    [Fact]
+    public void R2_TheOpenFindingsLine_IsKept_WhenItCountsWhatNoSeverityLineDoes()
+    {
+        // A low finding sits in no severity line: dropping the open-findings line would hide the measure that grades.
+        var shown = AnalysisGradeBreakdown.ShownMeasures(
+        [
+            OpenFindingsMeasure(new AnalysisGradeFindingCountsDto { Medium = 2, Low = 1 }, AnalysisGrade.B),
+            SeverityMeasure("grade.security.medium", AnalysisSeverity.Medium, 2, AnalysisGrade.B)
+        ]);
+
+        Assert.Equal(["grade.security.findings", "grade.security.medium"], shown.Select(measure => measure.Key));
+    }
+
+    [Fact]
+    public void R2_TheOpenFindingsLine_IsKept_WhenItsLetterDiffersFromTheMediumLine()
+    {
+        var shown = AnalysisGradeBreakdown.ShownMeasures(
+        [
+            OpenFindingsMeasure(new AnalysisGradeFindingCountsDto { Medium = 2 }, AnalysisGrade.C),
+            SeverityMeasure("grade.security.medium", AnalysisSeverity.Medium, 2, AnalysisGrade.A)
+        ]);
+
+        Assert.Equal(2, shown.Count);
+    }
+
     [Theory]
     [InlineData("grade.security.critical", "AnalysisCriticalVulnerabilities")]
     [InlineData("grade.security.high", "AnalysisHighVulnerabilities")]
@@ -265,5 +322,82 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         var cut = Render<AnalysisGradeBreakdown>(parameters => parameters.Add(component => component.Grade, grade));
 
         Assert.Equal(shown, cut.Markup.Contains("AnalysisRuntimePerformance", StringComparison.Ordinal));
+    }
+
+    private static AnalysisGradeSummaryDto CoverageGrade() => new()
+    {
+        OverallGrade = AnalysisGrade.B,
+        Completeness = AnalysisGradeCompleteness.Complete,
+        Domains =
+        [
+            new AnalysisGradeDomainDto
+            {
+                Domain = AnalysisGradeDomain.CodeQuality, Grade = AnalysisGrade.B, Required = true, Completeness = AnalysisGradeCompleteness.Complete,
+                Measures =
+                [
+                    new AnalysisGradeMeasureDto
+                    {
+                        Key = "grade.coverage.line", Grade = AnalysisGrade.B, Observed = true, ObservedValue = 88.64, Unit = "percent",
+                        Direction = AnalysisMetricDirection.HigherIsBetter, AThreshold = 90, BThreshold = 80, CThreshold = 70, DThreshold = 60,
+                        NextGrade = AnalysisGrade.A, DistanceToNextGrade = 1.36
+                    }
+                ]
+            }
+        ]
+    };
+
+    [Fact]
+    public void R1_38_EveryRowOfTheBlock_ExplainsItsCriterionInATooltip_AndOpensItsDetailOnAClick()
+    {
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, CoverageGrade())
+            .Add(component => component.GateRow, true)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        // The block is one OE accordion; the Gate row, the domain and the measure each carry an OE help mark
+        // (a tooltip) that explains the criterion.
+        Assert.Single(cut.FindAll("[data-testid='analysis-grade-block'].omni-accordion"));
+        Assert.Equal(3, cut.FindAll(".analysis-grade-row .omni-accordion__help.omni-tooltip").Count);
+        Assert.Contains("AnalysisCriterionGate", cut.Find("[data-testid='grade-row-gate']").InnerHtml, StringComparison.Ordinal);
+        Assert.Contains("AnalysisCriterionCoverageLine", cut.Find("[data-testid='grade-row-measure']").InnerHtml, StringComparison.Ordinal);
+        // An OE accordion row per line, folded by default (no detail rendered); a click on a row opens it and the
+        // detail names the thresholds and the measure. Rows open independently of each other (Multiple).
+        var toggles = cut.FindAll(".analysis-grade-row .omni-accordion__toggle");
+        Assert.Equal(3, toggles.Count);
+        Assert.All(toggles, toggle => Assert.Equal("false", toggle.GetAttribute("aria-expanded")));
+        Assert.Empty(cut.FindAll(".analysis-grade-row-detail"));
+        cut.Find("[data-testid='grade-row-gate'] .omni-accordion__toggle").Click();
+        cut.Find("[data-testid='grade-row-measure'] .omni-accordion__toggle").Click();
+        Assert.Equal("true", cut.Find("[data-testid='grade-row-gate'] .omni-accordion__toggle").GetAttribute("aria-expanded"));
+        Assert.Equal("true", cut.Find("[data-testid='grade-row-measure'] .omni-accordion__toggle").GetAttribute("aria-expanded"));
+        var detail = cut.Find("[data-testid='grade-row-measure'] .analysis-grade-row-detail");
+        Assert.Contains("AnalysisGradeThresholdsHigher", detail.TextContent, StringComparison.Ordinal);
+        Assert.Contains("AnalysisGradeMeasuredValue", detail.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R1_38_ThresholdText_ListsTheLettersInTheDirectionThatIsBetter_WithThePercentUnit()
+    {
+        var higher = new AnalysisGradeMeasureDto
+        {
+            Unit = "percent",
+            Direction = AnalysisMetricDirection.HigherIsBetter,
+            AThreshold = 75,
+            BThreshold = 65,
+            CThreshold = 55,
+            DThreshold = 40,
+            EThreshold = 20
+        };
+        var lower = new AnalysisGradeMeasureDto { Direction = AnalysisMetricDirection.LowerIsBetter, AThreshold = 0, BThreshold = 5, CThreshold = 15, DThreshold = 30 };
+
+        Assert.Equal("A ≥ 75 %, B ≥ 65 %, C ≥ 55 %, D ≥ 40 %, E ≥ 20 %", AnalysisGradeBreakdown.ThresholdText(higher));
+        Assert.Equal("A ≤ 0, B ≤ 5, C ≤ 15, D ≤ 30", AnalysisGradeBreakdown.ThresholdText(lower));
+        Assert.Null(AnalysisGradeBreakdown.ThresholdText(new AnalysisGradeMeasureDto()));
+    }
+
+    [Fact]
+    public void R1_38_ACoverageMeasureWithItsPercentUnit_ReadsWithThePercentSign()
+    {
+        Assert.Equal("88.64 %", AnalysisGradeBreakdown.MeasureText(CoverageGrade().Domains[0].Measures[0]).Replace(',', '.'));
     }
 }

@@ -109,7 +109,7 @@ internal static class PipelineArtifactRestorer
         if (!HasEnoughSpace(requiredBytes, availableBytes))
         {
             await onOutput(
-                $"Artifact restore refused: {requiredBytes} bytes to unpack with only {availableBytes} bytes free (512 MiB safety floor).",
+                $"Artifact restore refused: {requiredBytes} bytes to unpack with only {availableBytes} bytes free (512 Mo safety floor).",
                 TaskLogLevel.Error).ConfigureAwait(false);
             return new ExecutorResult(1, false);
         }

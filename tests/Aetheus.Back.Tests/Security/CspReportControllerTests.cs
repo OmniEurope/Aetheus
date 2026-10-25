@@ -168,6 +168,46 @@ public sealed class CspReportControllerTests
         Assert.Contains("script-src-elem", _logger.Last, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("sandbox eval code", "self['8qkyitlarc0prlgt3p'] = true; (func")]
+    [InlineData("blob", "self['e8spdwh55uzzxkxtvm'] = true; (func")]
+    public void A_Report_From_A_Firefox_Extension_Sandbox_Goes_To_Debug(string sourceFile, string sample)
+    {
+        // The two production reports of R1-10 (2026-10-19 and 2026-10-21), as logged.
+        Controller().Report(new CspReportEnvelope
+        {
+            CspReport = new CspReportBody
+            {
+                DocumentUri = "https://app.example/pipelines/runs/2780",
+                BlockedUri = "inline",
+                ViolatedDirective = "script-src-elem",
+                SourceFile = sourceFile,
+                LineNumber = 19,
+                ScriptSample = sample
+            }
+        });
+
+        Assert.Equal(LogLevel.Debug, _logger.LastLevel);
+    }
+
+    [Fact]
+    public void A_Blob_Report_Without_The_Extension_Marker_Stays_A_Warning()
+    {
+        Controller().Report(new CspReportEnvelope
+        {
+            CspReport = new CspReportBody
+            {
+                DocumentUri = "https://app.example/",
+                BlockedUri = "inline",
+                ViolatedDirective = "script-src-elem",
+                SourceFile = "blob",
+                ScriptSample = "window.location = 'https://evil.example'"
+            }
+        });
+
+        Assert.Equal(LogLevel.Warning, _logger.LastLevel);
+    }
+
     [Fact]
     public void A_Report_From_The_Page_Itself_Stays_A_Warning()
     {

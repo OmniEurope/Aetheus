@@ -7,7 +7,7 @@
 
 @* The pipelines list contributes its actions (New, Import...) to the header. *@
 <OmniPageHeader Title="@L["Pipelines"]" Subtitle="@Breadcrumb.Subtitle()">
-    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon><Actions><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PipelinesList.HeaderActionsSection" /></Actions>
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon><ActionsContent><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" /></ActionsContent>
 </OmniPageHeader>
 
 <UrlSyncedTabs Slugs="@TabSlugs" class="pipeline-hub-tabs">

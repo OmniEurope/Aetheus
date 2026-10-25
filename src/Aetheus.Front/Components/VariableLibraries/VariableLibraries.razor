@@ -4,7 +4,7 @@
 <PageTitle>@L["VariableLibraries"] - Aetheus</PageTitle>
 
 <OmniPageHeader Title="@L["VariableLibraries"]" Subtitle="@Breadcrumb.Subtitle()">
-    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("data_object")" /></Icon><Actions><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@Aetheus.Front.Components.Shared.PipelinesList.HeaderActionsSection" /></Actions>
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("data_object")" /></Icon><ActionsContent><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" /></ActionsContent>
 </OmniPageHeader>
 
 @* 0-a: the global variable-libraries list is the shared VariableLibrariesList with no scope filter. *@

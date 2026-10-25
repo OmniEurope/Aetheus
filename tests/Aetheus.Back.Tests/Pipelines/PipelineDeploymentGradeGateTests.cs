@@ -200,7 +200,7 @@ public class PipelineDeploymentGradeGateTests
             PendingSteps = completedStages is { Count: > 0 }
                 ? [new PipelineStepRun { StageName = "Verify candidate", Status = TaskExecutionStatus.Pending }]
                 : withWorkspace
-                    ? [new PipelineStepRun { StageName = PipelineRunService.SystemPrepareStage, Status = TaskExecutionStatus.Pending },
+                    ? [new PipelineStepRun { StageName = PipelineRunHelpers.SystemPrepareStage, Status = TaskExecutionStatus.Pending },
                        new PipelineStepRun { StageName = "Restore candidate", Status = TaskExecutionStatus.Pending }]
                     : [new PipelineStepRun { StageName = "Restore candidate", Status = TaskExecutionStatus.Pending }];
 

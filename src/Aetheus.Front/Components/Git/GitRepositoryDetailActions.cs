@@ -109,6 +109,24 @@ internal sealed class GitRepositoryDetailActions(
         return result is true;
     }
 
+    /// <summary>Designates the repository as the project's configuration repository (the previous one stops being it)
+    /// or gives the role up (ADR-057). The server refuses a mirror and the project's last source repository.</summary>
+    public async Task<bool> SetConfigurationAsync(int repositoryId, bool designate)
+    {
+        var updated = await api.Git.UpdateGitRepoAsync(
+            repositoryId, new UpdateGitLightRepoRequest { IsConfiguration = designate });
+        if (updated is null)
+        {
+            toast.Error("Error", "SaveFailed");
+            return false;
+        }
+
+        toast.Success(
+            localizer["Saved"].Value,
+            localizer[designate ? "GitRepoConfigurationDesignated" : "GitRepoConfigurationReleased"].Value);
+        return true;
+    }
+
     public async Task<bool> DeleteProtectionRuleAsync(
         int repositoryId, BranchProtectionRuleDto rule)
     {

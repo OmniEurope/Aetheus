@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.AppMonitoring;
-using Aetheus.Back.Components.AppMonitoring.Ingest;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Auth;
 using Aetheus.Back.Components.Shared;
@@ -235,6 +234,25 @@ public class AppDeployEnvProviderTests : IDisposable
         Assert.Equal(1, await ResolveAsync(blue, T0));
         Assert.Equal(1, await ResolveAsync(green, T0));
         Assert.Equal(1, await ResolveAsync(next, T0));
+    }
+
+    [Fact]
+    public async Task R1_11_TwoRunsAlternating_DoNotDropTheIdleColourKey()
+    {
+        // Production, 2026-10-21: the deploy run and the demo run of the same application each asked
+        // for the key twice, alternating (2819, 2823, 2819, 2823). The returning key used to rotate as
+        // a new one and push out the key the idle colour still held, refused from then on.
+        var provider = Build("https://obs.example.com");
+        var ct = TestContext.Current.CancellationToken;
+        var idle = (await provider.GetDeployEnvAsync(1, null, pipelineRunId: 6, ct: ct))["AETHEUS_INGEST_KEY"];
+        var deploy = (await provider.GetDeployEnvAsync(1, null, pipelineRunId: 7, ct: ct))["AETHEUS_INGEST_KEY"];
+        var demo = (await provider.GetDeployEnvAsync(1, null, pipelineRunId: 8, ct: ct))["AETHEUS_INGEST_KEY"];
+        await provider.GetDeployEnvAsync(1, null, pipelineRunId: 7, ct: ct);
+        await provider.GetDeployEnvAsync(1, null, pipelineRunId: 8, ct: ct);
+
+        Assert.Equal(1, await ResolveAsync(idle, T0));
+        Assert.Equal(1, await ResolveAsync(deploy, T0));
+        Assert.Equal(1, await ResolveAsync(demo, T0));
     }
 
     [Fact]

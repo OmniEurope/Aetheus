@@ -43,7 +43,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
     [Fact]
     public async Task Apache_OfflineAgent_ShowsTheNotice_DisablesTest_AndSendsNothing()
     {
-        var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Offline)).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Offline)).Add(x => x.ServerId, 30));
 
         Assert.Contains("AgentOfflineActionBlocked", cut.Find(".agent-offline-notice").TextContent, StringComparison.Ordinal);
         cut.Find(".omni-overflow-menu__trigger").Click();
@@ -51,9 +51,9 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
 
         // The handler behind the disabled button refuses too (a stale render, a keyboard path).
         var execute = typeof(ServerApacheSection).GetMethod("ExecuteActionAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [ApacheAction.TestConfig, null])!);
+        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.FindComponent<ServerApacheSection>().Instance, [ApacheAction.TestConfig, null])!);
         var logs = typeof(ServerApacheSection).GetMethod("FetchLogsAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)logs.Invoke(cut.Instance, [])!);
+        await cut.InvokeAsync(() => (Task)logs.Invoke(cut.FindComponent<ServerApacheSection>().Instance, [])!);
 
         Assert.False(SentAnyRequestTo("api/servers/30/apache"));
         AssertOfflineToast();
@@ -63,7 +63,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
     public async Task Apache_OnlineAgent_HasNoNotice_AndQueuesTheTest()
     {
         _handler.SetJsonResponse("api/servers/30/apache/action", "{}");
-        var cut = Render<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Online)).Add(x => x.ServerId, 30));
+        var cut = this.RenderWithPageHeader<ServerApacheSection>(p => p.Add(x => x.Server, Server(ServerStatus.Online)).Add(x => x.ServerId, 30));
 
         Assert.Empty(cut.FindAll(".agent-offline-notice"));
         cut.Find(".omni-overflow-menu__trigger").Click();
@@ -81,7 +81,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
 
         Assert.NotEmpty(cut.FindAll(".agent-offline-notice"));
         var execute = typeof(ServerCertbotSection).GetMethod("ExecuteActionAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [CertbotAction.RenewalCheck, null])!);
+        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [CertbotAction.RenewalCheck, null, null])!);
 
         Assert.False(SentAnyRequestTo("api/servers/30/certbot"));
         AssertOfflineToast();
@@ -158,9 +158,14 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         return Render<ServerMailSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
     }
 
+    // The accounts tab opens first (R1-29); these tests exercise the domains tab.
+    private void OpenMailTab(string tab) =>
+        Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>().NavigateTo($"/servers/10/mail?tab={tab}");
+
     [Fact]
     public async Task Mail_OfflineAgent_ShowsTheNotice_DisablesItsWrites_AndSendsNothing()
     {
+        OpenMailTab("domains");
         var cut = RenderMail(ServerStatus.Offline);
 
         Assert.Contains("AgentOfflineActionBlocked", cut.Find(".agent-offline-notice").TextContent, StringComparison.Ordinal);
@@ -179,6 +184,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
     [Fact]
     public async Task Mail_OnlineAgent_HasNoNotice_AndQueuesTheDelete()
     {
+        OpenMailTab("domains");
         var cut = RenderMail(ServerStatus.Online);
 
         Assert.Empty(cut.FindAll(".agent-offline-notice"));
@@ -189,12 +195,12 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         Assert.True(SentAnyRequestTo("api/servers/10/mail/domains/1"));
     }
 
-    private IRenderedComponent<ServerPortsentrySection> RenderPortsentry(ServerDetailLoader loader)
+    private IRenderedComponent<PageHeaderOutletHost> RenderPortsentry(ServerDetailLoader loader)
     {
         _handler.SetPaginatedJsonResponse("api/servers/30/portsentry/blocked", new List<PortsentryBlockedIpDto>());
         _handler.SetPaginatedJsonResponse("api/servers/30/portsentry/whitelist", new List<PortsentryWhitelistIpDto>());
         _handler.SetJsonResponse("api/servers/30/portsentry/filter-values", new PortsentryFilterValuesDto());
-        return Render<ServerPortsentrySection>(p => p
+        return this.RenderWithPageHeader<ServerPortsentrySection>(p => p
             .Add(x => x.ServerId, 30)
             .Add(x => x.Ps, new PortsentryDataDto { IsInstalled = true, IsRunning = true })
             .AddCascadingValue("ServerLoader", loader));
@@ -208,9 +214,9 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
         Assert.NotEmpty(cut.FindAll(".agent-offline-notice"));
         Assert.True(cut.FindMenuItem("ViewLogs")!.HasAttribute("disabled"));
         var execute = typeof(ServerPortsentrySection).GetMethod("ExecuteActionAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [PortsentryAction.Restart])!);
+        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [PortsentryAction.Restart])!);
         var unblock = typeof(ServerPortsentrySection).GetMethod("UnblockIpAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)unblock.Invoke(cut.Instance, ["10.0.0.9"])!);
+        await cut.InvokeAsync(() => (Task)unblock.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, ["10.0.0.9"])!);
 
         Assert.False(SentAnyRequestTo("api/servers/30/portsentry"));
         AssertOfflineToast();
@@ -224,7 +230,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
 
         Assert.Empty(cut.FindAll(".agent-offline-notice"));
         var execute = typeof(ServerPortsentrySection).GetMethod("ExecuteActionAsync", Priv)!;
-        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.Instance, [PortsentryAction.Restart])!);
+        await cut.InvokeAsync(() => (Task)execute.Invoke(cut.FindComponent<ServerPortsentrySection>().Instance, [PortsentryAction.Restart])!);
 
         Assert.True(SentAnyRequestTo("api/servers/30/portsentry/action"));
     }
@@ -354,7 +360,7 @@ public sealed class ServerSectionsOfflineAgentTests : BunitContext
             [nameof(ServerMailReinstall.ServerId)] = server.Id,
             [nameof(ServerMailReinstall.Mail)] = MailStack(),
             [nameof(ServerMailReinstall.CanManage)] = true
-        }, PipelinesList.HeaderActionsSection);
+        }, PageHeaderActions.SectionName);
         var cut = host.FindComponent<ServerMailReinstall>();
 
         var offline = status == ServerStatus.Offline;

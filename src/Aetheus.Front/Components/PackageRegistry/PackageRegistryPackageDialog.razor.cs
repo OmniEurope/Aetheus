@@ -22,6 +22,9 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
     private Func<string, string>? _listedText;
     private Func<string, string> ListedText => _listedText ??= value =>
         bool.TryParse(value, out var listed) ? L[listed ? "PackageVersionListed" : "PackageVersionUnlisted"].Value : value;
+    private Func<string, string>? _deprecatedText;
+    private Func<string, string> DeprecatedText => _deprecatedText ??= value =>
+        bool.TryParse(value, out var deprecated) ? L[deprecated ? "PackageVersionDeprecated" : "PackageVersionNotDeprecated"].Value : value;
     private bool _loading = true;
     private AdminEntitySubscription? _adminRt;
     private readonly TrailingReloadCoalescer _realtimeReload = new(500);
@@ -67,6 +70,18 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
     private async Task ToggleListedAsync(PackageRegistryVersionDto version)
     {
         var status = await Api.Packages.UpdateRegistryVersionAsync(PackageId, version.Id, !version.IsListed);
+        if (!status.Success)
+        {
+            Toast.Error("Error", "SaveFailed");
+            return;
+        }
+        await LoadAsync();
+        Toast.Success("Saved", "Saved");
+    }
+
+    private async Task ToggleDeprecatedAsync(PackageRegistryVersionDto version)
+    {
+        var status = await Api.Packages.UpdateRegistryVersionDeprecationAsync(PackageId, version.Id, !version.IsDeprecated);
         if (!status.Success)
         {
             Toast.Error("Error", "SaveFailed");

@@ -153,6 +153,18 @@ public sealed class UserNotificationsSurfaceTests : BunitContext
         Assert.Equal(bell.Find(".notification-bell-count").TextContent.Trim(), entry.Find("#nav-notification-count").TextContent.Trim());
     }
 
+    /// <summary>Above nine unread notifications, the bell and the menu entry both show "9+" (user decision of 2026-10-24).</summary>
+    [Fact]
+    public void AboveNineUnread_TheBellAndTheMenuEntry_ShowNinePlus()
+    {
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/notifications/me/unread-count", _ => Task.FromResult(12));
+        var bell = Render<NotificationBell>();
+        var entry = Render<NotificationsNavItem>();
+
+        entry.WaitForAssertion(() => Assert.Equal("9+", entry.Find("#nav-notification-count").TextContent.Trim()));
+        Assert.Equal("9+", bell.Find(".notification-bell-count").TextContent.Trim());
+    }
+
     [Fact]
     public void R461_TheBellAndTheMenuEntry_StartTheFeedWithOnePairOfRequests()
     {

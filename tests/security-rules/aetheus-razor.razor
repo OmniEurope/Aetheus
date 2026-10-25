@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Test corpus for .aetheus/security-rules/opengrep/aetheus-razor.yml. Not compiled. *@
+<div>
+    <!-- ruleid: aetheus.razor.markupstring-dynamic -->
+    @((MarkupString)CommentHtml)
+    <!-- ruleid: aetheus.razor.markupstring-dynamic -->
+    <p>@((MarkupString)RenderBody(Comment))</p>
+    <!-- ok: aetheus.razor.markupstring-dynamic -->
+    @((MarkupString)"<hr />")
+    <!-- ok: aetheus.razor.markupstring-dynamic -->
+    <p>@Comment</p>
+</div>

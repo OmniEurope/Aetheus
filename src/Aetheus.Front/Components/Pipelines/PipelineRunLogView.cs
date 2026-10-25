@@ -38,7 +38,8 @@ internal static class PipelineRunLogView
         for (var i = 0; i < logs.Count; i++)
         {
             if (string.IsNullOrEmpty(search) ||
-                logs[i].Message.Contains(search, StringComparison.OrdinalIgnoreCase))
+                // R-41: the search runs on what is displayed, the line without its ANSI sequences.
+                OmniAnsi.Strip(logs[i].Message).Contains(search, StringComparison.OrdinalIgnoreCase))
                 result.Add((logs[i], i + 1));
         }
         return result;

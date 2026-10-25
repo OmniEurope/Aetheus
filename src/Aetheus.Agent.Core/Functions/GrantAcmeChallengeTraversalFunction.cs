@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>grant-acme-challenge-traversal</c> function, port of
-/// <c>deploy/scripts/deploy-prod/grant-acme-challenge-traversal.sh</c>: when the ACME challenge web root
+/// the former <c>grant-acme-challenge-traversal.sh</c> script: when the ACME challenge web root
 /// lives under the agent work directory, Apache needs the others-execute bit on that directory to
 /// reach it, so <c>chmod o+x</c> on it must succeed; a web root elsewhere (under <c>/var/www</c> since a
 /// recent installer) needs nothing. The web root itself is then opened with <c>chmod -R o+rX</c>, best

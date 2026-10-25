@@ -12,7 +12,7 @@ namespace Aetheus.Agent.Core.Tests;
 /// the thrown error kept as its constructor name and message, the temporary directory written as
 /// <c>&lt;workspace&gt;</c>):
 ///
-/// <c>delivery-promotion-cases.json</c>: contracts sealed by <c>deploy/scripts/generate-delivery-contract.mjs</c>
+/// <c>delivery-promotion-cases.json</c>: contracts sealed by <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-delivery-contract.mjs</c>
 /// (run as a child process; some then edited and resealed with the generator's own <c>canonicalize</c>,
 /// or edited without resealing), schema histories and live contracts, and for each run of
 /// <c>verify-delivery-promotion.mjs</c> its arguments, standard output lines and error. No file a run

@@ -2,6 +2,9 @@
 @if (Step == 0)
 {
     <OmniStack Gap="OmniSpacing.Large" Class="pipeline-setup-step">
+        @* New pipelines from the templates, or the pipelines of an existing project: it is the first thing
+           of the Project step, so it is no longer there once Next went past it. *@
+        @StartFrom
         <OmniHeading Level="OmniHeadingLevel.H5">@L["SelectPipelineProject"]</OmniHeading>
         <OmniFormField Label="@L["Project"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1">
             <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-1" TValue="int?" Options="@(Projects.ToOptions(item => (int?)item.Id, item => item.Name))"
@@ -14,12 +17,13 @@
 }
 else if (Step == 1)
 {
-    @* The type first (what is built and checked), its detail below it. *@
-    <div class="pipeline-setup-step">
+    @* The type first (what is built and checked), its detail below it. R-3: the choices are OE tiles of
+       one grid (OmniSelectableCardGroup.Columns: same width, same height); the spacing is the stack's. *@
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelineArchitectureQuestion"]</OmniHeading>
-        <OmniSelectableCardGroup TValue="PipelineArchitecture" TSelection="PipelineArchitecture?"
+        <OmniSelectableCardGroup TValue="PipelineArchitecture" TSelection="PipelineArchitecture?" Columns="3"
                                  Label="@L["PipelineArchitectureTitle"]" Value="@Architecture" ValueChanged="@ArchitectureChanged"
-                                 ValueExpression="@(() => Architecture)" Class="pipeline-setup-architectures">
+                                 ValueExpression="@(() => Architecture)">
             @foreach (var architecture in Enum.GetValues<PipelineArchitecture>())
             {
                 var labels = PipelineSetupArchitecture.LabelKeys(architecture);
@@ -31,76 +35,93 @@ else if (Step == 1)
         </OmniSelectableCardGroup>
         @if (Architecture is PipelineArchitecture.Application)
         {
-            @* The one-project application shape is an explicit yes/no choice with no default. *@
-            <OmniRadioButtonList TValue="bool?" Label="@L["PipelineSameProjectQuestion"]" Options="@YesNoOptions"
-                                 Value="@SameProject" ValueChanged="@SameProjectChanged" ValueExpression="@(() => SameProject)"
-                                 Class="pipeline-setup-detail" data-testid="setup-same-project" />
-            @if (SameProject == true)
+            @* One exclusive choice, with no default: Full-stack (a monolith, one application serving the
+               interface and the API) or the front-end and back-end apart. The parts follow, then the database. *@
+            <OmniSelectableCardGroup TValue="bool" TSelection="bool?" Label="@L["PipelineShapeTitle"]" Columns="2"
+                                     Value="@SameProject" ValueChanged="@SameProjectChanged" ValueExpression="@(() => SameProject)"
+                                     data-testid="setup-shape">
+                <OmniSelectableCard Choice="@true" Title="@L["PipelineShapeFullStack"]" Description="@L["PipelineShapeFullStackHint"]"
+                                    data-testid="setup-shape-fullstack">
+                    <Icon><OmniIcon Name="OmniIconName.Layers" /></Icon>
+                </OmniSelectableCard>
+                <OmniSelectableCard Choice="@false" Title="@L["PipelineShapeSeparate"]" Description="@L["PipelineShapeSeparateHint"]"
+                                    data-testid="setup-shape-separate">
+                    <Icon><OmniIcon Name="OmniIconName.Columns" /></Icon>
+                </OmniSelectableCard>
+            </OmniSelectableCardGroup>
+            @if (SameProject is not null)
             {
-                <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="pipeline-setup-detail">@L["PipelineSameProjectYesDetail"]</OmniText>
-                <div class="pipeline-setup-options">
-                    @Option(OmniIconName.Database, L["Database"], L["DatabasePipelineHint"], Database, DatabaseChanged)
-                </div>
-            }
-            else if (SameProject == false)
-            {
-                <div class="pipeline-setup-options">
-                    @Option(OmniIconName.Monitor, L["Frontend"], L["FrontendPipelineHint"], Frontend, FrontendChanged)
-                    @Option(OmniIconName.Globe, L["Backend"], L["BackendPipelineHint"], Backend, BackendChanged)
-                    @Option(OmniIconName.Database, L["Database"], L["DatabasePipelineHint"], Database, DatabaseChanged)
-                </div>
+                <OmniTileGrid Columns="3" role="group" aria-label="@L["PipelineShapeParts"]" data-testid="setup-parts">
+                    @if (SameProject == false)
+                    {
+                        @Option("frontend", OmniIconName.Monitor, L["Frontend"], L["FrontendPipelineHint"], Frontend, FrontendChanged)
+                        @Option("backend", OmniIconName.Globe, L["Backend"], L["BackendPipelineHint"], Backend, BackendChanged)
+                    }
+                    @Option("database", OmniIconName.Database, L["Database"], L["DatabasePipelineHint"], Database, DatabaseChanged)
+                </OmniTileGrid>
             }
         }
         @if (Architecture is PipelineArchitecture.Application or PipelineArchitecture.Package)
         {
-            <OmniFormField Label="@L["PipelineStack"]" Help="@L["PipelineStackHint"]" Class="pipeline-setup-detail"
+            <OmniFormField Label="@L["PipelineStack"]" Help="@L["PipelineStackHint"]"
                            For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-stack">
                 <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-stack" TValue="string" Options="@StackOptions"
                               Value="@Stack" ValueChanged="@StackChanged" ValueExpression="@(() => Stack)" />
             </OmniFormField>
         }
-    </div>
+    </OmniStack>
 }
 else if (Step == 2)
 {
-    <div class="pipeline-setup-step">
+    @* R-10 / R-11: when the branch holds no test project the QA option is unticked, and says why on the option
+       itself (a badge with its OE tooltip), so nobody ticks it without knowing it will fail. *@
+    RenderFragment? qaNote = QaNoTestsTip is null ? null :
+        @<OmniTooltip Text="@QaNoTestsTip" MaxWidth="OmniTooltipWidth.Wide">
+            <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="setup-qa-no-tests">@L["PipelineSetupQaNoTestsBadge"]</OmniBadge>
+        </OmniTooltip>;
+    <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["SelectPipelineCapabilities"]</OmniHeading>
-        @* Only what the type of step 2 proposes (PipelineSetupArchitecture.Proposes). *@
-        <div class="pipeline-setup-options">
-            @if (Proposes("external-security")) { @Option(OmniIconName.ShieldCheck, L["ExternalSecurityPipeline"], L["ExternalSecurityPipelineHint"], ExternalSecurity, ExternalSecurityChanged) }
-            @if (Proposes("ci")) { @Option(OmniIconName.Wrench, "CI", L["CiPipelineHint"], Ci, CiChanged) }
-            @if (Proposes("quality")) { @Option(OmniIconName.ChartLine, L["Quality"], L["QualityPipelineHint"], Quality, QualityChanged) }
-            @if (Proposes("security")) { @Option(OmniIconName.ShieldCheck, L["Security"], L["SecurityPipelineHint"], Security, SecurityChanged) }
-            @if (Proposes("qa")) { @Option(OmniIconName.Flask, "QA", L["QaPipelineHint"], Qa, QaChanged) }
-            @if (Proposes("qa-extended")) { @Option(OmniIconName.Gauge, L["QaExtended"], L["QaExtendedPipelineHint"], QaExtended, QaExtendedChanged) }
-            @if (Proposes("security-history")) { @Option(OmniIconName.Key, L["SecurityHistory"], L["SecurityHistoryPipelineHint"], SecurityHistory, SecurityHistoryChanged) }
-            @if (Proposes("candidate")) { @Option(OmniIconName.CheckCircle, L["Candidate"], L["CandidatePipelineHint"], Candidate, CandidateChanged) }
-            @if (Proposes("nightly")) { @Option(OmniIconName.Timer, L["Nightly"], L["NightlyPipelineHint"], Nightly, NightlyChanged) }
-            @if (Proposes("production")) { @Option(OmniIconName.RocketLaunch, L["ProductionDeployment"], L["ProductionPipelineHint"], Production, ProductionChanged) }
-            @if (Proposes("fast-deploy")) { @Option(OmniIconName.Lightning, L["FastDeploy"], L["FastPipelineHint"], FastDeploy, FastDeployChanged) }
-            @if (Proposes("rollback")) { @Option(OmniIconName.Reset, L["Rollback"], L["RollbackPipelineHint"], Rollback, RollbackChanged) }
-            @if (Proposes("packages")) { @Option(OmniIconName.Package, L["Packages"], L["PackagesPipelineHint"], Packages, PackagesChanged) }
-        </div>
-    </div>
+        @* Only what the type of step 2 proposes (PipelineSetupArchitecture.Proposes). R-3: OE tiles of one grid. *@
+        <OmniTileGrid Columns="4" role="group" aria-label="@L["SelectPipelineCapabilities"]">
+            @if (Proposes("external-security")) { @Option("external-security", OmniIconName.ShieldCheck, L["ExternalSecurityPipeline"], L["ExternalSecurityPipelineHint"], ExternalSecurity, ExternalSecurityChanged) }
+            @if (Proposes("ci")) { @Option("ci", OmniIconName.Wrench, "CI", L["CiPipelineHint"], Ci, CiChanged) }
+            @if (Proposes("quality")) { @Option("quality", OmniIconName.ChartLine, L["Quality"], L["QualityPipelineHint"], Quality, QualityChanged) }
+            @if (Proposes("security")) { @Option("security", OmniIconName.ShieldCheck, L["Security"], L["SecurityPipelineHint"], Security, SecurityChanged) }
+            @if (Proposes("qa")) { @Option("qa", OmniIconName.Flask, "QA", L["QaPipelineHint"], Qa, QaChanged, qaNote) }
+            @if (Proposes("qa-extended")) { @Option("qa-extended", OmniIconName.Gauge, L["QaExtended"], L["QaExtendedPipelineHint"], QaExtended, QaExtendedChanged) }
+            @if (Proposes("security-history")) { @Option("security-history", OmniIconName.Key, L["SecurityHistory"], L["SecurityHistoryPipelineHint"], SecurityHistory, SecurityHistoryChanged) }
+            @if (Proposes("candidate")) { @Option("candidate", OmniIconName.CheckCircle, L["Candidate"], L["CandidatePipelineHint"], Candidate, CandidateChanged) }
+            @if (Proposes("nightly")) { @Option("nightly", OmniIconName.Timer, L["Nightly"], L["NightlyPipelineHint"], Nightly, NightlyChanged) }
+            @if (Proposes("production")) { @Option("production", OmniIconName.RocketLaunch, L["ProductionDeployment"], L["ProductionPipelineHint"], Production, ProductionChanged) }
+            @if (Proposes("fast-deploy")) { @Option("fast-deploy", OmniIconName.Lightning, L["FastDeploy"], L["FastPipelineHint"], FastDeploy, FastDeployChanged) }
+            @if (Proposes("rollback")) { @Option("rollback", OmniIconName.Reset, L["Rollback"], L["RollbackPipelineHint"], Rollback, RollbackChanged) }
+            @if (Proposes("packages")) { @Option("packages", OmniIconName.Package, L["Packages"], L["PackagesPipelineHint"], Packages, PackagesChanged) }
+        </OmniTileGrid>
+        @* R-10 to R-13: a selected pipeline whose default commands cannot work on this branch fails at its
+           first run; it is blocking for that run, so it is the one alert of the step. *@
+        @if (DetectionWarnings.Count > 0)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-detection-warnings">
+                <strong>@L["PipelineSetupDetectionWarningsTitle"]</strong>
+                <ul class="pipeline-setup-readiness-items">
+                    @foreach (var warning in DetectionWarnings)
+                    {
+                        <li>@warning</li>
+                    }
+                </ul>
+            </OmniAlert>
+        }
+    </OmniStack>
 }
 else
 {
     <div class="pipeline-setup-step">
-        <OmniHeading Level="OmniHeadingLevel.H5">@L["PipelinesToCreate"]</OmniHeading>
-        <OmniAlert Severity="OmniSeverity.Info">
-            @ProjectName · @ArchitectureSummary · @SummaryItems.Count @L["Pipelines"]
-        </OmniAlert>
-        <div class="pipeline-setup-summary">
-            @foreach (var item in SummaryItems)
-            {
-                <div><OmniIcon Name="OmniIconName.Graph" /><strong>@item.Name</strong><span>@item.TemplateName</span></div>
-            }
-        </div>
+        @* R2-17: the summary reads in one order and lives in the step's body, never below the wizard footer. *@
         @if (ProjectId is { } projectId)
         {
-            <PipelineSetupReadinessPanel ProjectId="@projectId" Readiness="@Readiness" Loading="@ReadinessLoading"
-                TemplateNames="@SummaryItems.Select(item => item.TemplateName).ToList()"
-                ReturnUrl="@ReturnUrl" OnChanged="@OnReadinessChanged" />
+            <PipelineSetupRecap ProjectId="@projectId" ProjectName="@ProjectName" ArchitectureSummary="@ArchitectureSummary"
+                                SummaryItems="@SummaryItems" Readiness="@Readiness" ReadinessLoading="@ReadinessLoading"
+                                ReturnUrl="@ReturnUrl" OnReadinessChanged="@OnReadinessChanged" ProductionSetup="@ProductionSetup" />
         }
     </div>
 }

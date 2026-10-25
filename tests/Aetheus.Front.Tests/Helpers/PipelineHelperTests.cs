@@ -8,8 +8,8 @@ public class PipelineHelperTests
     [InlineData(PipelineStatus.Success, OmniTone.Success)]
     [InlineData(PipelineStatus.Failed, OmniTone.Danger)]
     [InlineData(PipelineStatus.Running, OmniTone.Accent)]
-    // Partial runs use amber to indicate a tolerated failure; cancelled runs use neutral grey.
-    [InlineData(PipelineStatus.Cancelled, OmniTone.Info)]
+    // Partial runs use amber to indicate a tolerated failure; cancelled runs are orange too (owner decision 2026-10-24, R-38).
+    [InlineData(PipelineStatus.Cancelled, OmniTone.Warning)]
     [InlineData(PipelineStatus.Partial, OmniTone.Warning)]
     [InlineData(PipelineStatus.RolledBack, OmniTone.Warning)]
     public void GetRunBadge_ReturnsCorrectStyle(PipelineStatus status, OmniTone expected)

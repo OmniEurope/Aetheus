@@ -1,0 +1,41 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@inject GridExportContext ExportContext
+
+@* Recette R-18: the contractions the expand/contract plan still owes the database, read from the back's
+   registry (never hand-kept text), with the release from which each can ship. Used by the run's Schema tab
+   and by the production environment page. *@
+<OmniStack data-testid="schema-pending-contractions">
+    <OmniHeading Level="OmniHeadingLevel.H5">@L["SchemaPendingContractionsTitle"]</OmniHeading>
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["SchemaPendingContractionsHint"]</OmniText>
+    @if (Contractions.Count == 0)
+    {
+        <OmniEmptyState Title="@L["SchemaNoPendingContractions"]" />
+    }
+    else
+    {
+        <OmniDataGrid TItem="PendingContractionDto" Items="@Contractions" Class="schema-pending-grid"
+                      ExportTitle="@ExportContext.Title(L["SchemaPendingContractionsTitle"])" ExportFields="@ExportContext.Fields()"
+                      ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MinHeight="12rem" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+            <Columns>
+                <OmniDataGridColumn TItem="PendingContractionDto" Title="@L["SchemaPendingTarget"]" Sortable="false" Filterable="false" Key="target"
+                                    ExportValue="@(contraction => Target(contraction))">
+                    <Template Context="contraction">
+                        <code title="@contraction.ExpandMigration">@Target(contraction)</code>
+                    </Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="PendingContractionDto" Title="@L["SchemaPendingStep"]" Width="12rem" Sortable="false" Filterable="false" Key="step"
+                                    ExportValue="@(contraction => L.Localize(contraction.Step))">
+                    <Template Context="contraction">
+                        <OmniBadge Fill="OmniFill.Tonal" Tone="@StepTone(contraction.Step)">@L.Localize(contraction.Step)</OmniBadge>
+                    </Template>
+                </OmniDataGridColumn>
+                <OmniDataGridColumn TItem="PendingContractionDto" Title="@L["SchemaPendingPossibleFrom"]" Sortable="false" Filterable="false" Key="possible-from"
+                                    ExportValue="@(contraction => PossibleFrom(contraction))">
+                    <Template Context="contraction">
+                        <span title="@AppliedHint(contraction)">@PossibleFrom(contraction)</span>
+                    </Template>
+                </OmniDataGridColumn>
+            </Columns>
+        </OmniDataGrid>
+    }
+</OmniStack>

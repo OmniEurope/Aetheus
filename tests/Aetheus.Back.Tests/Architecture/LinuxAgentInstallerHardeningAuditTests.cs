@@ -259,7 +259,7 @@ public sealed class LinuxAgentInstallerHardeningAuditTests
     }
 
     private static string ReadInstaller() =>
-        File.ReadAllText(Path.Combine(RepoRoot, "deploy", "scripts", "install-agent-linux.sh"));
+        File.ReadAllText(Path.Combine(RepoRoot, "deploy", "agent-installer", "install-agent-linux.sh"));
 
     private static string FindRepoRoot() => Aetheus.Back.Tests.Architecture.RepositoryScan.Root;
 }

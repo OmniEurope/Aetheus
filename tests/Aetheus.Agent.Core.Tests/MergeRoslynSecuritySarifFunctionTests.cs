@@ -7,7 +7,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/merge-roslyn-security-sarif.mjs</c>, with the cases of its
+/// The C# port of the former <c>merge-roslyn-security-sarif.mjs</c> script, with the cases of its
 /// <c>merge-roslyn-security-sarif.test.mjs</c>: only the security families, only open findings, rules
 /// carried across without their stale index, and no report at all refused rather than published empty.
 /// </summary>

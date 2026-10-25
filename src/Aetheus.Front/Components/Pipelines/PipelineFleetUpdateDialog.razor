@@ -26,7 +26,7 @@ else if (_preview is not null)
         }
         <MonacoDiffViewer OriginalValue="@_preview.CurrentResolvedYaml" ModifiedValue="@_preview.TargetResolvedYaml" />
         <DialogFooter OnCancel="@Cancel">
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_preview.RequiresOrphanAcknowledgement && !_acknowledged)" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Download" /> <span>@L["ConfirmUpdate"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_preview.RequiresOrphanAcknowledgement && !_acknowledged)" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["ConfirmUpdate"]</span></ChildContent></OmniButton>
         </DialogFooter>
     </OmniStack>
 }
@@ -44,6 +44,6 @@ else if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger"><Icon><OmniIcon Name="OmniIconName.Error" /></Icon><ChildContent>@L["LoadError"]</ChildContent></OmniAlert>
     <DialogFooter OnCancel="@Cancel">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadPreviewAsync"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Retry"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@LoadPreviewAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </DialogFooter>
 }

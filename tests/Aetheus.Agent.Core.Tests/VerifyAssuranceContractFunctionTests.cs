@@ -6,7 +6,7 @@ using Aetheus.Shared.Components.Pipelines;
 namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
-/// The C# port of <c>deploy/scripts/verify-candidate-assurance-contract.mjs</c>, run through the real
+/// The C# port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-candidate-assurance-contract.mjs</c>, run through the real
 /// executor on every contract the script itself verified (<see cref="AssuranceReferenceData"/>), each
 /// sealed by the JS generator: every case of <c>assurance-contract.test.mjs</c> and of
 /// <c>CandidateAssuranceContractTests</c>, plus the JavaScript corner cases of the parse and the seal

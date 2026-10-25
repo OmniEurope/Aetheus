@@ -1,0 +1,215 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# JavaScript and TypeScript rules for web servers and pages: over-posting, NoSQL operators, CORS,
+# security headers, session secrets, client-side redirects, credentials in the source, file modes,
+# XML entities and unsafe deserialisation. They follow the OWASP Top 10 (2021) and the OWASP API
+# Security Top 10 (2023). Tests: tests/security-rules/aetheus-js-web.js.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP cheat sheets, the Node.js and Express
+# security documentation), not from any third-party rule set.
+rules:
+  - id: aetheus.javascript.request-mass-assignment
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The whole request body is handed to a model or merged into an existing object, so the caller can
+      set every field (role, isAdmin, ownerId). Pick the fields you accept, one by one or with an
+      allow-list, before they reach the model.
+    metadata:
+      cwe: CWE-915
+      owasp: A01:2021 Broken Access Control
+      category: security
+    pattern-either:
+      - pattern: $M.create(req.body)
+      - pattern: $M.create(request.body)
+      - pattern: $M.insertMany(req.body)
+      - pattern: $M.update(req.body, ...)
+      - pattern: $M.updateOne($FILTER, req.body, ...)
+      - pattern: $M.findByIdAndUpdate($ID, req.body, ...)
+      - pattern: $M.findOneAndUpdate($FILTER, req.body, ...)
+      - pattern: $ENTITY.set(req.body)
+      - pattern: new $M(req.body)
+      - pattern: new $M(request.body)
+      - pattern: Object.assign($ENTITY, req.body)
+      - pattern: Object.assign($ENTITY, request.body)
+
+  - id: aetheus.javascript.nosql-operator-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A query is built from the request body or a $where expression. A body such as
+      {"password": {"$ne": null}} turns a credential check into "any password", and $where runs
+      JavaScript inside the database. Cast each field to a string and never use $where with data.
+    metadata:
+      cwe: CWE-943
+      owasp: A03:2021 Injection
+      category: security
+    pattern-either:
+      - pattern: $M.find(req.body)
+      - pattern: $M.findOne(req.body)
+      - pattern: $M.deleteOne(req.body)
+      - pattern: $M.deleteMany(req.body)
+      - pattern: $M.countDocuments(req.body)
+      - pattern: $M.find(req.query)
+      - pattern: $M.findOne(req.query)
+      - pattern: '$M.findOne({ ..., $FIELD: req.body.$VALUE, ... })'
+      - pattern: '$M.find({ ..., $FIELD: req.body.$VALUE, ... })'
+      - pattern: '$M.findOne({ ..., $FIELD: req.query.$VALUE, ... })'
+      - pattern: '$M.find({ ..., $FIELD: req.query.$VALUE, ... })'
+      - pattern: '{ ..., $where: $EXPRESSION, ... }'
+
+  - id: aetheus.javascript.cors-wildcard-credentials
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The CORS configuration allows every origin (a wildcard, or "true" which reflects the caller's
+      origin) together with credentials, so any web page can act as the signed-in user. List the
+      origins you trust.
+    metadata:
+      cwe: CWE-942
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: 'cors({ ..., origin: "*", ..., credentials: true, ... })'
+      - pattern: 'cors({ ..., credentials: true, ..., origin: "*", ... })'
+      - pattern: 'cors({ ..., origin: true, ..., credentials: true, ... })'
+      - pattern: 'cors({ ..., credentials: true, ..., origin: true, ... })'
+      - pattern: '$RES.setHeader("Access-Control-Allow-Origin", "*")'
+      - pattern: '$RES.header("Access-Control-Allow-Origin", "*")'
+
+  - id: aetheus.javascript.security-header-relaxed
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      A browser protection is switched off or weakened: the Content-Security-Policy is disabled
+      (helmet) or allows unsafe-inline or unsafe-eval scripts. Use nonces or hashes for the scripts
+      you need and keep the policy on.
+    metadata:
+      cwe: CWE-693
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern-either:
+      - pattern: 'helmet({ ..., contentSecurityPolicy: false, ... })'
+      - pattern: 'helmet({ ..., frameguard: false, ... })'
+      - pattern: 'helmet({ ..., hsts: false, ... })'
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("Content-Security-Policy", $VALUE)
+              - pattern: $RES.header("Content-Security-Policy", $VALUE)
+          - metavariable-regex:
+              metavariable: $VALUE
+              regex: (?s)^.*(?:script-src|default-src)[^;"`]*unsafe-(?:inline|eval)
+
+  - id: aetheus.javascript.session-secret-hard-coded
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The key that signs the session is written in the source, so everyone who can read the code can
+      forge a session. Read it from the environment or a secret store.
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-either:
+      - pattern: 'session({ ..., secret: "...", ... })'
+      - pattern: 'cookieSession({ ..., secret: "...", ... })'
+      - pattern: 'cookieParser("...")'
+
+  - id: aetheus.javascript.dom-open-redirect
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The page navigates to an address taken from the URL, so a crafted link sends the visitor to
+      another site (or runs a javascript: URL). Navigate only to paths on this site, or check the
+      address against an allow-list.
+    metadata:
+      cwe: CWE-601
+      owasp: A01:2021 Broken Access Control
+      category: security
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: window.location.hash
+          - pattern: window.location.search
+          - pattern: document.referrer
+          - pattern: $PARAMS.get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: window.location = $X
+              - pattern: window.location.href = $X
+              - pattern: location.href = $X
+              - pattern: location = $X
+              - pattern: location.assign($X)
+              - pattern: location.replace($X)
+              - pattern: window.location.assign($X)
+              - pattern: window.location.replace($X)
+              - pattern: window.open($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: isSafeRedirect(...)
+      - pattern: new URL(..., ...)
+      - pattern: $ALLOWED.includes(...)
+
+  - id: aetheus.javascript.hard-coded-credential
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A password, secret or key is written in the source as a literal. Anyone with the repository (or
+      the shipped bundle) has it. Read it from the environment or a secret store.
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    # Written over the text: a name that says "secret" assigned a literal that looks like one (eight
+    # characters or more, letters and digits, no spaces, colons or slashes, so configuration keys and
+    # URLs are not secrets). A name that ends like a label (Name, Header, Url, ...) is skipped.
+    pattern-regex: '\b(?!\w*(?i:Header|Url|Name|Path|Label|Text|Placeholder|Claim|Setting|Field|Policy|Prefix|Format|Pattern|Scheme|Id|ConfigKey|Charset|Alphabet|Chars|Characters|Symbols)\s*[:=])\w*(?i:password|passwd|pwd|secret|apikey|api_key|privatekey|accesskey)\w*["'']?\s*[:=]\s*["''](?=[^"''\s]*[A-Za-z])(?=[^"''\s]*[0-9])[^\s"'':/{}\\]{8,}["'']'
+
+  - id: aetheus.javascript.world-writable-mode
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A file or directory is made writable by every local account (mode 777 or 666). Another user on
+      the machine can replace what runs from there. Grant the owner and, at most, a group.
+    metadata:
+      cwe: CWE-732
+      owasp: A01:2021 Broken Access Control
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $FS.chmod($PATH, $MODE, ...)
+          - pattern: $FS.chmodSync($PATH, $MODE)
+          - pattern: '$FS.mkdirSync($PATH, { ..., mode: $MODE, ... })'
+          - pattern: '$FS.writeFileSync($PATH, $DATA, { ..., mode: $MODE, ... })'
+      - metavariable-regex:
+          metavariable: $MODE
+          regex: ^(?:0o?777|0o?666|511|438|"777"|"666")$
+
+  - id: aetheus.javascript.xml-external-entities
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The XML parser is told to substitute entities (noent), so a document can read local files or
+      call internal hosts through an external entity. Leave entity substitution off.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    pattern: '{ ..., noent: true, ... }'
+
+  - id: aetheus.javascript.unsafe-deserialization
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      node-serialize builds functions from the serialized text, so deserializing data from outside
+      executes code. Use JSON.parse and validate the result against a schema.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021 Software and Data Integrity Failures
+      category: security
+    pattern-either:
+      - pattern: $S.unserialize(...)
+      - pattern: require("node-serialize")

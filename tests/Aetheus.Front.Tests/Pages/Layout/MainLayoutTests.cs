@@ -148,6 +148,22 @@ public class MainLayoutTests : BunitContext
         Assert.Contains("Aetheus", cut.Markup);
     }
 
+    /// <summary>R1-25: the main area follows the user's content width: whole width when asked (the Aetheus
+    /// default), the centred wide column otherwise.</summary>
+    [Fact]
+    public async Task TheMainArea_FollowsTheUsersContentWidth()
+    {
+        var state = Services.GetRequiredService<OmniAppearanceState>();
+        await state.SetFullWidthAsync(true);
+        var cut = Render<MainLayout>();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("#main-content")));
+        Assert.DoesNotContain("omni-main--wide", cut.Find("#main-content").ClassName, StringComparison.Ordinal);
+
+        await cut.InvokeAsync(() => state.SetFullWidthAsync(false));
+
+        cut.WaitForAssertion(() => Assert.Contains("omni-main--wide", cut.Find("#main-content").ClassName, StringComparison.Ordinal));
+    }
+
     [Fact]
     public void WhenAuthenticated_RendersSkipLink()
     {

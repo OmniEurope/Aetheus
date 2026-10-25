@@ -29,10 +29,17 @@ public sealed class PipelineRunNotificationPublisher(
         // Recette R1-77: the e-mail of a run another pipeline started (a trigger step: the parent waits for
         // it, so the parent's own result covers it) goes only to the subscribers who asked for it, with a
         // link to the run at the root of its lineage. A run started alone is its own root and mails as
-        // before; so does an on_success follow-up, which starts once its upstream run has finished and
-        // mailed its own result, so no other mail covers it.
+        // before. So does an on_success follow-up (confirmed, recette R1-9): the lineage is followed through
+        // trigger steps only (PipelineStepRun.TriggeredRunId, PipelineRunLineageRepository), and a follow-up is
+        // launched by PipelineRunCompletedDownstreamHandler once its upstream run has SUCCEEDED, with
+        // UPSTREAM_RUN_ID in its variables and no trigger step pointing at it. The upstream run has already
+        // mailed its own result by then, and no other mail covers the follow-up, so it is its own root and
+        // keeps its mail. One mail per recipient, then, for each root run: its own result, plus the children's
+        // only to a recipient who asked for them.
+        // The payload names why a Failed or Rejected run ended so (Cause, CauseStep), for the mail.
         var root = await RootRunAsync(pipelineRunId, ct).ConfigureAwait(false);
         var isChild = root is not null && root.RunId != pipelineRunId;
+        var cause = await CauseAsync(pipelineRunId, status, ct).ConfigureAwait(false);
         await RecordRunEventAsync(pipelineRunId, eventType, (run, projectId) => new
         {
             // First property: EmailOnceMarker matches the serialized payload on it.
@@ -42,11 +49,24 @@ public sealed class PipelineRunNotificationPublisher(
             run.BuildNumber,
             ProjectId = projectId,
             Status = status.ToString(),
+            // Recette R1-9: why a Failed or Rejected run ended so; null (not listed in the mail) for a success
+            // or when the engine recorded nothing.
+            cause.Cause,
+            cause.CauseStep,
             IsChildRun = isChild,
             RootRunId = root?.RunId ?? pipelineRunId,
             RootPipelineName = isChild ? root!.PipelineName : null
         }, ct, isChild ? NotificationEventTypes.PipelineChildResults : null, EmailOnceMarker(pipelineRunId)).ConfigureAwait(false);
     }
+
+    private async Task<PipelineRunOutcomeCause> CauseAsync(int pipelineRunId, PipelineStatus status, CancellationToken ct) => status switch
+    {
+        PipelineStatus.Failed => PipelineRunOutcomeCause.ForFailure(
+            await repo.GetFailedStepsAsync(pipelineRunId, 3, ct).ConfigureAwait(false) ?? []),
+        PipelineStatus.Rejected => PipelineRunOutcomeCause.ForRejection(
+            await repo.GetSuccessfulStepOutputsAsync(pipelineRunId, ct).ConfigureAwait(false) ?? []),
+        _ => PipelineRunOutcomeCause.None
+    };
 
     /// <summary>Recette R1-77: the payload fragment of one run's result. A retried run that ends with the
     /// same result again (same event type) is not e-mailed a second time to a recipient already mailed.</summary>

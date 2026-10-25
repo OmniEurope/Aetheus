@@ -34,22 +34,22 @@
                 VirtualData="@(() => new OmniDataGridResult<PipelineFleetItemDto>(_items, _totalCount))"
                 EmptyText="@L["NoRecords"]">
         <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="PipelineFleetItemDto" Property="PipelineName" Title="@L["Pipeline"]" MinWidth="14rem" Filterable="true" >
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="PipelineFleetItemDto" Property="PipelineName" Title="@L["Pipeline"]" Filterable="true" >
                 <Template Context="item">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@($"pipelines/{item.PipelineId}")">@item.PipelineName</OmniLink></span>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="OwnerName" Title="@L["Owner"]" MinWidth="12rem" Filterable="true" />
-            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="TemplateName" Title="@L["Template"]" MinWidth="12rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Templates" FilterSearchable="true" />
-            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="PinnedVersion" Title="@L["PinnedVersion"]" Width="8rem" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="OwnerName" Title="@L["Owner"]" Filterable="true" />
+            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="TemplateName" Title="@L["Template"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Templates" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="PinnedVersion" Title="@L["PinnedVersion"]" Width="8rem" TextAlign="OmniAlignment.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="item">@(item.PinnedVersion is null ? (item.UsesLegacyReference ? L["LegacyLatest"] : "-") : $"v{item.PinnedVersion}")</Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="LatestVersion" Title="@L["LatestVersion"]" Width="8rem" TextAlign="OmniDataGridTextAlign.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
+            <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="LatestVersion" Title="@L["LatestVersion"]" Width="8rem" TextAlign="OmniAlignment.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" >
                 <Template Context="item">@(item.LatestVersion is null ? "-" : $"v{item.LatestVersion}")</Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="Freshness" Title="@L["Status"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@FreshnessFilterText" >
                 <Template Context="item">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@FreshnessStyle(item.Freshness)">@FreshnessText(item.Freshness)</OmniBadge>
+                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@FreshnessStyle(item.Freshness)">@FreshnessText(item.Freshness)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineFleetItemDto" Title="@L["Actions"]" Width="11rem" Sortable="false" Filterable="false" >
@@ -57,7 +57,7 @@
                     @if (item.Freshness == PipelineFleetFreshness.Outdated && item.LatestVersion is not null && CanUpdate(item))
                     {
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenUpdateAsync(item))" title="@L["Update"]" Label="@L["Update"]"><OmniIcon Name="OmniIconName.Download" /></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenUpdateAsync(item))" title="@L["Update"]" Label="@L["Update"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon></OmniButton>
                         </span>
                     }
                 </Template>

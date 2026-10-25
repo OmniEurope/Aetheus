@@ -222,7 +222,8 @@ public sealed class PipelineRunPreparationService(
                 Description = p.Description,
                 DisplayNameFr = string.IsNullOrWhiteSpace(p.DisplayNameFr) ? null : p.DisplayNameFr,
                 DescriptionFr = string.IsNullOrWhiteSpace(p.DescriptionFr) ? null : p.DescriptionFr,
-                AllowedValues = p.AllowedValues
+                AllowedValues = p.AllowedValues,
+                Advanced = p.Advanced
             })
             .ToList();
     }

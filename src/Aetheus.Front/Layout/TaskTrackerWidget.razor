@@ -13,13 +13,13 @@
                  TriggerTitle="@string.Format(L["TaskTrackerTooltip"], _count)"
                  Label="@string.Format(L["TaskTrackerTooltip"], _count)"
                  PopupLabel="@L["TaskTrackerTitle"]">
+        @* Keep the task-list icon visible and widen the button when a running-task count
+           accompanies it. *@
+        <TriggerIcon><OmniIcon Name="OmniIconName.ListChecks" Class="header-icon" /></TriggerIcon>
         <TriggerContent>
-            @* Keep the task-list icon visible and widen the button when a running-task count
-               accompanies it. *@
-            <OmniIcon Name="OmniIconName.ListChecks" Class="header-icon" />
             @if (_count > 0)
             {
-                <span class="task-tracker-count">@(_count > 99 ? "99+" : _count.ToString(System.Globalization.CultureInfo.CurrentCulture))</span>
+                <span class="task-tracker-count">@DisplayFormatting.BadgeCount(_count)</span>
             }
         </TriggerContent>
         <ChildContent>
@@ -93,7 +93,7 @@
                 </div>
                 <div class="task-tracker-footer">
                     @* The same neutral "See all" button as the bell. *@
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoTo("/tasks"))" Class="task-tracker-see-all"><OmniIcon Name="OmniIconName.ArrowRight" /> <span>@L["SeeAll"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoTo("/tasks"))" Class="task-tracker-see-all"><Icon><OmniIcon Name="OmniIconName.ArrowRight" /></Icon><ChildContent><span>@L["SeeAll"]</span></ChildContent></OmniButton>
                 </div>
             </div>
         </ChildContent>

@@ -104,6 +104,43 @@ public sealed class GitRepositoryDetailActionsTests : BunitContext
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "DELETE");
     }
 
+    // --- the configuration repository designation (ADR-057) -----------------
+
+    [Fact]
+    public async Task DesignatingTheConfigurationRepository_SendsTheFlagToTheRepository_AndReportsSuccess()
+    {
+        _handler.SetJsonResponse(HttpMethod.Put, "api/git/repos/5", new GitLightRepoDto { Id = 5, IsConfiguration = true });
+
+        var done = await Build().SetConfigurationAsync(5, designate: true);
+
+        Assert.True(done);
+        var put = Assert.Single(_handler.RequestDetails, r => r.Method == "PUT" && r.Url.Contains("api/git/repos/5"));
+        Assert.Contains("\"isConfiguration\":true", put.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GivingUpTheConfigurationRole_SendsFalse()
+    {
+        _handler.SetJsonResponse(HttpMethod.Put, "api/git/repos/5", new GitLightRepoDto { Id = 5, IsConfiguration = false });
+
+        var done = await Build().SetConfigurationAsync(5, designate: false);
+
+        Assert.True(done);
+        var put = Assert.Single(_handler.RequestDetails, r => r.Method == "PUT");
+        Assert.Contains("\"isConfiguration\":false", put.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ARefusedDesignation_IsNotReportedAsDone()
+    {
+        // The server refuses a mirror and a project's last source repository: the page must not claim a change.
+        _handler.SetResponse(HttpMethod.Put, "api/git/repos/5", HttpStatusCode.BadRequest);
+
+        var done = await Build().SetConfigurationAsync(5, designate: true);
+
+        Assert.False(done);
+    }
+
     // --- accepting performs the call ---------------------------------------
 
     [Fact]

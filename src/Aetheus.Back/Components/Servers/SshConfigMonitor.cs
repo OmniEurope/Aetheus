@@ -31,20 +31,33 @@ internal sealed class SshConfigMonitor(
         if (stored is null)
         {
             server.SshConfigStateJson = JsonSerializer.Serialize(
-                new SshConfigStatusDto { Snapshot = reported, ObservedAt = now, BaselineAt = now });
+                new SshConfigStatusDto { Snapshot = reported, ObservedAt = now, LastReportedAt = now, BaselineAt = now });
             logger.LogInformation("SSH configuration baseline recorded for server {ServerId}", server.Id);
             return true;
         }
-        if (JsonSerializer.Serialize(stored.Snapshot) == JsonSerializer.Serialize(reported)) return false;
+        if (JsonSerializer.Serialize(stored.Snapshot) == JsonSerializer.Serialize(reported))
+        {
+            // R-50: an unchanged report still proves the agent is reading; record when, at a bounded write rate.
+            if (stored.LastReportedAt is { } last
+                && now - last < TimeSpan.FromMinutes(SshConfigLimits.LastReportedRefreshMinutes))
+                return false;
+            server.SshConfigStateJson = JsonSerializer.Serialize(stored with { LastReportedAt = now });
+            return true;
+        }
 
         var changes = SshConfigChangeDetector.Compare(stored.Snapshot, reported);
+        // R-50: what was said about a watched file that no longer exists (a deleted account) is a state that
+        // is over; a Critical "key added" stays as the audit trail, the rest folds into the removal event.
+        var gone = SshConfigChangeDetector.GonePaths(stored.Snapshot.AuthorizedKeys, reported.AuthorizedKeys);
+        var kept = stored.RecentChanges.Where(c =>
+            c.Severity == SshConfigChange.Critical || !gone.Any(path => c.Message.Contains(path, StringComparison.Ordinal)));
         var recent = changes
             .Select(c => new SshConfigChangeDto { DetectedAt = now, Severity = c.Severity, Message = c.Message })
-            .Concat(stored.RecentChanges)
+            .Concat(kept)
             .Take(SshConfigLimits.MaxStoredChanges)
             .ToList();
         server.SshConfigStateJson = JsonSerializer.Serialize(
-            stored with { Snapshot = reported, ObservedAt = now, RecentChanges = recent });
+            stored with { Snapshot = reported, ObservedAt = now, LastReportedAt = now, RecentChanges = recent });
 
         var alerts = changes.Where(c => c.IsAlert).ToList();
         if (alerts.Count > 0) await RaiseAsync(server, alerts, now, ct).ConfigureAwait(false);
@@ -72,7 +85,8 @@ internal sealed class SshConfigMonitor(
         if (domainEvents is not null)
         {
             await domainEvents.DispatchAsync(
-                new SshConfigChangedEvent(server.Id, server.Name, severity, message, now), ct).ConfigureAwait(false);
+                new SshConfigChangedEvent(server.Id, server.Name, severity, message, now,
+                    [.. alerts.Select(a => new SshChangeNotice(a.Code, a.Args ?? []))]), ct).ConfigureAwait(false);
         }
     }
 

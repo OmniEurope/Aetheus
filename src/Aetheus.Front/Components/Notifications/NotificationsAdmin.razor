@@ -8,11 +8,11 @@
 </OmniPageHeader>
 
 @* Channels: the transports a rule can target. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["NotificationChannels"]</OmniHeading>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_channelSearch" @bind-Value:after="ResetChannelSearchAsync" />
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(null))"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(null))"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>
 
@@ -30,7 +30,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="IsEnabled" Title="@L["Status"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EnabledText" >
             <Template Context="c">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(c.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(c.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(c.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(c.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="RuleCount" Title="@L["Rules"]" Width="90px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
@@ -38,13 +38,13 @@
             <Template Context="c">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                 @* STD-BTN detection 11: Edit and Delete visible, the other actions in the menu. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                     @if (_channelTest.TryGetValue(c.Id, out var r))
                     {
                         <OmniBadge Fill="OmniFill.Solid" Tone="@TestBadge(r.Status)" title="@r.Message">@L.Localize(r.Status)</OmniBadge>
                     }
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteChannelAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteChannelAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem OnClick="@(() => TestChannelAsync(c.Id))" Disabled="@(_testing.Contains(c.Id))"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent>@L["TestConnection"]</ChildContent></OmniMenuItem>
                     </OmniOverflowMenu>
@@ -56,11 +56,11 @@
 </AetheusDataGrid>
 
 @* Rules: event type -> channel mappings. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Rules"]</OmniHeading>
-    <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_ruleSearch" @bind-Value:after="ResetRuleSearchAsync" />
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(null))" Disabled="@(_channelTotalCount == 0)"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Create"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(null))" Disabled="@(_channelTotalCount == 0)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>
 
@@ -75,17 +75,17 @@
         <OmniDataGridColumn Frozen="true" TItem="NotificationRuleDto" Property="EventType" Title="@L["EventType"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_ruleFilterValues.EventTypes" FilterSearchable="true" >
             <Template Context="r"><span class="text-mono">@r.EventType</span></Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="NotificationRuleDto" Property="ChannelName" Title="@L["NotificationChannel"]" Width="200px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_ruleFilterValues.Channels" FilterSearchable="true" />
+        <OmniDataGridColumn TItem="NotificationRuleDto" Property="ChannelName" Title="@L["NotificationChannel"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_ruleFilterValues.Channels" FilterSearchable="true" />
         <OmniDataGridColumn TItem="NotificationRuleDto" Property="IsEnabled" Title="@L["Status"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EnabledText" >
             <Template Context="r">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(r.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(r.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
+                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(r.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(r.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="NotificationRuleDto" Title="@L["Actions"]" Width="120px" Sortable="false" TextAlign="OmniDataGridTextAlign.Center" Filterable="false" >
+        <OmniDataGridColumn TItem="NotificationRuleDto" Title="@L["Actions"]" Width="120px" Sortable="false" TextAlign="OmniAlignment.Center" Filterable="false" >
             <Template Context="r">
                 <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(r))" title="@L["Edit"]" Label="@L["Edit"]"><OmniIcon Name="OmniIconName.Edit" /></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" title="@L["Delete"]" Label="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(r))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                 </span>
             </Template>
         </OmniDataGridColumn>

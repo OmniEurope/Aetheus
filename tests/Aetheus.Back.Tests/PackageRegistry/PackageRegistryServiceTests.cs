@@ -98,6 +98,56 @@ public class PackageRegistryServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(true, "Deprecated")]
+    [InlineData(false, "Undeprecated")]
+    public async Task SetDeprecatedAsync_FlagsOnlyThatVersion_SavesAuditsAndNotifies(bool deprecated, string action)
+    {
+        var repository = Substitute.For<IPackageRegistryRepository>();
+        var audit = Substitute.For<IAuditService>();
+        var notifier = Substitute.For<IAdminChangeNotifier>();
+        var package = new RegistryPackage
+        {
+            Id = 7,
+            Kind = PackageRegistryKind.Npm,
+            Name = "Sample",
+            NormalizedName = "sample",
+            Versions =
+            [
+                new RegistryPackageVersion { Id = 11, Version = "1.0.0", IsDeprecated = !deprecated },
+                new RegistryPackageVersion { Id = 12, Version = "2.0.0" }
+            ]
+        };
+        repository.GetPackageByIdForUpdateAsync(7, Arg.Any<CancellationToken>()).Returns(package);
+        var service = new PackageRegistryAdminService(repository, audit, notifier);
+
+        var changed = await service.SetDeprecatedAsync(7, 11, deprecated, TestContext.Current.CancellationToken);
+
+        Assert.True(changed);
+        Assert.Equal(deprecated, package.Versions.Single(version => version.Id == 11).IsDeprecated);
+        Assert.False(package.Versions.Single(version => version.Id == 12).IsDeprecated);
+        await repository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await audit.Received(1).LogAsync(
+            action, "NpmPackage", 7, "Sample@1.0.0", Arg.Any<CancellationToken>());
+        await notifier.Received(1).BroadcastAsync(
+            AdminEntities.PackageRegistry, 7, EntityChangeOps.Updated, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SetDeprecatedAsync_ReturnsFalseForAnUnknownVersion_WithoutSaving()
+    {
+        var repository = Substitute.For<IPackageRegistryRepository>();
+        repository.GetPackageByIdForUpdateAsync(7, Arg.Any<CancellationToken>())
+            .Returns(new RegistryPackage { Id = 7, Versions = [] });
+        var service = new PackageRegistryAdminService(
+            repository, Substitute.For<IAuditService>(), Substitute.For<IAdminChangeNotifier>());
+
+        var changed = await service.SetDeprecatedAsync(7, 99, true, TestContext.Current.CancellationToken);
+
+        Assert.False(changed);
+        await repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task NpmPublish_DatabaseFailureRemovesNewlyPromotedPayload()
     {

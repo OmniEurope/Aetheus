@@ -1,0 +1,6 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R2-18: a secondary explanation of the pipeline setup screens is an OE tooltip on a question mark,
+   readable by keyboard and by screen readers, instead of a sentence in the page. *@
+<OmniTooltip Text="@Text" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
+    <span role="img" aria-label="@Text" data-testid="pipeline-info-tip"><OmniIcon Name="OmniIconName.Question" Class="omni-u-text-muted" aria-hidden="true" /></span>
+</OmniTooltip>

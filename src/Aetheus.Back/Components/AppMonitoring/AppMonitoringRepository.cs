@@ -105,6 +105,7 @@ public sealed class AppMonitoringRepository(AppDbContext db) : IAppMonitoringRep
     public async Task<List<MonitoredApp>> GetBackendProbedAppsAsync(CancellationToken ct = default)
     {
         return await db.MonitoredApps
+            .AsNoTracking()
             .Where(a => a.Enabled && a.ServerId == null && a.ProbeUrl != null)
             .ToListAsync(ct).ConfigureAwait(false);
     }

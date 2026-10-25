@@ -128,7 +128,7 @@ internal sealed class ApacheConfigSetApplier(
                 total += bytes.Length;
                 if (bytes.Length == 0 || total > 1024 * 1024)
                 {
-                    error = "Apache configuration set is empty or exceeds the 1 MiB safety limit.";
+                    error = "Apache configuration set is empty or exceeds the 1 Mo safety limit.";
                     return false;
                 }
                 files[name] = bytes;

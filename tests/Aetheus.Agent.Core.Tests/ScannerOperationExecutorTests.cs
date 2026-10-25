@@ -327,7 +327,7 @@ public sealed class ScannerOperationExecutorTests
         string[]? scanArguments = null;
         string? trustedHarnessContent = null;
         var hostileHarness = Path.Combine(
-            context.SourceDirectory, "deploy", "scripts", "zap-active-automation.sh");
+            context.SourceDirectory, "src", "Aetheus.Agent.Core", "Harnesses", "zap-active-automation.sh");
         Directory.CreateDirectory(Path.GetDirectoryName(hostileHarness)!);
         File.WriteAllText(hostileHarness, "echo HOSTILE_WORKSPACE_HARNESS");
         context.Runner.RunAsync(Arg.Any<ProcessStartInfo>(), Arg.Any<int>(),

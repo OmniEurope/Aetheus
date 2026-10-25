@@ -4,7 +4,8 @@
    never moves; hover and focus follow the theme, dark mode included. *@
 <OmniStack Gap="OmniSpacing.Large">
     <p>@L["WizardCapabilitiesDescription"]</p>
-    <OmniStack Gap="OmniSpacing.Medium">
+    @* R-5: the capability cards are OE tiles of one OmniTileGrid (same width, same height, nothing spills). *@
+    <OmniTileGrid Columns="2">
         <OmniSelectableCard Multiple="true" Title="@L["WizardModulePipelineRunner"]" Description="@L["WizardModulePipelineRunnerHint"]"
                             Value="IncludePipelineRunner" ValueChanged="IncludePipelineRunnerChanged">
             <Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon>
@@ -45,7 +46,7 @@
                             Value="DevModeInsecureTls" ValueChanged="DevModeInsecureTlsChanged">
             <Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon>
         </OmniSelectableCard>
-    </OmniStack>
+    </OmniTileGrid>
     @if (NoActionableModule)
     {
         <OmniAlert Severity="OmniSeverity.Warning">@L["WizardNoModuleWarning"]</OmniAlert>

@@ -25,6 +25,27 @@ public sealed record CertbotDataDto
     /// when it passed, or when certbot printed no per-lineage reason.</summary>
     [MaxLength(CertbotRenewalFailureDto.MaxFailures)]
     public List<CertbotRenewalFailureDto> RenewalCheckFailures { get; init; } = [];
+
+    public const int MaxOutputTailLines = 20;
+    public const int MaxOutputTailLineLength = 300;
+
+    /// <summary>Recette R1-7: the last meaningful lines certbot printed during the last failed rehearsal (the
+    /// first one says how long it ran and its exit code), so the cause stays visible when no per-lineage
+    /// reason was recognised. Empty when it passed, or when the helper predates the capture.</summary>
+    [MaxLength(MaxOutputTailLines)]
+    [Aetheus.Shared.Components.Shared.MaxItemStringLength(MaxOutputTailLineLength)]
+    public List<string> RenewalCheckOutputTail { get; init; } = [];
+
+    public const int MaxAcmeProxyRules = 50;
+    public const int MaxAcmeProxyRuleLength = 400;
+
+    /// <summary>Recette R-2: where an Apache <c>RewriteRule ... [P]</c> still lets the ACME challenge reach the
+    /// application (<c>&lt;file&gt;:&lt;line&gt;</c>), so the certificates of that virtual host fail the dry run. The
+    /// helper protects the files it may edit when it normalizes; what it lists here needs a manual change.
+    /// Empty when there is none, or when the helper predates the check.</summary>
+    [MaxLength(MaxAcmeProxyRules)]
+    [Aetheus.Shared.Components.Shared.MaxItemStringLength(MaxAcmeProxyRuleLength)]
+    public List<string> AcmeProxyRules { get; init; } = [];
 }
 
 /// <summary>Recette R3-56: one certificate that failed <c>certbot renew --dry-run</c>, and why.</summary>
@@ -76,6 +97,11 @@ public sealed record CertbotActionRequest
 
     [StringLength(200)]
     public string? CertificateName { get; init; }
+
+    /// <summary>Recette R-12: the name <see cref="Aetheus.Shared.Components.Certbot.CertbotAction.RemoveDomain"/>
+    /// takes out of the certificate; unused by the other actions.</summary>
+    [StringLength(253)]
+    public string? DomainName { get; init; }
 }
 
 // --- Create request ---
@@ -100,5 +126,13 @@ public sealed record CertbotCreateRequest
 /// (or none) is shown as "to update". Bumped together with the <c>aetheus-certbot-helper-version</c> marker.</summary>
 public static class CertbotHelperVersion
 {
-    public const int Current = 1;
+    public const int Current = 6;
+}
+
+/// <summary>Task variables of the Certbot operations shared by the backend that queues them and the agent.</summary>
+public static class CertbotTaskVariables
+{
+    /// <summary>Recette R-12: the name a <c>CertbotRemoveDomain</c> operation takes out of its certificate
+    /// (the target being the certificate name).</summary>
+    public const string RemoveDomain = "AETHEUS_CERTBOT_REMOVE_DOMAIN";
 }

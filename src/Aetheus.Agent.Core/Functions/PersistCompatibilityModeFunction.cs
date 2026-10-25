@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>persist-compatibility-mode</c> function, port of
-/// <c>deploy/scripts/qa/persist-compatibility-mode.sh</c>: publishes the compatibility attestation of a
+/// the former <c>persist-compatibility-mode.sh</c> script: publishes the compatibility attestation of a
 /// QA run, which the run page shows and the assurance seal grades, under one owner.
 /// <list type="bullet">
 /// <item>Each of the five gate statuses is read from the workspace's <c>.qa-&lt;gate&gt;-gate-status</c>

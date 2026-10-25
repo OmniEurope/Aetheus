@@ -3,7 +3,6 @@ using System.Security.Claims;
 using Aetheus.Back.Components.Audit;
 using Aetheus.Back.Components.Organizations;
 using Aetheus.Back.Components.Pipelines;
-using Aetheus.Back.Data;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
 using Aetheus.Back.Services;
@@ -587,6 +586,62 @@ public class PipelineServiceTests
             "main");
 
         Assert.Equal("develop", existing.SourceBranch);
+    }
+
+    /// <summary>A null source branch means "the repository default branch", not "unknown": a definition
+    /// that declares <c>source_branch</c> equal to the default branch is stored as null (this is how
+    /// the production demo pipeline, declaring main on a repository whose default branch is main,
+    /// reads back with a null source branch). A different branch is stored explicitly.</summary>
+    [Theory]
+    [InlineData("main", "main", null)]
+    [InlineData("main", "develop", "main")]
+    public async Task UpsertPipelineFromYamlAsync_NewPipeline_NormalizesTheDeclaredBranchAgainstTheDefault(
+        string declaredBranch, string defaultBranch, string? expectedStoredBranch)
+    {
+        _repoMock.GetProjectOwnerUsernameAsync(1, Arg.Any<CancellationToken>()).Returns("orgowner");
+        Pipeline? added = null;
+        _repoMock.AddPipelineAsync(Arg.Do<Pipeline>(pipeline => added = pipeline), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        await _sut.UpsertPipelineFromYamlAsync(
+            "aetheus-demo",
+            $"name: aetheus-demo\ntrigger: schedule\nsource_branch: {declaredBranch}\nstages: []",
+            1, "schedule", TestContext.Current.CancellationToken, declaredBranch, defaultBranch);
+
+        Assert.NotNull(added);
+        Assert.Equal(expectedStoredBranch, added.SourceBranch);
+    }
+
+    /// <summary>The state production was in: a stored null source branch on a repository whose default
+    /// branch is main, for a definition declaring <c>source_branch: main</c>. The main branch moving
+    /// must refresh the stored definition (the scheduler reads its cron), while a push of another
+    /// branch must not overwrite it with that branch's copy.</summary>
+    [Theory]
+    [InlineData("main", true)]
+    [InlineData("develop", false)]
+    public async Task UpsertPipelineFromYamlAsync_NullStoredBranchOnDefaultMain_FollowsOnlyMain(
+        string movedBranch, bool expectedRefreshed)
+    {
+        var existing = new Pipeline
+        {
+            Id = 62,
+            Name = "aetheus-demo",
+            SourceBranch = null,
+            YamlDefinition = "name: aetheus-demo\ntrigger: schedule\nschedule: \"0 0 3 * * *\"\nstages: []",
+            TriggerType = PipelineTriggerType.Schedule,
+            CreatedByUsername = "alice",
+            Runs = []
+        };
+        _repoMock.FindPipelineByNameAndProjectAsync("aetheus-demo", 1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.IsActiveUsernameAsync("alice", Arg.Any<CancellationToken>()).Returns(true);
+        const string fresh = "name: aetheus-demo\ntrigger: schedule\nschedule: \"0 0 2 * * *\"\nsource_branch: main\nstages: []";
+
+        await _sut.UpsertPipelineFromYamlAsync(
+            "aetheus-demo", fresh, 1, "schedule", TestContext.Current.CancellationToken, movedBranch, "main");
+
+        Assert.Equal(expectedRefreshed, existing.YamlDefinition == fresh);
+        Assert.Null(existing.SourceBranch);
+        await _repoMock.Received(expectedRefreshed ? 1 : 0).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1862,7 +1917,7 @@ public class PipelineServiceTests
     [Fact]
     public void ValidateYamlStrict_LatestCandidateTemplate_IsValid()
     {
-        var yaml = DeliveryPipelineTemplateSeeder.ReadResource("application-candidate-v1.yaml");
+        var yaml = DeliveryTemplateCatalog.ReadResource("application-candidate-v1.yaml");
 
         var result = _sut.ValidateYamlStrict(yaml);
 

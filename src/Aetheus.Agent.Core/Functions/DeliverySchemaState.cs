@@ -5,7 +5,7 @@ using System.Text;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// A database schema state as the delivery gate reads it, port of <c>deploy/scripts/schema-fingerprint.mjs</c>:
+/// A database schema state as the delivery gate reads it, port of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/schema-fingerprint.mjs</c>:
 /// the ordered list of applied EF migration ids and the SHA-256 of that list joined by line feeds
 /// (UTF-8, as <c>hash.update(string)</c> encodes it).
 /// </summary>

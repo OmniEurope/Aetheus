@@ -20,7 +20,7 @@ internal sealed class GitDiffReader(GitProcessRunner git)
     public async Task<PullRequestDiffDto> GetDiffAsync(
         string diskPath, string fromRef, string toRef, CancellationToken ct = default)
     {
-        GitLightCliService.EnsureRefArgsSafe(fromRef, toRef);
+        GitArgumentGuard.EnsureRefArgsSafe(fromRef, toRef);
         var (exitCode, output, _) = await git
             .RunGitAsync(diskPath, ["diff", "--numstat", fromRef, toRef], ct).ConfigureAwait(false);
         if (exitCode != 0) return new PullRequestDiffDto();
@@ -59,7 +59,7 @@ internal sealed class GitDiffReader(GitProcessRunner git)
     public async Task<GitPatchResult> GetCommitPatchAsync(
         string diskPath, string fromRef, string toRef, CancellationToken ct = default)
     {
-        GitLightCliService.EnsureRefArgsSafe(fromRef, toRef);
+        GitArgumentGuard.EnsureRefArgsSafe(fromRef, toRef);
         var (exitCode, output, _, truncated) = await git.RunGitBoundedAsync(
             diskPath, ["diff", "--patch", fromRef, toRef], MaximumCommitPatchChars, ct).ConfigureAwait(false);
         return exitCode == 0 ? new GitPatchResult(output, truncated) : new GitPatchResult(string.Empty, false);
@@ -77,7 +77,7 @@ internal sealed class GitDiffReader(GitProcessRunner git)
     public async Task<IReadOnlyList<string>?> GetChangedPathsAsync(
         string diskPath, string fromRef, string toRef, CancellationToken ct = default)
     {
-        GitLightCliService.EnsureRefArgsSafe(fromRef, toRef);
+        GitArgumentGuard.EnsureRefArgsSafe(fromRef, toRef);
         var (exitCode, output, _, truncated) = await git.RunGitBoundedAsync(
             diskPath, ["diff", "--name-only", "--no-renames", fromRef, toRef],
             MaximumCommitPatchChars, ct).ConfigureAwait(false);
@@ -98,7 +98,7 @@ internal sealed class GitDiffReader(GitProcessRunner git)
     public async Task<IReadOnlyDictionary<string, string>?> GetTreeBlobsAsync(
         string diskPath, string revision, CancellationToken ct = default)
     {
-        GitLightCliService.EnsureRefArgsSafe(revision);
+        GitArgumentGuard.EnsureRefArgsSafe(revision);
         var (exitCode, output, _, truncated) = await git.RunGitBoundedAsync(
             diskPath, ["ls-tree", "-r", "-z", "--full-tree", revision],
             MaximumTreeListingChars, ct).ConfigureAwait(false);
@@ -119,7 +119,7 @@ internal sealed class GitDiffReader(GitProcessRunner git)
     public async Task<GitPatchResult> GetRootCommitPatchAsync(
         string diskPath, string commitRef, CancellationToken ct = default)
     {
-        GitLightCliService.EnsureRefArgsSafe(commitRef);
+        GitArgumentGuard.EnsureRefArgsSafe(commitRef);
         var (exitCode, output, _, truncated) = await git.RunGitBoundedAsync(
             diskPath, ["show", "--format=", "--no-ext-diff", "--patch", commitRef],
             MaximumCommitPatchChars, ct).ConfigureAwait(false);

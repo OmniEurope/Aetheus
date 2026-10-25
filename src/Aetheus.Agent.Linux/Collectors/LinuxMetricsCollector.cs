@@ -117,6 +117,8 @@ public sealed class LinuxMetricsCollector(ILogger<LinuxMetricsCollector> logger)
                drive.Name.StartsWith("/mnt");
     }
 
+    protected override string? GetDeviceKey(string mountPoint) => LinuxMountInfo.DeviceKeyOf(mountPoint);
+
     protected override InodeUsage? GetInodeUsage(string mountPoint) => LinuxStatvfs.Read(mountPoint);
 
     private static double ParseMemInfoLine(string line)

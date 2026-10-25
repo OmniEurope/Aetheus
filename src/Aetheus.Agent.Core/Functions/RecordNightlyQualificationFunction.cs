@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>record-nightly-qualification</c> function, port of
-/// <c>deploy/scripts/record-nightly-qualification.mjs</c>: reads the security, quality, security
+/// the former <c>record-nightly-qualification.mjs</c> script: reads the security, quality, security
 /// history and extended dynamic security summaries (<see cref="NightlyQualificationSummaries"/>),
 /// refuses one that names another commit, and writes the schema 1 qualification byte for byte as the
 /// script does (<see cref="JsJson.StringifyIndented"/> plus a line feed, its directory created), with
@@ -92,7 +92,10 @@ public sealed partial class RecordNightlyQualificationFunction : IPipelineFuncti
 
         var output = Path.GetFullPath(Path.Combine(workspace, outputPath));
         Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-        await File.WriteAllBytesAsync(output, Utf8.GetBytes(JsJson.StringifyIndented(qualification) + "\n"), cancellationToken).ConfigureAwait(false);
+        // Written as text with the BOM-less encoding (the same bytes as Utf8.GetBytes): handing File.WriteAllBytesAsync
+        // the result of Utf8.GetBytes(JsJson...) made the CA5390/CA5403 data-flow analyzers walk into the JSON
+        // serializer and take over two minutes per compilation (measured with -p:ReportAnalyzer=true).
+        await File.WriteAllTextAsync(output, JsJson.StringifyIndented(qualification) + "\n", Utf8, cancellationToken).ConfigureAwait(false);
         await context.Log(Summary(qualification)).ConfigureAwait(false);
         return PipelineFunctionResult.Success();
     }

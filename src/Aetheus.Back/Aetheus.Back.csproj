@@ -86,26 +86,14 @@
     <EmbeddedResource Include="..\..\deploy\pipelines\toto-*.yaml">
       <LogicalName>TotoConformance/Pipelines/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\generate-delivery-contract.mjs">
-      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\verify-delivery-promotion.mjs">
-      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\resolve-injected-nuget-packages.mjs">
-      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\generate-artifact-provenance.mjs">
-      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\generate-candidate-assurance-contract.mjs">
-      <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\deploy\scripts\verify-candidate-assurance-contract.mjs">
+    <EmbeddedResource Include="..\..\deploy\pipelines\toto-conformance-fixture\common\deploy\scripts\*.mjs">
       <LogicalName>TotoConformance/Templates/common/deploy/scripts/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\deploy\pipeline-templates\*.yaml">
       <LogicalName>DeliveryPipelineTemplates/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\deploy\config-templates\apache\*.conf">
+      <LogicalName>ProjectConfigTemplates/apache/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\..\deploy\pipeline-templates\generic\*.yaml">
       <LogicalName>DeliveryPipelineTemplates/generic/%(Filename)%(Extension)</LogicalName>

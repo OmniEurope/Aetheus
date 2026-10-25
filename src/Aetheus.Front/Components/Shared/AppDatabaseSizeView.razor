@@ -18,30 +18,24 @@ else
 {
     @* The same OE key-figure tiles as the Performance tab: half the row from the small breakpoint, a third
        from the large one, one per line on a phone. *@
-    <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
-            <OmniStatTile Class="app-performance-tile" Value="@TotalText" Label="@L["AppDatabaseTotal"]" Detail="@TotalTrendText" data-testid="app-database-total" />
-        </OmniColumn>
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
-            <OmniStatTile Class="app-performance-tile" Value="@LargestSizeText" Label="@L["AppDatabaseLargestTable"]" Detail="@LargestNameText" data-testid="app-database-largest" />
-        </OmniColumn>
-        <OmniColumn Span="12" SmallSpan="6" LargeSpan="4">
-            <OmniStatTile Class="app-performance-tile" Value="@MeasuredAtText" Label="@L["AppDatabaseMeasuredAt"]" Detail="@DatabaseNameText" data-testid="app-database-measured" />
-        </OmniColumn>
-    </OmniRow>
+    <OmniTileGrid Columns="3" Class="omni-u-mb-md">
+        <OmniStatTile Class="app-performance-tile" Value="@TotalText" Title="@L["AppDatabaseTotal"]" Detail="@TotalTrendText" data-testid="app-database-total" />
+        <OmniStatTile Class="app-performance-tile" Value="@LargestSizeText" Title="@L["AppDatabaseLargestTable"]" Detail="@LargestNameText" data-testid="app-database-largest" />
+        <OmniStatTile Class="app-performance-tile" Value="@MeasuredAtText" Title="@L["AppDatabaseMeasuredAt"]" Detail="@DatabaseNameText" data-testid="app-database-measured" />
+    </OmniTileGrid>
 
     <AetheusDataGrid Data="@_report.Tables" TItem="AppDatabaseTableSizeDto" KeyProperty="" Virtualize="true" EmptyText="@L["AppDatabaseNoTables"]" class="omni-u-mb-lg">
         <Columns>
-            <OmniDataGridColumn Frozen="true" TItem="AppDatabaseTableSizeDto" Property="Name" Title="@L["AppDatabaseTable"]" MinWidth="14rem" Filterable="true">
+            <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="AppDatabaseTableSizeDto" Property="Name" Title="@L["AppDatabaseTable"]" Filterable="true">
                 <Template Context="table"><code>@TableName(table)</code></Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytes" Title="@L["Size"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytes" Title="@L["Size"]" Width="8rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
                 <Template Context="table">@Bytes(table.TotalBytes)</Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="EstimatedRows" Title="@L["AppDatabaseRows"]" Width="9rem" TextAlign="OmniDataGridTextAlign.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="EstimatedRows" Title="@L["AppDatabaseRows"]" Width="9rem" TextAlign="OmniAlignment.End" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">
                 <Template Context="table">@Rows(table.EstimatedRows)</Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytesDayBefore" Title="@L["AppDatabaseTrend"]" Width="8rem" TextAlign="OmniDataGridTextAlign.End" Sortable="false" Filterable="false">
+            <OmniDataGridColumn TItem="AppDatabaseTableSizeDto" Property="TotalBytesDayBefore" Title="@L["AppDatabaseTrend"]" Width="8rem" TextAlign="OmniAlignment.End" Sortable="false" Filterable="false">
                 <Template Context="table"><span data-testid="app-database-trend">@Trend(table.TotalBytes, table.TotalBytesDayBefore)</span></Template>
             </OmniDataGridColumn>
         </Columns>

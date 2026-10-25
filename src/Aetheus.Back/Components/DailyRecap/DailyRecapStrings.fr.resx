@@ -6,8 +6,7 @@
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="Subject" xml:space="preserve"><value>Récapitulatif quotidien Aetheus - {0}</value></data>
   <data name="Heading" xml:space="preserve"><value>Ce qui s'est passé le {0}</value></data>
-  <data name="Intro" xml:space="preserve"><value>Journée de 00:00 à 24:00 ({0}). Généré le {1}.</value></data>
-  <data name="Footer" xml:space="preserve"><value>Envoyé par Aetheus depuis son adresse no-reply. Destinataires, rubriques et heure d'envoi se règlent dans Administration &gt; Paramètres de la plateforme &gt; Récapitulatif quotidien.</value></data>
+  <data name="Footer" xml:space="preserve"><value>Envoyé par Aetheus</value></data>
   <data name="LabelSeparator" xml:space="preserve"><value> :</value></data>
   <data name="TileRunsSucceeded" xml:space="preserve"><value>exécutions de pipeline réussies</value></data>
   <data name="TileRunsFailed" xml:space="preserve"><value>exécutions de pipeline en échec</value></data>
@@ -23,13 +22,12 @@
   <data name="RunRolledBack" xml:space="preserve"><value>Restauré</value></data>
   <data name="RunRejected" xml:space="preserve"><value>Rejeté</value></data>
   <data name="PipelinesTitle" xml:space="preserve"><value>Pipelines</value></data>
-  <data name="PipelinesSummary" xml:space="preserve"><value>{0} exécutions terminées : {1} réussies, {2} en échec, {3} autres.</value></data>
-  <data name="PipelinesParentsOnly" xml:space="preserve"><value>Pipelines parents uniquement : un pipeline enfant lancé par un autre n'est pas listé, son résultat fait partie du statut de son parent.</value></data>
+  <data name="PipelinesSummary" xml:space="preserve"><value>{0} exécutions terminées : {1}, {2}, {3}.</value></data>
   <data name="PipelinesTruncated" xml:space="preserve"><value>Seules les {0} premières exécutions de la journée sont listées.</value></data>
   <data name="FinishedAt" xml:space="preserve"><value>Terminé à</value></data>
   <data name="RunNumber" xml:space="preserve"><value>exécution n° {0} à {1}</value></data>
   <data name="ServersTitle" xml:space="preserve"><value>Serveurs</value></data>
-  <data name="ServersSummary" xml:space="preserve"><value>{0} serveurs, dont {1} demandent de l'attention.</value></data>
+  <data name="ServersSummary" xml:space="preserve"><value>{0} serveurs, {1}.</value></data>
   <data name="LastSeen" xml:space="preserve"><value>dernier signal {0}</value></data>
   <data name="ServerOnline" xml:space="preserve"><value>En ligne</value></data>
   <data name="ServerOffline" xml:space="preserve"><value>Hors ligne</value></data>
@@ -60,22 +58,30 @@
   <data name="ReleaseRolledBack" xml:space="preserve"><value>Retour arrière</value></data>
   <data name="At" xml:space="preserve"><value>À</value></data>
   <data name="BackupsTitle" xml:space="preserve"><value>Sauvegardes</value></data>
-  <data name="BackupsSummary" xml:space="preserve"><value>{0} sauvegardes terminées : {1} réussies, {2} en échec.</value></data>
+  <data name="BackupsSummary" xml:space="preserve"><value>{0} sauvegardes terminées : {1}, {2}.</value></data>
   <data name="BackupWhere" xml:space="preserve"><value>{0} sur {1}</value></data>
   <data name="BackupSucceeded" xml:space="preserve"><value>Réussie</value></data>
   <data name="BackupFailed" xml:space="preserve"><value>Échec</value></data>
   <data name="Reason" xml:space="preserve"><value>Raison</value></data>
   <data name="CertificatesTitle" xml:space="preserve"><value>Certificats</value></data>
-  <data name="CertificatesSummary" xml:space="preserve"><value>{0} certificats expirent dans les {1} jours.</value></data>
+  <data name="CertificatesSummary" xml:space="preserve"><value>{0} certificats expirent dans {1}.</value></data>
   <data name="SecretsTitle" xml:space="preserve"><value>Secrets des coffres</value></data>
-  <data name="SecretsSummary" xml:space="preserve"><value>{0} secrets de coffre expirent dans les {1} jours.</value></data>
+  <data name="SecretsSummary" xml:space="preserve"><value>{0} secrets de coffre expirent dans {1}.</value></data>
   <data name="Expired" xml:space="preserve"><value>Expiré</value></data>
   <data name="ExpiresInDays" xml:space="preserve"><value>Dans {0} jours</value></data>
   <data name="ExpiresOn" xml:space="preserve"><value>Expire le</value></data>
   <data name="FindingsTitle" xml:space="preserve"><value>Constats de sécurité et de qualité</value></data>
-  <data name="FindingsSummary" xml:space="preserve"><value>{0} nouveaux constats, {1} résolus.</value></data>
-  <data name="FindingsNewTitle" xml:space="preserve"><value>Nouveaux constats par gravité</value></data>
-  <data name="FindingsNewCount" xml:space="preserve"><value>{0} nouveaux</value></data>
+  <data name="FindingsSummary" xml:space="preserve"><value>{0}, {1}.</value></data>
+  <data name="FindingsNewWithSeverities" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="FindingsCountCritical" xml:space="preserve"><value>{0} critiques</value></data>
+  <data name="FindingsCountCriticalOne" xml:space="preserve"><value>{0} critique</value></data>
+  <data name="FindingsCountHigh" xml:space="preserve"><value>{0} élevés</value></data>
+  <data name="FindingsCountHighOne" xml:space="preserve"><value>{0} élevé</value></data>
+  <data name="FindingsCountMedium" xml:space="preserve"><value>{0} moyens</value></data>
+  <data name="FindingsCountMediumOne" xml:space="preserve"><value>{0} moyen</value></data>
+  <data name="FindingsCountLow" xml:space="preserve"><value>{0} faibles</value></data>
+  <data name="FindingsCountLowOne" xml:space="preserve"><value>{0} faible</value></data>
+  <data name="FindingsCountInfo" xml:space="preserve"><value>{0} info</value></data>
   <data name="SeverityNone" xml:space="preserve"><value>Aucune</value></data>
   <data name="SeverityInfo" xml:space="preserve"><value>Info</value></data>
   <data name="SeverityLow" xml:space="preserve"><value>Faible</value></data>
@@ -97,4 +103,32 @@
   <data name="EmailLabel" xml:space="preserve"><value>Votre panorama quotidien</value></data>
   <data name="RunLink" xml:space="preserve"><value>Voir l’exécution et les journaux</value></data>
   <data name="ServerLink" xml:space="preserve"><value>Voir le serveur</value></data>
+  <data name="FindingsLink" xml:space="preserve"><value>Voir les constats</value></data>
+  <data name="TileRunsSucceededOne" xml:space="preserve"><value>exécution de pipeline réussie</value></data>
+  <data name="TileRunsFailedOne" xml:space="preserve"><value>exécution de pipeline en échec</value></data>
+  <data name="TileServersOnlineOne" xml:space="preserve"><value>serveur en ligne</value></data>
+  <data name="PipelinesSummaryOne" xml:space="preserve"><value>{0} exécution terminée : {1}, {2}, {3}.</value></data>
+  <data name="PipelinesSucceededCount" xml:space="preserve"><value>{0} réussies</value></data>
+  <data name="PipelinesSucceededCountOne" xml:space="preserve"><value>{0} réussie</value></data>
+  <data name="PipelinesFailedCount" xml:space="preserve"><value>{0} en échec</value></data>
+  <data name="PipelinesOtherCount" xml:space="preserve"><value>{0} autres</value></data>
+  <data name="PipelinesOtherCountOne" xml:space="preserve"><value>{0} autre</value></data>
+  <data name="ServersSummaryOne" xml:space="preserve"><value>{0} serveur, {1}.</value></data>
+  <data name="ServersAttentionCount" xml:space="preserve"><value>dont {0} demandent de l'attention</value></data>
+  <data name="ServersAttentionCountOne" xml:space="preserve"><value>dont {0} demande de l'attention</value></data>
+  <data name="BackupsSummaryOne" xml:space="preserve"><value>{0} sauvegarde terminée : {1}, {2}.</value></data>
+  <data name="BackupsSucceededCount" xml:space="preserve"><value>{0} réussies</value></data>
+  <data name="BackupsSucceededCountOne" xml:space="preserve"><value>{0} réussie</value></data>
+  <data name="BackupsFailedCount" xml:space="preserve"><value>{0} en échec</value></data>
+  <data name="CertificatesSummaryOne" xml:space="preserve"><value>{0} certificat expire dans {1}.</value></data>
+  <data name="SecretsSummaryOne" xml:space="preserve"><value>{0} secret de coffre expire dans {1}.</value></data>
+  <data name="DaysCount" xml:space="preserve"><value>{0} jours</value></data>
+  <data name="DaysCountOne" xml:space="preserve"><value>{0} jour</value></data>
+  <data name="ExpiresInDaysOne" xml:space="preserve"><value>Dans {0} jour</value></data>
+  <data name="FindingsNewTotal" xml:space="preserve"><value>{0} nouveaux constats</value></data>
+  <data name="FindingsNewTotalOne" xml:space="preserve"><value>{0} nouveau constat</value></data>
+  <data name="FindingsResolvedCount" xml:space="preserve"><value>{0} résolus</value></data>
+  <data name="FindingsResolvedCountOne" xml:space="preserve"><value>{0} résolu</value></data>
+  <data name="MailQueueCountOne" xml:space="preserve"><value>{0} message</value></data>
+  <data name="DiskFreeOne" xml:space="preserve"><value>{0} Go libre sur {1} Go ({2} % libre)</value></data>
 </root>

@@ -1,8 +1,28 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @if (AgentServer is { } agentServer)
 {
     <AgentOfflineNotice Server="@agentServer" />
 }
+
+@* Recette R-29: the page's main action sits in the page header, on the title line, with its menu beside it. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    @if (!Ps.IsInstalled)
+    {
+        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["PortsentrySetup"]</span></ChildContent></OmniButton>
+    }
+    else
+    {
+        @* Recette R3-41: Restart is the zone's one visible action; Start, Stop and the logs sit in the
+           "More actions" menu. *@
+        <OmniButton Disabled="@(AgentOffline || _actionRunning)" Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@_actionRunning"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Restart"]</span></ChildContent></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]">
+            <OmniMenuItem Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Start))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Tone="OmniTone.Danger" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    }
+</SectionContent>
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
@@ -20,23 +40,6 @@
         }
         <OmniBadge Fill="OmniFill.Solid" Tone="@GetBlockedCountBadgeStyle(Ps.BlockedCount)">@($"{Ps.BlockedCount} {L["BlockedIps"]}")</OmniBadge>
     }
-    <div class="blade-content-spacer"></div>
-
-    @if (!Ps.IsInstalled)
-    {
-        <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Primary" OnClick="@OpenSetupDialogAsync"><OmniIcon Name="OmniIconName.RocketLaunch" /> <span>@L["PortsentrySetup"]</span></OmniButton>
-    }
-    else
-    {
-        @* Recette R3-41: Restart is the zone's one visible action; Start, Stop and the logs sit in the
-           "More actions" menu. *@
-        <OmniButton Disabled="@(AgentOffline || _actionRunning)" Variant="OmniButtonVariant.Primary" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Restart))" Class="@(_actionRunning ? "btn-busy" : null)" Busy="@_actionRunning"><OmniIcon Name="OmniIconName.Refresh" /> <span>@L["Restart"]</span></OmniButton>
-        <OmniOverflowMenu Label="@L["MoreActions"]">
-            <OmniMenuItem Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Start))"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent>@L["Start"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem Tone="OmniTone.Danger" Disabled="@(AgentOffline || _actionRunning)" OnClick="@(() => ExecuteActionAsync(PortsentryAction.Stop))"><Icon><OmniIcon Name="OmniIconName.Stop" /></Icon><ChildContent>@L["Stop"]</ChildContent></OmniMenuItem>
-            <OmniMenuItem Disabled="@AgentOffline" OnClick="@GetLogsAsync"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>@L["ViewLogs"]</ChildContent></OmniMenuItem>
-        </OmniOverflowMenu>
-    }
 </OmniRow>
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="PortSentry" />
@@ -47,7 +50,7 @@
         <Tabs>
             @* --- Blocked IPs tab --- *@
             <OmniTabsItem Key="blocked" Title="@L["BlockedIps"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("block"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                     <CountBadge Value="@_blockedCount" Variant="@GetBlockedCountBadgeStyle(_blockedCount)" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_blockedGrid" Data="@_blockedIps" Count="@_blockedCount"
@@ -64,10 +67,10 @@
                                     @(b.BlockedAt == default ? "-" : b.BlockedAt.ToString("g"))
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Property="Reason" Title="@L["Reason"]" Filterable="true" />
-                            <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Title="" Width="80px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
+                            <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Property="Reason" Truncate="true" Title="@L["Reason"]" Filterable="true" />
+                            <OmniDataGridColumn TItem="PortsentryBlockedIpDto" Title="" Width="80px" TextAlign="OmniAlignment.End" Filterable="false" >
                                 <Template Context="b">
-                                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => UnblockIpAsync(b.IpAddress))" title="@L["Unblock"]"><OmniIcon Name="OmniIconName.LockOpen" /></OmniButton>
+                                    <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@AgentOffline" OnClick="@(() => UnblockIpAsync(b.IpAddress))" title="@L["Unblock"]"><Icon><OmniIcon Name="OmniIconName.LockOpen" /></Icon></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                     </Columns>
@@ -85,7 +88,7 @@
                         <OmniLabel For="WlDesc">@L["Description"]</OmniLabel>
                         <OmniTextBox @bind-Value="_whitelistDesc" Id="WlDesc" Placeholder="@L["WhitelistDescription"]" Class="w-rem-15-625" />
                     </div>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddWhitelistIpAsync"><OmniIcon Name="OmniIconName.Add" /> <span>@L["Add"]</span></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddWhitelistIpAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
                 </OmniRow>
                 <AetheusDataGrid FullHeight="true" @ref="_whitelistGrid" Data="@_whitelist" Count="@_whitelistCount"
                     TItem="PortsentryWhitelistIpDto" IsLoading="@_whitelistLoading" LoadData="@LoadWhitelistAsync" ExportRead="@ReadWhitelistExportAsync" ExportName="@L["Whitelist"]"
@@ -94,15 +97,15 @@
                     VirtualData="@(() => new OmniDataGridResult<PortsentryWhitelistIpDto>(_whitelist, _whitelistCount))">
                     <Columns>
                             <OmniDataGridColumn Frozen="true" TItem="PortsentryWhitelistIpDto" Property="IpAddress" Title="@L["IpAddress"]" Width="180px" Filterable="true" />
-                            <OmniDataGridColumn TItem="PortsentryWhitelistIpDto" Property="Description" Title="@L["Description"]" Filterable="true" />
+                            <OmniDataGridColumn TItem="PortsentryWhitelistIpDto" Property="Description" Truncate="true" Title="@L["Description"]" Filterable="true" />
                             <OmniDataGridColumn TItem="PortsentryWhitelistIpDto" Property="CreatedAt" Title="@L["CreatedAt"]" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" >
                                 <Template Context="w">
                                     @w.CreatedAt.ToString("g")
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PortsentryWhitelistIpDto" Title="" Width="80px" TextAlign="OmniDataGridTextAlign.End" Filterable="false" >
+                            <OmniDataGridColumn TItem="PortsentryWhitelistIpDto" Title="" Width="80px" TextAlign="OmniAlignment.End" Filterable="false" >
                                 <Template Context="w">
-                                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RemoveWhitelistIpAsync(w))" title="@L["Delete"]"><OmniIcon Name="OmniIconName.Delete" /></OmniButton>
+                                    <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RemoveWhitelistIpAsync(w))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                                 </Template>
                             </OmniDataGridColumn>
                     </Columns>

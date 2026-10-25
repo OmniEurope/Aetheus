@@ -2,16 +2,16 @@
 @using Microsoft.AspNetCore.Components.Sections
 @* The header offers reinstallation for any existing mail stack, including partial setup, beside
    other mail actions. Purge results remain visible after the stack is removed. *@
-<SectionContent SectionName="@PipelinesList.HeaderActionsSection">
+<SectionContent SectionName="@PageHeaderActions.SectionName">
     @if (StackDetected && _taskId is null)
     {
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@PurgeAsync" Busy="@Running" Disabled="@(!CanPurge)" Class="mail-reinstall-button" title="@(DisabledReason ?? L["MailReinstall"].Value)"><OmniIcon Name="OmniIconName.Delete" /> <span>@L["MailReinstallAction"]</span></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@PurgeAsync" Busy="@Running" Disabled="@(!CanPurge)" Class="mail-reinstall-button" title="@(DisabledReason ?? L["MailReinstall"].Value)"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["MailReinstallAction"]</span></ChildContent></OmniButton>
         <SectionOutlet SectionName="@HeaderMenuSection" />
     }
 </SectionContent>
 @if (_taskId is not null || _outcome is not null)
 {
-    <OmniStack Gap="OmniSpacing.Small" Class="omni-u-mb-lg mail-reinstall">
+    <OmniStack Class="omni-u-mb-lg mail-reinstall">
         @* During erasure, one progress banner replaces actions and status content; the result
            occupies that position at completion. *@
         @if (_taskId is not null)

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Components.Git.Events;
+
 namespace Aetheus.Back.Components.Git;
 
 public interface IGitSmartHttpService

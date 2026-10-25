@@ -5,11 +5,15 @@ namespace Aetheus.Back.Components.Notifications.MailTemplates;
 
 public sealed class MailTemplateRenderer(IMailTemplateRepository repository, ILogger<MailTemplateRenderer> logger) : IMailTemplateRenderer
 {
-    public async Task<MailRecipientStyle> ResolveRecipientAsync(string? email, CancellationToken ct = default)
+    public Task<MailRecipientStyle> ResolveRecipientAsync(string? email, CancellationToken ct = default) =>
+        ResolveRecipientAsync(email, MailTemplateLanguages.English, ct);
+
+    public async Task<MailRecipientStyle> ResolveRecipientAsync(string? email, string defaultLanguage, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(email)) return MailRecipientStyle.Default;
+        var fallback = MailTemplateLanguages.Normalize(defaultLanguage);
+        if (string.IsNullOrWhiteSpace(email)) return MailRecipientStyle.Default with { Language = fallback };
         var (language, appearance) = await repository.FindRecipientPreferencesAsync(email, ct).ConfigureAwait(false);
-        return MailRecipientStyle.FromPreferences(language, appearance);
+        return MailRecipientStyle.FromPreferences(language, appearance, fallback);
     }
 
     public async Task<OmniMailRenderResult> RenderAsync(

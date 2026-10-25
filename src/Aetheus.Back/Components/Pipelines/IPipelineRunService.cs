@@ -154,6 +154,14 @@ public interface IPipelineRunService
     /// <summary>Applies a refused or expired approval; see <see cref="IPipelineRunControlService.ApplyRefusalAsync"/>.</summary>
     Task<PipelineStatus?> ApplyRefusalAsync(int runId, CancellationToken ct = default);
 
+    /// <summary>R-39: resumes a run waiting after a missed confirmation; see
+    /// <see cref="IPipelineRunControlService.ResumeAwaitingRunAsync"/>.</summary>
+    Task ResumeAwaitingRunAsync(int runId, string? by, CancellationToken ct = default);
+
+    /// <summary>R-39: ends a run whose wait for a resume elapsed; see
+    /// <see cref="IPipelineRunControlService.CloseExpiredResumeWaitAsync"/>.</summary>
+    Task<bool> CloseExpiredResumeWaitAsync(int runId, CancellationToken ct = default);
+
     /// <summary>Re-runs ONLY the failed steps of a previously-failed run (resets them to Pending and
     /// re-schedules), instead of starting a whole new run. Returns the updated run, or null if the
     /// run is not found, not in a Failed state, or has no failed steps to retry.</summary>

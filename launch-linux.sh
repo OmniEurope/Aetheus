@@ -316,7 +316,7 @@ deploy_agent_remote() {
 
     local ROOT_DIR
     ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local INSTALL_SCRIPT="$ROOT_DIR/deploy/scripts/install-agent-linux.sh"
+    local INSTALL_SCRIPT="$ROOT_DIR/deploy/agent-installer/install-agent-linux.sh"
     local PUBLISH_DIR="$ROOT_DIR/publish/agent"
     # Shared with deploy.sh. Override with DEPLOY_ENV_FILE=/path/to/.env-prod
     local ENV_FILE="${DEPLOY_ENV_FILE:-$ROOT_DIR/.env-prod}"
@@ -754,7 +754,7 @@ invoke_test_run() {
 }
 
 invoke_node_test_run() {
-    # PLAN-002 lot 9.T: the JavaScript suites (deploy/scripts/*.test.mjs, tests/js/*) run in the CI and
+    # PLAN-002 lot 9.T: the JavaScript suites (tests/js/*) run in the CI and
     # quality pipelines. Runs `node --test` with the TAP reporter over the given files (relative to the
     # repository root) and reads its final counters. A skipped test fails the run, like the quality
     # stage that demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
@@ -820,7 +820,7 @@ invoke_coverage_report() {
         return 1
     fi
     # coverlet.MTP stamps its reports; give them the coverage.cobertura.xml layout the CI readers use.
-    sh "$ROOT/deploy/scripts/normalize-coverage-report.sh" "$COVERAGE_DIR" >/dev/null || return 1
+    sh "$ROOT/scripts/normalize-coverage-report.sh" "$COVERAGE_DIR" >/dev/null || return 1
     local xml_files
     mapfile -t xml_files < <(find "$COVERAGE_DIR" -type f -name "coverage.cobertura.xml" -print 2>/dev/null | sort)
     if [[ ${#xml_files[@]} -ne 3 ]]; then
@@ -1133,7 +1133,7 @@ if [[ $TEST_BACK -eq 1 || $TEST_FRONT -eq 1 || $TEST_AGENT -eq 1 || $TEST_ANALYZ
     # PLAN-002 lot 9.T: the JavaScript suites belong to the unit set (-t, hence -ta), with the same
     # file sets as the `Compile` step of aetheus-ci and the JavaScript stages of aetheus-quality.
     if [[ $TEST_UNIT -eq 1 ]]; then
-        for js_suite in "JS deploy-scripts|deploy/scripts|*.test.mjs" "JS tests|tests/js|*.test.cjs *.test.mjs"; do
+        for js_suite in "JS deploy-scripts|tests/js/deploy|*.test.mjs" "JS tests|tests/js|*.test.cjs *.test.mjs"; do
             IFS='|' read -r js_label js_dir js_patterns <<<"$js_suite"
             js_files=()
             for js_pattern in $js_patterns; do

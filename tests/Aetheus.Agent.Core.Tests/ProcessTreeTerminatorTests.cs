@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.ComponentModel;
 using System.Diagnostics;
-using Aetheus.Agent.Core.Operations;
+using Aetheus.Agent.Core.Services;
 using Aetheus.Tests.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

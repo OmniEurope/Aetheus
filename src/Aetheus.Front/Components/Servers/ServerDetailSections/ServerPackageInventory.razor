@@ -8,7 +8,7 @@
 {
     <OmniCard Class="@(Busy ? "omni-u-mb-lg server-package-inventory omni-busy" : "omni-u-mb-lg server-package-inventory")" aria-busy="@(Busy ? "true" : "false")">
         <OmniStack Gap="OmniSpacing.Medium">
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["InstalledPackagesTitle"]
                     <OmniTooltip Text="@L["InstalledPackagesReadOnlyHelp"]" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
                         <span role="img" aria-label="@L["InstalledPackagesReadOnlyHelp"]" class="package-inventory-help"><OmniIcon Name="OmniIconName.Question" aria-hidden="true" /></span>
@@ -21,7 +21,7 @@
                 @if (AgentCanList)
                 {
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ListAsync" Disabled="@AgentOffline" Busy="@Busy" Class="package-inventory-load">
-                        <OmniIcon Name="OmniIconName.ListChecks" /> <span>@L[_report is null ? "InstalledPackagesLoad" : "InstalledPackagesReload"]</span>
+                        <Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent><span>@L[_report is null ? "InstalledPackagesLoad" : "InstalledPackagesReload"]</span></ChildContent>
                     </OmniButton>
                 }
             </OmniStack>

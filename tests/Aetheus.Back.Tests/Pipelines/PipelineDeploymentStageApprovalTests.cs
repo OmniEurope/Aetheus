@@ -183,7 +183,7 @@ public class PipelineDeploymentStageApprovalTests
         repo.TryTransitionPipelineRunStatusAsync(
             RunId, PipelineStatus.WaitingForApproval, PipelineStatus.Failed, Arg.Any<CancellationToken>()).Returns(true);
         var control = new PipelineRunControlService(
-            repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>());
+            repo, Substitute.For<IHubContext<PipelineHub>>(), Substitute.For<IPipelineRunDefinitionParser>(), Substitute.For<Aetheus.Back.Components.Audit.IAuditService>(), TimeProvider.System);
 
         var outcome = await control.ApplyRefusalAsync(
             RunId, scheduler, Substitute.For<IPipelineChildRunLauncher>(), CancellationToken.None);
@@ -212,9 +212,9 @@ public class PipelineDeploymentStageApprovalTests
             Repo.HasActiveArtifactCollectionAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
             // The workspace is prepared: a stage with steps waits for System:Prepare otherwise.
             Repo.GetCompletedStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-                .Returns([PipelineRunService.SystemPrepareStage]);
+                .Returns([PipelineRunHelpers.SystemPrepareStage]);
             Repo.GetTerminalStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-                .Returns([PipelineRunService.SystemPrepareStage]);
+                .Returns([PipelineRunHelpers.SystemPrepareStage]);
             Repo.HasAnyFailedStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
             Repo.HasAnyRunningStepInRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(false);
             Repo.GetActiveStageNamesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);

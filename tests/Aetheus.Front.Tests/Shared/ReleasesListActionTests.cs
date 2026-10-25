@@ -77,7 +77,7 @@ public sealed class ReleasesListActionTests : BunitContext
         Render(builder =>
         {
             builder.OpenComponent<SectionOutlet>(0);
-            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PipelinesList.HeaderActionsSection);
+            builder.AddAttribute(1, nameof(SectionOutlet.SectionName), PageHeaderActions.SectionName);
             builder.CloseComponent();
             builder.OpenComponent<ReleasesList>(2);
             builder.AddAttribute(3, nameof(ReleasesList.ProjectId), (int?)projectId);

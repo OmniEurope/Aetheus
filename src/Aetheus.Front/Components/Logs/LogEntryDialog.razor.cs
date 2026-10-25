@@ -33,5 +33,9 @@ public partial class LogEntryDialog : ComponentBase
         return Clipboard.CopyAsync(text, L["MessageCopied"]);
     }
 
+    /// <summary>R-39: the message and its exception as Markdown, to the clipboard only (no file).</summary>
+    private Task CopyMarkdownAsync() => Clipboard.CopyAsync(
+        ErrorDetailMarkdown.ForLogEntry(Message, Exception, DetailsTitle ?? L["ExceptionDetails"], key => L[key]), L["MessageCopied"]);
+
     private void Close() => Dialog.Close();
 }

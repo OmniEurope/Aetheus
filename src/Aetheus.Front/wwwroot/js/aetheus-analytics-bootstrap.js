@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 const configurationEndpoint = "/aetheus-analytics/v1/configuration";
-const analyticsModule = "/_content/Aetheus.WebAnalytics/1.1.0/aetheus-web-analytics.js";
+const analyticsModule = "/_content/Aetheus.WebAnalytics/1.1.1/aetheus-web-analytics.js";
 
 // Measures only known routes, replacing dynamic segments before they leave the browser. Sign-in
 // pages are excluded to avoid counting one person both anonymously and as an authenticated visitor.

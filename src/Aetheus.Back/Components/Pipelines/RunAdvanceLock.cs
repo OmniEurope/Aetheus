@@ -22,6 +22,9 @@ internal sealed class RunAdvanceLock
 
     private readonly Dictionary<int, Entry> _entries = new();
     private readonly object _gate = new();
+    private readonly Action<int, Entry> _releaseReference;
+
+    public RunAdvanceLock() => _releaseReference = ReleaseRef;
 
     internal sealed class Entry
     {
@@ -51,7 +54,7 @@ internal sealed class RunAdvanceLock
             ReleaseRef(runId, entry);
             throw;
         }
-        return new Releaser(this, runId, entry);
+        return new Releaser(_releaseReference, runId, entry);
     }
 
     private void ReleaseRef(int runId, Entry entry)
@@ -67,12 +70,14 @@ internal sealed class RunAdvanceLock
         }
     }
 
-    internal readonly struct Releaser(RunAdvanceLock owner, int runId, Entry entry) : IDisposable
+    /// <summary>Releases the run's slot. It reaches the lock only through the release delegate it is given, so
+    /// the lock and its releaser do not depend on each other.</summary>
+    internal readonly struct Releaser(Action<int, Entry> releaseReference, int runId, Entry entry) : IDisposable
     {
         public void Dispose()
         {
             entry.Semaphore.Release();
-            owner.ReleaseRef(runId, entry);
+            releaseReference(runId, entry);
         }
     }
 }

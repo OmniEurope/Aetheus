@@ -16,7 +16,7 @@ public sealed class ScannerProcessRunnerTests
     [InlineData("100%|512KiB / 1GiB", 100, 524_288)]
     public void TryParseUsage_ParsesDockerStats(string value, double expectedCpu, long expectedMemory)
     {
-        var parsed = ScannerProcessRunner.TryParseUsage(value, out var cpu, out var memory);
+        var parsed = DockerStatsParser.TryParseUsage(value, out var cpu, out var memory);
 
         Assert.True(parsed);
         Assert.Equal(expectedCpu, cpu);
@@ -29,7 +29,7 @@ public sealed class ScannerProcessRunnerTests
     [InlineData("12%|unknown")]
     public void TryParseUsage_RejectsInvalidDockerStats(string value)
     {
-        Assert.False(ScannerProcessRunner.TryParseUsage(value, out _, out _));
+        Assert.False(DockerStatsParser.TryParseUsage(value, out _, out _));
     }
 
     [Theory]
@@ -41,7 +41,7 @@ public sealed class ScannerProcessRunnerTests
     [InlineData("1 GiB", 1_073_741_824)]
     public void TryParseUsage_ConvertsEveryDockerSizeUnit(string memory, long expectedBytes)
     {
-        Assert.True(ScannerProcessRunner.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
+        Assert.True(DockerStatsParser.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
         Assert.Equal(expectedBytes, bytes);
     }
 
@@ -52,23 +52,23 @@ public sealed class ScannerProcessRunnerTests
     [InlineData("12")]
     public void TryParseUsage_RejectsUnknownUnitsAndMalformedAmounts(string memory)
     {
-        Assert.False(ScannerProcessRunner.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
+        Assert.False(DockerStatsParser.TryParseUsage($"1%|{memory} / 4GiB", out _, out var bytes));
         Assert.Equal(0, bytes);
     }
 
     [Fact]
     public void TryParseUsage_RejectsIncompleteIoColumns()
     {
-        Assert.False(ScannerProcessRunner.TryParseUsage(
+        Assert.False(DockerStatsParser.TryParseUsage(
             "1%|1MiB / 2GiB|1MB|2MB / 3MB", out _, out _, out _, out _, out _, out _));
-        Assert.False(ScannerProcessRunner.TryParseUsage(
+        Assert.False(DockerStatsParser.TryParseUsage(
             "1%|1MiB / 2GiB|1MB / 2MB", out _, out _, out _, out _, out _, out _));
     }
 
     [Fact]
     public void TryParseUsage_ParsesCpuMemoryDiskAndNetwork()
     {
-        var parsed = ScannerProcessRunner.TryParseUsage(
+        var parsed = DockerStatsParser.TryParseUsage(
             "12.5%|64MiB / 2GiB|1.5MB / 2MiB|3kB / 4KiB",
             out var cpu,
             out var memory,

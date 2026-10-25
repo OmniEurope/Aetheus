@@ -18,13 +18,13 @@
             <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"v{_template.Version}")</OmniBadge>
         }
     </Badges>
-    <Actions>
+    <ActionsContent>
         @if (_template is not null)
         {
             @* STD-BTN detection 11: Use template visible, the other actions in the menu. *@
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UseTemplate"><OmniIcon Name="OmniIconName.Add" /> <span>@L["UseTemplate"]</span></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@UseTemplate"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["UseTemplate"]</span></ChildContent></OmniButton>
         }
-    </Actions>
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_loading)
@@ -84,9 +84,9 @@ else
             </ChildContent></OmniFieldset>
         }
 
-        <OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><OmniIcon Name="OmniIconName.Close" /> <span>@L["Cancel"]</span></OmniButton>
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["Save"]</span></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniTemplateForm>
 }

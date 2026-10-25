@@ -12,14 +12,13 @@
 @foreach (var group in Groups)
 {
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L[group.TitleKey]</OmniHeading>
-    <div class="admin-tile-grid">
+    @* R1-20: OE navigation tiles in an OE tile grid (same size, the whole tile one link). *@
+    <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="admin-tile-grid">
         @foreach (var tile in group.Tiles)
         {
-            <a href="@tile.Href" class="admin-tile-link">
-                <OmniSettingsTile Title="@L[tile.TitleKey]" Description="@L[tile.DescriptionKey]">
-                    <Icon><OmniIcon Name="@MaterialIconMap.Resolve(tile.Icon)" /></Icon>
-                </OmniSettingsTile>
-            </a>
+            <OmniNavTile Href="@tile.Href" Title="@L[tile.TitleKey]" Description="@L[tile.DescriptionKey]">
+                <Icon><OmniIcon Name="@MaterialIconMap.Resolve(tile.Icon)" /></Icon>
+            </OmniNavTile>
         }
-    </div>
+    </OmniTileGrid>
 }

@@ -384,7 +384,7 @@ public sealed class ContainerRunExecutor(
         string? hostDockerInternalAddress = null,
         IReadOnlyList<ContainerReadOnlyMount>? readOnlyMounts = null)
     {
-        if (!IsShellSafeScriptName(scriptName))
+        if (!ContainerWorkspaceMaterializer.IsShellSafeScriptName(scriptName))
             throw new ArgumentException("Container step script name is not a shell-safe token.", nameof(scriptName));
 
         var psi = new ProcessStartInfo
@@ -509,18 +509,13 @@ public sealed class ContainerRunExecutor(
     private static void AddResourceLimits(ICollection<string> arguments, ContainerSpec spec)
     {
         // S-UX-35: optional per-run resource ceilings (validated server-side before reaching here).
+        // R-6: low CPU weight so the production containers keep priority under contention.
+        arguments.Add("--cpu-shares"); arguments.Add(PipelineContainerCpuWeight.Shares);
         if (!string.IsNullOrWhiteSpace(spec.Memory)) { arguments.Add("--memory"); arguments.Add(spec.Memory); }
         if (!string.IsNullOrWhiteSpace(spec.Cpus)) { arguments.Add("--cpus"); arguments.Add(spec.Cpus); }
     }
 
     internal static string CreateScriptName() => $".prom-step-{Guid.NewGuid():N}.sh";
-
-    internal static bool IsShellSafeScriptName(string scriptName) =>
-        scriptName.StartsWith(".prom-step-", StringComparison.Ordinal)
-        && scriptName.EndsWith(".sh", StringComparison.Ordinal)
-        && scriptName.Length == 46
-        && scriptName.All(static character =>
-            char.IsAsciiLetterOrDigit(character) || character is '.' or '-');
 
     internal string ResolveHostWorkspace(
         ContainerSpec spec,

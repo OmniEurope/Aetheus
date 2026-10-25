@@ -99,6 +99,8 @@ public sealed class PreferenceUserChangeTests : BunitContext
         SeedAliceAndBob();
         var cut = RenderShell();
         cut.WaitForAssertion(() => Assert.Equal(OmniAppearance.Dark, Appearance.Appearance), Wait);
+        // R1-25: full width is the default, signed out as for a user who never chose.
+        Assert.True(Appearance.FullWidth);
         var preferences = Services.GetRequiredService<IUserPreferences>();
         await cut.InvokeAsync(() => preferences.SetAsync(PreferenceKeys.ProjectViewMode, "anonymous-view"));
         Assert.Empty(_server.Requests);
@@ -142,6 +144,7 @@ public sealed class PreferenceUserChangeTests : BunitContext
             // Bob never chose a look: the Aetheus default, not Alice's light compact one.
             Assert.Equal(OmniAppearance.Dark, Appearance.Appearance);
             Assert.Equal(OmniDensity.Comfortable, Appearance.Density);
+            Assert.True(Appearance.FullWidth);
         }, Wait);
         Assert.DoesNotContain("alice", cut.Markup, StringComparison.Ordinal);
         // No full-page reload: the shell restarted the session in place.
@@ -151,6 +154,35 @@ public sealed class PreferenceUserChangeTests : BunitContext
         Assert.Equal("\"bob-view\"", _server.Value(BobId, PreferenceKeys.ProjectViewMode));
         Assert.Contains("\"Dark\"", _server.Value(BobId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"Light\"", _server.Value(AliceId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>R1-25: an appearance saved before the width could be chosen has no such member and is
+    /// completed with full width (OE's own default is the centred column); a column the user chose
+    /// (fullWidth false) is left alone. Run through the production preference chain.</summary>
+    [Fact]
+    public async Task AnAppearanceSavedWithoutAWidth_GetsFullWidth_AndAChosenCentredColumnStays()
+    {
+        _storedToken = Token(AliceId, "alice");
+        await _auth.LoginAsync(_storedToken);
+        var cut = RenderShell();
+        cut.WaitForAssertion(() => Assert.True(Appearance.FullWidth), Wait);
+        var omni = Services.GetRequiredService<OmniPreferences>();
+        var migration = Services.GetRequiredService<Aetheus.Front.Components.Settings.LegacyAppearanceMigration>();
+
+        // Saved by a version that had no width: the member is absent, the state reads it as centred.
+        await cut.InvokeAsync(() => Appearance.SetFullWidthAsync(false));
+        await cut.InvokeAsync(() => omni.SetAsync(OmniAppearanceState.PreferenceKey, new { version = 1, appearance = "Light" }));
+        await cut.InvokeAsync(() => migration.RunAsync());
+
+        Assert.True(Appearance.FullWidth);
+        Assert.Contains("\"fullWidth\":true", _server.Value(AliceId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
+
+        // The user then chooses the centred column: the member is there, the migration keeps it.
+        await cut.InvokeAsync(() => Appearance.SetFullWidthAsync(false));
+        await cut.InvokeAsync(() => migration.RunAsync());
+
+        Assert.False(Appearance.FullWidth);
+        Assert.Contains("\"fullWidth\":false", _server.Value(AliceId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

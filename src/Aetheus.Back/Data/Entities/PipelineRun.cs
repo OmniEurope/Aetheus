@@ -99,6 +99,16 @@ public class PipelineRun
     /// </summary>
     public bool RunToEnd { get; set; }
 
+    /// <summary>
+    /// Recette R-39: the end of the wait for a resume. Set when a timed-out stage confirmation was rolled
+    /// back and the run entered <see cref="PipelineStatus.AwaitingResume"/>. A run has one window, counted
+    /// from its first missed confirmation: a resume keeps the date, and a later missed confirmation parks
+    /// the run again only until that same date. A date already past on a run that is no longer waiting
+    /// means the window closed: the run is not parked again and ends rolled back. Null on every run that
+    /// never waited. Only the runs in <see cref="PipelineStatus.AwaitingResume"/> expose it.
+    /// </summary>
+    public DateTime? ResumeDeadline { get; set; }
+
     // Navigation
     public Pipeline Pipeline { get; set; } = null!;
     public List<PipelineStepRun> StepRuns { get; set; } = [];

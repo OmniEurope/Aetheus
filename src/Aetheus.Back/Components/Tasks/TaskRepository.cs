@@ -119,6 +119,9 @@ public class TaskRepository(AppDbContext db, TimeProvider timeProvider) : ITaskR
             .ConfigureAwait(false);
     }
 
+    public Task<PendingHoldServerFacts?> GetPendingHoldFactsAsync(int serverId, CancellationToken ct = default) =>
+        PendingHoldFactsReader.ReadAsync(db, serverId, ct);
+
     public async Task<Dictionary<int, int>> GetServerIdsForTasksAsync(IReadOnlyCollection<int> taskIds, CancellationToken ct = default)
     {
         if (taskIds.Count == 0) return [];

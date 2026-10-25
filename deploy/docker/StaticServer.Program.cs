@@ -154,7 +154,7 @@ app.Use(async (context, next) =>
 // runtime files shipped by this image. Reusing it after a blue/green switch can
 // therefore point an existing browser at framework hashes that only existed in
 // the previous container. The HTML shell must never outlive the deployment that
-// produced it. The fingerprinted framework files are immutable; the other shipped
+// produced it, so it is revalidated on every use. The fingerprinted framework files are immutable; the other shipped
 // assets are revalidated through their ETag/Last-Modified headers (cheap 304s).
 app.Use(async (context, next) =>
 {
@@ -173,7 +173,16 @@ app.Use(async (context, next) =>
         // Appsettings.json is rewritten at every container start (API_BASE_URL, APP_VERSION), so,
         // like the HTML shell, it must never outlive the deployment that wrote it.
         var isRuntimeSettings = context.Request.Path.Equals("/appsettings.json", StringComparison.OrdinalIgnoreCase);
-        if (isHtml || isServiceWorker || isRuntimeSettings)
+        if (isHtml)
+        {
+            // The HTML shell is revalidated on every use (ETag/Last-Modified, cheap 304s) but not
+            // forbidden from storage: no-store would exclude the page from the browser's
+            // back/forward cache and reload the whole app on a Back after a pasted link.
+            context.Response.Headers.CacheControl = "no-cache";
+            context.Response.Headers.Remove("Pragma");
+            context.Response.Headers.Remove("Expires");
+        }
+        else if (isServiceWorker || isRuntimeSettings)
         {
             context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
             context.Response.Headers.Pragma = "no-cache";

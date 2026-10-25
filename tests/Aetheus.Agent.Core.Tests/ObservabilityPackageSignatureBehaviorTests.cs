@@ -278,7 +278,7 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
         public Task<ProcessResult> RunPromotionAsync(string scenario, string? legacySetVersion = null)
         {
             var startInfo = CreateStartInfo(Path.Combine(
-                FindRepoRoot(), "deploy", "scripts", "promote-observability-packages.sh"));
+                FindRepoRoot(), "src", "Aetheus.Agent.Core", "Harnesses", "promote-observability-packages.sh"));
             ConfigureCommonEnvironment(startInfo, scenario);
             if (legacySetVersion is not null)
                 startInfo.Environment["PACKAGE_VERSION"] = legacySetVersion;
@@ -294,7 +294,7 @@ public sealed class ObservabilityPackageSignatureBehaviorTests
         public Task<ProcessResult> RunPublicationAsync(string scenario, string? packageVersion = null)
         {
             var startInfo = CreateStartInfo(Path.Combine(
-                FindRepoRoot(), "deploy", "scripts", "publish-observability-package.sh"));
+                FindRepoRoot(), "src", "Aetheus.Agent.Core", "Harnesses", "publish-observability-package.sh"));
             startInfo.ArgumentList.Add("telemetry");
             ConfigureCommonEnvironment(startInfo, scenario);
             startInfo.Environment["PACKAGE_VERSION"] = packageVersion ?? TelemetryVersion;

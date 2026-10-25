@@ -9,6 +9,9 @@ internal static class PackageRegistryDefaults
     public const string NuGetContentType = "application/octet-stream";
     public const string NpmContentType = "application/octet-stream";
 
+    /// <summary>Text served in the npm `deprecated` field and the NuGet `deprecation` entry of a deprecated version.</summary>
+    public const string DeprecationMessage = "This version is deprecated.";
+
     public static long ResolveMaxPackageBytes(IConfiguration configuration)
         => Math.Clamp(
             configuration.GetValue("PackageRegistry:MaxPackageBytes", DefaultMaxPackageBytes),

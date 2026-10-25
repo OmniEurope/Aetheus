@@ -3,18 +3,6 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Aetheus.Shared.Components.Monitoring;
 
-public sealed record ServiceInfoDto
-{
-    [StringLength(200)]
-    public string Name { get; init; } = string.Empty;
-    public ServiceType Type { get; init; }
-    [StringLength(100)]
-    public string Status { get; init; } = string.Empty;
-    public bool IsRunning { get; init; }
-    public bool IsManageable { get; init; }
-    public bool IsInstalled { get; init; } = true;
-}
-
 public sealed record ServiceActionRequest
 {
     [Required]
@@ -98,8 +86,8 @@ public sealed record ServerMetricDto : StorageUsageDto
             CpuPercent = heartbeat.CpuPercent,
             MemoryUsedMb = heartbeat.MemoryUsedMb,
             MemoryTotalMb = heartbeat.MemoryTotalMb,
-            DiskUsedGb = heartbeat.Disks.Sum(d => d.UsedGb),
-            DiskTotalGb = heartbeat.Disks.Sum(d => d.TotalGb),
+            DiskUsedGb = DiskInfoDto.Totals(heartbeat.Disks).UsedGb,
+            DiskTotalGb = DiskInfoDto.Totals(heartbeat.Disks).TotalGb,
             InodeUsedPercent = DiskInfoDto.MaxInodeUsedPercent(heartbeat.Disks),
             ClockOffsetMs = clock?.OffsetMs,
             ClockOffsetUncertaintyMs = clock?.UncertaintyMs,

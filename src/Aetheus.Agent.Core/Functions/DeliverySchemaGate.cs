@@ -4,7 +4,7 @@ using System.Text;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The schema half of <c>deploy/scripts/verify-delivery-promotion.mjs</c>, in its order and with its
+/// The schema half of <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-delivery-promotion.mjs</c>, in its order and with its
 /// messages: the live production schema must be a state the candidate was proven against (before or
 /// after its migrations, an empty or identical database for a bootstrap), or the state of the release
 /// production runs when that release's own sealed contract proves the candidate is its predecessor

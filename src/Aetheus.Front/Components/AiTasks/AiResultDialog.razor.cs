@@ -86,7 +86,7 @@ public partial class AiResultDialog
     }
 
     private static string FormatDuration(long durationMs) =>
-        TimeSpan.FromMilliseconds(durationMs).ToString(@"mm\:ss");
+        DisplayFormatting.Duration(TimeSpan.FromMilliseconds(durationMs));
 
     private void Close() => Dialog.Close();
 

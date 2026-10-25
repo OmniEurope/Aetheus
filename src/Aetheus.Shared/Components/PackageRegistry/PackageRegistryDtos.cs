@@ -32,6 +32,7 @@ public sealed record PackageRegistryVersionDto
     public long SizeBytes { get; init; }
     public string Sha256 { get; init; } = string.Empty;
     public bool IsListed { get; init; }
+    public bool IsDeprecated { get; init; }
     public string PublishedBy { get; init; } = string.Empty;
     public DateTime CreatedAt { get; init; }
 }
@@ -39,4 +40,9 @@ public sealed record PackageRegistryVersionDto
 public sealed record UpdatePackageRegistryVersionRequest
 {
     public bool IsListed { get; init; }
+}
+
+public sealed record UpdatePackageRegistryVersionDeprecationRequest
+{
+    public bool IsDeprecated { get; init; }
 }

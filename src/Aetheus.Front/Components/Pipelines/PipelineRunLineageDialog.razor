@@ -5,10 +5,10 @@
     {
         <span class="run-tile-subrow">
             <a href="@PipelineRunPresentation.Href(child.RunId, child.ProjectId ?? ProjectId, ServerId)" class="pipeline-name-link run-tile-value run-lineage-child" title="@child.PipelineName">@child.PipelineName #@child.BuildNumber</a>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunPresentation.Badge(child.Status)">@L.Localize(child.Status)</OmniBadge>
+            <PipelineRunStatusBadge Status="child.Status" />
         </span>
     }
 </OmniStack>
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
     <Aetheus.Front.Components.Servers.DialogCloseButton />
 </OmniStack>

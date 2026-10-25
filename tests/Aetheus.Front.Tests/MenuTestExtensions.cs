@@ -29,10 +29,28 @@ internal static class MenuTestExtensions
         {
             if (cut.FindAll(".omni-overflow-menu__trigger")[index].HasAttribute("disabled")) continue;
             cut.FindAll(".omni-overflow-menu__trigger")[index].Click();
+            WaitForEntries(cut);
             if (Find() is { } item) return item;
             cut.FindAll(".omni-overflow-menu__trigger")[index].Click();
         }
 
         return null;
+    }
+
+    // The entries of a menu just opened may render after an asynchronous step of the menu (CI under load:
+    // the entry was still missing right after the click, BackupsRealtimeTests on candidate #2890). Waits
+    // until the opened menu lists entries at all, briefly, then lets the caller look for its label: a
+    // menu that lacks the label still answers null, without waiting for it.
+    private static void WaitForEntries<TComponent>(IRenderedComponent<TComponent> cut)
+        where TComponent : IComponent
+    {
+        try
+        {
+            cut.WaitForState(() => cut.FindAll(".omni-menu__item").Count > 0, TimeSpan.FromSeconds(5));
+        }
+        catch (Bunit.Extensions.WaitForHelpers.WaitForFailedException)
+        {
+            // An opened menu with no entry at all: the caller's lookup answers null.
+        }
     }
 }

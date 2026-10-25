@@ -45,7 +45,7 @@ internal sealed class BufferedLogForwarder(
             remaining = _buffer.Count > 0 || _droppedLines > 0 ? TakeBufferLocked() : null;
         }
         if (remaining is not null)
-            await PollingService.SendLogBatchAsync(apiClient, remaining, flushCt, SendTimeout)
+            await SendLogBatchAsync(apiClient, remaining, flushCt, SendTimeout)
                 .ConfigureAwait(false);
     }
 
@@ -100,7 +100,7 @@ internal sealed class BufferedLogForwarder(
     {
         try
         {
-            await PollingService.SendLogBatchAsync(apiClient, batch, token, SendTimeout)
+            await SendLogBatchAsync(apiClient, batch, token, SendTimeout)
                 .ConfigureAwait(false);
         }
         catch (Exception)
@@ -132,5 +132,16 @@ internal sealed class BufferedLogForwarder(
         });
         _droppedLines = 0;
         return batch;
+    }
+
+    internal static async Task SendLogBatchAsync(
+        IServerApiClient apiClient,
+        List<AppendLogRequest> batch,
+        CancellationToken token,
+        TimeSpan sendTimeout)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(sendTimeout);
+        await apiClient.AppendLogBatchAsync(batch, timeout.Token).ConfigureAwait(false);
     }
 }

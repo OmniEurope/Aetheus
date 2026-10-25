@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Pipelines;
 
@@ -65,23 +66,20 @@ public sealed class PipelineAdvisoryPreflightBuilder(
         HashSet<string> visited,
         CancellationToken ct)
     {
-        foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
+        foreach (var declaredStage in YamlParsingHelper.FlattenJobs(definition))
         {
-            var server = await dispatchServers.ResolveServerForTargetAsync(
-                stage, resolvedVariables, organizationId, dispatchServers.StageHasDeployStep(stage), projectId, ct)
-                .ConfigureAwait(false);
-            var (kind, label) = PipelineRunHelpers.DescribeTarget(stage);
-            stages.Add(new PreflightStageDto
-            {
-                StageName = stage.Name,
-                TargetKind = kind,
-                Target = label,
-                Resolved = server is not null,
-                ServerName = server?.Name,
-                Reason = server is null ? dispatchServers.BuildNoServerReason(stage.Name, stage) : null,
-                Depth = depth,
-                PipelineName = pipelineName
-            });
+            var (stage, emptyParameter, unresolvedExpression) = PipelineStageTargetParameters.Resolve(
+                declaredStage, resolvedVariables, definition.Parameters);
+            // A triggered pipeline's parameters arrive from its trigger step at run time: its target
+            // cannot be read here, and listing it under its raw expression would be a false finding.
+            if (unresolvedExpression && depth > 0) continue;
+
+            // An empty target parameter is reported as such: no server is chosen, so none is searched.
+            var server = emptyParameter is not null ? null
+                : await dispatchServers.ResolveServerForTargetAsync(
+                    stage, resolvedVariables, organizationId, dispatchServers.StageHasDeployStep(stage), projectId, ct)
+                    .ConfigureAwait(false);
+            stages.Add(DescribeStage(stage, emptyParameter, server, depth, pipelineName));
         }
 
         if (projectId is not { } id || depth >= PipelineChildPipelineResolver.MaxChildDepth) return;
@@ -96,6 +94,37 @@ public sealed class PipelineAdvisoryPreflightBuilder(
                 child.Value.Definition, child.Value.Variables, organizationId, id, stages,
                 depth + 1, reference.Name, visited, ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>The preview line of one stage: its target, the server found for it, or why none was.</summary>
+    private PreflightStageDto DescribeStage(
+        PipelineStageDefinition stage,
+        PipelineTemplateParameterDefinition? emptyParameter,
+        Server? server,
+        int depth,
+        string? pipelineName)
+    {
+        var (kind, label) = PipelineRunHelpers.DescribeTarget(stage);
+        return new PreflightStageDto
+        {
+            StageName = stage.Name,
+            TargetKind = kind,
+            Target = emptyParameter?.Name ?? label,
+            Resolved = server is not null,
+            ServerName = server?.Name,
+            Reason = server is not null ? null
+                : emptyParameter is not null
+                    ? dispatchServers.BuildEmptyTargetParameterReason(stage.Name, emptyParameter.Name)
+                    : dispatchServers.BuildNoServerReason(stage.Name, stage),
+            Depth = depth,
+            PipelineName = pipelineName,
+            EmptyTargetParameter = emptyParameter is null
+                ? null
+                : new PreflightEmptyParameterDto(
+                    emptyParameter.Name,
+                    string.IsNullOrWhiteSpace(emptyParameter.DisplayName) ? emptyParameter.Name : emptyParameter.DisplayName!,
+                    string.IsNullOrWhiteSpace(emptyParameter.DisplayNameFr) ? null : emptyParameter.DisplayNameFr)
+        };
     }
 
     /// <summary>A child's definition and variables for the preview, or null when anything about it

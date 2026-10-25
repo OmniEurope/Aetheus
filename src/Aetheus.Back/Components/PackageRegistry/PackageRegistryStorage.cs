@@ -57,9 +57,11 @@ internal sealed class PackageRegistryStorage(IConfiguration configuration) : IPa
         try
         {
             using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            // nosemgrep: aetheus.csharp.weak-hash-sha1 - Maven .sha1 checksum file requested by clients, guards nothing.
             using var sha1 = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
             using var sha512 = IncrementalHash.CreateHash(HashAlgorithmName.SHA512);
             // MD5 only feeds the .md5 checksum file Maven clients still request; it guards nothing.
+            // nosemgrep: aetheus.csharp.weak-hash-md5 - Maven checksum file, see the comment above.
             using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
             await using var output = new FileStream(
                 temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920,

@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Tests;
 
 /// <summary>
 /// The C# port of the state-directory and secret-zero refusals of
-/// <c>deploy/scripts/prod-deploy-prepare.sh</c>, the ones
+/// the former <c>prod-deploy-prepare.sh</c> script, the ones
 /// <c>DeploymentSafetyAuditTests.CanonicalDeployBootstrapsProductionStateWithoutExposingExistingSecrets</c>
 /// and <c>ProductionSecretZero_SurvivesAgentReinstall_AndMissingStateFailsClosed</c> pin in the script:
 /// a state directory outside <c>/var/lib</c>, nested or traversing, differing canonical and legacy

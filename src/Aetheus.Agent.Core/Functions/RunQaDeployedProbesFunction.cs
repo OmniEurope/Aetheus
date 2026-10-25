@@ -7,7 +7,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>run-qa-deployed-probes</c> function, port of
-/// <c>deploy/scripts/run-qa-deployed-integration-suite.sh</c>: proves that a deployed QA backend
+/// the former <c>run-qa-deployed-integration-suite.sh</c> script: proves that a deployed QA backend
 /// authenticates and reads through its migrated database. The two health endpoints must answer (a
 /// technical failure otherwise, as the script's <c>set -e</c>); the five application probes (login,
 /// bearer token, permissions naming the admin user and its Admin role, a non-empty project page) are

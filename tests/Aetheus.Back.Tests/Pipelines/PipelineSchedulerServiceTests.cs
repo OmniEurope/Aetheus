@@ -3,7 +3,6 @@ using System.Reflection;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Exceptions;
-using Aetheus.Back.Services;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

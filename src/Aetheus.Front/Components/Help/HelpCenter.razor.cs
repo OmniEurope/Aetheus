@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2
-using Microsoft.AspNetCore.Components.Web;
 
 namespace Aetheus.Front.Components.Help;
 
 public partial class HelpCenter
 {
     [Inject] private HelpService Help { get; set; } = default!;
-    [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
 
@@ -32,11 +30,5 @@ public partial class HelpCenter
     {
         _search = value;
         await FilterAsync();
-    }
-
-    private void OnCardKeyDown(KeyboardEventArgs e, string articleKey)
-    {
-        if (e.Key is "Enter" or " ")
-            Nav.NavigateTo($"/help/{articleKey}");
     }
 }

@@ -5,7 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
-/// The <c>ensure-tls-certificates</c> function, port of <c>deploy/scripts/ensure-tls-certificates.sh</c>:
+/// The <c>ensure-tls-certificates</c> function, port of the former <c>ensure-tls-certificates.sh</c> script:
 /// for each certificate group <c>NAME[,ALIAS...]</c> (the first name is the lineage), a missing
 /// certificate, or one that does not name every host of its group, is issued through the agent's
 /// root-owned <c>aetheus-certbot-issue</c> helper; one that expires within <c>min_days</c> is renewed

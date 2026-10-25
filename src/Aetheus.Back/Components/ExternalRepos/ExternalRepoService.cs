@@ -51,7 +51,7 @@ public sealed class ExternalRepoService(
         {
             throw new ConflictException("This project already has an external repository attached.");
         }
-        var besideInternalRepository = existing.Count > 0;
+        var besideInternalRepository = existing.Any(repo => !repo.IsConfiguration);
 
         var credential = BuildCredential(request);
         ValidateCredential(credential);

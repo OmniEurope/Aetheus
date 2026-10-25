@@ -5,7 +5,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>verify-assurance-contract</c> function, port of
-/// <c>deploy/scripts/verify-candidate-assurance-contract.mjs</c>, which gates production deployment:
+/// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/verify-candidate-assurance-contract.mjs</c>, which gates production deployment:
 /// the contract must belong to the artifact's source commit, match its seal (recomputed over the parsed
 /// contract exactly as <c>JSON.stringify</c> writes it, through <see cref="JsJson"/>), reference evidence
 /// files inside the artifact whose hashes match, grade consistently and reach the minimum grade. It

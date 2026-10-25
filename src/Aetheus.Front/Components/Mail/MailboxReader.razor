@@ -3,15 +3,15 @@
    resource unless "Show images" fetched it through the backend); the page's own Content Security
    Policy still refuses any remote image or script that would slip through. *@
 <OmniCard Class="mailbox-reader">
-    <Header>
+    <HeaderContent>
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 mailbox-reader-subject">@Subject</OmniText>
-    </Header>
+    </HeaderContent>
     <ChildContent>
         <OmniStack Gap="OmniSpacing.Medium">
             @* Recette R3-52: one visible action (Répondre, grey: Écrire is the page's blue one), the others in the
                menu beside it; deleting sits there in red, no longer as a red button among the others. *@
-            <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="mailbox-reader-actions">
-                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Reply))" Class="mailbox-reply"><OmniIcon Name="@MaterialIconMap.Resolve("undo")" /> <span>@L["MailboxReply"]</span></OmniButton>
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="mailbox-reader-actions">
+                <OmniButton Variant="OmniButtonVariant.Secondary" Disabled="@(!CanWrite)" OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Reply))" Class="mailbox-reply"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("undo")" /></Icon><ChildContent><span>@L["MailboxReply"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]" Disabled="@(!CanWrite)" Class="mailbox-reader-more">
                     <OmniMenuItem OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.ReplyAll))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("group")" /></Icon><ChildContent>@L["MailboxReplyAll"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@(() => OnCompose.InvokeAsync(MailboxComposeMode.Forward))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("arrow_forward")" /></Icon><ChildContent>@L["MailboxForward"]</ChildContent></OmniMenuItem>
@@ -20,30 +20,30 @@
                 </OmniOverflowMenu>
             </OmniStack>
             <OmniDescriptionList Columns="2">
-                <OmniDescriptionItem Label="@L["MailboxFrom"]">@Message.From</OmniDescriptionItem>
-                <OmniDescriptionItem Label="@L["Date"]">@Message.Date.ToString("g")</OmniDescriptionItem>
-                <OmniDescriptionItem Label="@L["MailboxTo"]">@Message.To</OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["MailboxFrom"]">@Message.From</OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["Date"]">@Message.Date.ToString("g")</OmniDescriptionItem>
+                <OmniDescriptionItem Term="@L["MailboxTo"]">@Message.To</OmniDescriptionItem>
                 @if (!string.IsNullOrWhiteSpace(Message.Cc))
                 {
-                    <OmniDescriptionItem Label="@L["MailboxCc"]">@Message.Cc</OmniDescriptionItem>
+                    <OmniDescriptionItem Term="@L["MailboxCc"]">@Message.Cc</OmniDescriptionItem>
                 }
             </OmniDescriptionList>
             @if (Message.BlockedRemoteImages > 0)
             {
                 <OmniAlert Severity="OmniSeverity.Info" Class="mailbox-images-blocked">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
                         <OmniText>@string.Format(L["MailboxImagesBlocked"], Message.BlockedRemoteImages)</OmniText>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@LoadingImages" OnClick="@(() => OnLoadImages.InvokeAsync())"><OmniIcon Name="@MaterialIconMap.Resolve("photo_library")" /> <span>@L["MailboxLoadImages"]</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Busy="@LoadingImages" OnClick="@(() => OnLoadImages.InvokeAsync())"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("photo_library")" /></Icon><ChildContent><span>@L["MailboxLoadImages"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniAlert>
             }
             @if (Message.Attachments.Count > 0)
             {
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-attachments">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-attachments">
                     <OmniText Element="OmniTextElement.Strong">@L["MailboxAttachments"]</OmniText>
                     @foreach (var attachment in Message.Attachments)
                     {
-                        <OmniButton Variant="OmniButtonVariant.Secondary" Size="OmniControlSize.Small" OnClick="@(() => OnDownload.InvokeAsync(attachment))" title="@L["Download"]"><OmniIcon Name="OmniIconName.Download" /> <span>@attachment.FileName</span></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" Size="OmniControlSize.Small" OnClick="@(() => OnDownload.InvokeAsync(attachment))" title="@L["Download"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@attachment.FileName</span></ChildContent></OmniButton>
                     }
                 </OmniStack>
             }

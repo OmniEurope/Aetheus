@@ -39,8 +39,8 @@ public class ComplexityAnalyzerTests
     [Fact]
     public void Analyze_FlagsMethodsOverThreshold()
     {
-        // A method with 12 if-statements → CC 13 (> 10 threshold).
-        var ifs = string.Join("\n", Enumerable.Range(0, 12).Select(i => $"if (n == {i}) {{ }}"));
+        // A method with 16 if-statements → CC 17 (> 15 threshold).
+        var ifs = string.Join("\n", Enumerable.Range(0, 16).Select(i => $"if (n == {i}) {{ }}"));
         var src = $$"""
             public class C
             {
@@ -54,9 +54,9 @@ public class ComplexityAnalyzerTests
         var report = ComplexityAnalyzer.Analyze([("C.cs", src)]);
 
         Assert.Equal(1, report.TotalMethods);
-        Assert.Equal(13, report.MaxCyclomatic);
+        Assert.Equal(17, report.MaxCyclomatic);
         Assert.Equal(1, report.HighComplexityMethods);
-        Assert.Equal(13, report.Hotspots[0].Cyclomatic);
+        Assert.Equal(17, report.Hotspots[0].Cyclomatic);
     }
 
     [Fact]
@@ -128,8 +128,70 @@ public class ComplexityAnalyzerTests
                 $"CC {item.Cyclomatic}: {Path.GetRelativePath(root, item.Path)}:{item.Line} ({item.Member})"));
 
         Assert.True(
-            report.MaxCyclomatic <= 15,
+            report.MaxCyclomatic <= ComplexityAnalyzer.HighComplexityThreshold,
             $"Repository max cyclomatic complexity is {report.MaxCyclomatic}; grade A of the nightly quality grade (grade.complexity.maximum) requires <= 15.{Environment.NewLine}{details}");
+    }
+
+    private static string Branches(int count) =>
+        string.Concat(Enumerable.Range(0, count).Select(index => $"if (n == {index}) return {index}; "));
+
+    [Fact]
+    public void AnalyzeDetailed_ListsEveryMethodOverTheThreshold_WithAQualifiedSymbol()
+    {
+        var src = $$"""
+            namespace Shop.Orders;
+            public class Checkout
+            {
+                public int Simple() => 1;
+                public int Total(int n) { {{Branches(15)}} return n; }
+                public int Total(string text) { {{Branches(15)}} return 0; }
+                public int Exactly15(int n) { {{Branches(14)}} return n; }
+                public int Name { get { {{Branches(15)}} return 0; } }
+            }
+            """;
+
+        var analysis = ComplexityAnalyzer.AnalyzeDetailed([("Checkout.cs", src)]);
+
+        // 15 branches + 1 = 16 > 15; 14 + 1 = 15 is not over the threshold.
+        Assert.Equal(analysis.Report.HighComplexityMethods, analysis.HighMethods.Count);
+        Assert.Equal(
+            ["Shop.Orders.Checkout.Total(int)", "Shop.Orders.Checkout.Total(string)", "Shop.Orders.Checkout.Name.get"],
+            analysis.HighMethods.Select(item => item.Symbol));
+        Assert.All(analysis.HighMethods, item => Assert.Equal(16, item.Cyclomatic));
+    }
+
+    [Fact]
+    public void AnalyzeDetailed_ASymbolDoesNotDependOnTheLine_AndTwoLambdasOfOneMemberAreTwoMethods()
+    {
+        var body = $"public int Run(int n) {{ Func<int, int> a = x => {{ {Branches(15).Replace("n ==", "x ==")} return x; }}; "
+            + $"Func<int, int> b = x => {{ {Branches(15).Replace("n ==", "x ==")} return x; }}; return a(n) + b(n); }}";
+        string Source(string header) => $"{header}namespace Shop; public class Flow {{ {body} }}";
+
+        var first = ComplexityAnalyzer.AnalyzeDetailed([("Flow.cs", Source(string.Empty))]).HighMethods;
+        var moved = ComplexityAnalyzer.AnalyzeDetailed([("Flow.cs", Source("using System;\n\n\n"))]).HighMethods;
+
+        Assert.Equal(2, first.Count);
+        Assert.Equal(first.Count, first.Select(item => item.Symbol).Distinct().Count());
+        Assert.EndsWith("#1", first[0].Symbol, StringComparison.Ordinal);
+        Assert.EndsWith("#2", first[1].Symbol, StringComparison.Ordinal);
+        Assert.Equal(first.Select(item => item.Symbol), moved.Select(item => item.Symbol));
+        Assert.NotEqual(first[0].Line, moved[0].Line);
+    }
+
+    [Fact]
+    public void Analyze_KeepsReturningTheSameReportAsBefore()
+    {
+        const string src = "class C { int M(int n) { if (n > 0) return 1; return 0; } }";
+
+        var report = ComplexityAnalyzer.Analyze([("C.cs", src)]);
+        var detailed = ComplexityAnalyzer.AnalyzeDetailed([("C.cs", src)]);
+
+        Assert.Equal(report.TotalMethods, detailed.Report.TotalMethods);
+        Assert.Equal(report.AvgCyclomatic, detailed.Report.AvgCyclomatic);
+        Assert.Equal(report.MaxCyclomatic, detailed.Report.MaxCyclomatic);
+        Assert.Equal(report.HighComplexityMethods, detailed.Report.HighComplexityMethods);
+        Assert.Equal(report.Hotspots, detailed.Report.Hotspots);
+        Assert.Empty(detailed.HighMethods);
     }
 
     private static string FindRepoRoot() => Aetheus.Agent.Core.Tests.RepositoryScan.Root;

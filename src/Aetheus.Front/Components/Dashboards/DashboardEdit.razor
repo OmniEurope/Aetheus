@@ -25,8 +25,8 @@ else if (_dashboard is not null)
             </OmniColumn>
             <OmniColumn Span="12" SmallSpan="12">
                 @* STD-BTN detection 11: SaveDashboard visible, the other actions in the menu. *@
-                <OmniStack Orientation="OmniStackOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Align="OmniAlignment.Center">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveDashboard" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><OmniIcon Name="OmniIconName.Save" /> <span>@L["SaveDashboard"]</span></OmniButton>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End" Align="OmniAlignment.Center">
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveDashboard" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["SaveDashboard"]</span></ChildContent></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem OnClick="@AddWidget"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@L["AddWidget"]</ChildContent></OmniMenuItem>
                     </OmniOverflowMenu>
@@ -79,8 +79,8 @@ else if (_dashboard is not null)
                     </OmniColumn>
                     <OmniColumn Span="12" SmallSpan="12">
                         @* STD-BTN detection 11: Settings visible, the other actions in the menu. *@
-                        <OmniStack Orientation="OmniStackOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleConfig(widget))"><OmniIcon Name="OmniIconName.Settings" /> <span>@L["Settings"]</span></OmniButton>
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ToggleConfig(widget))"><Icon><OmniIcon Name="OmniIconName.Settings" /></Icon><ChildContent><span>@L["Settings"]</span></ChildContent></OmniButton>
                             <OmniOverflowMenu Label="@L["MoreActions"]">
                                 <OmniMenuItem OnClick="@(() => MoveUp(widget))" Disabled="@(index == 0)"><Icon><OmniIcon Name="OmniIconName.Upgrade" /></Icon><ChildContent>@L["MoveUp"]</ChildContent></OmniMenuItem>
                                 <OmniMenuItem OnClick="@(() => MoveDown(widget))" Disabled="@(index == _widgets.Count - 1)"><Icon><OmniIcon Name="OmniIconName.ArrowDown" /></Icon><ChildContent>@L["MoveDown"]</ChildContent></OmniMenuItem>
@@ -111,11 +111,11 @@ else if (_dashboard is not null)
         {
             <OmniColumn Span="12" SmallSpan="6">
                 <OmniCard Class="@($"omni-u-p-md dashboard-widget-preview dashboard-widget-height-{Math.Clamp(widget.Height, 1, 4)}")">
-                    <OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                         <OmniIcon Name="@MaterialIconMap.Resolve(GetWidgetIcon(widget.WidgetType))" />
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@widget.Title</OmniText>
                     </OmniStack>
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">
+                    <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">
                         @widget.WidgetType - @widget.Width×@widget.Height
                     </OmniText>
                 </OmniCard>

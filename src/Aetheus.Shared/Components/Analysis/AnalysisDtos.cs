@@ -70,6 +70,10 @@ public sealed record AnalysisRunGateViolationDto
 {
     public int ReportId { get; init; }
     public string PolicyKey { get; init; } = string.Empty;
+
+    /// <summary>The policy's human name (<c>AnalysisPolicy.Name</c>), joined from the policy by the back; null
+    /// when the policy no longer exists, in which case the key is all there is to show.</summary>
+    public string? PolicyName { get; init; }
     public AnalysisPolicyScope Scope { get; init; }
     public int Version { get; init; }
     public string Outcome { get; init; } = string.Empty;
@@ -286,8 +290,8 @@ public sealed record AnalysisRunFindingsRequest : PaginationRequest
     [Required, MinLength(1), MaxLength(MaxRuns)]
     public List<int> RunIds { get; init; } = [];
 
-    /// <summary>The findings already decided on (accepted, false positive, mitigated, fixed since)
-    /// are left out unless asked for.</summary>
+    /// <summary>The findings already decided on (accepted, false positive, mitigated) are left out
+    /// unless asked for. A fixed finding is never listed: it is no decision (recette R1-35).</summary>
     public bool IncludeDecided { get; init; }
 
     /// <summary>The Gate tab's column filters; <see cref="PaginationRequest.Search"/> matches the title or the rule.</summary>

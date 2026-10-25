@@ -22,6 +22,18 @@ public class PackageRegistryAdminController(IPackageRegistryAdminService registr
         return package is null ? NotFound() : Ok(package);
     }
 
+    [HttpPut("{packageId:int}/versions/{versionId:int}/deprecation")]
+    public async Task<IActionResult> UpdateVersionDeprecation(
+        int packageId,
+        int versionId,
+        [FromBody] UpdatePackageRegistryVersionDeprecationRequest request,
+        CancellationToken ct)
+    {
+        var updated = await registry.SetDeprecatedAsync(
+            packageId, versionId, request.IsDeprecated, ct);
+        return updated ? NoContent() : NotFound();
+    }
+
     [HttpPut("{packageId:int}/versions/{versionId:int}")]
     public async Task<IActionResult> UpdateVersion(
         int packageId,

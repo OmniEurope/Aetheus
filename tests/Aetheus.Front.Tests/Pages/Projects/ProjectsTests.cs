@@ -86,13 +86,16 @@ public class ProjectsTests : BunitContext
         Assert.Contains("href=\"/pipelines/runs/52\"", cut.Markup);
         // The tile identifies the root run without a child-of line.
         Assert.DoesNotContain("ChildOf", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("project-production-status online", cut.Markup);
+        var productionBadge = Assert.Single(cut.FindAll("[data-testid=\"project-production-status\"]"));
+        Assert.Contains("omni-badge", productionBadge.ClassName, StringComparison.Ordinal);
+        Assert.Contains("accent", productionBadge.ClassName, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<time", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("project-online-users", cut.Markup);
         // Two ruled lines, not one framed strip: production and its state, then the grade and the
         // people online.
         var lines = cut.FindAll(".project-production > .project-production-row");
         Assert.Equal(2, lines.Count);
-        Assert.NotNull(lines[0].QuerySelector(".project-production-status"));
+        Assert.NotNull(lines[0].QuerySelector("[data-testid=\"project-production-status\"]"));
         Assert.NotNull(lines[1].QuerySelector(".grade-badge"));
         Assert.NotNull(lines[1].QuerySelector(".project-online-users"));
         // The tile grade is the shared badge, not a hand-coloured strong.
@@ -147,6 +150,8 @@ public class ProjectsTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("Quiet"));
 
         var cards = cut.FindAll(".project-card");
+        // R-5: every project card is an OE card laid out by the OE tile grid.
+        Assert.Equal(cards.Count, cut.FindAll(".omni-tile-grid > .project-card-item > .omni-card.project-card").Count);
         var active = cards.Single(card => card.TextContent.Contains("Operational"));
         var quiet = cards.Single(card => card.TextContent.Contains("Quiet"));
 
@@ -208,7 +213,7 @@ public class ProjectsTests : BunitContext
         cut.Find("button[title='DenseView']").Click();
 
         Assert.Contains("project-dense-list", cut.Markup);
-        Assert.DoesNotContain("project-card-grid\"", cut.Markup);
+        Assert.DoesNotContain("omni-tile-grid", cut.Markup);
     }
 
     [Fact]

@@ -16,7 +16,6 @@ global using Aetheus.Front.Components.Releases;
 global using Aetheus.Front.Components.Servers;
 global using Aetheus.Front.Components.Shared;
 global using Aetheus.Front.Components.Shared.Services;
-global using Aetheus.Front.Components.Teamspeak;
 global using Aetheus.Front.Components.Users;
 global using Aetheus.Front.Components.VariableLibraries;
 global using Aetheus.Front.Layout;

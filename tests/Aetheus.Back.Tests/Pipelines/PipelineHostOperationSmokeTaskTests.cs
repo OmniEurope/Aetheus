@@ -188,7 +188,7 @@ public class PipelineHostOperationSmokeTaskTests
         await Build().CreateBlueGreenTaskAsync(
             type, runId: 1, Runner(), step,
             definition ?? new PipelineStepDefinition { Name = "bg", Project = "toto", TimeoutSeconds = 300 },
-            legVars, TestContext.Current.CancellationToken);
+            legVars, stageEnvironment: null, TestContext.Current.CancellationToken);
         return step;
     }
 

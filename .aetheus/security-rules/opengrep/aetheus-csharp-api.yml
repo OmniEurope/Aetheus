@@ -1,0 +1,277 @@
+# SPDX-License-Identifier: EUPL-1.2
+#
+# C# rules for ASP.NET Core controllers and hosting: access control, over-posting, uploads, CSRF,
+# error pages, request limits, security headers, archive extraction and credentials in the source.
+# They follow the OWASP Top 10 (2021) and the OWASP API Security Top 10 (2023).
+# Tests: tests/security-rules/aetheus-csharp-api.cs.
+#
+# Written from public vulnerability knowledge (CWE, the OWASP Top 10, API Security Top 10 and ASVS,
+# the ASP.NET Core security documentation), not from any third-party rule set.
+rules:
+  - id: aetheus.csharp.controller-without-authorize
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      This controller has no [Authorize] (or [AllowAnonymous]) at class level, so every action that
+      does not carry its own attribute is open to anonymous callers. A controller that is meant to be
+      public says so with [AllowAnonymous]; every other one requires [Authorize].
+    metadata:
+      cwe: CWE-862
+      owasp: A01:2021 Broken Access Control
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: |
+              class $C : ControllerBase { ... }
+          - pattern: |
+              class $C : Controller { ... }
+      - pattern-not: |
+          [Authorize] class $C : ControllerBase { ... }
+      - pattern-not: |
+          [Authorize] class $C : Controller { ... }
+      - pattern-not: |
+          [Authorize(...)] class $C : ControllerBase { ... }
+      - pattern-not: |
+          [Authorize(...)] class $C : Controller { ... }
+      - pattern-not: |
+          [AllowAnonymous] class $C : ControllerBase { ... }
+      - pattern-not: |
+          [AllowAnonymous] class $C : Controller { ... }
+      # A controller whose actions each carry their own attribute is gated per endpoint.
+      - pattern-not: |
+          class $C : ControllerBase { ... [Authorize] $RET $M(...) { ... } ... }
+      - pattern-not: |
+          class $C : ControllerBase { ... [Authorize(...)] $RET $M(...) { ... } ... }
+      - pattern-not: |
+          class $C : ControllerBase { ... [AllowAnonymous] $RET $M(...) { ... } ... }
+      - pattern-not: |
+          class $C : Controller { ... [Authorize] $RET $M(...) { ... } ... }
+      - pattern-not: |
+          class $C : Controller { ... [Authorize(...)] $RET $M(...) { ... } ... }
+      - pattern-not: |
+          class $C : Controller { ... [AllowAnonymous] $RET $M(...) { ... } ... }
+
+  - id: aetheus.csharp.mass-assignment-bound-entity
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      An object bound straight from the request body or form is handed to the data context. The
+      caller can set every property of it, including the ones it must not (Id, OwnerId, IsAdmin). Bind
+      to a DTO that lists the editable fields and copy them across.
+    metadata:
+      cwe: CWE-915
+      owasp: A01:2021 Broken Access Control
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $RET $METHOD(..., [FromBody] $T $INPUT, ...) { ... }
+          - pattern-inside: |
+              $RET $METHOD(..., [FromForm] $T $INPUT, ...) { ... }
+      - pattern-either:
+          - pattern: $DB.Add($INPUT)
+          - pattern: $DB.AddAsync($INPUT, ...)
+          - pattern: $DB.Update($INPUT)
+          - pattern: $DB.Attach($INPUT)
+          - pattern: $DB.$SET.Add($INPUT)
+          - pattern: $DB.$SET.AddAsync($INPUT, ...)
+          - pattern: $DB.$SET.Update($INPUT)
+          - pattern: $DB.Entry($INPUT)
+  - id: aetheus.csharp.upload-client-file-name
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The file name chosen by the uploader is used to build a path. It can carry "../", an absolute
+      path or an executable extension. Generate the stored name yourself (Guid, Path.GetRandomFileName)
+      and keep the original only as display text.
+    metadata:
+      cwe: CWE-434
+      owasp: A04:2021 Insecure Design
+      category: security
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $FILE.FileName
+          - pattern-inside: |
+              $RET $METHOD(..., IFormFile $FILE, ...) { ... }
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Path.Combine(..., $NAME)
+              - pattern: new FileStream($NAME, ...)
+              - pattern: File.Create($NAME)
+              - pattern: File.WriteAllBytes($NAME, ...)
+              - pattern: $FILE.SaveAs($NAME)
+              - pattern: $FILE.CopyTo($NAME)
+          - focus-metavariable: $NAME
+    pattern-sanitizers:
+      - pattern: Path.GetRandomFileName()
+      - pattern: Guid.NewGuid()
+      - pattern: Path.GetExtension(...)
+
+  - id: aetheus.csharp.antiforgery-disabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Anti-forgery validation is switched off, so a page on another site can submit this action with
+      the visitor's cookies (cross-site request forgery). Keep the token check for every action that
+      relies on a cookie for authentication.
+    metadata:
+      cwe: CWE-352
+      owasp: A01:2021 Broken Access Control
+      category: security
+    pattern-either:
+      - pattern: new IgnoreAntiforgeryTokenAttribute()
+      - patterns:
+          - pattern: $B.DisableAntiforgery()
+          # An endpoint that takes no cookie or ambient credential has nothing for a forged request to ride on.
+          - pattern-not: $E.AllowAnonymous().DisableAntiforgery()
+          - pattern-not: $E.DisableAntiforgery().AllowAnonymous()
+      - pattern-regex: '^[ \t]*\[\s*(?:\w+\s*,\s*)*IgnoreAntiforgeryToken(?:Attribute)?\b'
+
+  - id: aetheus.csharp.developer-exception-page-unguarded
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      The developer exception page prints stack traces, source lines and environment details to
+      whoever triggers an error. Register it only inside an IsDevelopment() check.
+    metadata:
+      cwe: CWE-209
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $APP.UseDeveloperExceptionPage(...)
+          - pattern: $APP.UseDatabaseErrorPage(...)
+          - pattern: $APP.UseMigrationsEndPoint(...)
+      - pattern-not-inside: |
+          if (<... $ENV.IsDevelopment() ...>) { ... }
+      - pattern-not-inside: |
+          if (<... $ENV.IsEnvironment("Development") ...>) { ... }
+
+  - id: aetheus.csharp.detailed-errors-enabled
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      Detailed errors send exception messages to the client (SignalR hubs, Blazor circuits), which
+      reveals internals to an attacker. Enable them in Development only.
+    metadata:
+      cwe: CWE-209
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: EnableDetailedErrors = true
+          - pattern: $O.EnableDetailedErrors = true
+          - pattern: DetailedErrors = true
+          - pattern: $O.DetailedErrors = true
+      - pattern-not-inside: |
+          if (<... $ENV.IsDevelopment() ...>) { ... }
+
+  - id: aetheus.csharp.request-size-limit-disabled
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      The request size limit is removed, so one request can use all the memory or disk of the server
+      (OWASP API4, unrestricted resource consumption). Set an explicit limit that fits the endpoint.
+    metadata:
+      cwe: CWE-770
+      owasp: A04:2021 Insecure Design
+      category: security
+    pattern-either:
+      - pattern: new DisableRequestSizeLimitAttribute()
+      - pattern: MaxRequestBodySize = null
+      - pattern: $O.MaxRequestBodySize = null
+      - pattern: MultipartBodyLengthLimit = long.MaxValue
+      - pattern: $O.MultipartBodyLengthLimit = long.MaxValue
+      - pattern-regex: '^[ \t]*\[\s*(?:\w+\s*,\s*)*DisableRequestSizeLimit(?:Attribute)?\b'
+
+  - id: aetheus.csharp.security-header-relaxed
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A security header is written with a value that removes its protection: a Content-Security-Policy
+      that allows unsafe-inline or unsafe-eval scripts, a wildcard Access-Control-Allow-Origin, or
+      X-Frame-Options ALLOWALL. Use nonces or hashes for scripts and list the allowed origins.
+    metadata:
+      cwe: CWE-693
+      owasp: A05:2021 Security Misconfiguration
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $H["Content-Security-Policy"] = $VALUE
+          - pattern: $H.Append("Content-Security-Policy", $VALUE)
+          - pattern: $H.Add("Content-Security-Policy", $VALUE)
+          - pattern: $H["Access-Control-Allow-Origin"] = $VALUE
+          - pattern: $H.Append("Access-Control-Allow-Origin", $VALUE)
+          - pattern: $H.Add("Access-Control-Allow-Origin", $VALUE)
+          - pattern: $H["X-Frame-Options"] = $VALUE
+          - pattern: $H.Append("X-Frame-Options", $VALUE)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: (?is)^.*(?:script-src[^;"]*unsafe-(?:inline|eval)|default-src[^;"]*unsafe-(?:inline|eval)|"\*"|allowall).*$
+
+  - id: aetheus.csharp.archive-entry-path-traversal
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      An archive entry name is joined to the destination folder without checking where it ends up. A
+      name such as "../../etc/cron.d/x" writes outside the folder (zip slip). Resolve the full path and
+      check that it still starts with the destination, or reject names with "..".
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021 Broken Access Control
+      category: security
+    patterns:
+      - pattern: Path.Combine($DESTINATION, $ENTRY.FullName)
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            <... $PATH.StartsWith(...) ...>;
+            ...
+          }
+
+  - id: aetheus.csharp.password-fast-hash
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A password is hashed with a general-purpose digest. SHA-2 is fast by design, so a stolen hash is
+      guessed at billions of tries per second. Use a password hash: PasswordHasher, bcrypt, Argon2 or
+      PBKDF2 with a high iteration count and a random salt.
+    metadata:
+      cwe: CWE-916
+      owasp: A02:2021 Cryptographic Failures
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: $ALGORITHM.HashData($ENCODING.GetBytes($PASSWORD))
+          - pattern: $ALGORITHM.ComputeHash($ENCODING.GetBytes($PASSWORD))
+      - metavariable-regex:
+          metavariable: $PASSWORD
+          regex: (?i)^.*(password|passwd|passphrase)
+
+  - id: aetheus.csharp.hard-coded-credential
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A password, secret or key is written in the source as a literal. Anyone with the repository (or
+      the compiled binary) has it. Read it from configuration or a secret store.
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    # Written over the text: a name that says "secret" assigned a literal that looks like one (eight
+    # characters or more, letters and digits, no spaces, colons or slashes, so configuration keys and
+    # URLs are not secrets). A name that ends like a label (Name, Header, Url, ...) is skipped.
+    pattern-regex: '\b(?!\w*(?i:Header|Url|Name|Path|Label|Text|Placeholder|Claim|Setting|Field|Policy|Prefix|Format|Pattern|Scheme|Id|ConfigKey|SettingKey|Charset|Alphabet|Chars|Characters|Symbols)\s*=)\w*(?i:password|passwd|pwd|secret|apikey|api_key|privatekey|accesskey)\w*\s*=\s*@?"(?=[^"\s]*[A-Za-z])(?=[^"\s]*[0-9])[^\s":/{}\\]{8,}"'
+  - id: aetheus.csharp.connection-string-password-literal
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A connection string written in the source carries its password. Keep the password out of the
+      code: read the whole string from configuration or a secret store.
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021 Identification and Authentication Failures
+      category: security
+    pattern-regex: '"[^"\n]*(?i:password|pwd)\s*=\s*(?![{$%@;"\s])[^;"\n{}]{4,}[^"\n]*"'

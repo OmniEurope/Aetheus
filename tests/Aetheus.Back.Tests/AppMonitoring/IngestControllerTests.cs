@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text;
 using Aetheus.Back.Components.AppMonitoring;
-using Aetheus.Back.Components.AppMonitoring.Ingest;
 using Google.Protobuf;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -53,6 +52,20 @@ public class IngestControllerTests
         _ingest.ResolveAppIdAsync("bad", Arg.Any<CancellationToken>()).Returns((int?)null);
         var controller = Build(key: "bad", contentType: "application/json", body: "{}");
         Assert.IsType<UnauthorizedResult>(await controller.Metrics(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task EveryExporterEndpoint_RefusesAnUnknownKeyWith401_NeverWithAServerError()
+    {
+        // R1-11: an exporter reads 401 as permanent and stops sending that key; a 5xx would be
+        // retried forever. Each endpoint an Aetheus exporter posts to answers a refused key with 401.
+        _ingest.ResolveAppIdAsync("stale", Arg.Any<CancellationToken>()).Returns((int?)null);
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.IsType<UnauthorizedResult>(await Build("stale", "application/x-protobuf", "").Metrics(ct));
+        Assert.IsType<UnauthorizedResult>(await Build("stale", "application/x-protobuf", "").Logs(ct));
+        Assert.IsType<UnauthorizedResult>(await Build("stale", "application/x-protobuf", "").Traces(ct));
+        Assert.IsType<UnauthorizedResult>(await Build("stale", "application/json", "[]").WebAnalytics([], ct));
     }
 
     [Fact]

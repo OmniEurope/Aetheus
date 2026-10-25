@@ -58,7 +58,18 @@ public sealed record PreflightStageDto
     /// <summary>The pipeline this stage belongs to, or null for the one being launched. The launch
     /// dialog prefixes the stage badge with it, so a blocked "Deploy" says which pipeline it is in.</summary>
     public string? PipelineName { get; init; }
+
+    /// <summary>The run parameter that names this stage's target (<c>agent: "${{ parameters.deployServer }}"</c>)
+    /// when it has no value, or null. The stage is then reported unresolved because no target is chosen,
+    /// never because an agent called "${{ parameters.deployServer }}" is missing.</summary>
+    public PreflightEmptyParameterDto? EmptyTargetParameter { get; init; }
 }
+
+/// <summary>A declared run parameter left empty, named the way the launch dialog labels it.</summary>
+/// <param name="Name">The parameter name.</param>
+/// <param name="Label">Its label (<c>display_name</c>, else the name).</param>
+/// <param name="LabelFr">Its French label (<c>display_name_fr</c>), when the pipeline has one.</param>
+public sealed record PreflightEmptyParameterDto(string Name, string Label, string? LabelFr = null);
 
 /// <summary>
 /// One requirement the blocking preflight actually verified before a run was allowed to start,

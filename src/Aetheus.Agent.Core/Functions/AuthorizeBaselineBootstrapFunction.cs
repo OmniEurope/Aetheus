@@ -4,7 +4,7 @@ namespace Aetheus.Agent.Core.Functions;
 
 /// <summary>
 /// The <c>authorize-baseline-bootstrap</c> function, port of
-/// <c>deploy/scripts/candidate/authorize-baseline-bootstrap.sh</c>: a candidate that has no
+/// the former <c>authorize-baseline-bootstrap.sh</c> script: a candidate that has no
 /// rollback-capable deployed baseline (<c>DELIVERY_BASELINE_BOOTSTRAP</c> true, the value
 /// <c>export-baseline-identity</c> publishes) is refused unless the bootstrap is explicitly allowed,
 /// before any expensive qualification runs. Same test and same messages as the script.

@@ -98,7 +98,7 @@ public sealed class PipelineArtifactTaskFactory(
             await CompleteMissingRestoreArtifactAsync(
                 runId, server, stepRun,
                 $"Nothing to restore: the optional artifact '{stepDefinition.Artifact}' of {stepDefinition.ArtifactSourcePipeline} does not exist yet, so there is nothing to compare with ({error?.TrimEnd('.')}). The checks that read it record it as unavailable.",
-                runWarning: false, now, ct).ConfigureAwait(false);
+                runNotice: false, now, ct).ConfigureAwait(false);
             return;
         }
         var canBootstrap = stepDefinition.AllowMissing
@@ -127,7 +127,7 @@ public sealed class PipelineArtifactTaskFactory(
         await CompleteMissingRestoreArtifactAsync(
             runId, server, stepRun,
             "the selected release contract does not require this retained artifact; explicit fallback selected.",
-            runWarning: true, now, ct)
+            runNotice: true, now, ct)
             .ConfigureAwait(false);
     }
 
@@ -159,7 +159,7 @@ public sealed class PipelineArtifactTaskFactory(
         Server server,
         PipelineStepRun stepRun,
         string reason,
-        bool runWarning,
+        bool runNotice,
         DateTime now,
         CancellationToken ct)
     {
@@ -168,10 +168,14 @@ public sealed class PipelineArtifactTaskFactory(
         stepRun.StartedAt ??= now;
         stepRun.CompletedAt = now;
         stepRun.SkippedReason = reason.Length <= 1000 ? reason : reason[..1000];
-        if (runWarning)
+        if (runNotice)
         {
+            // R-16: no baseline to restore on a project's first release is information, not a warning of the
+            // run; the front says it in French from this code (the detail is for the log reader).
             await repo.AppendRunWarningsAsync(
-                runId, [$"Restore-artifacts step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+                runId,
+                [PipelineRunNotices.Compose(PipelineRunNotices.BaselineAbsent, $"Restore-artifacts step '{stepRun.StepName}': {reason}")],
+                ct).ConfigureAwait(false);
         }
     }
 

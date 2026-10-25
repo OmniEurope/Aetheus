@@ -2,7 +2,7 @@
 @inject GridExportContext ExportContext
 @* Networks tab of the Docker section. Extracted so the parent stops carrying five tabs' worth of
    filter state; it owns nothing but its own search box and grouping. *@
-<OmniStack Orientation="OmniStackOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredNetworks.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterNetworks"]" @bind-Value="_networkSearch" Placeholder="@L["FilterNetworks"]" Class="docker-search" />
 </OmniStack>
@@ -10,7 +10,7 @@
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_networkGroups"
     AllGroupsExpanded="@_allNetworkGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
     <Columns>
-        <OmniDataGridColumn Frozen="true" TItem="DockerNetworkDto" Property="Project" Title="@L["Project"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn Frozen="true" TItem="DockerNetworkDto" Property="Project" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn TItem="DockerNetworkDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         <OmniDataGridColumn TItem="DockerNetworkDto" Property="Driver" Title="@L["Driver"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
         <OmniDataGridColumn TItem="DockerNetworkDto" Property="Scope" Title="@L["Scope"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
