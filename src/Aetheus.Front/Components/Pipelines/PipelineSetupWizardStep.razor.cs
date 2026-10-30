@@ -16,6 +16,13 @@ public partial class PipelineSetupWizardStep
     [Parameter] public EventCallback<int?> ProjectIdChanged { get; set; }
     [Parameter] public string Prefix { get; set; } = string.Empty;
     [Parameter] public EventCallback<string> PrefixChanged { get; set; }
+    /// <summary>The branch every pipeline created reads (R-94), and the repository's branches to choose it from.</summary>
+    [Parameter] public string? SourceBranch { get; set; }
+    [Parameter] public EventCallback<string> SourceBranchChanged { get; set; }
+    [Parameter] public IReadOnlyList<OmniOption<string>> SourceBranches { get; set; } = [];
+    /// <summary>True once the project's branch was looked for and neither the project nor its repository names one (R-76): the
+    /// pipelines would be written without <c>source_branch:</c>, which the step says.</summary>
+    [Parameter] public bool SourceBranchMissing { get; set; }
     /// <summary>The type of what is built and checked, asked before its detail.</summary>
     [Parameter] public PipelineArchitecture? Architecture { get; set; }
     [Parameter] public EventCallback<PipelineArchitecture?> ArchitectureChanged { get; set; }
@@ -61,6 +68,19 @@ public partial class PipelineSetupWizardStep
     [Parameter] public EventCallback<bool> RollbackChanged { get; set; }
     [Parameter] public bool Packages { get; set; }
     [Parameter] public EventCallback<bool> PackagesChanged { get; set; }
+    /// <summary>R-105: the languages the quality pipeline analyses, one tile each.</summary>
+    [Parameter] public bool LangDotNet { get; set; }
+    [Parameter] public EventCallback<bool> LangDotNetChanged { get; set; }
+    [Parameter] public bool LangPython { get; set; }
+    [Parameter] public EventCallback<bool> LangPythonChanged { get; set; }
+    [Parameter] public bool LangJava { get; set; }
+    [Parameter] public EventCallback<bool> LangJavaChanged { get; set; }
+    /// <summary>R-72: the candidate starts the deployment pipeline created with it. Offered only when both are created.</summary>
+    [Parameter] public bool DeployChain { get; set; } = true;
+    [Parameter] public EventCallback<bool> DeployChainChanged { get; set; }
+    [Parameter] public bool DeployChainOffered { get; set; }
+    /// <summary>The repository could not be read to the end for one of the languages: the user confirms which to keep.</summary>
+    [Parameter] public bool LanguagesUncertain { get; set; }
     [Parameter] public string ProjectName { get; set; } = string.Empty;
     [Parameter] public string ArchitectureSummary { get; set; } = string.Empty;
     [Parameter] public IReadOnlyList<PipelineSetupSummaryItem> SummaryItems { get; set; } = [];

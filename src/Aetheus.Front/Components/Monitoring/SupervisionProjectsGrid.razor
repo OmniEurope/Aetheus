@@ -5,19 +5,19 @@
    the first row of its group, and its largest tables in the row detail. *@
 @if (ShowReclaimLink)
 {
-    <OmniText Element="OmniTextElement.Small" Class="omni-u-mb-sm"><OmniLink Href="#reclaim-space" data-testid="reclaim-space-link">@L["ReclaimSpaceGoTo"]</OmniLink></OmniText>
+    <OmniText Element="OmniTextElement.Small"><OmniLink Href="#reclaim-space" data-testid="reclaim-space-link">@L["ReclaimSpaceGoTo"]</OmniLink></OmniText>
 }
 @if (StorageFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-sm" data-testid="supervision-storage-failed">@L["LoadFailed"]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Warning" data-testid="supervision-storage-failed">@L["LoadFailed"]</OmniAlert>
 }
 <div class="aetheus-grid-host">
 <OmniDataGrid TItem="SupervisionRow" Items="@Rows" KeyOf="@(row => row.Key)" ExportTitle="@ExportContext.Title(L["Supervision"])" ExportFields="@ExportContext.Fields()"
     ShowLoadingBar="true" Busy="@IsLoading" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_groups" GroupLabel="@GroupLabel"
     ExpandMode="OmniDataGridRowMode.Single" OnRowClick="@(args => Nav.NavigateTo(args.Item.Href))"
-    EmptyText="@L["NoMonitoredApps"].Value" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
-    Class="dashboard-clickable-grid supervision-projects-grid">
+    EmptyText="@L["NoMonitoredApps"].Value" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
+    Class="dashboard-clickable-grid supervision-projects-grid aetheus-grid-fullheight">
     <EmptyContent>
         <EmptyState Icon="monitor_heart" Title="@L["NoMonitoredApps"]" />
     </EmptyContent>
@@ -40,7 +40,9 @@
         </div>
     </DetailTemplate>
     <Columns>
-        <OmniDataGridColumn TItem="SupervisionRow" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn TItem="SupervisionRow" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >
+            <Template Context="row"><EntityNameLink Kind="EntityNameKind.Project" Id="row.ProjectId" Name="@row.ProjectName" /></Template>
+        </OmniDataGridColumn>
         <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="SupervisionRow" Property="ApplicationName" Title="@L["Application"]" Filterable="true">
             <Template Context="row">
                 @if (row.App is not null)
@@ -55,7 +57,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="StatusKey" Title="@L["Status"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="row">
-                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@StatusTone(row)">@StatusText(row.StatusKey)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(StatusTone(row)))" Fill="OmniFill.Solid" Tone="@StatusTone(row)">@StatusText(row.StatusKey)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="SupervisionRow" Property="OnlineVisitors" Title="@L["CurrentVisitors"]" Width="8rem"
@@ -104,7 +106,7 @@
             <Template Context="row">
                 @if (row.ShowsStorage && row.Usage is { } usage)
                 {
-                    <OmniBadge Tone="@ShareTone(usage.UsedPercent)" Fill="OmniFill.Tonal" data-testid="project-storage-share">@Percent(usage.UsedPercent)</OmniBadge>
+                    <NumberBadge Tone="@ShareTone(usage.UsedPercent)" Fill="OmniFill.Tonal" data-testid="project-storage-share">@Percent(usage.UsedPercent)</NumberBadge>
                 }
             </Template>
         </OmniDataGridColumn>

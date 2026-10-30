@@ -75,4 +75,42 @@ public class ApacheSiteActionTests
         Assert.Equal(OperationKind.ApacheDeleteSite, _queued?.Operation);
         Assert.Equal(name, _queued?.Command);
     }
+
+    // R-119: a module change was an `a2enmod x && systemctl restart apache2` shell string, run without root and
+    // carrying no kind, so the agent never collected its Apache inventory again and the grid kept the old state. It
+    // is now a typed operation whose only variable is the module name.
+    [Theory]
+    [InlineData(ApacheAction.EnableModule, OperationKind.ApacheEnableModule, "proxy_http")]
+    [InlineData(ApacheAction.DisableModule, OperationKind.ApacheDisableModule, "php8.2")]
+    public async Task ModuleAction_QueuesTheTypedOperation_OnTheModuleName_NeverAShellCommand(
+        ApacheAction action, OperationKind expected, string module)
+    {
+        await _sut.ExecuteActionAsync(7, new ApacheActionRequest { Action = action, TargetName = module },
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(_queued);
+        Assert.Equal(ExecutorType.Operation, _queued.Executor);
+        Assert.Equal(expected, _queued.Operation);
+        Assert.Equal(module, _queued.Command);
+        Assert.StartsWith("Apache ", _queued.Name, StringComparison.Ordinal);
+        Assert.True(OperationTargetValidator.IsValid(expected, _queued.Command));
+        await _audit.Received(1).LogAsync($"Apache{action}", "Apache", 7, module, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("../evil")]
+    [InlineData("-f")]
+    [InlineData("proxy http")]
+    [InlineData("proxy;reboot")]
+    [InlineData("proxy\n")]
+    [InlineData("")]
+    public async Task ModuleAction_RefusesAnythingButAModuleName(string name)
+    {
+        foreach (var action in new[] { ApacheAction.EnableModule, ApacheAction.DisableModule })
+        {
+            await Assert.ThrowsAsync<BadRequestException>(() => _sut.ExecuteActionAsync(
+                1, new ApacheActionRequest { Action = action, TargetName = name }, TestContext.Current.CancellationToken));
+        }
+        Assert.Null(_queued);
+    }
 }

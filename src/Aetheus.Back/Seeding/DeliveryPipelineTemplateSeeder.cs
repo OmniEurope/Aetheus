@@ -256,6 +256,10 @@ public sealed class DeliveryPipelineTemplateSeeder(
         ("application-candidate", 3) =>
             "Takes the stage order of the platform's own candidate: deployed baseline in service, bootstrap check, "
             + "CI, Quality, Security then QA, release; no assurance seal (R2-1, ADR-054).",
+        ("application-candidate", 4) =>
+            "Grades the release from its Quality and Security gates (grade-candidate-from-gates): the release carries "
+            + "the worst gate grade and whether it reaches the deployment threshold, so an accepted release graded A to E "
+            + "deploys without the approval a refused, F or ungraded one still asks for (R-23, R-24).",
         ("host-bluegreen-deploy", 2) =>
             "Drops the required `revision` run parameter: the journal revision defaults to the commit the run was "
             + "launched on and a consumer overrides BG_REVISION; an unresolved revision is refused before the "

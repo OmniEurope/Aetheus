@@ -17,6 +17,7 @@ public partial class ServerPortsentrySection
     private bool AgentOffline => AgentServer is { } server && AgentOfflineGuard.IsOffline(server);
     private bool BlockedByOfflineAgent() => AgentServer is { } server && AgentOfflineGuard.Blocks(server, Toast);
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -54,6 +55,16 @@ public partial class ServerPortsentrySection
         _protocolValues = [];
         _whitelistDesc = string.Empty;
 
+        if (!Ps.IsInstalled) return;
+        var blockedReload = _blockedGrid?.Reload() ?? Task.CompletedTask;
+        var whitelistReload = _whitelistGrid?.Reload() ?? Task.CompletedTask;
+        await Task.WhenAll(blockedReload, whitelistReload, LoadProtocolValuesAsync());
+    }
+
+    // R-119: the blocked and whitelisted addresses are read from the backend, which has them once the agent's new
+    // state has arrived; the follower asks for this read before it lifts the veil.
+    private async Task ReloadAfterSettleAsync()
+    {
         if (!Ps.IsInstalled) return;
         var blockedReload = _blockedGrid?.Reload() ?? Task.CompletedTask;
         var whitelistReload = _whitelistGrid?.Reload() ?? Task.CompletedTask;
@@ -237,7 +248,7 @@ public partial class ServerPortsentrySection
     private async Task GetLogsAsync()
     {
         if (BlockedByOfflineAgent()) return;
-        _follower?.Expect(L["ViewLogs"]);
+        _follower?.Expect(L["ViewLogs"], settle: false);
         var success = await Api.Security.GetPortsentryLogsAsync(ServerId, new PortsentryLogRequest());
         if (success)
             Toast.Success("TaskCreated");
@@ -298,21 +309,31 @@ public partial class ServerPortsentrySection
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Security.RemovePortsentryWhitelistIpAsync(ServerId, entry.Id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("Deleted");
-            if (_whitelistGrid is not null)
-                await _whitelistGrid.Reload();
-            else
+            var success = await Api.Security.RemovePortsentryWhitelistIpAsync(ServerId, entry.Id);
+            if (success)
             {
-                _whitelist.RemoveAll(item => item.Id == entry.Id);
-                _whitelistCount = Math.Max(0, _whitelistCount - 1);
+                Toast.Success("Deleted");
+                if (_whitelistGrid is not null)
+                    await _whitelistGrid.Reload();
+                else
+                {
+                    _whitelist.RemoveAll(item => item.Id == entry.Id);
+                    _whitelistCount = Math.Max(0, _whitelistCount - 1);
+                }
             }
-        }
-        else
-            Toast.Error("Error", "DeleteFailed");
+            else
+                Toast.Error("Error", "DeleteFailed");
+        });
     }
+
+    // The detection mode PortSentry reports ("atcp"), said in words; an unknown or empty mode is not shown.
+    internal string? PortsentryModeText(string? mode) => mode?.Trim().ToLowerInvariant() switch
+    {
+        ("tcp" or "udp" or "stcp" or "sudp" or "atcp" or "audp") and var known => L[$"PortsentryMode_{known}"].Value,
+        _ => null
+    };
 
     private static OmniTone GetBlockedCountBadgeStyle(int count) => count switch
     {

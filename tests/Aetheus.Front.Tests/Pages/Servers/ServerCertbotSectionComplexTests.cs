@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,10 +39,11 @@ public class ServerCertbotSectionComplexTests : BunitContext
     [Fact]
     public void Renders_Empty()
     {
-        var cut = RenderSection();
-        // Installed certbot with zero certs: heading + the "Installed" status badge render.
+        // R-18: the badge is sent to the page header's badges outlet, so the section is rendered with it.
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.ServerId, 1).Add(x => x.Server, MakeServer()));
+        // Installed certbot with zero certs: the section still renders, with the renewal check badge (R-121).
         Assert.Contains("Certbot", cut.Markup);
-        Assert.Contains("Installed", cut.Markup);
+        Assert.Single(cut.FindAll("[data-testid=certbot-renewal-check]"));
     }
 
     [Fact]
@@ -54,20 +56,6 @@ public class ServerCertbotSectionComplexTests : BunitContext
         var cut = RenderSection(server);
         // The single certificate's name is rendered in the certificates grid.
         Assert.Contains("example.com", cut.Markup);
-    }
-
-    [Fact]
-    public void FilteredCertificates_WithSearch()
-    {
-        var server = MakeServer(certs:
-        [
-            new CertbotCertificateDto { Name = "example.com", Domains = ["example.com"], ExpiryDate = DateTime.UtcNow.AddDays(60) },
-            new CertbotCertificateDto { Name = "api.test.com", Domains = ["api.test.com"], ExpiryDate = DateTime.UtcNow.AddDays(30) }
-        ]);
-        var cut = RenderSection(server);
-        typeof(ServerCertbotSection).GetField("_certSearch", Priv)!.SetValue(cut.Instance, "api");
-        var filtered = (List<CertbotCertificateDto>)typeof(ServerCertbotSection).GetProperty("FilteredCertificates", Priv)!.GetValue(cut.Instance)!;
-        Assert.Single(filtered);
     }
 
     [Fact]

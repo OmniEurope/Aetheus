@@ -32,6 +32,31 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         => PostForApiErrorOutcomeAsync<LoginRequest, LoginResponse>("api/auth/login", request, ct);
 
 
+    /// <summary>R-14: sets the password with a welcome mail's token; false when the server refused the link.
+    /// The page says the refusal itself, so the global notifier stays out of a 400.</summary>
+    public async Task<bool> CompletePasswordSetupAsync(CompletePasswordSetupRequest request, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "api/auth/password-setup") { Content = JsonContent.Create(request) };
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesBadRequest, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>R-14 "forgotten password": true when the server took the request (it answers the same whether
+    /// an account holds the address or not), false when it refused it (too many requests, invalid address).</summary>
+    public async Task<bool> RequestPasswordResetAsync(RequestPasswordResetRequest request, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "api/auth/password-reset") { Content = JsonContent.Create(request) };
+        message.Options.Set(ErrorNotificationHandler.CallerHandlesErrors, true);
+        using var response = await Http.SendAsync(message, ct).ConfigureAwait(false);
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>R-14: an administrator sends the account a new set-password link; the outcome says what became
+    /// of the mail, the error the server's reason (too many links, inactive account).</summary>
+    public Task<ApiOutcome<WelcomeMailResultDto, ApiError>> SendPasswordLinkAsync(int userId, CancellationToken ct = default)
+        => SendForOutcomeAsync<WelcomeMailResultDto, ApiError>(HttpMethod.Post, $"api/auth/users/{userId}/password-link", null, ct, callerHandlesEveryError: true);
+
     public Task<PublicDemoInfoDto?> GetPublicDemoInfoAsync(CancellationToken ct = default)
         => GetJsonAsync<PublicDemoInfoDto>("api/auth/public-demo", ct);
 
@@ -93,9 +118,10 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         int page = 1, int pageSize = 25, string? search = null,
         string? sortBy = null, bool sortDescending = false,
         IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int? organizationId = null)
     {
         var query = PageQuery(page, pageSize, search, sortBy, sortDescending);
+        AddOrganization(query, organizationId);
         // The list's column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<UserDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/users", query), filters), JsonOptions.Web, cancellationToken) ?? new();
@@ -153,12 +179,25 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
 
     public async Task<PaginatedResult<RoleDto>> GetRoleDtosAsync(
         int page, int pageSize, string? search = null, string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null, int? organizationId = null)
     {
         var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
+        AddOrganization(query, organizationId);
         // The role grids' column header filters.
         return await Http.GetFromJsonAsync<PaginatedResult<RoleDto>>(GridColumnFilters.AddTo(
             QueryHelpers.AddQueryString("api/roles", query), filters), JsonOptions.Web) ?? new();
+    }
+
+    /// <summary>The roles an organization's administrator gives in <paramref name="organizationId"/> when it creates an
+    /// account (R-10 d): the built-in ones but Admin, and that organization's own.</summary>
+    public async Task<PaginatedResult<RoleDto>> GetAssignableRoleDtosAsync(
+        int organizationId, int page, int pageSize, string? search = null, string? sortBy = null, bool sortDescending = false,
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
+    {
+        var query = BuildPaginationQuery(page, pageSize, search, sortBy, sortDescending);
+        AddOrganization(query, organizationId);
+        return await Http.GetFromJsonAsync<PaginatedResult<RoleDto>>(GridColumnFilters.AddTo(
+            QueryHelpers.AddQueryString("api/roles/assignable", query), filters), JsonOptions.Web) ?? new();
     }
 
 
@@ -190,6 +229,16 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
         => PutJsonNoBodyAsync<SetResourcePermissionsRequest>($"api/roles/{roleId}/permissions", request, ct);
 
 
+    /// <summary>R-11: the named permissions the role holds on its whole organization.</summary>
+    public async Task<List<string>> GetRolePermissionKeysAsync(int roleId, CancellationToken ct = default)
+    {
+        return await Http.GetFromJsonAsync<List<string>>($"api/roles/{roleId}/permission-keys", JsonOptions.Web, ct) ?? [];
+    }
+
+    /// <summary>R-11: replaces the named permissions the role holds on its whole organization.</summary>
+    public Task<ApiStatus> SetRolePermissionKeysAsync(int roleId, SetRolePermissionKeysRequest request, CancellationToken ct = default)
+        => PutJsonNoBodyAsync<SetRolePermissionKeysRequest>($"api/roles/{roleId}/permission-keys", request, ct);
+
     public Task<RoleDto?> CloneRoleAsync(int roleId, CancellationToken ct = default)
         => PostNoBodyAsync<RoleDto>($"api/roles/{roleId}/clone", ct);
 
@@ -216,12 +265,17 @@ public sealed class AuthApi(HttpClient http) : ApiClientBase(http)
     }
 
 
-    public Task<ApiStatus> AddUserToRoleAsync(int roleId, int userId, CancellationToken ct = default)
-        => PostJsonNoBodyAsync<AddUserToRoleRequest>($"api/roles/{roleId}/users", new AddUserToRoleRequest { UserId = userId }, ct);
+    /// <summary>Gives the role to the user; every role but Admin is held for one organization (ADR-059).</summary>
+    public Task<ApiStatus> AddUserToRoleAsync(int roleId, int userId, int? organizationId = null, CancellationToken ct = default)
+        => PostJsonNoBodyAsync<AddUserToRoleRequest>($"api/roles/{roleId}/users",
+            new AddUserToRoleRequest { UserId = userId, OrganizationId = organizationId }, ct);
 
 
-    public Task<ApiStatus> RemoveUserFromRoleAsync(int roleId, int userId, CancellationToken ct = default)
-        => DeleteAsync($"api/roles/{roleId}/users/{userId}", ct);
+    /// <summary>Takes the role back; <paramref name="organizationId"/> names the organization it was held for (ADR-059).</summary>
+    public Task<ApiStatus> RemoveUserFromRoleAsync(int roleId, int userId, int? organizationId = null, CancellationToken ct = default)
+        => DeleteAsync(organizationId is { } organization
+            ? $"api/roles/{roleId}/users/{userId}?organizationId={organization}"
+            : $"api/roles/{roleId}/users/{userId}", ct);
 
 
     public async Task<UserPermissionSummaryDto?> GetUserEffectivePermissionsAsync(int userId, CancellationToken ct = default)

@@ -14,6 +14,12 @@ public sealed record PipelineTemplateSummaryDto
     public DateTime UpdatedAt { get; init; }
     public int PipelineCount { get; init; }
     public DateTime? LatestRunAt { get; init; }
+    /// <summary>A delivery template the platform organization ships and every organization extends;
+    /// outside the platform organization it can be read, never changed.</summary>
+    public bool IsShared { get; init; }
+    /// <summary>True when the caller may change or delete this template (Write on it, and a site Admin for
+    /// a shared delivery template). Computed by the server; a UI shows the template read-only otherwise.</summary>
+    public bool CanEdit { get; init; }
 }
 
 public sealed record PipelineTemplateDto
@@ -27,6 +33,11 @@ public sealed record PipelineTemplateDto
     public string Changelog { get; init; } = string.Empty;
     public int OrganizationId { get; init; }
     public List<PipelineTemplateVersionDto> Versions { get; init; } = [];
+    /// <summary>A delivery template the platform organization ships and every organization extends.</summary>
+    public bool IsShared { get; init; }
+    /// <summary>True when the caller may change or delete this template; see
+    /// <see cref="PipelineTemplateSummaryDto.CanEdit"/>. Set by the single-template read only.</summary>
+    public bool CanEdit { get; init; }
 }
 
 public sealed record PipelineTemplateVersionDto

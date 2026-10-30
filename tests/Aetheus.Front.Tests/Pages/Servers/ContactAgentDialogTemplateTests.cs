@@ -158,7 +158,7 @@ public class ContactAgentDialogTemplateTests : BunitContext
         SetField(cut.Instance, "_state", StateRunning);
         SetField(cut.Instance, "_attempt", 1);
         cut.Render();
-        Assert.Contains("Cancel", cut.Markup);
+        Assert.Contains("GoBack", cut.Markup);
     }
 
     [Fact]

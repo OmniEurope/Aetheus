@@ -53,6 +53,7 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         ["app.metric.threshold"] = "MetricThreshold",
         ["alert.triggered"] = "AlertTriggered",
         ["certbot.renewal-check.failed"] = "CertificateFailed",
+        ["certbot.certificate-expiring"] = "CertificateExpiring",
         ["SecretExpiring"] = "SecretExpiring",
         ["server.offline"] = "ServerOffline",
         ["notification.test"] = "ChannelTest"
@@ -75,6 +76,7 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         ["analysis.operational.scanner-unavailable"] = "Failed",
         ["app.down"] = "Down",
         ["certbot.renewal-check.failed"] = "Failed",
+        ["certbot.certificate-expiring"] = "Warning",
         ["server.offline"] = "Offline",
         ["pipeline.succeeded"] = "Succeeded",
         ["release.deployed"] = "Succeeded",
@@ -140,6 +142,7 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         var blocks = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [StatusBanner] = Banner(heading, BannerColours(email.EventType, root)),
+            [ApprovalActions] = ApprovalMailActions.Block(email.EventType, Id(root, "PipelineRunId"), Id(root, "ApprovalId"), frontOrigin, colours, T),
             [ContextLink] = ContextBlock(context, serverUrl, root),
             [Details] = DetailTable(email, root, projectPrefix, serverUrl),
             [LinkNote] = link is null ? NoLinkNote() : RootRunNote(root, frontOrigin)
@@ -365,12 +368,12 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
         // alerts were stored (recette R-52).
         if (eventType == "alert.triggered" && LongId(root, "AlertId") is { } alertId) return ($"/alerts/{alertId}", "AlertLink");
         var serverEvent = eventType.StartsWith("agent-update.", StringComparison.Ordinal)
-            || eventType is "alert.triggered" or "server.offline" or "certbot.renewal-check.failed";
+            || eventType is "alert.triggered" or "server.offline" or "certbot.renewal-check.failed" or "certbot.certificate-expiring";
         if (!serverEvent || Id(root, "ServerId") is not { } serverId) return null;
         // The button leads to the alert itself, not only to its server (recette R-52).
         if (eventType == "alert.triggered")
             return ($"/servers/{serverId}/" + AlertPages.GetValueOrDefault(Value(root, "Metric") ?? string.Empty, "overview"), "AlertLink");
-        return ($"/servers/{serverId}/" + (eventType == "certbot.renewal-check.failed" ? "certbot" : "overview"), "ServerLink");
+        return ($"/servers/{serverId}/" + (eventType is "certbot.renewal-check.failed" or "certbot.certificate-expiring" ? "certbot" : "overview"), "ServerLink");
     }
 
     private static int? Id(JsonElement? root, string name) =>
@@ -402,11 +405,12 @@ internal sealed class NotificationEmailComposer(string language, MailBlockColour
     /// <summary>The rule's name tells the reader nothing the event does not (recette R-53); the server's identifier is
     /// no reader's business when the server opens from its name, in every server event (R-58 follow-up); the structured
     /// SSH changes are worded under the diagnostic, never shown as data. An agent update's request and project
-    /// identifiers mean nothing to a reader: the server and the project are named elsewhere in the mail.</summary>
+    /// identifiers mean nothing to a reader: the server and the project are named elsewhere in the mail. An approval's identifier only feeds the buttons at the top (recette R-24).</summary>
     private static bool IsHiddenField(string eventType, string name, string? serverUrl) =>
         (name == "ServerId" && serverUrl is not null)
         || (eventType == "alert.triggered" && name is "RuleName" or "Changes" or "AlertId")
-        || (eventType.StartsWith("agent-update.", StringComparison.Ordinal) && name is "AgentUpdateRequestId" or "ProjectId");
+        || (eventType.StartsWith("agent-update.", StringComparison.Ordinal) && name is "AgentUpdateRequestId" or "ProjectId")
+        || (eventType == "pipeline.approval-requested" && name == "ApprovalId");
 
     /// <summary>The words of an alert's metric, comparison, severity and host risks; a value without a word stays as the producer wrote it.</summary>
     private string? AlertValue(JsonProperty property)

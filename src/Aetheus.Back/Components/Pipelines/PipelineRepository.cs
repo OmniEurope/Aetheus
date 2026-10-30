@@ -259,7 +259,7 @@ public sealed class PipelineRepository(
         => _templates.GetTemplateSummariesAsync(ct);
 
     public Task<List<string>> GetTemplateVersionYamlDefinitionsByOrganizationAsync(
-        int organizationId, int excludedTemplateId, CancellationToken ct = default)
+        int? organizationId, int excludedTemplateId, CancellationToken ct = default)
         => _templates.GetTemplateVersionYamlDefinitionsByOrganizationAsync(
             organizationId, excludedTemplateId, ct);
 
@@ -366,7 +366,7 @@ public sealed class PipelineRepository(
             templateId, page, pageSize, sortBy, sortDescending, ct, columnFilters);
 
     public Task<List<string>> GetPipelineYamlDefinitionsByOrganizationAsync(
-        int organizationId, CancellationToken ct = default)
+        int? organizationId, CancellationToken ct = default)
         => _templates.GetPipelineYamlDefinitionsByOrganizationAsync(organizationId, ct);
 
     public Task<List<TestResult>> GetTestResultsAsync(int runId, CancellationToken ct = default)
@@ -395,6 +395,9 @@ public sealed class PipelineRepository(
 
     public Task<int?> GetPipelineIdForApprovalAsync(int approvalId, CancellationToken ct = default)
         => _approvals.GetPipelineIdForApprovalAsync(approvalId, ct);
+
+    public Task<PipelineApprovalScope?> GetApprovalScopeAsync(int approvalId, CancellationToken ct = default)
+        => _approvals.GetApprovalScopeAsync(approvalId, ct);
 
     public Task<int?> GetPipelineIdForArtifactAsync(int artifactId, CancellationToken ct = default)
         => _artifacts.GetPipelineIdForArtifactAsync(artifactId, ct);
@@ -489,6 +492,9 @@ public sealed class PipelineRepository(
 
     public Task<bool> IsActiveUsernameAsync(string username, CancellationToken ct = default)
         => _projectOwners.IsActiveUsernameAsync(username, ct);
+
+    public Task<bool> IsProjectDeletionPendingAsync(int projectId, CancellationToken ct = default)
+        => _projectOwners.IsProjectDeletionPendingAsync(projectId, ct);
 
     public Task<List<int>> FindServerIdsByAgentAsync(string? agent, CancellationToken ct = default)
         => _resolver.FindServerIdsByAgentAsync(agent, ct);

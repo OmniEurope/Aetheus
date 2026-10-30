@@ -41,7 +41,7 @@ public sealed class PublishFailedTestsFunction : IPipelineFunction
             var names = FailedTestNames.Collect(Sources(context));
             if (names.Count > 0)
             {
-                await context.Log(FailedTestNames.LogLine(names)).ConfigureAwait(false);
+                await context.Log(FailedTestNames.LogLine(names, Heading(variable))).ConfigureAwait(false);
                 context.SetOutput(variable, FailedTestNames.Format(names));
             }
         }
@@ -52,6 +52,11 @@ public sealed class PublishFailedTestsFunction : IPipelineFunction
         }
         return PipelineFunctionResult.Success();
     }
+
+    /// <summary>The log line's heading: <c>&lt;GATE&gt;_FLAKY_TESTS</c> names the tests a suite's rerun
+    /// passed (its <c>flaky-tests.txt</c>), which did not fail the gate, so they are not called failed.</summary>
+    internal static string Heading(string variable) =>
+        variable.EndsWith("_FLAKY_TESTS", StringComparison.Ordinal) ? "Flaky tests" : "Failed tests";
 
     /// <summary>True only when statuses were given and every one of them is exactly 0.</summary>
     internal static bool AllClean(string? statuses)

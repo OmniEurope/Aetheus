@@ -13,9 +13,10 @@
 
 @* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
    on each render. Show failures with a Retry action. *@
+<OmniStack Class="page-fill-body">
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadFailed"]
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
@@ -41,7 +42,7 @@
                 <Template Context="profile">
                     @if (profile.NeedsReconfiguration)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["AiProfileNeedsReconfiguration"]">@L["AiToReconfigure"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["AiProfileNeedsReconfiguration"]">@L["AiToReconfigure"]</OmniBadge>
                     }
                     else
                     {
@@ -57,7 +58,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiRunnerProfileDto" Property="SendsDataExternally" Title="@L["ExternalData"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" >
                 <Template Context="profile">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@(profile.SendsDataExternally ? OmniTone.Warning : OmniTone.Success)">@(profile.SendsDataExternally ? L["Yes"] : L["No"])</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(profile.SendsDataExternally ? OmniTone.Warning : OmniTone.Success))" Fill="OmniFill.Solid" Tone="@(profile.SendsDataExternally ? OmniTone.Warning : OmniTone.Success)">@(profile.SendsDataExternally ? L["Yes"] : L["No"])</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiRunnerProfileDto" Title="@L["Actions"]" Width="120px"
@@ -71,3 +72,4 @@
             </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
+</OmniStack>

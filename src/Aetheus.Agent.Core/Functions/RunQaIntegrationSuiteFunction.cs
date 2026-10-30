@@ -24,6 +24,10 @@ namespace Aetheus.Agent.Core.Functions;
 /// <c>classify-dotnet-test-result.mjs</c>): unusable evidence fails the step, failures are status 1,
 /// published as <c>INTEGRATION_SUITE_STATUS</c> where the script exited 10, with the failed names in
 /// <c>failed-tests.txt</c>.</item>
+/// <item>Failures are rerun once, alone (<see cref="FailedTestRerun"/>), into
+/// <c>integration-rerun.trx</c> beside the first TRX: a test that passes on the rerun is flaky, named
+/// in the log and in <c>flaky-tests.txt</c>, and still fails the suite: the status and
+/// <c>failed-tests.txt</c> keep the tests that failed on both attempts and the flaky ones.</item>
 /// </list>
 /// Differences, deliberate: the test project and the static web assets manifest are parameters instead
 /// of the Aetheus paths, and no Node.js is resolved, since nothing here runs in Node any more.
@@ -32,6 +36,7 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
 {
     private const string Configuration = "Release";
     private const string TrxName = "integration.trx";
+    private const string RerunTrxName = "integration-rerun.trx";
 
     private readonly IPipelineFunctionTools _tools;
     private readonly PinnedDotnetSdk _sdk;
@@ -81,21 +86,52 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
         // this step and the scope removes the containers of this run, and the stale ones of a killed run.
         var testcontainers = new TestcontainersRunScope(_tools, context);
         await testcontainers.RemoveStaleAsync(cancellationToken).ConfigureAwait(false);
-        var test = Dotnet(context, sdk.Executable, suite.SourceRoot, TestArguments(suite));
-        foreach (var (name, value) in testcontainers.Variables)
-            test.Environment[name] = value;
-        int rawExitCode;
+        var run = new TestRun(context, sdk.Executable, suite, testcontainers, interval.Value);
         try
         {
-            rawExitCode = await FunctionProgress
-                .RunAsync(_tools, context, $"Integration tests ({suite.Label})", interval.Value, test, cancellationToken)
+            var rawExitCode = await RunTestsAsync(run, $"Integration tests ({suite.Label})", TestArguments(suite), cancellationToken)
                 .ConfigureAwait(false);
+            var trx = Path.Combine(suite.Results, TrxName);
+            var verdict = DotnetTestResultClassifier.Classify(rawExitCode, trx, null, new PhysicalFileSystemReader());
+            if (!verdict.IsValue)
+                return PipelineFunctionResult.Failure($"The integration test evidence cannot be graded: {verdict.Failure.Reason}");
+            // The rerun shares the Testcontainers scope of the first attempt: its containers are removed with them.
+            var rerun = verdict.Value == 0 ? null : await RerunAsync(run, trx, cancellationToken).ConfigureAwait(false);
+            return await GradeAsync(context, suite, trx, verdict.Value, rerun, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             await testcontainers.RemoveOwnAsync().ConfigureAwait(false);
         }
-        return await GradeAsync(context, suite, rawExitCode, cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed record TestRun(
+        PipelineFunctionContext Context, string Dotnet, Suite Suite, TestcontainersRunScope Testcontainers, TimeSpan Interval);
+
+    private Task<int> RunTestsAsync(TestRun run, string title, string[] arguments, CancellationToken cancellationToken)
+    {
+        var test = Dotnet(run.Context, run.Dotnet, run.Suite.SourceRoot, arguments);
+        foreach (var (name, value) in run.Testcontainers.Variables)
+            test.Environment[name] = value;
+        return FunctionProgress.RunAsync(_tools, run.Context, title, run.Interval, test, cancellationToken);
+    }
+
+    /// <summary>The failed tests of the first attempt run once more into <c>integration-rerun.trx</c>, or
+    /// null when nothing is rerun or the rerun left no gradable evidence (the first verdict stands).</summary>
+    private async Task<FailedTestRerun.Verdict?> RerunAsync(TestRun run, string trx, CancellationToken cancellationToken)
+    {
+        var description = $"Integration suite {run.Suite.Label}";
+        if (await FailedTestRerun.PlanAsync(run.Context, description, trx).ConfigureAwait(false) is not { } plan)
+            return null;
+        var rerunTrx = Path.Combine(run.Suite.Results, RerunTrxName);
+        var rawExitCode = await RunTestsAsync(run, $"Integration tests rerun ({run.Suite.Label})",
+            TestArguments(suite: run.Suite, trxName: RerunTrxName, rerunMethods: plan.Methods), cancellationToken).ConfigureAwait(false);
+        var verdict = DotnetTestResultClassifier.Classify(rawExitCode, rerunTrx, null, new PhysicalFileSystemReader());
+        if (verdict.IsValue)
+            return await FailedTestRerun.ReconcileAsync(run.Context, description, plan, rerunTrx).ConfigureAwait(false);
+        await run.Context.Log($"{description}: the rerun evidence cannot be graded ({verdict.Failure.Reason}); the first attempt's failures stand.",
+            TaskLogLevel.Warning).ConfigureAwait(false);
+        return null;
     }
 
     private static async Task<string?> RebaseStaticWebAssetsAsync(PipelineFunctionContext context, Suite suite)
@@ -153,39 +189,45 @@ public sealed partial class RunQaIntegrationSuiteFunction : IPipelineFunction
             : string.Empty;
 
     /// <summary>The runner the tested source selects: its <c>global.json</c> naming
-    /// Microsoft.Testing.Platform (<c>grep -q</c>), else VSTest.</summary>
-    internal static string[] TestArguments(Suite suite)
+    /// Microsoft.Testing.Platform (<c>grep -q</c>), else VSTest. A rerun selects its test methods with
+    /// the runner's own filter: xunit's <c>--filter-method</c> on the testing platform, a
+    /// <c>FullyQualifiedName</c> expression on VSTest (<see cref="FailedTestRerun"/>).</summary>
+    internal static string[] TestArguments(Suite suite, string trxName = TrxName, IReadOnlyList<string>? rerunMethods = null)
     {
         var globalJson = Path.Combine(suite.SourceRoot, "global.json");
         var testingPlatform = File.Exists(globalJson)
             && File.ReadAllText(globalJson).Contains("\"Microsoft.Testing.Platform\"", StringComparison.Ordinal);
-        return testingPlatform
+        string[] arguments = testingPlatform
             ?
             [
                 "test", "--project", suite.TestProject, "--configuration", Configuration, "--no-build", "--no-restore",
-                "--no-progress", "--report-trx", "--report-trx-filename", TrxName, "--results-directory", suite.Results
+                "--no-progress", "--report-trx", "--report-trx-filename", trxName, "--results-directory", suite.Results
             ]
             :
             [
                 "test", suite.TestProject, "--configuration", Configuration, "--no-build", "--no-restore",
-                "--logger", "console;verbosity=minimal", "--logger", $"trx;LogFileName={TrxName}",
+                "--logger", "console;verbosity=minimal", "--logger", $"trx;LogFileName={trxName}",
                 "--results-directory", suite.Results
             ];
+        if (rerunMethods is null)
+            return arguments;
+        return testingPlatform
+            ? [.. arguments, .. FailedTestRerun.TestingPlatformFilter(rerunMethods)]
+            : [.. arguments, "--filter", FailedTestRerun.VsTestFilter(rerunMethods)];
     }
 
+    /// <summary>The status over both attempts when the failed tests were rerun, else the first one's;
+    /// the failed names, and the flaky ones, recorded beside it so they are named directly.</summary>
     private static async Task<PipelineFunctionResult> GradeAsync(
-        PipelineFunctionContext context, Suite suite, int rawExitCode, CancellationToken cancellationToken)
+        PipelineFunctionContext context, Suite suite, string trx, int firstStatus, FailedTestRerun.Verdict? rerun,
+        CancellationToken cancellationToken)
     {
-        var trx = Path.Combine(suite.Results, TrxName);
-        var verdict = DotnetTestResultClassifier.Classify(rawExitCode, trx, null, new PhysicalFileSystemReader());
-        if (!verdict.IsValue)
-            return PipelineFunctionResult.Failure($"The integration test evidence cannot be graded: {verdict.Failure.Reason}");
-
-        var status = verdict.Value.ToString(CultureInfo.InvariantCulture);
+        var status = (rerun?.Status ?? firstStatus).ToString(CultureInfo.InvariantCulture);
         await context.Log($"Integration suite {suite.Label} produced an executed-test proof with findings status {status}.").ConfigureAwait(false);
-        // The failed names, published beside the gate status so the failing checks are named directly.
-        if (verdict.Value != 0)
-            await FailedTestNames.RecordAsync(context, trx, Path.Combine(suite.Results, "failed-tests.txt"), cancellationToken).ConfigureAwait(false);
+        if (rerun is not null)
+            await FailedTestRerun.RecordAsync(context, $"Integration suite {suite.Label}", suite.Results, rerun, cancellationToken).ConfigureAwait(false);
+        else if (firstStatus != 0)
+            await FailedTestNames.RecordAsync(context, trx, Path.Combine(suite.Results, FailedTestRerun.FailedList), cancellationToken).ConfigureAwait(false);
         context.SetOutput("INTEGRATION_SUITE_STATUS", status);
         return PipelineFunctionResult.Success();
     }

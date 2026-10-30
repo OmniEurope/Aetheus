@@ -15,11 +15,11 @@
 @* Tabs choose what the grid lists (all packages, or one type); the last tab shows the source addresses. *@
 <UrlSyncedTabs Slugs="@TabSlugs" SelectedIndex="@_tab" SelectedIndexChanged="@OnTabChangedAsync">
     <Tabs>
-        <OmniTabsItem Key="all" Title="@L["All"]" />
-        <OmniTabsItem Key="nuget" Title="NuGet" />
-        <OmniTabsItem Key="npm" Title="npm" />
-        <OmniTabsItem Key="maven" Title="Maven" />
-        <OmniTabsItem Key="addresses" Title="@L["PackageRegistryAddresses"]" />
+        <OmniTabsItem Key="all" Title="@L["All"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("apps")" /></Icon></OmniTabsItem>
+        <OmniTabsItem Key="nuget" Title="NuGet"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("deployed_code")" /></Icon></OmniTabsItem>
+        <OmniTabsItem Key="npm" Title="npm"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("inventory_2")" /></Icon></OmniTabsItem>
+        <OmniTabsItem Key="maven" Title="Maven"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("layers")" /></Icon></OmniTabsItem>
+        <OmniTabsItem Key="addresses" Title="@L["PackageRegistryAddresses"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("link")" /></Icon></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>
 
@@ -59,10 +59,23 @@ else
         <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PackageRegistryPackageDto" Property="LatestVersion" Title="@L["Version"]" Filterable="true" >
             <Template Context="p"><span class="text-mono">@(p.LatestVersion ?? "-")</span></Template>
         </OmniDataGridColumn>
+        @* R-58: whether the package can be read without a token; toggled in the package dialog. *@
+        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="AllowAnonymousDownload" Title="@L["PackageAccess"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@AccessText">
+            <Template Context="p">
+                @if (p.AllowAnonymousDownload)
+                {
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Info))" Fill="OmniFill.Solid" Tone="OmniTone.Info">@L["AnonymousDownloadAllowed"]</OmniBadge>
+                }
+                else
+                {
+                    <span class="omni-u-text-muted">@L["AnonymousDownloadOff"]</span>
+                }
+            </Template>
+        </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="TotalSizeBytes" Title="@L["Size"]" Width="110px" Filterable="false" >
             <Template Context="p">@DisplayFormatting.Size(p.TotalSizeBytes)</Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="UpdatedAt" Title="@L["UpdatedAt"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+        <OmniDataGridColumn TItem="PackageRegistryPackageDto" Property="UpdatedAt" Title="@L["UpdatedAt"]" Width="160px" Filterable="true" >
             <Template Context="p">@p.UpdatedAt.ToString("d")</Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PackageRegistryPackageDto" Title="@L["Actions"]" Width="90px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >

@@ -143,7 +143,7 @@ public sealed class PipelineAdvisoryPreflightBuilder(
                 .ConfigureAwait(false);
             if (target is null) return null;
 
-            var problems = new List<string>();
+            var problems = new List<PipelineProblem>();
             var definition = await children.ResolveDefinitionAsync(
                 target, organizationId, reference.Name, problems, ct).ConfigureAwait(false);
             if (definition is null) return null;

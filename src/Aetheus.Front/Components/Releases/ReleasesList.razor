@@ -42,7 +42,9 @@
         </OmniDataGridColumn>
         @if (!IsProjectScope)
         {
-            <OmniDataGridColumn TItem="ReleaseDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="ReleaseDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" >
+                <Template Context="rel"><EntityNameLink Kind="EntityNameKind.Project" Id="rel.ProjectId" Name="@rel.ProjectName" /></Template>
+            </OmniDataGridColumn>
         }
         <OmniDataGridColumn TItem="ReleaseDto" Property="BranchName" Title="@L["Branch"]" Filterable="true" />
         <OmniDataGridColumn TItem="ReleaseDto" Property="Status" Title="@L["Status"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
@@ -58,12 +60,13 @@
                 }
                 else
                 {
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"
-                        title="@L["ReleaseNotQualifiedHint"]">@L["ReleaseNotQualified"]</OmniText>
+                    @* R-59: "Not qualified" is a state, so a text badge with its icon. *@
+                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral"
+                               title="@L["ReleaseNotQualifiedHint"]" data-testid="release-not-qualified">@L["ReleaseNotQualified"]</OmniBadge>
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="ReleaseDto" Property="PublishedAt" Title="@L["ReleaseDate"]" Width="160px" SortOrder="OmniDataGridSortOrder.Descending" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+        <OmniDataGridColumn TItem="ReleaseDto" Property="PublishedAt" Title="@L["ReleaseDate"]" Width="160px" SortOrder="OmniDataGridSortOrder.Descending" Filterable="true" >
             <Template Context="r">
                 @if (r.PublishedAt.HasValue)
                 {
@@ -115,7 +118,7 @@
                     else if (r.Status == ReleaseStatus.Published)
                     {
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => PromoteRelease(r))" Disabled="@(!_canWrite)" title="@L["Promote"]"><Icon><OmniIcon Name="OmniIconName.Upgrade" /></Icon></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackRelease(r))" Disabled="@(!_canWrite)" title="@L["Rollback"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => RollbackRelease(r))" Disabled="@(!Permissions.Can(PermissionKeys.ReleaseRollback, r.Id))" title="@L["Rollback"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon></OmniButton>
                     }
                     else if (r.Status == ReleaseStatus.Archived)
                     {
@@ -123,16 +126,17 @@
                         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => RelaunchFromCommit(r))" Disabled="@(!_canWrite || !ReleaseRelaunch.CanRelaunch(r.Status, r.CommitHash))" title="@(ReleaseRelaunch.CanRelaunch(r.Status, r.CommitHash) ? L["RelaunchFromCommit"] : L["RelaunchFromCommitUnavailable"])"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon></OmniButton>
                     }
                     @* STD-BTN detection 11: the status action (and Rollback) visible, the other actions in the menu. *@
-                    @if (r.RevertPipelineId is not null || r.IsPreviousDeployment || r.PipelineRunId.HasValue)
+                    @if (r.RevertPipelineId is not null || ReleaseRedeploy.IsOffered(r.Status) || r.PipelineRunId.HasValue)
                     {
                         <OmniOverflowMenu Label="@L["MoreActions"]">
                             @if (r.RevertPipelineId is not null)
                             {
                                 <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => RollbackToPreviousColour(r))" Disabled="@(!_canWrite)" title="@L["RevertToPrevious"]"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent>@L["RevertToPrevious"]</ChildContent></OmniMenuItem>
                             }
-                            @if (r.IsPreviousDeployment)
+                            @* R-72: any release whose artifact is kept can be deployed again; without one the entry says why. *@
+                            @if (ReleaseRedeploy.IsOffered(r.Status))
                             {
-                                <OmniMenuItem OnClick="@(() => RedeployRelease(r))" Disabled="@(!_canWrite || r.RedeployPipelineId is null)" title="@(r.RedeployPipelineId is null ? L["RedeployUnavailable"] : L["Redeploy"])"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Redeploy"]</ChildContent></OmniMenuItem>
+                                <OmniMenuItem OnClick="@(() => RedeployRelease(r))" Disabled="@(!_canWrite || !ReleaseRedeploy.CanRedeploy(r))" title="@RedeployTitle(r)"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Redeploy"]</ChildContent></OmniMenuItem>
                             }
                             @if (r.PipelineRunId.HasValue)
                             {

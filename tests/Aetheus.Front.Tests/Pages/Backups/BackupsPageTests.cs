@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net.Http;
 using Aetheus.Front.Components.AppBackups;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using BackupsPage = Aetheus.Front.Components.AppBackups.Backups;
 
@@ -57,14 +58,16 @@ public class BackupsPageTests : BunitContext
     {
         var handler = Wire(Policy(1, "project-nightly", enabled: true));
 
-        var cut = Render<BackupsPage>(parameters => parameters
+        // Inside a project, Create sits in the project header (R-109), so the page is rendered next to the header outlet.
+        var host = this.RenderWithPageHeader<BackupsPage>(parameters => parameters
             .Add(component => component.ProjectId, 7));
+        var cut = host.FindComponent<BackupsPage>();
 
         cut.WaitForAssertion(() => Assert.Contains(handler.Requests, request =>
             request.Method == "GET"
             && request.Url.Contains("api/backups", StringComparison.Ordinal)
             && request.Url.Contains("projectId=7", StringComparison.Ordinal)));
-        cut.FindAll("button").First(button => button.TextContent.Contains("Create")).Click();
+        host.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Contains("Create")).Click();
 
         Assert.DoesNotContain(">Project<", cut.Markup, StringComparison.Ordinal);
     }

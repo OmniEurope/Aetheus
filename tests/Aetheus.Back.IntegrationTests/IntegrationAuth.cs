@@ -16,16 +16,21 @@ internal static class IntegrationAuth
     /// <summary>The bootstrap-admin password the integration <see cref="AetheusWebApplicationFactory"/> seeds.</summary>
     public const string AdminPassword = AetheusWebApplicationFactory.AdminPassword;
 
-    /// <summary>Logs in over HTTP and returns the JWT, throwing if the login does not succeed.</summary>
-    public static async Task<string> LoginAsync(
+    /// <summary>The sign-in e-mail of the seeded admin: the factory runs in Development, whose
+    /// appsettings.Development.json names it (Auth:AdminEmail).</summary>
+    public const string AdminEmail = "admin@aetheus.local";
+
+    /// <summary>Logs in by e-mail, as everyone does (a username is never a sign-in), and returns the JWT,
+    /// throwing if the login does not succeed.</summary>
+    public static async Task<string> LoginByEmailAsync(
         HttpClient client,
-        string username,
+        string email,
         string password,
         CancellationToken ct)
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = email,
             Password = password
         }, ct);
         response.EnsureSuccessStatusCode();
@@ -33,9 +38,9 @@ internal static class IntegrationAuth
         return login!.Token;
     }
 
-    /// <summary>Logs in as the seeded bootstrap admin and returns the JWT.</summary>
+    /// <summary>Logs in as the seeded bootstrap admin, by its e-mail, and returns the JWT.</summary>
     public static Task<string> LoginAsAdminAsync(HttpClient client, CancellationToken ct)
-        => LoginAsync(client, "admin", AdminPassword, ct);
+        => LoginByEmailAsync(client, AdminEmail, AdminPassword, ct);
 
     /// <summary>Sets (or clears, when <paramref name="token"/> is null) the Bearer header on a client.</summary>
     public static void SetBearer(HttpClient client, string? token)

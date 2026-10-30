@@ -37,6 +37,10 @@ public sealed class AppBackupsController(IBackupPolicyService service, IResource
         // fleet operation.
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, request.ServerId, Permission.Write, ct))
             return Forbid();
+        // RBAC audit, finding 6: and the server sits in the project's organization, so a caller of two
+        // organizations never points one's backups at the other's agent.
+        if (!await authz.BelongsToProjectOrganizationAsync(request.ProjectId, ResourceType.Server, [request.ServerId], ct))
+            return Forbid();
         return Ok(await service.CreateAsync(request, ct));
     }
 

@@ -49,7 +49,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineFleetItemDto" Property="Freshness" Title="@L["Status"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@FreshnessFilterText" >
                 <Template Context="item">
-                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@FreshnessStyle(item.Freshness)">@FreshnessText(item.Freshness)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(FreshnessStyle(item.Freshness)))" Fill="OmniFill.Solid" Tone="@FreshnessStyle(item.Freshness)">@FreshnessText(item.Freshness)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineFleetItemDto" Title="@L["Actions"]" Width="11rem" Sortable="false" Filterable="false" >

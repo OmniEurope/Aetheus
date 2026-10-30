@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Aetheus.Front.Tests.Services;
 
 /// <summary>Hands out one <see cref="SilentHubConnection"/> per <see cref="Create"/> and counts them.</summary>
-internal sealed class SilentHubConnectionFactory(AuthStateProvider auth, bool refuseJoin = false)
+internal sealed class SilentHubConnectionFactory(AuthStateProvider auth, bool refuseJoin = false, Exception? joinFailure = null)
     : HubConnectionFactory(
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["ApiBaseUrl"] = "http://test" }).Build(),
         auth,
@@ -23,7 +23,7 @@ internal sealed class SilentHubConnectionFactory(AuthStateProvider auth, bool re
     public override HubConnection Create(string hubPath, IRetryPolicy? retryPolicy = null)
     {
         Created++;
-        return Connection = new SilentHubConnection(refuseJoin);
+        return Connection = new SilentHubConnection(refuseJoin, joinFailure);
     }
 }
 
@@ -31,7 +31,7 @@ internal sealed class SilentHubConnectionFactory(AuthStateProvider auth, bool re
 /// Starts and answers invocations without a transport, and never delivers a single event: the
 /// connection that is still attached to the previous colour after a blue-green switch.
 /// </summary>
-internal sealed class SilentHubConnection(bool refuseJoin) : HubConnection(
+internal sealed class SilentHubConnection(bool refuseJoin, Exception? joinFailure = null) : HubConnection(
     new UnusedConnectionFactory(),
     new JsonHubProtocol(),
     new UriEndPoint(new Uri("http://test/hubs/pipelines")),
@@ -58,7 +58,7 @@ internal sealed class SilentHubConnection(bool refuseJoin) : HubConnection(
         string methodName, Type returnType, object?[] args, CancellationToken cancellationToken = default)
     {
         lock (_invoked) _invoked.Add(methodName);
-        return refuseJoin
+        return joinFailure is not null ? Task.FromException<object?>(joinFailure) : refuseJoin
             ? Task.FromException<object?>(new HubException("Access denied."))
             : Task.FromResult<object?>(null);
     }

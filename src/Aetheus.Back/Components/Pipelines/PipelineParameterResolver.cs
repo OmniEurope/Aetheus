@@ -25,6 +25,20 @@ public static class PipelineParameterResolver
         out List<string> errors,
         bool enforceRequired = true)
     {
+        var resolved = TryResolveProblems(declared, supplied, out effective, out var problems, enforceRequired);
+        errors = [.. problems.Select(problem => problem.English)];
+        return resolved;
+    }
+
+    /// <summary><see cref="TryResolve"/> with each refusal as a <see cref="PipelineProblem"/>: a code the front
+    /// says in the user's language, and the same English sentence.</summary>
+    public static bool TryResolveProblems(
+        IReadOnlyList<PipelineTemplateParameterDefinition> declared,
+        IReadOnlyDictionary<string, string>? supplied,
+        out Dictionary<string, string> effective,
+        out List<PipelineProblem> errors,
+        bool enforceRequired = true)
+    {
         effective = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         errors = [];
         supplied ??= new Dictionary<string, string>();
@@ -37,23 +51,29 @@ public static class PipelineParameterResolver
         // Reject inputs that don't correspond to a declared parameter (typo / stale dialog).
         foreach (var key in supplied.Keys)
             if (!declaredNames.Contains(key))
-                errors.Add($"Unknown parameter '{key}'.");
+                errors.Add(PipelineProblem.Of(
+                    PipelineProblemCodes.ParameterUnknown, $"Unknown parameter '{key}'.", ("parameter", key)));
         foreach (var param in declared)
             ResolveParameter(param, supplied, effective, errors, enforceRequired);
         return errors.Count == 0;
     }
 
+    private static PipelineProblem ReservedName(string name) => PipelineProblem.Of(
+        PipelineProblemCodes.ParameterReservedName,
+        $"Parameter '{name}' uses a reserved system variable name.",
+        ("parameter", name));
+
     private static void ResolveParameter(
         PipelineTemplateParameterDefinition parameter,
         IReadOnlyDictionary<string, string> supplied,
         IDictionary<string, string> effective,
-        ICollection<string> errors,
+        ICollection<PipelineProblem> errors,
         bool enforceRequired)
     {
         if (string.IsNullOrWhiteSpace(parameter.Name)) return;
         if (IsReservedName(parameter.Name))
         {
-            errors.Add($"Parameter '{parameter.Name}' uses a reserved system variable name.");
+            errors.Add(ReservedName(parameter.Name));
             return;
         }
         var hasSupplied = supplied.TryGetValue(parameter.Name, out var rawValue)
@@ -61,7 +81,10 @@ public static class PipelineParameterResolver
         var value = hasSupplied ? rawValue! : parameter.Default;
         if (string.IsNullOrWhiteSpace(value))
         {
-            if (parameter.Required && enforceRequired) errors.Add($"Parameter '{parameter.Name}' is required.");
+            if (parameter.Required && enforceRequired)
+                errors.Add(PipelineProblem.Of(
+                    PipelineProblemCodes.ParameterRequired, $"Parameter '{parameter.Name}' is required.",
+                    ("parameter", parameter.Name)));
             return;
         }
         ValidateParameterType(parameter, value, errors);
@@ -71,17 +94,29 @@ public static class PipelineParameterResolver
     private static void ValidateParameterType(
         PipelineTemplateParameterDefinition parameter,
         string value,
-        ICollection<string> errors)
+        ICollection<PipelineProblem> errors)
     {
         var type = (parameter.Type ?? "string").Trim().ToLowerInvariant();
         if (type == "number"
             && !decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-            errors.Add($"Parameter '{parameter.Name}' must be a number (got '{value}').");
+            errors.Add(PipelineProblem.Of(
+                PipelineProblemCodes.ParameterNotNumber,
+                $"Parameter '{parameter.Name}' must be a number (got '{value}').",
+                ("parameter", parameter.Name), ("value", value)));
         else if (type == "boolean" && !bool.TryParse(value, out _))
-            errors.Add($"Parameter '{parameter.Name}' must be 'true' or 'false' (got '{value}').");
+            errors.Add(PipelineProblem.Of(
+                PipelineProblemCodes.ParameterNotBoolean,
+                $"Parameter '{parameter.Name}' must be 'true' or 'false' (got '{value}').",
+                ("parameter", parameter.Name), ("value", value)));
         else if (type == "choice" && parameter.AllowedValues.Count > 0
                  && !parameter.AllowedValues.Any(item => string.Equals(item, value, StringComparison.Ordinal)))
-            errors.Add($"Parameter '{parameter.Name}' must be one of: {string.Join(", ", parameter.AllowedValues)} (got '{value}').");
+        {
+            var choices = string.Join(", ", parameter.AllowedValues);
+            errors.Add(PipelineProblem.Of(
+                PipelineProblemCodes.ParameterNotInChoices,
+                $"Parameter '{parameter.Name}' must be one of: {choices} (got '{value}').",
+                ("parameter", parameter.Name), ("choices", choices), ("value", value)));
+        }
     }
 
     /// <summary>
@@ -97,20 +132,28 @@ public static class PipelineParameterResolver
     /// the check. Missing values stay a launch-time concern, enforced where the launch happens.
     /// </summary>
     public static List<string> ValidateDeclarations(
+        IReadOnlyList<PipelineTemplateParameterDefinition> declared) =>
+        [.. ValidateDeclarationProblems(declared).Select(problem => problem.English)];
+
+    /// <summary><see cref="ValidateDeclarations"/> with each error as a <see cref="PipelineProblem"/>.</summary>
+    public static List<PipelineProblem> ValidateDeclarationProblems(
         IReadOnlyList<PipelineTemplateParameterDefinition> declared)
     {
-        var errors = new List<string>();
+        var errors = new List<PipelineProblem>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in declared)
         {
             if (string.IsNullOrWhiteSpace(parameter.Name)) continue;
             if (IsReservedName(parameter.Name))
             {
-                errors.Add($"Parameter '{parameter.Name}' uses a reserved system variable name.");
+                errors.Add(ReservedName(parameter.Name));
                 continue;
             }
             if (!seen.Add(parameter.Name))
-                errors.Add($"Parameter '{parameter.Name}' is declared more than once.");
+                errors.Add(PipelineProblem.Of(
+                    PipelineProblemCodes.ParameterDeclaredTwice,
+                    $"Parameter '{parameter.Name}' is declared more than once.",
+                    ("parameter", parameter.Name)));
             if (!string.IsNullOrWhiteSpace(parameter.Default))
                 ValidateParameterType(parameter, parameter.Default!, errors);
         }

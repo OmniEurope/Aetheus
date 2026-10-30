@@ -10,7 +10,8 @@ namespace Aetheus.Agent.Core.Functions;
 /// <c>deploy/pipelines/toto-conformance-fixture/common/deploy/scripts/generate-candidate-assurance-contract.mjs</c> captured it: the single summary file
 /// of that name under the directory is copied into the evidence directory and graded; no summary, two,
 /// or one that is not JSON gives an Unavailable grade F with a generated evidence file instead. A summary
-/// whose run identity is invalid or whose commit is another one stops the generation.
+/// whose run identity is invalid, whose commit is another one, or that has a grade but names no commit stops the
+/// generation; a summary with no grade at all is recorded Unavailable (grade F) with its real cause.
 /// </summary>
 internal sealed partial class AssuranceAnalysisCapture(string sourceSha, string evidenceDirectory, string contractDirectory)
 {
@@ -74,7 +75,13 @@ internal sealed partial class AssuranceAnalysisCapture(string sourceSha, string 
         var gateStatus = JsValue.ToJsString(JsValue.Coalesce(JsValue.Get(summary, "status"), "Unknown"));
         if (!JsValue.IsPositiveSafeInteger(pipelineRunId))
             throw new AssuranceContractException($"{label} pipeline run identity is invalid.");
-        if (commitHash is not string hash || !string.Equals(JsValue.AsciiLower(hash), JsValue.AsciiLower(sourceSha), StringComparison.Ordinal))
+        // A summary with no grade names no commit: that is no provenance violation, the analysis simply has no grade
+        // (owner decision after run #2958). It is recorded, unavailable, with its real cause.
+        if (commitHash is not string && !IsGradeLetter(grade))
+            return NoGrade(label, path, bytes, summary, pipelineRunId, gateStatus);
+        if (commitHash is not string hash)
+            throw new AssuranceContractException($"{label} summary has a grade but names no commit.");
+        if (!string.Equals(JsValue.AsciiLower(hash), JsValue.AsciiLower(sourceSha), StringComparison.Ordinal))
             throw new AssuranceContractException($"{label} summary belongs to another commit.");
 
         var destination = Destination(label);
@@ -94,6 +101,41 @@ internal sealed partial class AssuranceAnalysisCapture(string sourceSha, string 
         analysis.Set("evidence", Evidence(destination));
         return analysis;
     }
+
+    /// <summary>A summary without a grade: copied as evidence like any other, recorded unavailable (effective grade F)
+    /// with the reason <c>no-grade</c> and a detail that says why, the validator's messages when the grading was
+    /// rejected, "nothing measured" otherwise.</summary>
+    private JsObject NoGrade(string label, string path, byte[] bytes, object? summary, object? pipelineRunId, string gateStatus)
+    {
+        var destination = Destination(label);
+        File.Copy(path, destination, overwrite: true);
+        var rejections = Rejections(JsValue.GetOptional(summary, "grade"));
+        var analysis = new JsObject();
+        analysis.Set("status", "Unavailable");
+        analysis.Set("reason", "no-grade");
+        analysis.Set("detail", rejections.Count > 0
+            ? $"{label} summary has no grade (grading rejected: {string.Join("; ", rejections)})."
+            : $"{label} summary has no grade: nothing measured.");
+        analysis.Set("reportedGrade", null);
+        analysis.Set("effectiveGrade", "F");
+        analysis.Set("completeness", "Incomplete");
+        analysis.Set("gateStatus", gateStatus);
+        analysis.Set("pipelineRunId", pipelineRunId);
+        analysis.Set("sourceSha", JsValue.AsciiLower(sourceSha));
+        analysis.Set("sha256", Convert.ToHexStringLower(SHA256.HashData(bytes)));
+        analysis.Set("evidence", Evidence(destination));
+        return analysis;
+    }
+
+    /// <summary>The validator's messages a grade carries on its rejected measures (<c>grade.domains[].measures[].rejection</c>).</summary>
+    private static List<string> Rejections(object? grade) =>
+        (JsValue.GetOptional(grade, "domains") as List<object?> ?? [])
+            .SelectMany(domain => JsValue.GetOptional(domain, "measures") as List<object?> ?? [])
+            .Select(measure => JsValue.GetOptional(measure, "rejection"))
+            .OfType<string>()
+            .Where(rejection => rejection.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>The reason of a captured grade; undefined (so not written) when it is available.</summary>
     private static object Reason(bool gradeAvailable, bool gateUsable) => gradeAvailable

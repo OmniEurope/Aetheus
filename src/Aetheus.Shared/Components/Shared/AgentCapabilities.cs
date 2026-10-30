@@ -7,6 +7,26 @@ public static class AgentCapabilities
 {
     public const string ShellExecution = "shell.execute";
     public const string DockerExecution = "docker.execute";
+
+    /// <summary>R-119: the agent runs the Docker page's changes as typed operations (container and image removal,
+    /// resource limits, Compose stack actions, prune). A software capability gating the agent version, published only
+    /// where Docker is available, like <see cref="DockerExecution"/>: an older agent would not even read the new
+    /// operation kinds, so it is never handed one.</summary>
+    public const string DockerManagement = "docker.manage";
+
+    /// <summary>R-119: the agent enables and disables Apache modules as typed operations (<c>ApacheEnableModule</c>,
+    /// <c>ApacheDisableModule</c>). A software capability gating the agent version, published only where the
+    /// aetheus-apache grant is, like <see cref="DockerManagement"/> with Docker.</summary>
+    public const string ApacheModules = "apache.modules";
+
+    /// <summary>R-119: the agent installs RKHunter as a typed operation (<c>RkhunterSetup</c>). Published only where
+    /// both the aetheus-package and the aetheus-rkhunter grants are.</summary>
+    public const string RkhunterSetup = "rkhunter.setup";
+
+    /// <summary>R-119: the agent starts, stops and restarts the TeamSpeak unit as typed operations
+    /// (<c>TeamspeakStart</c>, <c>TeamspeakStop</c>, <c>TeamspeakRestart</c>). Published only where the
+    /// aetheus-teamspeak grant is.</summary>
+    public const string TeamspeakServiceControl = "teamspeak.control";
     public const string PipelineBuild = "pipeline.build";
     public const string ArtifactCollect = "artifact.collect";
     public const string ArtifactRestore = "artifact.restore";
@@ -50,6 +70,11 @@ public static class AgentCapabilities
     /// which is a grant.</summary>
     public const string PackageInventory = "package.inventory";
 
+    /// <summary>Recette R-97 (ADR-058): the agent can find and remove what a project deployed on its host
+    /// (<c>ProjectResourcesDiscover</c>, <c>ProjectResourcesRemove</c>). A software capability gating the agent
+    /// version: the backend does not queue the tasks for an agent that does not publish it, and says so.</summary>
+    public const string ProjectResources = "project.resources";
+
     /// <summary>The agent runs build-level functions of <c>PipelineFunctionCatalog</c>
     /// (<c>type: aetheus</c> steps). A software capability gating the agent version: an agent that
     /// does not publish it never receives such a task.</summary>
@@ -63,6 +88,10 @@ public static class AgentCapabilities
     public static IReadOnlyList<string> SoftwareCapabilities { get; } =
     [
         ShellExecution,
+        DockerManagement,
+        ApacheModules,
+        RkhunterSetup,
+        TeamspeakServiceControl,
         PipelineBuild,
         ArtifactCollect,
         ArtifactRestore,
@@ -72,6 +101,7 @@ public static class AgentCapabilities
         MailOutboundProbe,
         MailLeftoversCheck,
         PackageInventory,
+        ProjectResources,
         Analysis,
         AiExecution
     ];
@@ -117,10 +147,13 @@ public static class AgentCapabilities
     private static string? RequiredInfrastructureCapability(OperationKind operation) => operation switch
     {
         >= OperationKind.DockerRestartContainer and <= OperationKind.DockerBuildImage => DockerExecution,
+        >= OperationKind.DockerRemoveContainer and <= OperationKind.DockerPrune => DockerManagement,
         OperationKind.SystemPackageUpgrade => PatchManagement,
         >= OperationKind.ApacheReload and <= OperationKind.ApacheDeleteSite => ApacheManagement,
+        OperationKind.ApacheEnableModule or OperationKind.ApacheDisableModule => ApacheModules,
         >= OperationKind.CertbotObtain and <= OperationKind.CertbotRemoveDomain => CertbotManagement,
         >= OperationKind.RkhunterScan and <= OperationKind.RkhunterPropupd => Analysis,
+        OperationKind.RkhunterSetup => RkhunterSetup,
         >= OperationKind.FirewallAllow and <= OperationKind.FirewallSetEnabled => FirewallManagement,
         _ => null
     };
@@ -134,9 +167,11 @@ public static class AgentCapabilities
         OperationKind.MailMasterAccess or OperationKind.MailSetQuota or OperationKind.MailRetryTuning => MailManagement,
         OperationKind.MailOutboundProbe => MailOutboundProbe,
         OperationKind.MailLeftoversCheck => MailLeftoversCheck,
+        OperationKind.ProjectResourcesDiscover or OperationKind.ProjectResourcesRemove => ProjectResources,
         >= OperationKind.PortsentryStart and <= OperationKind.PortsentrySetup => PortsentryManagement,
         >= OperationKind.CronSave and <= OperationKind.CronDelete => CronManagement,
         >= OperationKind.TeamspeakServerQuery and <= OperationKind.TeamspeakGetLogs => TeamspeakManagement,
+        >= OperationKind.TeamspeakStart and <= OperationKind.TeamspeakRestart => TeamspeakServiceControl,
         _ => null
     };
 

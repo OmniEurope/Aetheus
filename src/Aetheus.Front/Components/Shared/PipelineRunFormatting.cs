@@ -132,6 +132,21 @@ internal static class PipelineRunFormatting
     public static OmniIconName? StepStatusIcon(PipelineStepRunDto step) =>
         IsSkippedByCondition(step) || IsSkippedWithoutWork(step) ? SkippedIcon : null;
 
+    /// <summary>The icon of a step's status badge: a text badge always carries one (badge rule of
+    /// 2026-10-25, recette R-59), the same icons as the run statuses, skipped keeping its own.</summary>
+    public static OmniIconName StepBadgeIcon(PipelineStepRunDto step) =>
+        StepStatusIcon(step)
+        ?? (IsRolledBack(step) ? OmniIconName.Reset
+            : step.IsRejected ? OmniIconName.ShieldSlash
+            : step.Status switch
+            {
+                TaskExecutionStatus.Success => OmniIconName.Check,
+                TaskExecutionStatus.Failed or TaskExecutionStatus.Timeout => OmniIconName.Close,
+                TaskExecutionStatus.Running => OmniIconName.Sync,
+                TaskExecutionStatus.Cancelled => OmniIconName.Prohibit,
+                _ => OmniIconName.Timer
+            });
+
     /// <summary>One icon for "skipped" everywhere (step badge, Gantt stage and step
     /// rows).</summary>
     public const OmniIconName SkippedIcon = OmniIconName.ArrowUUpRight;

@@ -189,6 +189,16 @@ Aetheus.scrollToBottom = function (el) {
         requestAnimationFrame(function () { el.scrollTop = el.scrollHeight; });
     });
 };
+// Brings the element with this id into view (R-40: the run strip leads down to the detailed timeline).
+Aetheus.scrollToId = function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+};
+// Moves the focus to the field with this id (R-24: the comment field of the approval page opened by the mail's Comment link).
+Aetheus.focusById = function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.focus(); }
+};
 Aetheus.scrollToTop = function (el) {
     if (el) { el.scrollTop = 0; }
 };
@@ -594,6 +604,50 @@ Aetheus.unwatchVirtualList = function (root) {
     }
 
     if (typeof ResizeObserver !== 'function') return;
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+    else start();
+})();
+
+// R-46: publishes the width of the page scrollbar (the one of #main-content, OmniMain.Scrollable) as the
+// CSS variable --aetheus-scrollbar-width on the root, 0px when it is an overlay or absent. The header spans
+// the window while the content area is one scrollbar narrower; app.css gives that width back on the
+// header's trailing side so both end on the same line. The root is written through the CSSOM, which the
+// shell's style policy allows.
+(function syncPageScrollbarWidth() {
+    var observed = null;
+    var published = null;
+    var queued = false;
+    var resize = typeof ResizeObserver === 'function' ? new ResizeObserver(queue) : null;
+
+    function measure() {
+        queued = false;
+        var main = document.getElementById('main-content');
+        if (main !== observed) {
+            if (observed && resize) resize.unobserve(observed);
+            observed = main;
+            if (main && resize) resize.observe(main);
+        }
+        var width = main ? Math.max(0, main.offsetWidth - main.clientWidth) : 0;
+        if (width === published) return;
+        published = width;
+        document.documentElement.style.setProperty('--aetheus-scrollbar-width', width + 'px');
+    }
+
+    function queue() {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(measure);
+    }
+
+    // The main area is rendered after the boot gate, and a scrollbar appears when the content grows,
+    // which narrows the content box the observer watches.
+    function start() {
+        new MutationObserver(function () {
+            if (!observed || !observed.isConnected) queue();
+        }).observe(document.body, { childList: true, subtree: true });
+        queue();
+    }
+
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
     else start();
 })();

@@ -2,18 +2,19 @@
 @inject GridExportContext ExportContext
 @* Containers tab of the Docker section: the grid, the per-project bulk actions, and the five
    detail panels (logs, inspect, shell, env, file browser). Markup moved verbatim from the parent. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
+<OmniStack>
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredContainers.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterContainers"]" @bind-Value="_containerSearch" Placeholder="@L["FilterContainers"]" Class="docker-search" />
 </OmniStack>
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
 @if (UnexpectedRiskCount > 0)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["DockerRiskSummaryTitle"]" Class="omni-u-mb-md docker-risk-summary">@L["DockerRiskSummary", UnexpectedRiskCount]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Danger" Title="@L["DockerRiskSummaryTitle"]" Class="docker-risk-summary">@L["DockerRiskSummary", UnexpectedRiskCount]</OmniAlert>
 }
 else if (RisksUnknown)
 {
-    <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md docker-risk-unknown">@L["DockerRiskUnknown"]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Info" Class="docker-risk-unknown">@L["DockerRiskUnknown"]</OmniAlert>
 }
 @if (!InitialLoaded && FilteredContainers.Count == 0)
 {
@@ -27,7 +28,7 @@ else
 {
     @if (BulkProjectOptions.Count > 0)
     {
-        <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm docker-bulk-actions">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="docker-bulk-actions">
             <label for="docker-bulk-project">@L["Project"]</label>
             <OmniDropDown aria-label="@L["Project"]" TValue="string" Id="docker-bulk-project" Options="@BulkProjectOptions"
                 AllowEmpty="true" Placeholder="@L["Project"]" @bind-Value="_bulkProject" />
@@ -43,14 +44,14 @@ else
 <OmniDataGrid @ref="_grid" Items="@FilteredContainers" ExportTitle="@ExportContext.Title(L["Containers"])" ExportFields="@ExportContext.Fields()" TItem="DockerContainerDto" KeyOf="@(row => row.ContainerId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_containerGroups" GroupLabel="@ContainerGroupLabel"
     AllGroupsExpanded="@_allContainerGroupsExpanded"
-    RowRender="@OnContainerRowRender" OnRowClick="@(args => InspectFromRowAsync(args.Item))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+    RowRender="@OnContainerRowRender" OnRowClick="@(args => InspectFromRowAsync(args.Item))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="DockerContainerDto" Property="Project" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="DockerContainerDto" Property="Name" Title="@L["Name"]" Filterable="true">
             <Template Context="c">
                 <OmniStack Gap="OmniSpacing.XSmall">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.XSmall">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetContainerBadge(c.State)">@c.State</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(GetContainerBadge(c.State)))" Fill="OmniFill.Solid" Tone="@GetContainerBadge(c.State)">@StateText(c.State)</OmniBadge>
                         <span title="@c.ContainerId">
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@c.Name</OmniText>
                         </span>
@@ -60,7 +61,7 @@ else
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="DockerContainerDto" Property="Image" Title="@L["Image"]" Filterable="true" />
-        <OmniDataGridColumn TItem="DockerContainerDto" Property="Status" Title="@L["Status"]" Width="11.25rem" Filterable="true" />
+        <OmniDataGridColumn TItem="DockerContainerDto" Property="Status" Value="@(c => ContainerStatusText(c.Status))" Title="@L["Status"]" Width="11.25rem" Filterable="true" />
         <OmniDataGridColumn TItem="DockerContainerDto" Property="CpuPercent" Title="@L["CPU"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" Width="5rem">
             <Template Context="c">
                 @(c.CpuPercent.ToString("F1"))%
@@ -110,7 +111,10 @@ else
                             {
                                 <OmniMenuItem OnClick="@(() => OpenShell(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.TerminalWindow" /></Icon><ChildContent>@L["DockerShell"]</ChildContent></OmniMenuItem>
                             }
-                            <OmniMenuItem OnClick="@(() => RequestEnvVarsAsync(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["DockerEnvVars"]</ChildContent></OmniMenuItem>
+                            @if (CanViewEnv)
+                            {
+                                <OmniMenuItem OnClick="@(() => RequestEnvVarsAsync(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>@L["DockerEnvVars"]</ChildContent></OmniMenuItem>
+                            }
                             <OmniMenuItem OnClick="@(() => OpenFileBrowserAsync(c.ContainerId, c.Name))"><Icon><OmniIcon Name="OmniIconName.FolderOpen" /></Icon><ChildContent>@L["DockerFileBrowser"]</ChildContent></OmniMenuItem>
                         }
                     </OmniOverflowMenu>                </OmniStack>
@@ -123,7 +127,7 @@ else
 
 @if (_logsContainerId is not null)
 {
-    <OmniCard Class="omni-u-mt-md">
+    <OmniCard>
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerLogs"] - @_logsContainerId[..Math.Min(12, _logsContainerId.Length)]</OmniText>
             <div class="flex-spacer"></div>
@@ -131,7 +135,8 @@ else
         </OmniStack>
         @if (_logsContent is null)
         {
-            <AetheusLoader Size="OmniControlSize.Small" />
+            @* Recette R-116: the logs are being read, OE's busy veil lies over the zone they will fill. *@
+            <div class="omni-busy action-veil-placeholder" aria-busy="true" title="@L["WaitingResult"]"></div>
         }
         else
         {
@@ -143,7 +148,7 @@ else
 
 @if (_inspectContainerId is not null)
 {
-    <OmniCard Class="omni-u-mt-md docker-panel-fadein">
+    <OmniCard Class="docker-panel-fadein">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerInspect"] - @_inspectContainerId[..Math.Min(12, _inspectContainerId.Length)]</OmniText>
             <div class="flex-spacer"></div>
@@ -163,7 +168,7 @@ else
 
 @if (_shellContainerId is not null)
 {
-    <OmniCard Class="omni-u-mt-md docker-panel-fadein">
+    <OmniCard Class="docker-panel-fadein">
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerShell"] - @_shellContainerName</OmniText>
@@ -183,7 +188,7 @@ else
 
 @if (_envContainerId is not null)
 {
-    <OmniCard Class="omni-u-mt-md docker-panel-fadein">
+    <OmniCard Class="docker-panel-fadein">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerEnvVars"] - @_envContainerName</OmniText>
             <div class="flex-spacer"></div>
@@ -207,7 +212,7 @@ else
 
 @if (_browseContainerId is not null)
 {
-    <OmniCard Class="omni-u-mt-md docker-panel-fadein">
+    <OmniCard Class="docker-panel-fadein">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerFileBrowser"] - @_browseContainerName</OmniText>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@_browsePath</OmniText>
@@ -224,3 +229,4 @@ else
         }
     </OmniCard>
 }
+</OmniStack>

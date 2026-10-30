@@ -1,0 +1,13 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* The organization switcher of the Administration section (owner decision 2026-10-28): an OE drop-down of the
+   organizations the user administers, shown only when there is a choice to make. *@
+@if (Visible)
+{
+    <OmniFormField Label="@L["AdminScopeOrganization"]" For="admin-scope-organization" Help="@L["AdminScopeOrganizationHelp"]" Class="admin-scope-switcher">
+        <OmniDropDown TValue="int" Id="admin-scope-organization"
+                      Options="@Options"
+                      Value="@CurrentValue"
+                      ValueChanged="@OnSelectedAsync"
+                      ValueExpression="@(() => CurrentValue)" />
+    </OmniFormField>
+}

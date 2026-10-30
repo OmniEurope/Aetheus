@@ -66,7 +66,7 @@
     </div>
 
     <div id="blazor-error-ui">
-        An unhandled error has occurred.
+        <span id="blazor-error-message">An unhandled error has occurred.</span>
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
@@ -74,10 +74,10 @@
          changed layout.js would otherwise stay stale in the browser (a new function like
          Aetheus.scrollToBottom would be "undefined" and its buttons silently no-op). Bump ?v= on any
          edit to these files. -->
-    <script src="js/layout.js?v=19"></script>
+    <script src="js/layout.js?v=21"></script>
     <script src="js/offline-registration.js?v=1"></script>
     <script src="js/docker-interop.js?v=3"></script>
-    <script src="js/monaco-frame-host.js?v=2"></script>
+    <script src="js/monaco-frame-host.js?v=3"></script>
     <script src="lib/dagre/dagre.min.js"></script>
     <script src="js/visual-pipeline.js?v=3"></script>
     <script type="module" src="js/aetheus-analytics-bootstrap.js?v=4"></script>
@@ -101,6 +101,14 @@
             // one screen in two languages ("Autres actions" beside "More actions").
             var browser = navigator.language || 'en';
             var culture = valid ? lang : (/^fr/i.test(browser) ? 'fr-FR' : 'en');
+            // The framework's own "unhandled error" bar is shown before and outside any Blazor component, so
+            // it cannot use the localizer: it is written in the language the app boots in.
+            if (/^fr/i.test(culture)) {
+                var errorMessage = document.getElementById('blazor-error-message');
+                var errorReload = document.querySelector('#blazor-error-ui .reload');
+                if (errorMessage) errorMessage.textContent = 'Une erreur inattendue est survenue.';
+                if (errorReload) errorReload.textContent = 'Recharger';
+            }
             function showStartError() {
                 var splash = document.getElementById('app-splash');
                 var panel = document.getElementById('app-start-error');

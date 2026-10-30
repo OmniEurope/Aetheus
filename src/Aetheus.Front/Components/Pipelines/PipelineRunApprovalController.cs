@@ -60,6 +60,16 @@ public sealed class PipelineRunApprovalController(
         WaitingWithoutApproval = Pending is null;
     }
 
+    /// <summary>Recette R-24: the approval page an approval mail opens shows the one approval it read itself,
+    /// when it still waits; any other state shows no banner.</summary>
+    public void Show(PipelineApprovalDto? approval)
+    {
+        Pending = approval is { Status: ApprovalStatus.Pending } ? approval : null;
+        EnvironmentInstructions = Pending is { Scope: ApprovalScope.Environment } ? Pending.EnvironmentInstructions : null;
+        WaitingWithoutApproval = false;
+        LoadFailed = false;
+    }
+
     /// <summary>The run page reads a waiting run's approval before its first render, so the banner
     /// is there from the start instead of arriving later and pushing the page down. Returns whether
     /// it loaded (the page then skips the load it makes behind the first render).</summary>

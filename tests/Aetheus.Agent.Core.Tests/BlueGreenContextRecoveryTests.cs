@@ -71,6 +71,35 @@ public sealed class BlueGreenContextRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void MissingStateDirectory_IsCreatedByTheAgent_WithItsParents_OwnerOnly()
+    {
+        // R-97: the wizard writes <agent work dir>/projects/<slug>-production; neither it nor projects/ exists yet.
+        var stateDir = Path.Combine(_root, "aetheus-agent", "projects", "w9-production");
+
+        Assert.True(BlueGreenContext.TryCreateForRecovery("w9-prod", Ports(stateDir), out var context, out _));
+
+        Assert.True(Directory.Exists(stateDir));
+        Assert.Equal(stateDir, context!.StateDir);
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(stateDir));
+    }
+
+    [Fact]
+    public void StateDirectoryThatCannotBeCreated_FailsHonestly()
+    {
+        // A file where the projects directory should be: the state directory cannot be created under it.
+        var blocker = Path.Combine(_root, "projects");
+        File.WriteAllText(blocker, string.Empty);
+        var stateDir = Path.Combine(blocker, "w9-production");
+
+        Assert.False(BlueGreenContext.TryCreateForRecovery("w9-prod", Ports(stateDir), out var context, out var error));
+
+        Assert.Null(context);
+        Assert.Contains($"State directory {stateDir} does not exist and could not be created", error, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(stateDir));
+    }
+
+    [Fact]
     public void RepeatedPort_IsRefused()
     {
         var env = Ports(_root);

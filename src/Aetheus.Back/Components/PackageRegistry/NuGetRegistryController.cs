@@ -3,9 +3,14 @@ using System.Text.Json.Nodes;
 
 namespace Aetheus.Back.Components.PackageRegistry;
 
+/// <summary>
+/// NuGet v3 feed. Every endpoint needs a personal access token, except the service index and, for a
+/// package an administrator opened to anonymous download (R-58), the reads <c>dotnet restore</c>
+/// makes: version list, archive, manifest and registration. Search and publication stay authenticated.
+/// </summary>
 [ApiController]
 [Route("api/packages/nuget")]
-[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName)]
+[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName, Policy = PackageRegistryPolicies.Read)]
 public class NuGetRegistryController(
     INuGetRegistryService registry,
     PackageRegistryUploadGate uploadGate) : ControllerBase
@@ -28,6 +33,7 @@ public class NuGetRegistryController(
     }
 
     [HttpGet("v3/flatcontainer/{id}/index.json")]
+    [AnonymousPackageDownload(PackageRegistryKind.NuGet)]
     public async Task<IActionResult> GetVersions(string id, CancellationToken ct)
     {
         var versions = await registry.GetVersionsAsync(id, ct);
@@ -35,6 +41,7 @@ public class NuGetRegistryController(
     }
 
     [HttpGet("v3/flatcontainer/{id}/{version}/{fileName}")]
+    [AnonymousPackageDownload(PackageRegistryKind.NuGet)]
     public async Task<IActionResult> Download(
         string id, string version, string fileName, CancellationToken ct)
     {
@@ -62,6 +69,7 @@ public class NuGetRegistryController(
     }
 
     [HttpGet("v3/registration/{id}/index.json")]
+    [AnonymousPackageDownload(PackageRegistryKind.NuGet)]
     public async Task<IActionResult> GetRegistration(string id, CancellationToken ct)
     {
         var registration = await registry.GetRegistrationAsync(id, ct);
@@ -72,6 +80,7 @@ public class NuGetRegistryController(
     }
 
     [HttpGet("v3/registration/{id}/{version}.json")]
+    [AnonymousPackageDownload(PackageRegistryKind.NuGet)]
     public async Task<IActionResult> GetRegistrationLeaf(
         string id, string version, CancellationToken ct)
     {

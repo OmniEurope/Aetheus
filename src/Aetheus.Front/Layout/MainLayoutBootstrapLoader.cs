@@ -14,7 +14,7 @@ internal static class MainLayoutBootstrapLoader
         {
             var summary = await api.Auth.GetMyPermissionsAsync();
             if (summary is not null)
-                permissions.SetPermissions(summary.EffectivePermissions, auth.IsAdmin);
+                permissions.SetPermissions(summary.EffectivePermissions, auth.IsAdmin, summary.PermissionKeys);
         }
         catch (Exception exception)
         {

@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @{
     RenderFragment<PipelineCopyStatus> StatusBadge = status =>
-        @<OmniBadge Tone="@StatusTone(status)" Fill="OmniFill.Tonal" data-testid="pipeline-copy-status">@L.Localize(status)</OmniBadge>;
+        @<OmniBadge Icon="@(BadgeIcon.ForState(StatusTone(status)))" Tone="@StatusTone(status)" Fill="OmniFill.Tonal" data-testid="pipeline-copy-status">@L.Localize(status)</OmniBadge>;
     RenderFragment<PipelineCopyItemDto> Issues = item =>
         @<OmniStack Gap="OmniSpacing.XSmall">
             @foreach (var issue in item.Issues)
@@ -23,11 +23,11 @@
                                 <span>@resource.NewName</span>
                                 @if (resource.AlreadyExists)
                                 {
-                                    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Tonal">@L["PipelineCopyResourceKept"]</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Tone="OmniTone.Neutral" Fill="OmniFill.Tonal">@L["PipelineCopyResourceKept"]</OmniBadge>
                                 }
                                 else
                                 {
-                                    <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal">@L[args.Created ? "PipelineCopyResourceValuesEmpty" : "PipelineCopyResourceValuesToFill"]</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Tonal">@L[args.Created ? "PipelineCopyResourceValuesEmpty" : "PipelineCopyResourceValuesToFill"]</OmniBadge>
                                 }
                             </OmniStack>
                             @if (!resource.AlreadyExists && resource.Keys.Count > 0)
@@ -63,6 +63,10 @@
             <OmniTextBox Id="pipeline-copy-source-prefix" Value="@Flow.SourcePrefix" ValueChanged="@((string value) => Flow.SetSourcePrefix(value))"
                          ValueExpression="@(() => Flow.SourcePrefix)" Class="omni-u-w-100" />
         </OmniFormField>
+        @if (Flow.SourceBranchMissing)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" data-testid="pipeline-copy-source-branch-missing">@L["PipelineSourceBranchMissing"]</OmniAlert>
+        }
         <OmniAlert Severity="OmniSeverity.Info" data-testid="pipeline-copy-rule">@L["PipelineCopyValuesRule"]</OmniAlert>
     </OmniStack>
 }

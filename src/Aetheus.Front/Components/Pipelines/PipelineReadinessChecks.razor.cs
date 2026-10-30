@@ -12,6 +12,14 @@ public partial class PipelineReadinessChecks
     /// <summary>Where the pages opened to fix a finding send the user back; validated as local.</summary>
     [Parameter] public string? ReturnUrl { get; set; }
 
+    /// <summary>R-61: where the creation of an environment returns, when it is not <see cref="ReturnUrl"/>
+    /// (the setup wizard sends it to the project's overview).</summary>
+    [Parameter] public string? EnvironmentReturnUrl { get; set; }
+
+    /// <summary>R-59: true in the setup wizard, where an empty value is filled in a dialog over the page
+    /// instead of on the page of its library or vault.</summary>
+    [Parameter] public bool FillEmptyValuesInDialog { get; set; }
+
     /// <summary>True, the default: a blocking finding is an alert. The setup summary sets it to false,
     /// where its single alert is the one saying the creation cannot go on.</summary>
     [Parameter] public bool BlockingAsAlert { get; set; } = true;

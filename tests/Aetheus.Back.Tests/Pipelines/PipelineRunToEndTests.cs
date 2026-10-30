@@ -32,6 +32,8 @@ public sealed class PipelineRunToEndTests
     {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(),
             Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(true);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _pipelines.GetPipelineAsync(1, Arg.Any<CancellationToken>())
             .Returns(new PipelineDto { Id = 1, Name = "ci", YamlDefinition = "name: ci" });
         _runs.PrepareRunAsync(1, Arg.Any<string?>(), Arg.Any<CancellationToken>())

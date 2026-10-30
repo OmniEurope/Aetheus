@@ -1,12 +1,13 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 
+<OmniStack>
 @if (!CanManagePackages)
 {
     @* Capability notice + live heartbeat as two aligned tiles. The capability self-heals on the next
        heartbeat (re-install with --enable-package-manage); the notice clears itself once a beat lands
        reporting the aetheus-package sudoers grant, no manual reload needed. *@
-    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
         <OmniCard Class="capability-warning-tile">
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center">
                 <OmniIcon Name="OmniIconName.Lock" Class="capability-warning-icon" />
@@ -19,13 +20,14 @@
     </OmniTileGrid>
 }
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" />
 <ServiceActionsInFlightBanner Services="@Server.Services" ActionStateOf="@ActionStateOf" />
 
 <UrlSyncedTabs Slugs="@(new[] { "manageable", "other", "system" })">
     <Tabs>
         <OmniTabsItem Key="manageable" Title="@($"{L["Manageable"]} ({ModuleCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("build"))" /></Icon><ChildContent>
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["InstalledServices"] (@ModuleInstalled.Count())</OmniHeading>
+<OmniStack>
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["InstalledServices"] (@ModuleInstalled.Count())</OmniHeading>
             @if (!ModuleInstalled.Any())
             {
                 <EmptyState Icon="build" Title="@L["NoServicesToDisplay"]" />
@@ -41,7 +43,7 @@
                     OnOpenModule="@OpenServiceModule" OnBulk="@BulkActionAsync" />
             }
 
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@L["AvailableServices"] (@ModuleNotInstalled.Count())</OmniHeading>
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["AvailableServices"] (@ModuleNotInstalled.Count())</OmniHeading>
             @if (!ModuleNotInstalled.Any())
             {
                 <OmniAlert Severity="OmniSeverity.Success">
@@ -54,16 +56,18 @@
                     CanManagePackages="@CanManagePackages" CanInstallTeamspeak="@Server.TeamspeakSetupAvailable" ActionStateOf="@ActionStateOf" ServerOnline="@ServerOnline" ServerId="@ServerId"
                     OnInstall="@InstallServiceAsync" OnBulk="@BulkActionAsync" />
             }
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="other" Title="@($"{L["OtherServices"]} ({OtherCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("apps"))" /></Icon><ChildContent>
+<OmniStack>
             @* Recette R3-59: a package that is not a service (a command-line client) is never in the service lists;
                say so, and show the complete read-only package list at the end of this tab. *@
-            <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm services-packages-not-listed">
+            <OmniAlert Severity="OmniSeverity.Info" Class="services-packages-not-listed">
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["ServicesPackagesNotListed"]</OmniText>
                 <OmniLink Href="@($"/servers/{ServerId}/updates")">@L["ServicesPackagesSeeUpdates"]</OmniLink>
             </OmniAlert>
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["InstalledServices"] (@OtherInstalled.Count())</OmniHeading>
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["InstalledServices"] (@OtherInstalled.Count())</OmniHeading>
             @if (!OtherInstalled.Any())
             {
                 <EmptyState Icon="build" Title="@L["NoServicesToDisplay"]" />
@@ -78,7 +82,7 @@
                     OnLogs="@ViewServiceLogsAsync" OnUninstall="@UninstallServiceAsync" OnBulk="@BulkActionAsync" />
             }
 
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-sm">@L["AvailableServices"] (@OtherNotInstalled.Count())</OmniHeading>
+            <OmniHeading Level="OmniHeadingLevel.H5">@L["AvailableServices"] (@OtherNotInstalled.Count())</OmniHeading>
             @if (!OtherNotInstalled.Any())
             {
                 <OmniAlert Severity="OmniSeverity.Success">
@@ -92,45 +96,48 @@
                     OnInstall="@InstallServiceAsync" OnBulk="@BulkActionAsync" />
             }
 
-            <div class="omni-u-mt-2xl">
+            <div>
                 <ServerPackageInventory Server="@Server" ServerId="@ServerId" />
             </div>
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="system" Title="@($"{L["System"]} ({SystemCount})")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("settings"))" /></Icon><ChildContent>
+<OmniStack>
             @if (!SystemServices.Any())
             {
                 <EmptyState Icon="build" Title="@L["NoServicesToDisplay"]" />
             }
             else
             {
-                <OmniDataGrid @ref="_systemGrid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@SystemServices.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+                <OmniDataGrid @ref="_systemGrid" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@SystemServices.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ServiceInfoDto" Property="Name" Title="@L["Service"]" Filterable="true" />
                         <OmniDataGridColumn TItem="ServiceInfoDto" Property="Type" Title="@L["Type"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText">
                             <Template Context="svc">
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@ManageableServiceGrid.FormatType(svc.Type)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@ManageableServiceGrid.FormatType(svc.Type)</OmniBadge>
                             </Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="ServiceInfoDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
-                            <Template Context="svc"><span title="@svc.Status">@StatusText(svc.Status)</span></Template>
+                            <Template Context="svc">@StatusText(svc.Status)</Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="ServiceInfoDto" Property="IsRunning" Title="@L["Running"]" Width="6.25rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText">
                             <Template Context="svc">
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@(svc.IsRunning ? OmniTone.Accent : OmniTone.Neutral)">@(svc.IsRunning ? L["Yes"] : L["No"])</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(svc.IsRunning ? OmniTone.Accent : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(svc.IsRunning ? OmniTone.Accent : OmniTone.Neutral)">@(svc.IsRunning ? L["Yes"] : L["No"])</OmniBadge>
                             </Template>
                         </OmniDataGridColumn>
                     </Columns>
                 </OmniDataGrid>
             }
+</OmniStack>
         </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>
 
 @if (_logsVisible)
 {
-    <OmniCard Class="omni-u-mt-lg">
-        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+    <OmniCard>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Logs"] - @_logsServiceName</OmniText>
             <div class="flex-spacer"></div>
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["LogLines"]</OmniText>
@@ -141,15 +148,14 @@
                enabled. *@
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseLogsAsync" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
-        @if (_logsLoading && string.IsNullOrEmpty(_logsContent))
-        {
-            <AetheusLoader Size="OmniControlSize.Small" />
-        }
-        else
+        @* Recette R-116: while a read is pending, OE's busy veil lies over the log zone; the lines already on screen
+           stay mounted underneath, and a zone that holds nothing yet is a veiled block of sensible height. *@
+        <OmniStack Class="@(_logsLoading ? (string.IsNullOrEmpty(_logsContent) ? "omni-busy action-veil-placeholder" : "omni-busy") : null)" aria-busy="@(_logsLoading ? "true" : "false")" data-testid="service-logs-zone">
+        @if (!_logsLoading || !string.IsNullOrEmpty(_logsContent))
         {
             @if (HasInsufficientJournalPermissions)
             {
-                <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md">
+                <OmniAlert Severity="OmniSeverity.Warning">
                     @L["JournalPermissionInsufficient"]
                 </OmniAlert>
             }
@@ -161,5 +167,7 @@
                 </OmniStack>
             }
         }
+        </OmniStack>
     </OmniCard>
 }
+</OmniStack>

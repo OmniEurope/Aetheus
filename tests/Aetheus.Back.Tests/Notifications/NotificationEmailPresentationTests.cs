@@ -68,6 +68,7 @@ public sealed class NotificationEmailPresentationTests
     [InlineData("agent-update.failed", "/servers/7/overview")]
     [InlineData("alert.triggered", "/servers/7/overview")]
     [InlineData("certbot.renewal-check.failed", "/servers/7/certbot")]
+    [InlineData("certbot.certificate-expiring", "/servers/7/certbot")]
     [InlineData("release.deployed", "/releases/8")]
     [InlineData("app.down", "/projects/1/overview")]
     [InlineData("SecretExpiring", "/vaults")]

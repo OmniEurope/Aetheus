@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerMailSection
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -88,6 +89,11 @@ public partial class ServerMailSection
     private ServerMailQueueTab? _queueTab;
     private ServerMailLogsTab? _logsTab;
     private ServerMailStatusList? _statusList;
+    private MailComplianceBanner? _complianceBanner;
+
+    // R-119: the tasks the domain, account, alias and DKIM actions of this page queue are followed, and the page
+    // is veiled until they end. The tabs below hand it to the actions they queue themselves.
+    private ServerTaskFollower? _follower;
     private ServerMailSetupAssistant? _assistant;
 
     // First known account of the server: a sensible default sender for the delivery test.
@@ -159,6 +165,16 @@ public partial class ServerMailSection
         var accountsReload = _accountsGrid?.Reload() ?? Task.CompletedTask;
         var aliasesReload = _aliasesGrid?.Reload() ?? Task.CompletedTask;
         await Task.WhenAll(domainsReload, accountsReload, aliasesReload);
+    }
+
+    // R-119: the state of the stack (the banner above the tabs, the State tab) is read from the backend, which has
+    // the agent's new inventory once the heartbeat has arrived; the follower asks for this read before it lifts the
+    // veil, instead of leaving it to the live feed's reload a moment later.
+    private async Task ReloadAfterSettleAsync()
+    {
+        var banner = _complianceBanner?.ReloadNowAsync() ?? Task.CompletedTask;
+        var status = _statusList?.ReloadNowAsync() ?? Task.CompletedTask;
+        await Task.WhenAll(banner, status);
     }
 
     // A completed task is live data, so the grids refresh quietly (rows, page, filters kept).
@@ -305,6 +321,7 @@ public partial class ServerMailSection
     private async Task CreateDomainAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect($"{L["AddDomain"]} {_newDomainName}");
         try
         {
             var result = await Api.Mail.CreateMailDomainAsync(ServerId, new CreateMailDomainRequest
@@ -321,11 +338,13 @@ public partial class ServerMailSection
             }
             else
             {
+                _follower?.Forget();
                 Toast.Error(L["ActionFailed"]);
             }
         }
         catch (HttpRequestException ex)
         {
+            _follower?.Forget();
             Logger.LogWarning(ex, "Mail domain creation failed for server {ServerId}", ServerId);
             Toast.Error(L["ActionFailed"]);
         }
@@ -344,6 +363,7 @@ public partial class ServerMailSection
     private async Task DeleteDomainAsync(int domainId)
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["DeleteDomain"]);
         var success = await Api.Mail.DeleteMailDomainAsync(ServerId, domainId);
         if (success)
         {
@@ -352,6 +372,7 @@ public partial class ServerMailSection
         }
         else
         {
+            _follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
     }
@@ -359,6 +380,7 @@ public partial class ServerMailSection
     private async Task CreateAccountAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect($"{L["AddAccount"]} {_newAccountEmail}");
         try
         {
             var result = await Api.Mail.CreateMailAccountAsync(ServerId, new CreateMailAccountRequest
@@ -377,11 +399,13 @@ public partial class ServerMailSection
             }
             else
             {
+                _follower?.Forget();
                 Toast.Error(L["ActionFailed"]);
             }
         }
         catch (HttpRequestException ex)
         {
+            _follower?.Forget();
             Logger.LogWarning(ex, "Mail account creation failed for server {ServerId}", ServerId);
             Toast.Error(L["ActionFailed"]);
         }
@@ -410,6 +434,7 @@ public partial class ServerMailSection
     private async Task DeleteAccountAsync(int accountId)
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["DeleteAccount"]);
         var success = await Api.Mail.DeleteMailAccountAsync(ServerId, accountId);
         if (success)
         {
@@ -418,6 +443,7 @@ public partial class ServerMailSection
         }
         else
         {
+            _follower?.Forget();
             Toast.Error(L["ActionFailed"]);
         }
     }
@@ -477,7 +503,7 @@ public partial class ServerMailSection
         var confirmed = await Dialog.Confirm(message, title,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed == true)
-            await action();
+            await Veil.RunAsync(action);
     }
 
     private async Task CopyToClipboardAsync(string text)
@@ -491,6 +517,7 @@ public partial class ServerMailSection
     private async Task CreateAliasAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect($"{L["AddAlias"]} {_newAliasSource}");
         var result = await Api.Mail.CreateMailAliasAsync(ServerId, _selectedAliasDomainId, new CreateMailAliasRequest
         {
             SourceEmail = _newAliasSource,
@@ -504,7 +531,10 @@ public partial class ServerMailSection
             if (_aliasesGrid is not null) await _aliasesGrid.Reload();
         }
         else
+        {
+            _follower?.Forget();
             Toast.Error(L["OperationFailed"]);
+        }
     }
 
     private async Task OpenAddAliasDialogAsync()
@@ -528,13 +558,17 @@ public partial class ServerMailSection
     private async Task DeleteAliasAsync(int aliasId)
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect(L["DeleteAlias"]);
         if (await Api.Mail.DeleteMailAliasAsync(ServerId, aliasId))
         {
             Toast.Success(L["AliasDeleted"]);
             if (_aliasesGrid is not null) await _aliasesGrid.Reload();
         }
         else
+        {
+            _follower?.Forget();
             Toast.Error(L["OperationFailed"]);
+        }
     }
 
     // --- DKIM key rotation ---
@@ -560,6 +594,7 @@ public partial class ServerMailSection
     private async Task RotateDkimKeyAsync()
     {
         if (BlockedByOfflineAgent()) return;
+        _follower?.Expect($"{L["RotateDkimKey"]} {_dkimRotationDomain}");
         var result = await Api.Mail.RotateMailDkimKeyAsync(ServerId, _dkimRotationDomainId, new DkimRotationRequest
         {
             NewSelector = _dkimNewSelector
@@ -570,7 +605,10 @@ public partial class ServerMailSection
             await ReloadDataAsync();
         }
         else
+        {
+            _follower?.Forget();
             Toast.Error(L["OperationFailed"]);
+        }
     }
 
 

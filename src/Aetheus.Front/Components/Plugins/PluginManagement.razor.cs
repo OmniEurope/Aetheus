@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Plugins;
 
 public partial class PluginManagement : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -149,16 +150,19 @@ public partial class PluginManagement : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Unregister"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Settings.UnregisterPluginAsync(id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            await ReloadGridAsync();
-            Toast.Success("Deleted", "PluginUnregistered");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Settings.UnregisterPluginAsync(id);
+            if (success)
+            {
+                await ReloadGridAsync();
+                Toast.Success("Deleted", "PluginUnregistered");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private static OmniTone GetStatusBadgeStyle(PluginStatus status) => status switch

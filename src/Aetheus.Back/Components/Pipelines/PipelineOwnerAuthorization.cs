@@ -36,6 +36,12 @@ public sealed class PipelineOwnerAuthorization(
             if (!await authz.HasPermissionAsync(user, ResourceType.Environment, id, Permission.Write, ct)
                     .ConfigureAwait(false))
                 return false;
+            // RBAC audit, finding 6: never a project of one organization with an environment of another,
+            // even for a caller who can write both (the request validation already refuses two owners;
+            // this holds whatever a future request shape allows).
+            if (!await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.Environment, [id], ct)
+                    .ConfigureAwait(false))
+                return false;
         }
 
         if (projectServerId is not { } serverId) return true;
@@ -43,6 +49,9 @@ public sealed class PipelineOwnerAuthorization(
         // There is no ResourceType.ProjectServer, so the row's owning project carries the permission.
         var owningProjectId = await pipelineService.GetProjectServerProjectIdAsync(serverId, ct).ConfigureAwait(false);
         if (owningProjectId is not { } serverProjectId) return false;
+        if (!await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.Project, [serverProjectId], ct)
+                .ConfigureAwait(false))
+            return false;
         return await authz.HasPermissionAsync(user, ResourceType.Project, serverProjectId, Permission.Write, ct)
             .ConfigureAwait(false);
     }

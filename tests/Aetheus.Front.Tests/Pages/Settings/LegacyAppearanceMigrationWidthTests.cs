@@ -32,4 +32,21 @@ public sealed class LegacyAppearanceMigrationWidthTests : BunitContext
         Assert.True(State.FullWidth);
     }
 
+    /// <summary>R-42: the default appearance of a signed-out visitor follows the system, not dark or light.</summary>
+    [Fact]
+    public async Task TheSignedOutDefault_FollowsTheSystemTheme()
+    {
+        await Migration.ApplyDefaultAsync();
+
+        Assert.Equal(OmniAppearance.System, State.Appearance);
+    }
+
+    /// <summary>R-42: a new account that never chose a look follows the system theme.</summary>
+    [Fact]
+    public async Task ANewAccount_FollowsTheSystemTheme()
+    {
+        await Migration.RunAsync(Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(OmniAppearance.System, State.Appearance);
+    }
 }

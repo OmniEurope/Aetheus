@@ -40,6 +40,8 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
     private int _runnerExit;
     private string? _rawExit = "0\n";
     private string _trx = Trx(("E2E.Home", "Passed"));
+    private string _rerunTrx = string.Empty;
+    private string? _rerunRawExit;
 
     public RunQaE2eSuiteFunctionTests()
     {
@@ -80,11 +82,18 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
 
     private (int, string[]) Copy(string destination)
     {
-        File.WriteAllText(Path.Combine(destination, "e2e.trx"), _trx);
-        if (_rawExit is not null)
-            File.WriteAllText(Path.Combine(destination, "raw-exit-code"), _rawExit);
+        // The rerun's results are copied into their own directory beside the first attempt's.
+        var rerun = Path.GetFileName(destination.TrimEnd('/', '\\')) == "rerun";
+        File.WriteAllText(Path.Combine(destination, "e2e.trx"), rerun ? _rerunTrx : _trx);
+        if ((rerun ? _rerunRawExit : _rawExit) is { } rawExit)
+            File.WriteAllText(Path.Combine(destination, "raw-exit-code"), rawExit);
         return (0, []);
     }
+
+    private string[][] Runners => _docker.Where(arguments => arguments is ["run", "--name", ..]).ToArray();
+
+    private static string Login(string outcome) =>
+        FailedTestRerunTests.Trx(("Aetheus.E2E.AuthTests", "Login", "Login", outcome));
 
     private Task<(Executors.ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync()
     {
@@ -154,6 +163,73 @@ public sealed class RunQaE2eSuiteFunctionTests : IDisposable
         Assert.Contains(_harness.Log, entry => entry.Line == "  skipped: testName=\"E2E.NewFeature\"");
         Assert.Contains("E2E_TEST_FILTER=Category=RollbackRelevant", Runner!);
         Assert.Contains("E2E_PREVIOUS_PAYLOAD_ONLY=true", Runner!);
+    }
+
+    [Fact]
+    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndStillFailsTheSuite()
+    {
+        _trx = FailedTestRerunTests.Trx(
+            ("Aetheus.E2E.HomeTests", "Loads", "Loads", "Passed"),
+            ("Aetheus.E2E.AuthTests", "Login", "Login", "Failed"));
+        _rawExit = "1\n";
+        _rerunTrx = Login("Passed");
+        _rerunRawExit = "0\n";
+        _parameters["test_filter"] = "Category=RollbackRelevant";
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["E2E_SUITE_STATUS"]);
+        // The rerun is the same suite container (image, network, environment) with only the filter changed.
+        Assert.Equal(2, Runners.Length);
+        Assert.Contains("E2E_TEST_FILTER=Category=RollbackRelevant", Runners[0]);
+        var filter = "E2E_TEST_FILTER=FullyQualifiedName=Aetheus.E2E.AuthTests.Login";
+        Assert.Equal(Runners[0].Select(argument => argument.StartsWith("E2E_TEST_FILTER=", StringComparison.Ordinal) ? filter : argument), Runners[1]);
+        Assert.Equal(2, _docker.Count(arguments => arguments is ["run", "--rm", "--name", "aetheus-qa-42-current-ready", ..]));
+        var firstRunner = _docker.FindIndex(arguments => arguments is ["run", "--name", ..]);
+        var removedBeforeRerun = _docker.FindIndex(arguments => arguments.SequenceEqual(["rm", "-f", "aetheus-qa-42-current-tests"]));
+        Assert.InRange(removedBeforeRerun, firstRunner + 1, _docker.FindLastIndex(arguments => arguments is ["run", "--name", ..]) - 1);
+        // Both attempts are kept as evidence.
+        Assert.Equal(_trx, File.ReadAllText(Path.Combine(Results, "e2e.trx")));
+        Assert.Equal(_rerunTrx, File.ReadAllText(Path.Combine(Results, "rerun", "e2e.trx")));
+        Assert.Equal("Login\n", File.ReadAllText(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.Equal("Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.Contains(_harness.Log, entry => entry.Line == "Flaky test in E2E suite qa-42-current: Login failed, then passed on its rerun.");
+        Assert.Contains(_harness.Log, entry => entry.Line.EndsWith("with findings status 1, 0 test(s) skipped.", StringComparison.Ordinal));
+        Assert.True(ContainersRemoved);
+    }
+
+    [Fact]
+    public async Task AFailureThatFailsAgainOnItsRerun_StaysAFailureAndIsNotFlaky()
+    {
+        _trx = Login("Failed");
+        _rawExit = "1\n";
+        _rerunTrx = Login("Failed");
+        _rerunRawExit = "1\n";
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["E2E_SUITE_STATUS"]);
+        Assert.Equal(2, Runners.Length);
+        Assert.Equal("Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.True(File.Exists(Path.Combine(Results, "rerun", "e2e.trx")));
+        Assert.True(ContainersRemoved);
+    }
+
+    [Fact]
+    public async Task ACleanSuite_IsNotRerun()
+    {
+        _trx = Login("Passed");
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("0", variables["E2E_SUITE_STATUS"]);
+        Assert.Single(Runners);
+        Assert.False(Directory.Exists(Path.Combine(Results, "rerun")));
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
     }
 
     [Fact]

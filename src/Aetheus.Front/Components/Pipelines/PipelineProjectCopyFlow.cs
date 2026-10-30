@@ -29,6 +29,21 @@ public sealed class PipelineProjectCopyFlow(
 
     private string? _planSignature;
     private RenderFragment? _startFrom;
+    private PipelineSetupSourceBranch? _branch;
+
+    /// <summary>The branch the copies read, chosen as the setup wizard chooses it for its own pipelines (R-76): develop when
+    /// the new project's repository has it, else the project's default branch, else the repository's.</summary>
+    private PipelineSetupSourceBranch Branch
+    {
+        get
+        {
+            _branch ??= new PipelineSetupSourceBranch(api, changed);
+            _branch.Follow(TargetProject);
+            return _branch;
+        }
+    }
+
+    public bool SourceBranchMissing => Branch.IsMissing;
 
     public IReadOnlyList<ProjectDto> Projects => projects;
     public int? TargetProjectId { get; private set; } = initialProjectId;
@@ -142,7 +157,7 @@ public sealed class PipelineProjectCopyFlow(
         TargetProjectId = TargetProjectId ?? 0,
         Prefix = Prefix,
         SourcePrefix = SourcePrefix,
-        TargetBranch = TargetProject?.DefaultBranch,
+        TargetBranch = Branch.Chosen,
         PipelineIds = [.. pipelineIds]
     };
 
@@ -160,6 +175,7 @@ public sealed class PipelineProjectCopyFlow(
         changed();
         try
         {
+            await Branch.SettledAsync();
             Plan = await api.Pipelines.PlanProjectCopyAsync(BuildRequest([]));
             PlanFailed = Plan is null;
             foreach (var item in Plan?.Pipelines.Where(item => item.Status != PipelineCopyStatus.NotCopied) ?? [])
@@ -191,6 +207,7 @@ public sealed class PipelineProjectCopyFlow(
         changed();
         try
         {
+            await Branch.SettledAsync();
             var outcome = await api.Pipelines.CopyProjectPipelinesAsync(BuildRequest(Selected));
             if (outcome.Value is { } result)
             {

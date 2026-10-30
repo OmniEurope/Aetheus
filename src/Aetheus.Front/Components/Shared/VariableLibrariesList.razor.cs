@@ -91,6 +91,7 @@ public partial class VariableLibrariesList : IAsyncDisposable
         {
             _usage = (await Api.Variables.GetResourceUsageAsync()).Libraries;
             _usageLoaded = true;
+            StateHasChanged();
         }
         catch (HttpRequestException) { } // the list stays usable without the usage column
     }
@@ -196,6 +197,8 @@ public partial class VariableLibrariesList : IAsyncDisposable
             _hubConnection = HubFactory.Create("entities");
             _hubConnection.On<ResourceType, int, string>("EntityChanged", (type, _, _) =>
             {
+                // R-64: a pipeline created or changed afterwards changes who reads each library.
+                if (type == ResourceType.Pipeline) return InvokeAsync(LoadUsageAsync);
                 if (type != ResourceType.VariableLibrary) return Task.CompletedTask;
                 return InvokeAsync(async () =>
                 {
@@ -210,16 +213,27 @@ public partial class VariableLibrariesList : IAsyncDisposable
             _hubConnection.RejoinOnReconnect(() => InvokeAsync(async () =>
             {
                 await _hubConnection.InvokeAsync("JoinEntityUpdates", ResourceType.VariableLibrary);
+                await JoinPipelineUpdatesAsync(_hubConnection);
                 if (IsServerScope)
                 {
                     try { await LoadServerLibrariesAsync(); } catch (HttpRequestException) { } // hub-triggered reload - silent on auth failure
                 }
                 await RefreshGridAsync();
+                await LoadUsageAsync();
             }));
             await _hubConnection.StartAsync();
             await _hubConnection.InvokeAsync("JoinEntityUpdates", ResourceType.VariableLibrary);
+            await JoinPipelineUpdatesAsync(_hubConnection);
         }
         catch { /* Hub unavailable - degrade to static */ }
+    }
+
+    /// <summary>The pipelines only feed the "used by" column; a caller who may not read any pipeline keeps the
+    /// library updates without them.</summary>
+    private static async Task JoinPipelineUpdatesAsync(HubConnection hub)
+    {
+        try { await hub.InvokeAsync("JoinEntityUpdates", ResourceType.Pipeline); }
+        catch (Microsoft.AspNetCore.SignalR.HubException) { /* Access denied to pipelines: the column keeps what it loaded. */ }
     }
 
     public async ValueTask DisposeAsync()
@@ -227,6 +241,10 @@ public partial class VariableLibrariesList : IAsyncDisposable
         Permissions.OnPermissionsChanged -= OnPermissionsChanged;
         if (_hubConnection is not null)
         {
+            try { await _hubConnection.InvokeAsync("LeaveEntityUpdates", ResourceType.Pipeline); }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException
+                or Microsoft.AspNetCore.SignalR.HubException)
+            { /* Leaving a group is best-effort when the transport is already unavailable. */ }
             await _hubConnection.LeaveEntityUpdatesAndDisposeAsync(ResourceType.VariableLibrary);
             _hubConnection = null;
         }

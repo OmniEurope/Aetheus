@@ -287,12 +287,18 @@ stages:
         scanner: pmd-java
         timeout_seconds: 1200
 
-  # The grade counts what any repository produces: the high-severity findings of every quality report
-  # the run published, whichever producer wrote it. Coverage, duplication and complexity are graded
-  # when their evidence exists and shown beside it, but are not required: a repository in a language
-  # without that evidence is not held "incomplete" for it. A project that wants one of them to decide
-  # the grade overrides this step in its own pipeline with `required: true` on that rule. Findings are
-  # counted by severity, never weighted (owner decision of 2026-10-17, ADR-030 amendment of that date).
+  # Every rule is required and every domain counts (owner decision of 2026-10-25, recette R-73 and R-74,
+  # ADR-030 amendment of that date): coverage, duplication and complexity keep their own thresholds, being
+  # measures and not findings, and the architecture is graded on its findings. A measure whose step was
+  # skipped or published nothing (a repository in a language without that evidence) does not turn the grade
+  # into an A nor hide it: the grade is the one of what was observed, and the Gate tab lists the missing
+  # measure with the step that should have produced it. Findings are counted by severity, never weighted
+  # (owner decision of 2026-10-17, ADR-030 amendment of that date). The architecture follows the scale of
+  # application-security: no open finding is an A, the first one costs the A whatever its severity (one rule
+  # per severity, so the lines add up to the findings of the run), then the grade falls with the severity,
+  # never to an E: info, low and medium (B up to 5, C from 6, never worse), high (a D from the first one,
+  # whatever the count), critical (F). The duplication has no producer in this template (jscpd is the
+  # project's own npm tool): it shows as missing until the project adds one.
   - name: Grade quality
     group: Quality
     execution_role: build
@@ -307,7 +313,9 @@ stages:
           version: 1
           minimum_grade: F
           required_domains:
+            - reliability
             - code-quality
+            - architecture
           rules:
             - key: grade.quality.high
               domain: code-quality
@@ -322,7 +330,6 @@ stages:
               domain: reliability
               metric: coverage.line.percent
               category: coverage
-              required: false
               direction: higher-is-better
               a: 75
               b: 65
@@ -333,7 +340,6 @@ stages:
               domain: code-quality
               metric: duplication.percentage
               category: duplication
-              required: false
               direction: lower-is-better
               a: 3
               b: 5
@@ -344,11 +350,49 @@ stages:
               domain: code-quality
               metric: complexity.cyclomatic.maximum
               category: code-quality
-              required: false
               direction: lower-is-better
               a: 15
               b: 20
               c: 25
               d: 35
               e: 50
+            - key: grade.architecture.critical
+              domain: architecture
+              severity: critical
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 0
+              c: 0
+              d: 0
+              e: 0
+            - key: grade.architecture.high
+              domain: architecture
+              severity: high
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 0
+              c: 0
+            - key: grade.architecture.medium
+              domain: architecture
+              severity: medium
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 5
+            - key: grade.architecture.low
+              domain: architecture
+              severity: low
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 5
+            - key: grade.architecture.info
+              domain: architecture
+              severity: info
+              category: architecture
+              direction: lower-is-better
+              a: 0
+              b: 5
         timeout_seconds: 300

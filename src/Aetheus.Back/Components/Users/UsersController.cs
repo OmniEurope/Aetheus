@@ -6,14 +6,24 @@ namespace Aetheus.Back.Components.Users;
 [ApiController]
 [Route("api/users")]
 [Authorize]
-public class UsersController(IUserService service) : ControllerBase
+public class UsersController(
+    IUserService service, IResourceAuthorizationService authz, IOrganizationRoleAssignmentService roleAssignments) : ControllerBase
 {
+    /// <summary>
+    /// Every user for a site Admin; for an organization's administrator, the members of the organizations
+    /// where it holds org.members.manage (Administration section, owner decision 2026-10-28), without their
+    /// e-mails. <paramref name="organizationId"/> is the organization switcher's choice: one the caller
+    /// administers, else 403.
+    /// </summary>
     [HttpGet]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<PaginatedResult<UserDto>>> GetUsers(
-        [FromQuery] PaginationRequest request, CancellationToken ct)
+        [FromQuery] PaginationRequest request, [FromQuery, Range(1, int.MaxValue)] int? organizationId, CancellationToken ct)
     {
-        return Ok(await service.GetUsersAsync(request, ct));
+        var scope = await AdministrationScope.ResolveAsync(authz, User, PermissionKeys.OrganizationMembersManage, organizationId, ct);
+        if (scope is null) return Forbid();
+        return Ok(scope.OrganizationIds is { } organizations
+            ? await service.GetOrganizationUsersAsync(request, organizations, User.IsInRole(RoleNames.Admin), ct)
+            : await service.GetUsersAsync(request, ct));
     }
 
     [HttpGet("{id:int}")]
@@ -33,10 +43,29 @@ public class UsersController(IUserService service) : ControllerBase
         return Ok(user);
     }
 
+    /// <summary>
+    /// A site Admin creates any account. A holder of org.members.manage (R-10 d) creates one in the
+    /// organizations where it holds that key only, with the built-in roles held for one organization and those
+    /// organizations' own roles: a site-wide role, another organization, the Admin role, a role of every
+    /// organization or of another organization are refused (403), an account in no organization too (400).
+    /// Every refusal comes before the e-mail is looked at. An e-mail or username already used answers the same
+    /// 409 as for the site Admin, naming nothing of the account holding it: no more than adding a member by
+    /// exact login already tells.
+    /// </summary>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<UserDto>> CreateUser([FromBody] CreateUserRequest request, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        var administered = await authz.GetOrganizationsWithPermissionKeyAsync(User, PermissionKeys.OrganizationMembersManage, ct);
+        if (administered is not null)
+        {
+            if (administered.Count == 0 || request.Roles.Count > 0) return Forbid();
+            if (request.OrganizationRoles.Count == 0)
+                return BadRequest("An Organization Admin creates the account in one of the organizations it administers.");
+            if (request.OrganizationRoles.Any(held => !administered.Contains(held.OrganizationId))
+                || !await roleAssignments.AreGivenByOrganizationAdministratorAsync(request.OrganizationRoles, ct))
+                return Forbid();
+        }
         var user = await service.CreateUserAsync(request, ct);
         return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
     }

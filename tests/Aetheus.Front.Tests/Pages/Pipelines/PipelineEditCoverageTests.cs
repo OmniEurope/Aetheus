@@ -284,12 +284,12 @@ public class PipelineEditCoverageTests : BunitContext
             "  - name: target\n    display_name: Target\n    type: string\n    description: " + description + "\n" +
             "  - name: plain\n    type: string\n");
 
-        var descriptionId = PipelineEdit.TemplateParameterDescriptionId("target", description)!;
+        var descriptionId = PipelineTemplateParameterIds.Description("target", description)!;
         cut.WaitForElement($"#{descriptionId}");
         Assert.Equal(description, cut.Find($"#{descriptionId}").TextContent.Trim());
-        Assert.Equal(descriptionId, cut.Find($"input#{PipelineEdit.TemplateParameterControlId("target")}").GetAttribute("aria-describedby"));
-        Assert.Empty(cut.FindAll($"#{PipelineEdit.TemplateParameterFieldId("plain")}-help-content"));
-        Assert.Null(cut.Find($"input#{PipelineEdit.TemplateParameterControlId("plain")}").GetAttribute("aria-describedby"));
+        Assert.Equal(descriptionId, cut.Find($"input#{PipelineTemplateParameterIds.Control("target")}").GetAttribute("aria-describedby"));
+        Assert.Empty(cut.FindAll($"#{PipelineTemplateParameterIds.Field("plain")}-help-content"));
+        Assert.Null(cut.Find($"input#{PipelineTemplateParameterIds.Control("plain")}").GetAttribute("aria-describedby"));
         Assert.Single(cut.FindAll("*"), element => element.Children.Length == 0
             && element.TextContent.Contains(description, StringComparison.Ordinal));
     }
@@ -303,12 +303,12 @@ public class PipelineEditCoverageTests : BunitContext
             "  - name: target\n    display_name: Target\n    type: string\n    required: true\n" +
             "  - name: plain\n    type: string\n");
 
-        var target = cut.WaitForElement($"label[for='{PipelineEdit.TemplateParameterControlId("target")}']");
+        var target = cut.WaitForElement($"label[for='{PipelineTemplateParameterIds.Control("target")}']");
         Assert.Contains("omni-label--required", target.ClassList);
         Assert.Equal("*", target.QuerySelector(".omni-label__required")!.TextContent);
         Assert.Equal(1, target.TextContent.Count(character => character == '*'));
         Assert.DoesNotContain("omni-label--required",
-            cut.Find($"label[for='{PipelineEdit.TemplateParameterControlId("plain")}']").ClassList);
+            cut.Find($"label[for='{PipelineTemplateParameterIds.Control("plain")}']").ClassList);
     }
 
     private IRenderedComponent<PipelineEdit> RenderTemplateParameters(string parametersYaml)

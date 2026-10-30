@@ -115,6 +115,10 @@ internal static class StartupHostingExtensions
             await ApplyMigrationsAsync(app.Configuration, db, startupLogger);
 
         await DbInitializer.SeedAsync(db, app.Configuration);
+        // The administrator bootstrap locks for good once an administrator exists (the one the seed just made,
+        // or those of a platform that predates it), so a later Auth:AdminEmail makes nobody Admin.
+        await scope.ServiceProvider.GetRequiredService<Aetheus.Back.Components.Auth.ISiteAdminBootstrap>()
+            .LockIfAdministratorExistsAsync();
         // One-shot, idempotent: an instance seeded before normalize-coverage-report.sh moved to scripts/ keeps the old path.
         await Aetheus.Back.Components.Pipelines.SeededTemplateScriptPathReconciliation.RunAsync(
             db, scope.ServiceProvider.GetRequiredService<TimeProvider>(), startupLogger);

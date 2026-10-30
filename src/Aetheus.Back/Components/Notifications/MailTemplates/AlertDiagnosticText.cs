@@ -41,6 +41,7 @@ internal static class AlertDiagnosticText
         var kills = obj.TryGetProperty("KillCount", out var count) && count.ValueKind == JsonValueKind.Number && count.TryGetInt64(out var value)
             ? value : victims.Count;
         if (kills <= 0 && victims.Count == 0) return null;
+        if (OomKillDiagnostic.Build(obj, kills, language) is { } detailed) return detailed;
         if (victims.Count == 0)
             return kills == 1
                 ? NotificationEmailText.Get("OomKillUnnamedOne", language)

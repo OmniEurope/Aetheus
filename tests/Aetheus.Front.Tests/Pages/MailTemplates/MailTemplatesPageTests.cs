@@ -49,7 +49,7 @@ public sealed class MailTemplatesPageTests : BunitContext
         Assert.Contains("MailTemplateDefault", cut.Find(".mail-template-state").TextContent);
         Assert.True(cut.Find(".mail-template-save").HasAttribute("disabled"));
         // Every mail written from a template is offered: the channel test, the event notifications, the daily recap.
-        Assert.Equal(["NotificationChannelTest", "NotificationEvent", "DailyRecap"],
+        Assert.Equal(["NotificationChannelTest", "NotificationEvent", "DailyRecap", "UserWelcome", "PasswordReset", "SiteAdminGranted"],
             cut.FindAll("#mail-template-kind option").Select(option => option.TextContent.Trim().Split('_')[^1]));
     }
 

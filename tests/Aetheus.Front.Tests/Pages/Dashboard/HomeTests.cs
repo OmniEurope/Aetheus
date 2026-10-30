@@ -95,18 +95,41 @@ public class HomeTests : BunitContext
     }
 
     [Fact]
-    public void R35_DashboardPanels_AreNotForcedToAnEqualHeight()
+    public void R41_DashboardPanels_AreTheTilesOfOneEqualHeightOeTileGrid()
     {
         _handler.SetJsonResponse("monitoring/dashboard", new DashboardOverviewDto { RecentRuns = [], Servers = [], Projects = [] });
 
         var cut = Render<Home>();
 
         cut.WaitForAssertion(() => Assert.Equal(4, cut.FindAll(".dashboard-tile").Count));
-        // The OE tile grid and the equal-height row class are what forced the same height.
-        Assert.Empty(cut.FindAll(".omni-tile-grid"));
-        Assert.Empty(cut.FindAll(".dashboard-tile-row"));
+        // Same width and same height, phone included (the tiles stack and share the tallest height): the OE
+        // tile grid with its default equal heights, the four panels as its direct children.
+        var grid = Assert.Single(cut.FindAll(".dashboard-tile-row.omni-tile-grid"));
+        Assert.DoesNotContain("omni-tile-grid--natural-heights", grid.ClassName, StringComparison.Ordinal);
+        Assert.Equal(4, grid.Children.Count(child => child.ClassList.Contains("dashboard-tile")));
     }
+    [Fact]
+    public void R43_TheCountBadgesOfThePanels_TakeTheWidthOfTheirContent()
+    {
+        _handler.SetJsonResponse("monitoring/dashboard", new DashboardOverviewDto
+        {
+            OnlineServers = 2,
+            OfflineServers = 1,
+            TotalProjects = 3,
+            RecentRuns = [Run(3, PipelineStatus.Success)],
+            Servers = [],
+            Projects = []
+        });
 
+        var cut = Render<Home>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var badges = cut.FindAll(".dashboard-tile .omni-badge");
+            Assert.True(badges.Count >= 4, cut.Markup);
+            Assert.All(badges, badge => Assert.DoesNotContain("omni-badge--width-", badge.ClassName, StringComparison.Ordinal));
+        });
+    }
     [Fact]
     public void DoesNotRenderOrLoadAiRunsTile()
     {
@@ -146,7 +169,9 @@ public class HomeTests : BunitContext
         Assert.DoesNotContain(_handler.Requests, request =>
             request.Url.Contains("monitoring/dashboard", StringComparison.Ordinal)
             || request.Url.Contains("api/appmonitoring/summary", StringComparison.Ordinal));
-        Assert.Contains("AccessDenied", cut.Markup);
+        // R-43: never "Access denied" on Home; with no organization and no notification it says so.
+        Assert.DoesNotContain("AccessDenied", cut.Markup);
+        Assert.Contains("DashboardNothingToShow", cut.Markup);
     }
 
     [Fact]

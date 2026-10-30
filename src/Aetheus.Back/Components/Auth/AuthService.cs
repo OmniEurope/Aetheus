@@ -43,12 +43,15 @@ public class AuthService(
             // Inactive users are deliberately returned here so their rejected attempts remain
             // distinguishable in the append-only audit trail. Every other auth path still checks
             // IsActive before issuing access.
-            user = await repo.FindUserWithRolesAsync(NormalizeLoginName(request.Username), ct).ConfigureAwait(false);
+            // Owner decision 2026-10-28: people sign in by e-mail address only. What is typed is looked up
+            // as an e-mail and nowhere else, so a username typed in the field matches no account and is
+            // refused exactly like a wrong password (no account enumeration).
+            user = await repo.FindUserByEmailWithRolesAsync(request.Email, ct).ConfigureAwait(false);
             if (user is not null)
             {
                 if (!user.IsActive)
                 {
-                    await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "Inactive", user, request.Username, ct).ConfigureAwait(false);
+                    await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "Inactive", user, AttemptedLogin(request), ct).ConfigureAwait(false);
                     return null;
                 }
 
@@ -57,14 +60,14 @@ public class AuthService(
 
             var bootstrap = await LoginBootstrapAsync(request, ct).ConfigureAwait(false);
             if (bootstrap is null)
-                await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidCredentials", null, request.Username, ct).ConfigureAwait(false);
+                await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidCredentials", null, AttemptedLogin(request), ct).ConfigureAwait(false);
             return bootstrap;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Interactive login failed unexpectedly for {Username}", LoginAuditRecorder.Sanitize(request.Username, 100));
-            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "Error", user, request.Username, CancellationToken.None).ConfigureAwait(false);
+            logger.LogError(ex, "Interactive login failed unexpectedly for {Username}", LoginAuditRecorder.Sanitize(AttemptedLogin(request), 100));
+            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "Error", user, AttemptedLogin(request), CancellationToken.None).ConfigureAwait(false);
             throw;
         }
     }
@@ -77,13 +80,13 @@ public class AuthService(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         if (user.LockoutEndUtc is not null && user.LockoutEndUtc > now)
         {
-            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "LockedOut", user, request.Username, ct).ConfigureAwait(false);
+            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "LockedOut", user, AttemptedLogin(request), ct).ConfigureAwait(false);
             return null;
         }
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
             await HandleFailedLoginAsync(user, ct).ConfigureAwait(false);
-            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidCredentials", user, request.Username, ct).ConfigureAwait(false);
+            await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidCredentials", user, AttemptedLogin(request), ct).ConfigureAwait(false);
             return null;
         }
         var (secondFactorValid, challenge) = await ValidateSecondFactorAsync(user, request, ct).ConfigureAwait(false);
@@ -91,7 +94,13 @@ public class AuthService(
         if (user.FailedLoginCount > 0 || user.LockoutEndUtc is not null)
             await repo.ResetFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
         await DetectLoginAnomalyAsync(user.Username, user.Id, ct).ConfigureAwait(false);
+        // The administrator bootstrap (owner decision 2026-10-28) may make this account site Admin now: the
+        // token issued below then already carries the role.
+        var accessProved = new AccountAccessProvedEvent(user.Id, user.Username, user.Email);
+        await domainEvents.DispatchAsync(accessProved, ct).ConfigureAwait(false);
         var roles = user.UserRoles.Select(item => item.Role.Name).ToList();
+        if (accessProved.GrantedSiteAdmin && !roles.Contains(RoleNames.Admin, StringComparer.Ordinal))
+            roles.Add(RoleNames.Admin);
         var claims = BuildUserClaims(user, roles);
         var response = await GenerateTokenResponseWithRefreshAsync(
             claims, user.Id, request.RememberMe, ct).ConfigureAwait(false);
@@ -111,7 +120,7 @@ public class AuthService(
             : await totpService.ConsumeRecoveryCodeAsync(user.Id, request.RecoveryCode!, ct).ConfigureAwait(false);
         if (accepted) return (true, null);
         await HandleFailedLoginAsync(user, ct).ConfigureAwait(false);
-        await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidSecondFactor", user, request.Username, ct).ConfigureAwait(false);
+        await LoginAuditRecorder.RecordFailureAsync(audit, httpContextAccessor, "InvalidSecondFactor", user, AttemptedLogin(request), ct).ConfigureAwait(false);
         return (false, null);
     }
 
@@ -128,7 +137,7 @@ public class AuthService(
         // Bootstrap admin does not support TOTP or refresh tokens - short-lived JWT only.
         var bootstrapStamp = config["Auth:BootstrapStamp"] ?? "bootstrap";
         return GenerateTokenResponse([
-            new Claim(ClaimTypes.Name, request.Username),
+            new Claim(ClaimTypes.Name, AttemptedLogin(request)),
             new Claim(ClaimTypes.NameIdentifier, "bootstrap"),
             new Claim(AetheusClaimTypes.SecurityStamp, bootstrapStamp),
             new Claim(ClaimTypes.Role, "Admin")
@@ -401,11 +410,20 @@ public class AuthService(
             if (existing is not null)
                 return null;
 
+            // PLAN-003 P3-2: every account signs in by a unique e-mail. A provider that gives none, or
+            // one another account already holds, provisions nothing: linking would hand that account over.
+            var normalizedEmail = Aetheus.Back.Data.UserEmail.Normalize(email);
+            if (normalizedEmail is null || await repo.EmailInUseAsync(normalizedEmail, null, ct).ConfigureAwait(false))
+            {
+                logger.LogWarning("External login of {Provider} not provisioned: e-mail missing or already used", provider);
+                return null;
+            }
+
             user = new User
             {
                 Username = canonicalUsername,
                 PasswordHash = string.Empty,
-                Email = email
+                Email = normalizedEmail
             };
 
             await repo.AddUserAsync(user, ct).ConfigureAwait(false);
@@ -493,6 +511,7 @@ public class AuthService(
             CreatedAt = now
         };
         await repo.AddRefreshTokenAsync(newRefresh, ct).ConfigureAwait(false);
+        await repo.TouchLastActivityAsync(stored.UserId, now, ct).ConfigureAwait(false);
         if (!await repo.RevokeRefreshTokenAsync(stored.Id, newRefresh.Id, ct).ConfigureAwait(false))
         {
             // A concurrent request rotated (or a logout revoked) this token after our read. Retire
@@ -562,6 +581,7 @@ public class AuthService(
             CreatedAt = now
         };
         await repo.AddRefreshTokenAsync(refresh, ct).ConfigureAwait(false);
+        await repo.TouchLastActivityAsync(userId, now, ct).ConfigureAwait(false);
 
         return response with { RefreshToken = plaintext };
     }
@@ -583,33 +603,30 @@ public class AuthService(
     /// run-scoped clone token / RBAC downstream. Accounts that must stay MFA-only should not be used for
     /// Git Basic-auth (use a dedicated access token instead).
     /// </summary>
-    public async Task<bool> ValidateBasicAuthAsync(string username, string password, CancellationToken ct = default)
+    public async Task<string?> AuthenticateBasicAsync(string email, string password, CancellationToken ct = default)
     {
-        // Same case-insensitivity as LoginAsync (git CLI users type their username by hand).
-        var user = await repo.FindUserWithRolesAsync(NormalizeLoginName(username), ct).ConfigureAwait(false);
-        if (user is null || !user.IsActive) return false;
+        // Same rule as LoginAsync: the sign-in is the e-mail address, matched case-insensitively.
+        var user = await repo.FindUserByEmailWithRolesAsync(email, ct).ConfigureAwait(false);
+        if (user is null || !user.IsActive) return null;
 
         if (user.LockoutEndUtc.HasValue && user.LockoutEndUtc.Value > timeProvider.GetUtcNow().UtcDateTime)
-            return false;
+            return null;
 
         if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
         {
             await HandleFailedLoginAsync(user, ct).ConfigureAwait(false);
-            return false;
+            return null;
         }
 
         // Align with LoginAsync: also clear a now-expired LockoutEndUtc, not just a non-zero fail count.
         if (user.FailedLoginCount > 0 || user.LockoutEndUtc is not null)
             await repo.ResetFailedLoginAsync(user.Id, ct).ConfigureAwait(false);
 
-        return true;
+        return user.Username;
     }
 
-    // Human-login username normalisation, mirroring how usernames are stored on write (F-24:
-    // UserService trim + ToLowerInvariant, and the seeded "admin"). Applied only to the interactive
-    // login paths (LoginAsync, ValidateBasicAuthAsync); the external-login flow keeps its canonical
-    // provider_subjectId verbatim.
-    private static string NormalizeLoginName(string? username) => (username ?? string.Empty).Trim().ToLowerInvariant();
+    /// <summary>What the caller typed to sign in: the e-mail address.</summary>
+    private static string AttemptedLogin(LoginRequest request) => request.Email;
 
     private static string GenerateSecureToken() => AuthTokenHelper.GenerateSecureToken();
 

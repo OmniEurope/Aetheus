@@ -217,11 +217,16 @@ public sealed class UserNotificationService(
         var subject = BuildSubject(eventType, projectName);
         var deliveries = new List<NotificationDelivery>(candidates.Count);
         var addresses = new List<string?>(candidates.Count);
+        // A subscriber who lost access to the project must not keep learning about it. One query for every
+        // subscriber rather than one per subscriber (RBAC audit, finding 12).
+        var readers = candidates.Count == 0
+            ? []
+            : await authorization.GetUsernamesWithPermissionAsync(
+                [.. candidates.Select(candidate => candidate.Username)], ResourceType.Project, projectId.Value,
+                Permission.Read, ct).ConfigureAwait(false);
         foreach (var candidate in candidates)
         {
-            // A subscriber who lost access to the project must not keep learning about it.
-            if (!await authorization.HasPermissionAsync(
-                    candidate.Username, ResourceType.Project, projectId.Value, Permission.Read, ct).ConfigureAwait(false))
+            if (!readers.Contains(candidate.Username))
                 continue;
 
             deliveries.Add(new NotificationDelivery
@@ -242,7 +247,11 @@ public sealed class UserNotificationService(
         if (deliveries.Count > 0)
         {
             if (descriptor.SentByEmail)
-                await EmailOptedInDeliveriesAsync(deliveries, addresses, emailOptInEventType, emailOnceMarker, ct).ConfigureAwait(false);
+            {
+                // The mail of a project's event is written with its organization's own template when it has one.
+                var organizationId = await repo.GetProjectOrganizationIdAsync(projectId.Value, ct).ConfigureAwait(false);
+                await EmailOptedInDeliveriesAsync(deliveries, addresses, emailOptInEventType, emailOnceMarker, organizationId, ct).ConfigureAwait(false);
+            }
             await repo.AddDeliveriesAsync(deliveries, ct).ConfigureAwait(false);
             await PushChangedAsync([.. deliveries.Select(delivery => delivery.RecipientUserId)], ct).ConfigureAwait(false);
         }
@@ -257,7 +266,7 @@ public sealed class UserNotificationService(
     /// </summary>
     private async Task EmailOptedInDeliveriesAsync(
         IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, string? optInEventType,
-        string? onceMarker, CancellationToken ct)
+        string? onceMarker, int? organizationId, CancellationToken ct)
     {
         var descriptor = optInEventType is null ? null : NotificationEventTypes.Find(optInEventType);
         var alreadyEmailed = onceMarker is null || deliveries.Count == 0
@@ -292,18 +301,20 @@ public sealed class UserNotificationService(
             mailedAddresses.Add(addresses[i]);
         }
 
-        await EmailDeliveriesAsync(mailed, mailedAddresses, ct).ConfigureAwait(false);
+        await EmailDeliveriesAsync(mailed, mailedAddresses, ct, organizationId).ConfigureAwait(false);
     }
 
     /// <summary> Every notification also leaves by e-mail to the recipient's account address, and
     /// its row records the real outcome: Sent once the SMTP server accepted it, Failed with the
     /// server's text, NotConfigured with the reason when no sender or no address exists. </summary>
     private async Task EmailDeliveriesAsync(
-        IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, CancellationToken ct)
+        IReadOnlyList<NotificationDelivery> deliveries, IReadOnlyList<string?> addresses, CancellationToken ct,
+        int? organizationId = null)
     {
         if (emailer is null || deliveries.Count == 0) return;
         var emails = deliveries
-            .Select((delivery, index) => new NotificationEmail(addresses[index], delivery.Subject, delivery.EventType, delivery.PayloadJson))
+            .Select((delivery, index) => new NotificationEmail(
+                addresses[index], delivery.Subject, delivery.EventType, delivery.PayloadJson, organizationId))
             .ToList();
         var results = await emailer.SendAsync(emails, ct).ConfigureAwait(false);
         var now = timeProvider.GetUtcNow().UtcDateTime;

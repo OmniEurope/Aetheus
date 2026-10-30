@@ -3,9 +3,15 @@
 @typeparam TItem
 @inject IStringLocalizer<AppStrings> L
 
-@if (_loadFailed)
-{
-    <OmniAlert Severity="OmniSeverity.Danger" Class="grid-load-alert">
+@* Let page-owned buttons initialize and finish inline edits so the grid does not expose a second
+   edit path with uninitialized fields.
+   R-110: the host is the OmniStack that separates the load-failure alert from the grid by its gap (no margin on
+   the alert). It stays the one wrapper the full-height chain of app.css addresses (.app-body-wrapper >
+   .aetheus-grid-host, .page-fill-body > .aetheus-grid-host, .iam-grid-surface > .aetheus-grid-host). *@
+<OmniStack Class="aetheus-grid-host">
+    @if (_loadFailed)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Class="grid-load-alert">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center"
                    Justify="OmniJustification.Between" Gap="OmniSpacing.Small">
             <OmniText>@L["GridLoadFailed"]</OmniText>
@@ -13,12 +19,8 @@
                 <Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Retry"]</ChildContent>
             </OmniButton>
         </OmniStack>
-    </OmniAlert>
-}
-
-@* Let page-owned buttons initialize and finish inline edits so the grid does not expose a second
-   edit path with uninitialized fields. *@
-<div class="aetheus-grid-host">
+        </OmniAlert>
+    }
     @* OE draws its loading bar between the headers and the first row for every load, on the table
        alone: every request the grid makes (first load included, a page, a sort, a filter, a block
        of rows) and every load the page runs itself, signalled through Busy. The rows already there
@@ -30,6 +32,8 @@
                   ScrollMode="@(EffectiveVirtualize ? OmniDataGridScrollMode.Virtual : OmniDataGridScrollMode.Paged)" AllowSorting="@AllowSorting"
                   Filterable="@AllowFiltering" FilterMode="@FilterMode" ShowHeaderFilterMenu="@ShowHeaderFilterMenu"
                   AllowAlternatingRows="@AllowAlternatingRows" HighlightRowOnHover="true"
+                  SelectionMode="@SelectionMode" AllowRowSelectOnRowClick="@AllowRowSelectOnRowClick"
+                  Value="@Value" ValueChanged="@ValueChanged"
                   AllowColumnResize="@AllowColumnResize"
                   VirtualizationOverscanCount="@VirtualizationOverscanCount"
                   EstimatedRowHeight="@AetheusGrid.RowHeightPixels"
@@ -46,4 +50,4 @@
                   Class="@GridCssClass" @attributes="OtherAttributes">
         <Columns>@Columns</Columns>
     </OmniDataGrid>
-</div>
+</OmniStack>

@@ -10,11 +10,11 @@ public partial class WorkItemEditDialog : EntityEditDialogBase
     private bool IsEdit => Item is not null;
     private EditModel _model = new();
 
-    private static readonly List<OmniOption<WorkItemType>> _types = Enum.GetValues<WorkItemType>()
-        .Select(t => new OmniOption<WorkItemType>(t, t.ToString())).ToList();
+    private List<OmniOption<WorkItemType>> TypeOptions => Enum.GetValues<WorkItemType>()
+        .Select(t => new OmniOption<WorkItemType>(t, L.Localize(t))).ToList();
 
-    private static readonly List<OmniOption<WorkItemStatus>> _statuses = Enum.GetValues<WorkItemStatus>()
-        .Select(s => new OmniOption<WorkItemStatus>(s, s.ToString())).ToList();
+    private List<OmniOption<WorkItemStatus>> StatusOptions => Enum.GetValues<WorkItemStatus>()
+        .Select(s => new OmniOption<WorkItemStatus>(s, L.Localize(s))).ToList();
 
     protected override void OnInitialized()
     {

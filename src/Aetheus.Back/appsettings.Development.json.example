@@ -13,7 +13,7 @@
   "Auth": {
     "_comment": "JwtKey must be at least 32 UTF-8 bytes for HS256. Leaving it empty in Development is allowed: the backend then generates an ephemeral signing key at startup, which invalidates every token on restart. Set it for stable dev sessions. AdminPassword seeds the persistent administrator on an empty database. EncryptionKey signs clone tokens and derives the deployment bootstrap identity.",
     "JwtKey": "CHANGE_ME-at-least-32-utf8-bytes-long",
-    "AdminUser": "admin",
+    "AdminEmail": "admin@aetheus.local",
     "AdminPassword": "CHANGE_ME",
     "EncryptionKey": "CHANGE_ME"
   },

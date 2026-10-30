@@ -40,11 +40,13 @@ public sealed class ProjectBoardEditDialogTests : BunitContext
     [Fact]
     public async Task ACreatedItem_ReloadsTheBoard()
     {
-        var cut = RenderLoaded();
+        // Create sits in the project header (R-109), so the section is rendered next to the header outlet the project layout gives it.
+        var cut = this.RenderWithPageHeader<ProjectBoardSection>(parameters => parameters.Add(section => section.ProjectId, 1));
+        cut.WaitForState(() => cut.Markup.Contains("Design login"));
         var before = BoardReads();
         _dialogs.OpenResult = true;
 
-        await cut.FindAll("button").First(button => button.TextContent.Contains("Create", StringComparison.Ordinal)).ClickAsync(new());
+        await cut.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Contains("Create", StringComparison.Ordinal)).ClickAsync(new());
 
         Assert.Equal(typeof(WorkItemEditDialog), _dialogs.LastComponent);
         Assert.Equal("Create", _dialogs.LastTitle);

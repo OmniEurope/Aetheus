@@ -1359,7 +1359,7 @@ public class PollingServiceTests
         // A finished service action asks for a heartbeat, so the page sees the new state.
         Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
         // A service action does not touch the cached mail inventory.
-        Assert.False(health.ConsumeMailInventoryInvalidation());
+        Assert.Equal(CachedInventory.None, health.ConsumeInventoryInvalidations());
     }
 
     [Theory]
@@ -1396,7 +1396,7 @@ public class PollingServiceTests
         await PollAndDrainAsync(CreateService([operationExecutorMock], runtimeHealth: health));
 
         await _apiClientMock.Received(1).CompleteTaskAsync(103, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
-        Assert.True(health.ConsumeMailInventoryInvalidation());
+        Assert.Equal(CachedInventory.Mail, health.ConsumeInventoryInvalidations());
         Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
     }
 
@@ -1413,7 +1413,174 @@ public class PollingServiceTests
     [InlineData(OperationKind.MailSendTest, true)]
     [InlineData(OperationKind.MailPurge, true)]
     public void R1_8_OnlyTheMailOperationsThatChangeTheStack_InvalidateItsInventory(OperationKind operation, bool invalidates) =>
-        Assert.Equal(invalidates, PollingService.ChangesMailInventory(operation));
+        Assert.Equal(invalidates, CachedInventoryOperations.ChangedBy(operation) == CachedInventory.Mail);
+
+    [Theory]
+    [InlineData(OperationKind.ApacheDisableSite, 0)]
+    [InlineData(OperationKind.ApacheDeleteSite, 0)]
+    [InlineData(OperationKind.ApacheEnableSite, 1)]
+    public async Task R119_ACompletedApacheSiteOperation_InvalidatesTheApacheInventory_AndAsksForAHeartbeat(OperationKind operation, int exitCode)
+    {
+        var operationExecutorMock = Substitute.For<IOperationExecutor>();
+        operationExecutorMock.CanHandle(operation).Returns(true);
+        operationExecutorMock.ExecuteAsync(
+                operation, "site.conf",
+                Arg.Any<IReadOnlyDictionary<string, string>>(), 30,
+                Arg.Any<Func<string, TaskLogLevel, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ExecutorResult(exitCode, false));
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PendingTaskDto>
+            {
+                new()
+                {
+                    Id = 104,
+                    Name = "apache",
+                    Command = "site.conf",
+                    Operation = operation,
+                    Executor = ExecutorType.Shell,
+                    EnvironmentVariables = new Dictionary<string, string>(),
+                    TimeoutSeconds = 30
+                }
+            });
+
+        var health = new AgentRuntimeHealth(TimeProvider.System);
+        await PollAndDrainAsync(CreateService([operationExecutorMock], runtimeHealth: health));
+
+        await _apiClientMock.Received(1).CompleteTaskAsync(104, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
+        Assert.Equal(CachedInventory.Apache, health.ConsumeInventoryInvalidations());
+        Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+    }
+
+    [Theory]
+    [InlineData(OperationKind.ApacheTestConfig, false)]
+    [InlineData(OperationKind.ApacheGetLogs, false)]
+    [InlineData(OperationKind.ApacheGetConfig, false)]
+    [InlineData(OperationKind.ApacheGetHtaccess, false)]
+    [InlineData(OperationKind.MailRestartPostfix, false)]
+    [InlineData(OperationKind.ServiceRestart, false)]
+    [InlineData(OperationKind.ApacheEnableSite, true)]
+    [InlineData(OperationKind.ApacheDisableSite, true)]
+    [InlineData(OperationKind.ApacheDeleteSite, true)]
+    [InlineData(OperationKind.ApacheStart, true)]
+    [InlineData(OperationKind.ApacheStop, true)]
+    [InlineData(OperationKind.ApacheRestart, true)]
+    [InlineData(OperationKind.ApacheReload, true)]
+    [InlineData(OperationKind.ApacheSaveConfig, true)]
+    [InlineData(OperationKind.ApacheApplyConfigSet, true)]
+    public void R119_OnlyTheApacheOperationsThatChangeTheServer_InvalidateItsInventory(OperationKind operation, bool invalidates) =>
+        Assert.Equal(invalidates, CachedInventoryOperations.ChangedBy(operation) == CachedInventory.Apache);
+
+    // R-119, every other cached inventory: a finished operation marks exactly the inventory it changed, whatever
+    // its outcome, and asks for a beat, so the page reads the new state when its task veil lifts.
+    [Theory]
+    [InlineData(OperationKind.CertbotObtain, CachedInventory.Certbot, 0)]
+    [InlineData(OperationKind.CertbotRemoveDomain, CachedInventory.Certbot, 0)]
+    [InlineData(OperationKind.CertbotDelete, CachedInventory.Certbot, 1)]
+    [InlineData(OperationKind.CertbotRenew, CachedInventory.Certbot, 0)]
+    [InlineData(OperationKind.FirewallAllow, CachedInventory.Firewall, 0)]
+    [InlineData(OperationKind.FirewallSetEnabled, CachedInventory.Firewall, 1)]
+    [InlineData(OperationKind.PortsentryUnblock, CachedInventory.Portsentry, 0)]
+    [InlineData(OperationKind.PortsentryRestart, CachedInventory.Portsentry, 0)]
+    [InlineData(OperationKind.RkhunterScan, CachedInventory.Rkhunter, 0)]
+    [InlineData(OperationKind.TeamspeakServerQuery, CachedInventory.Teamspeak, 0)]
+    [InlineData(OperationKind.TeamspeakGracefulRestart, CachedInventory.Teamspeak, 1)]
+    // R-119: every change of the server's Docker page (task 11784, a stopped container still shown running).
+    [InlineData(OperationKind.DockerStopContainer, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerStartContainer, CachedInventory.Docker, 1)]
+    [InlineData(OperationKind.DockerPullImage, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerRemoveContainer, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerRemoveImage, CachedInventory.Docker, 1)]
+    [InlineData(OperationKind.DockerUpdateResources, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerComposeProjectUp, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerComposeProjectDown, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerComposeProjectRestart, CachedInventory.Docker, 0)]
+    [InlineData(OperationKind.DockerPrune, CachedInventory.Docker, 0)]
+    // R-119: the Apache modules, RKHunter install and TeamSpeak start/stop/restart, once plain shell strings.
+    [InlineData(OperationKind.ApacheEnableModule, CachedInventory.Apache, 0)]
+    [InlineData(OperationKind.ApacheDisableModule, CachedInventory.Apache, 1)]
+    [InlineData(OperationKind.RkhunterSetup, CachedInventory.Rkhunter, 0)]
+    [InlineData(OperationKind.RkhunterSetup, CachedInventory.Rkhunter, 1)]
+    [InlineData(OperationKind.TeamspeakStart, CachedInventory.Teamspeak, 0)]
+    [InlineData(OperationKind.TeamspeakStop, CachedInventory.Teamspeak, 0)]
+    [InlineData(OperationKind.TeamspeakRestart, CachedInventory.Teamspeak, 1)]
+    [InlineData(OperationKind.SystemPackageUpgrade, CachedInventory.SecurityUpdates, 0)]
+    [InlineData(OperationKind.DockerRestartContainer, CachedInventory.Docker, 0)]
+    public async Task R119_ACompletedOperation_InvalidatesTheInventoryItChanged_AndAsksForAHeartbeat(
+        OperationKind operation, CachedInventory expected, int exitCode)
+    {
+        var operationExecutorMock = Substitute.For<IOperationExecutor>();
+        operationExecutorMock.CanHandle(operation).Returns(true);
+        operationExecutorMock.ExecuteAsync(
+                operation, "target",
+                Arg.Any<IReadOnlyDictionary<string, string>>(), 30,
+                Arg.Any<Func<string, TaskLogLevel, Task>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new ExecutorResult(exitCode, false));
+        _apiClientMock.GetPendingTasksAsync(1, Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PendingTaskDto>
+            {
+                new()
+                {
+                    Id = 105,
+                    Name = "operation",
+                    Command = "target",
+                    Operation = operation,
+                    Executor = ExecutorType.Shell,
+                    EnvironmentVariables = new Dictionary<string, string>(),
+                    TimeoutSeconds = 30
+                }
+            });
+
+        var health = new AgentRuntimeHealth(TimeProvider.System);
+        await PollAndDrainAsync(CreateService([operationExecutorMock], runtimeHealth: health));
+
+        await _apiClientMock.Received(1).CompleteTaskAsync(105, Arg.Any<TaskResultDto>(), Arg.Any<CancellationToken>());
+        Assert.Equal(expected, health.ConsumeInventoryInvalidations());
+        Assert.True(health.WaitForHeartbeatRequestAsync(TestContext.Current.CancellationToken).IsCompletedSuccessfully);
+    }
+
+    [Theory]
+    [InlineData(OperationKind.CertbotObtain, CachedInventory.Certbot)]
+    [InlineData(OperationKind.CertbotRenewAll, CachedInventory.Certbot)]
+    [InlineData(OperationKind.CertbotRenewalCheck, CachedInventory.Certbot)]
+    [InlineData(OperationKind.CertbotRemoveDomain, CachedInventory.Certbot)]
+    [InlineData(OperationKind.CertbotDelete, CachedInventory.Certbot)]
+    [InlineData(OperationKind.FirewallAllow, CachedInventory.Firewall)]
+    [InlineData(OperationKind.FirewallDeny, CachedInventory.Firewall)]
+    [InlineData(OperationKind.FirewallDeleteRule, CachedInventory.Firewall)]
+    [InlineData(OperationKind.FirewallSetEnabled, CachedInventory.Firewall)]
+    [InlineData(OperationKind.PortsentryStart, CachedInventory.Portsentry)]
+    [InlineData(OperationKind.PortsentryStop, CachedInventory.Portsentry)]
+    [InlineData(OperationKind.PortsentrySetup, CachedInventory.Portsentry)]
+    [InlineData(OperationKind.PortsentryUnblock, CachedInventory.Portsentry)]
+    [InlineData(OperationKind.RkhunterScan, CachedInventory.Rkhunter)]
+    [InlineData(OperationKind.RkhunterUpdate, CachedInventory.Rkhunter)]
+    [InlineData(OperationKind.RkhunterPropupd, CachedInventory.Rkhunter)]
+    [InlineData(OperationKind.TeamspeakServerQuery, CachedInventory.Teamspeak)]
+    [InlineData(OperationKind.TeamspeakSetup, CachedInventory.Teamspeak)]
+    [InlineData(OperationKind.TeamspeakGracefulRestart, CachedInventory.Teamspeak)]
+    [InlineData(OperationKind.SystemPackageUpgrade, CachedInventory.SecurityUpdates)]
+    [InlineData(OperationKind.DockerStartContainer, CachedInventory.Docker)]
+    [InlineData(OperationKind.DockerStopContainer, CachedInventory.Docker)]
+    [InlineData(OperationKind.DockerPullImage, CachedInventory.Docker)]
+    [InlineData(OperationKind.DockerComposeUp, CachedInventory.Docker)]
+    // A deployment starts or replaces containers; a project deletion removes its containers, sites and certificates.
+    [InlineData(OperationKind.PipelineDeploy, CachedInventory.Docker)]
+    [InlineData(OperationKind.BlueGreenUp, CachedInventory.Docker)]
+    [InlineData(OperationKind.BlueGreenRetire, CachedInventory.Docker)]
+    [InlineData(OperationKind.ProjectResourcesRemove, CachedInventory.Docker | CachedInventory.Apache | CachedInventory.Certbot)]
+    [InlineData(OperationKind.ProjectResourcesDiscover, CachedInventory.None)]
+    // What only reads, or changes nothing a cached inventory holds, invalidates nothing.
+    [InlineData(OperationKind.PortsentryStatus, CachedInventory.None)]
+    [InlineData(OperationKind.PortsentryGetLogs, CachedInventory.None)]
+    [InlineData(OperationKind.TeamspeakGetLogs, CachedInventory.None)]
+    [InlineData(OperationKind.ServiceStatus, CachedInventory.None)]
+    [InlineData(OperationKind.PackageInventory, CachedInventory.None)]
+    [InlineData(OperationKind.PortsObserve, CachedInventory.None)]
+    [InlineData(OperationKind.CronSave, CachedInventory.None)]
+    public void R119_EachOperation_ChangesOnlyItsOwnCachedInventory(OperationKind operation, CachedInventory expected) =>
+        Assert.Equal(expected, CachedInventoryOperations.ChangedBy(operation));
 
     [Fact]
     public async Task PollOnceAsync_ExecutorThrows_ReportsFailedAndContinues()

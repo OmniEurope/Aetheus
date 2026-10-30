@@ -48,6 +48,7 @@ services:
       - AETHEUS_RUN_MIGRATIONS=true
       - ConnectionStrings__Default=Host=${APPNAME}-${ENV}-database;Port=5432;Database=${DB_NAME:-aetheus};Username=${DB_USER};Password=${DB_PASSWORD}
       - Auth__JwtKey=${JWT_KEY}
+      - Auth__AdminEmail=${ADMIN_EMAIL:-}
       - Auth__AdminPassword=${ADMIN_PASSWORD}
       - Auth__EncryptionKey=${ENCRYPTION_KEY}
       - Auth__EncryptionSalt=${ENCRYPTION_SALT}

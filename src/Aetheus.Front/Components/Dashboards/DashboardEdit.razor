@@ -13,7 +13,8 @@ else if (_dashboard is not null)
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("space_dashboard")" /></Icon>
     </OmniPageHeader>
 
-    <OmniCard Class="omni-u-p-lg omni-u-mb-lg">
+    <OmniStack>
+    <OmniCard Class="omni-u-p-lg">
         <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End">
             <OmniColumn Span="12" SmallSpan="6">
                 <OmniFormField Label="@L["DashboardName"]" Class="omni-u-w-100" For="oe-formfield-pages-dashboard-dashboardedit-1">
@@ -42,7 +43,7 @@ else if (_dashboard is not null)
     }
     else
     {
-        <div role="list" aria-label="@L["Widgets"]">
+        <OmniStack role="list" aria-label="@L["Widgets"]">
         @for (var i = 0; i < _widgets.Count; i++)
         {
             var index = i;
@@ -51,7 +52,7 @@ else if (_dashboard is not null)
                 @ondragstart="@(() => OnDragStart(index))"
                 @ondragend="OnDragEnd"
                 @ondragover:preventDefault="true" @ondrop="@(() => OnDrop(index))" @ondrop:preventDefault="true">
-            <OmniCard Class="@($"omni-u-p-md omni-u-mb-sm{(_dragIndex == index ? " omni-u-border-accent" : "")}")">
+            <OmniCard Class="@($"omni-u-p-md{(_dragIndex == index ? " omni-u-border-accent" : "")}")">
                 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniColumn Span="1" SmallSpan="1">
                         <OmniIcon Name="OmniIconName.DotsThreeVertical" Class="omni-u-text-muted" />
@@ -102,10 +103,10 @@ else if (_dashboard is not null)
             </OmniCard>
             </div>
         }
-        </div>
+        </OmniStack>
     }
 
-    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-2xl omni-u-mb-md">@L["Preview"]</OmniHeading>
+    <OmniHeading Level="OmniHeadingLevel.H5">@L["Preview"]</OmniHeading>
     <OmniRow Gap="OmniSpacing.Small">
         @foreach (var widget in _widgets.Where(w => w.IsVisible).OrderBy(w => w.Row).ThenBy(w => w.Column))
         {
@@ -116,10 +117,11 @@ else if (_dashboard is not null)
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@widget.Title</OmniText>
                     </OmniStack>
                     <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">
-                        @widget.WidgetType - @widget.Width×@widget.Height
+                        @L.Localize(widget.WidgetType) - @widget.Width×@widget.Height
                     </OmniText>
                 </OmniCard>
             </OmniColumn>
         }
     </OmniRow>
+    </OmniStack>
 }

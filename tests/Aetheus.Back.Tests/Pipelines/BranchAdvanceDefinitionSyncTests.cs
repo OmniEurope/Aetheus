@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Git.Events;
+using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
 using Aetheus.Back.Services.DomainEvents;
@@ -32,6 +33,7 @@ public sealed class BranchAdvanceDefinitionSyncTests : IDisposable
     private readonly string _bare;
     private readonly string _work;
     private readonly IPipelineService _pipelines = Substitute.For<IPipelineService>();
+    private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
     private readonly IDomainEventHandler<GitPushProcessedEvent> _pushHandler =
         Substitute.For<IDomainEventHandler<GitPushProcessedEvent>>();
     private readonly GitBranchAdvanceService _advance;
@@ -67,7 +69,9 @@ public sealed class BranchAdvanceDefinitionSyncTests : IDisposable
         services.AddSingleton(_pushHandler);
         services.AddSingleton<IDomainEventHandler<GitBranchMovedEvent>>(
             new GitBranchMovedPipelineSyncHandler(new PipelineDefinitionSynchronizer(
-                _pipelines, cli, NullLogger<PipelineDefinitionSynchronizer>.Instance)));
+                _pipelines, cli,
+                new PipelineRunNotificationPublisher(Substitute.For<IPipelineRepository>(), _userNotifications),
+                NullLogger<PipelineDefinitionSynchronizer>.Instance)));
         var dispatcher = new DomainEventDispatcher(
             services.BuildServiceProvider(), Substitute.For<IBackgroundTaskQueue>(),
             NullLogger<DomainEventDispatcher>.Instance);
@@ -98,6 +102,33 @@ public sealed class BranchAdvanceDefinitionSyncTests : IDisposable
         // push subscriber is never invoked.
         await _pipelines.DidNotReceiveWithAnyArgs().GetWebhookTriggeredPipelinesForProjectAsync(default, TestContext.Current.CancellationToken);
         await _pushHandler.DidNotReceiveWithAnyArgs().HandleAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Recette R-49 with a real bare repository: the deployed commit holds a definition with an
+    /// unquoted " : " (the production incident of 2026-10-25). Nothing is stored for it, and the project is
+    /// told which file and the parser's line.</summary>
+    [Fact]
+    public async Task AdvancingMain_ToACommitWhoseDefinitionIsNotYaml_StoresNothing_AndNotifiesWhichFile()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var stale = CommitDefinition(Stale);
+        PushRef("refs/heads/main", stale);
+        var broken = CommitDefinition("name: aetheus-demo\ntrigger: schedule\ndescription: Diagnostic : liste\nstages: []\n");
+
+        var result = await _advance.TryFastForwardAsync(ProjectId, "main", broken, ct);
+        var shortCommit = broken[..12];
+
+        Assert.Equal(GitBranchAdvanceOutcome.Advanced, result.Outcome);
+        await _pipelines.DidNotReceiveWithAnyArgs().UpsertPipelineFromYamlAsync(
+            default!, default!, default, default!, TestContext.Current.CancellationToken, default, default, default);
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            "pipeline.launch-refused",
+            Arg.Is<string>(payload =>
+                payload.Contains("aetheus-demo.yaml")
+                && payload.Contains($"push:main@{shortCommit}")
+                && payload.Contains("line 3, column")
+                && payload.Contains("found invalid mapping")),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     [Fact]

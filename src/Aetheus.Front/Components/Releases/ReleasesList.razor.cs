@@ -18,6 +18,7 @@ namespace Aetheus.Front.Components.Releases;
 /// </summary>
 public partial class ReleasesList : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -301,19 +302,13 @@ public partial class ReleasesList : IAsyncDisposable
         }
     }
 
-    /// <summary>Redeploy the previous production release through the pipeline that deployed the
-    /// live one so deployment gates and approvals remain authoritative.</summary>
-    private async Task RedeployRelease(ReleaseDto release)
-    {
-        if (release.RedeployPipelineId is not { } pipelineId) return;
-        var confirmed = await Dialog.Confirm(
-            string.Format(L["RedeployConfirm"].Value, release.Version),
-            L["Redeploy"].Value,
-            new OmniConfirmOptions { OkButtonText = L["Redeploy"].Value, CancelButtonText = L["GoBack"].Value });
-        if (confirmed != true) return;
+    /// <summary>R-72: deploy this version again (or an older one) through the project's deployment pipeline, opened on
+    /// the run parameters with the version filled in, so its gate and approvals remain authoritative.</summary>
+    private Task RedeployRelease(ReleaseDto release) =>
+        new ReleaseRedeployer(Api, RunGate, RunDialogs, Dialog, Toast, Nav, L).RedeployAsync(release);
 
-        await TriggerRunAsync(pipelineId, new Dictionary<string, string> { ["candidateVersion"] = release.Version });
-    }
+    private string RedeployTitle(ReleaseDto release) => !_canWrite ? L["InsufficientPermissions"]
+        : ReleaseRedeploy.CanRedeploy(release) ? L["Redeploy"] : L["RedeployNoArtifact"];
 
     /// <summary>Switch traffic through the project's revert pipeline to the retained reserve colour
     /// without rebuilding; the agent refuses when that colour is unavailable.</summary>
@@ -326,7 +321,7 @@ public partial class ReleasesList : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, ConfirmIcon = OmniIconName.ArrowUUpLeft, OkButtonText = L["Rollback"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await TriggerRunAsync(pipelineId, []);
+        await Veil.RunAsync(() => TriggerRunAsync(pipelineId, []));
     }
 
     // The release actions confirmed the run and fixed its parameters: no preflight, no second prompt.

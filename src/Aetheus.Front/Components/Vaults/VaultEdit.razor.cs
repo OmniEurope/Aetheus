@@ -4,13 +4,15 @@ using Aetheus.Front.Components.Pipelines;
 
 namespace Aetheus.Front.Components.Vaults;
 
-public partial class VaultEdit
+public partial class VaultEdit : IAsyncDisposable
 {
+    [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     private DateOnly? NewSecretExpiryDate
     {
         get => _newSecret.ExpiresAt is { } value ? DateOnly.FromDateTime(value) : null;
         set => _newSecret.ExpiresAt = value?.ToDateTime(TimeOnly.MinValue);
     }
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -59,6 +61,8 @@ public partial class VaultEdit
 
         _detail = null;
         _model = new VaultModel();
+        _usage = null;
+        _usageLoaded = false;
 
         var projects = await Api.Projects.GetAllProjectsAsync();
         VaultDetailDto? detail = null;
@@ -75,20 +79,44 @@ public partial class VaultEdit
 
     private IReadOnlyList<ResourceUsageUserDto>? _usage;
     private bool _usageLoaded;
+    private int _usageRequest;
+    private PipelineChangeSubscription? _pipelineChanges;
 
-    /// <summary>Who reads this vault (R-66). A failed call leaves the line empty rather than saying "Unused".</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // R-64: a pipeline created, changed or deleted while the page is open changes who reads the vault.
+        _pipelineChanges = new PipelineChangeSubscription(HubFactory, () => InvokeAsync(async () =>
+        {
+            await RefreshUsageAsync();
+            StateHasChanged();
+        }));
+        await _pipelineChanges.StartAsync();
+    }
+
+    /// <summary>Who reads this vault (R-66), asked after the page is shown and again when a pipeline
+    /// changes or the vault is saved (R-64). A failed call keeps what the line showed (nothing, on the
+    /// first load) rather than saying "Unused"; only the latest answer is applied.</summary>
     private async Task LoadUsageAsync(int vaultId, int generation, (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) key)
     {
-        _usage = null;
-        _usageLoaded = false;
+        var request = ++_usageRequest;
         try
         {
             var usage = await Api.Variables.GetResourceUsageAsync();
-            if (!IsCurrentLoad(generation, key)) return;
+            if (!IsCurrentLoad(generation, key) || request != _usageRequest) return;
             _usage = usage.Vaults.GetValueOrDefault(vaultId);
             _usageLoaded = true;
         }
         catch (HttpRequestException) { } // the page stays usable without the usage line
+    }
+
+    private Task RefreshUsageAsync() =>
+        _isNew || _detail is null ? Task.CompletedTask : LoadUsageAsync(Id!.Value, _loadGeneration, CurrentKey());
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pipelineChanges is not null)
+            await _pipelineChanges.DisposeAsync();
     }
 
     private (int? Id, int? ProjectId, int? EnvironmentId, int? ProjectServerId) CurrentKey() =>
@@ -201,17 +229,20 @@ public partial class VaultEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Variables.DeleteVaultAsync(Id!.Value);
-        if (!status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Error("Error", "DeleteFailed");
-            return;
-        }
-        // S-TECH-SWIV: drop cached vault pages so the list doesn't briefly re-seed the deleted row.
-        Cache.InvalidatePrefix("vaults:");
-        Toast.Success("Deleted", "Deleted");
-        // R-70: back to the list the user came from (a project's vaults, a server's), else the global list.
-        Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/vaults");
+            var status = await Api.Variables.DeleteVaultAsync(Id!.Value);
+            if (!status.Success)
+            {
+                Toast.Error("Error", "DeleteFailed");
+                return;
+            }
+            // S-TECH-SWIV: drop cached vault pages so the list doesn't briefly re-seed the deleted row.
+            Cache.InvalidatePrefix("vaults:");
+            Toast.Success("Deleted", "Deleted");
+            // R-70: back to the list the user came from (a project's vaults, a server's), else the global list.
+            Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/vaults");
+        });
     }
 
     /// <summary>
@@ -331,15 +362,18 @@ public partial class VaultEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Variables.DeleteVaultSecretAsync(Id!.Value, secretId);
-        // FRONT-025: a refused delete leaves the secret in place.
-        if (!status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Error("Error", status.Forbidden ? "AccessDenied" : "DeleteFailed");
-            return;
-        }
-        Toast.Success("Deleted", "SecretDeleted");
-        await ReloadDetail();
+            var status = await Api.Variables.DeleteVaultSecretAsync(Id!.Value, secretId);
+            // FRONT-025: a refused delete leaves the secret in place.
+            if (!status.Success)
+            {
+                Toast.Error("Error", status.Forbidden ? "AccessDenied" : "DeleteFailed");
+                return;
+            }
+            Toast.Success("Deleted", "SecretDeleted");
+            await ReloadDetail();
+        });
     }
 
     private async Task ShowVersions(VaultSecretDto secret)
@@ -442,6 +476,8 @@ public partial class VaultEdit
     private async Task ReloadDetail()
     {
         _detail = await Api.Variables.GetVaultDetailAsync(Id!.Value);
+        // R-64: the page's own save (a rename, a secret) can change who reads the vault.
+        await RefreshUsageAsync();
     }
 
     private static OmniTone GetExpiryBadge(DateTime expiresAt)

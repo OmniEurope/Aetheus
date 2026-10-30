@@ -44,9 +44,25 @@ public partial class Administration
         ])
     ];
 
+    [Inject] private PermissionService Permissions { get; set; } = default!;
+
+    /// <summary>The groups and tiles shown: every one to a site Admin; to an organization's administrator, the
+    /// pages its permissions open (owner decision 2026-10-28), a group with none of them left out.</summary>
+    internal static IReadOnlyList<AdminTileGroup> VisibleGroups(bool isAdmin, PermissionService permissions) =>
+        isAdmin
+            ? Groups
+            : [.. Groups
+                .Select(group => group with
+                {
+                    Tiles = [.. group.Tiles.Where(tile => OrganizationAdministration.CanOpen(tile.Href, permissions))]
+                })
+                .Where(group => group.Tiles.Count > 0)];
+
+    private IReadOnlyList<AdminTileGroup> Shown => VisibleGroups(Auth.IsAdmin, Permissions);
+
     protected override void OnInitialized()
     {
-        if (!Auth.IsAdmin)
+        if (!Auth.IsAdmin && !OrganizationAdministration.AdministersAny(Permissions))
         {
             Nav.NavigateTo("/");
             return;

@@ -16,7 +16,17 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
             .Select(version => version.Version)
             .FirstOrDefault())
         .Number("VersionCount", package => package.Versions.Count)
+        .Boolean("AllowAnonymousDownload", package => package.AllowAnonymousDownload)
         .Date("UpdatedAt", package => package.UpdatedAt);
+
+    public async Task<bool> IsAnonymousDownloadAllowedAsync(
+        PackageRegistryKind kind, string normalizedName, CancellationToken ct = default)
+        => await db.RegistryPackages
+            .AsNoTracking()
+            .AnyAsync(package => package.Kind == kind
+                && package.NormalizedName == normalizedName
+                && package.AllowAnonymousDownload, ct)
+            .ConfigureAwait(false);
 
     public async Task<RegistryPackage?> GetPackageAsync(
         PackageRegistryKind kind, string normalizedName, CancellationToken ct = default)
@@ -189,6 +199,7 @@ internal sealed class PackageRegistryRepository(AppDbContext db) : IPackageRegis
                     .FirstOrDefault(),
                 VersionCount = package.Versions.Count,
                 TotalSizeBytes = package.Versions.Sum(version => version.SizeBytes),
+                AllowAnonymousDownload = package.AllowAnonymousDownload,
                 UpdatedAt = package.UpdatedAt
             })
             .ToListAsync(ct)

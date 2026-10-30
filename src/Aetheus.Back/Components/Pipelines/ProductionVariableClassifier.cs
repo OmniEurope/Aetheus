@@ -19,7 +19,8 @@ internal sealed record ProductionVariablePlan(
 /// generated into the vault, a convention or the file's own default fills the library, or the operator is
 /// asked. A name is guessed to be an application secret only from the words of its name, and only when the
 /// application owns that secret (a database password, a signing key): the credential of an external service
-/// (SMTP, cloud, payment) is asked, never invented.
+/// (cloud, payment) is asked, never invented. The administrator, the mail server and the certificate contact are
+/// never asked at all (<see cref="IsOptionalByNature"/>, recette R-91).
 /// </summary>
 internal static partial class ProductionVariableClassifier
 {
@@ -65,6 +66,34 @@ internal static partial class ProductionVariableClassifier
     public static bool DeclaresBlueGreen(IEnumerable<ComposeVariable> variables) =>
         variables.Any(variable => BlueGreenPorts.Contains(variable.Name, StringComparer.Ordinal));
 
+    /// <summary>Recette R-89: the strategy is the operator's choice, not only a deduction from the names the Compose file reads.
+    /// When it differs from the one the file declares, the ports to reserve follow it: the four colour ports for a blue-green
+    /// deployment, the one published port of each service for a replacement. A service the file publishes no port for gets none.
+    /// The project's Compose file must read the ports of the strategy chosen; the wizard says so when it does not.</summary>
+    public static IReadOnlyList<ProductionVariablePlan> ForStrategy(IReadOnlyList<ProductionVariablePlan> plans, string strategy)
+    {
+        ArgumentNullException.ThrowIfNull(plans);
+        var blueGreen = string.Equals(strategy, ProductionStrategy.BlueGreen, StringComparison.Ordinal);
+        if (blueGreen == plans.Any(plan => BlueGreenPorts.Contains(plan.Name, StringComparer.Ordinal))) return plans;
+
+        var front = plans.Any(plan => plan.Name == FrontPort || plan.Name.StartsWith(FrontPort + "_", StringComparison.Ordinal));
+        var back = plans.Any(plan => plan.Name == BackPort || plan.Name.StartsWith(BackPort + "_", StringComparison.Ordinal));
+        var names = new List<string>();
+        if (front) names.AddRange(blueGreen ? [FrontPort + "_BLUE", FrontPort + "_GREEN"] : [FrontPort]);
+        if (back) names.AddRange(blueGreen ? [BackPort + "_BLUE", BackPort + "_GREEN"] : [BackPort]);
+        return
+        [
+            .. plans.Where(plan => plan.Kind != ProductionVariableKind.Port),
+            .. names.Select(name => new ProductionVariablePlan(name, ProductionVariableKind.Port, false, null))
+        ];
+    }
+
+    /// <summary>The API has its own host and virtual hosts: a blue-green deployment always has one, a replacement when the
+    /// Compose file publishes a back port.</summary>
+    public static bool DeclaresApi(IEnumerable<ProductionVariablePlan> plans, string strategy) =>
+        string.Equals(strategy, ProductionStrategy.BlueGreen, StringComparison.Ordinal)
+        || plans.Any(plan => plan.Name == BackPort);
+
     public static IReadOnlyList<ProductionVariablePlan> Classify(IEnumerable<ComposeVariable> variables, string slug)
     {
         ArgumentNullException.ThrowIfNull(variables);
@@ -80,7 +109,7 @@ internal static partial class ProductionVariableClassifier
             return new(name, ProductionVariableKind.Port, false, null);
         // The file names a default, so the deployment is complete without it. A secret with a default stays
         // out of the vault: Compose fills it, and nothing is invented for a setting the file made optional.
-        if (variable.Form is ComposeVariableForm.WithDefault or ComposeVariableForm.Alternative)
+        if (variable.Form is ComposeVariableForm.WithDefault or ComposeVariableForm.Alternative || IsOptionalByNature(name))
             return new(name, ProductionVariableKind.Optional, IsSecretName(name), variable.Default);
         if (IsSecretName(name))
             return new(name, OwnsItsSecret(name) ? ProductionVariableKind.GeneratedSecret : ProductionVariableKind.NeedsValue,
@@ -90,6 +119,14 @@ internal static partial class ProductionVariableClassifier
             ? new(name, ProductionVariableKind.DefaultValue, false, convention)
             : new(name, ProductionVariableKind.NeedsValue, false, null);
     }
+
+    /// <summary>Recette R-91 (decision 2026-10-25): the administrator's e-mail and password, the mail server (every
+    /// <c>SMTP_</c> setting) and the certificate contact may stay empty, and the deployment must succeed all the same, so
+    /// the setup never asks for them, never creates an entry that would block the launch while empty and never invents a
+    /// password nobody knows. An application that cannot start without one is the one to adapt, and so is a Compose file
+    /// that requires one with <c>:?</c>: Compose itself stops on it, and it is written <c>${NAME:-}</c>.</summary>
+    internal static bool IsOptionalByNature(string name) =>
+        name is "ADMIN_EMAIL" or "ADMIN_PASSWORD" or "CERTBOT_EMAIL" || name.StartsWith("SMTP_", StringComparison.Ordinal);
 
     private static bool IsSecretName(string name) =>
         name.Split('_', StringSplitOptions.RemoveEmptyEntries).Any(SecretWords.Contains);

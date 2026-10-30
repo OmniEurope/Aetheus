@@ -99,6 +99,13 @@ public sealed class PackagesApi(HttpClient http) : ApiClientBase(http)
             new UpdatePackageRegistryVersionDeprecationRequest { IsDeprecated = isDeprecated },
             ct);
 
+    public Task<ApiStatus> UpdateRegistryAnonymousDownloadAsync(
+        int packageId, bool allowAnonymousDownload, CancellationToken ct = default)
+        => PutJsonNoBodyAsync(
+            $"api/package-registry/{packageId}/anonymous-download",
+            new UpdatePackageRegistryAnonymousDownloadRequest { AllowAnonymousDownload = allowAnonymousDownload },
+            ct);
+
 
     public async Task<PipelineLintSummaryDto?> GetLintSummaryAsync(int runId, CancellationToken ct = default)
     {

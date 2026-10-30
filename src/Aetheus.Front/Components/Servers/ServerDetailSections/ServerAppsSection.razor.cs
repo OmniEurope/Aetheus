@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerAppsSection
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -137,16 +138,19 @@ public partial class ServerAppsSection
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Servers.DeleteServerAppAsync(ServerId, app.Id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            await RefreshAppsAsync();
-            Toast.Success("Deleted", "Deleted");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Servers.DeleteServerAppAsync(ServerId, app.Id);
+            if (success)
+            {
+                await RefreshAppsAsync();
+                Toast.Success("Deleted", "Deleted");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private static OmniTone GetAppStatusBadge(ServerAppStatus status) => status switch

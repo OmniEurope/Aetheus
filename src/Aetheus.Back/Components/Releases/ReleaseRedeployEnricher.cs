@@ -7,9 +7,8 @@ namespace Aetheus.Back.Components.Releases;
 public sealed record ReleaseRedeployTarget(int PreviousReleaseId, int? DeployPipelineId, int? RevertPipelineId = null);
 
 /// <summary> Marks the release production ran just before the live one, and offers to redeploy it
-/// only when that can actually pass the deploy gate: a sealed grade (the gate restores its
-/// assurance seal, which a release-fast release never had) and retained artifacts. The gate itself
-/// stays the authority; this only keeps the grid from offering what it would refuse. </summary>
+/// when its artifacts are retained (R-72, owner decision of 2026-10-28: the only thing that stops a
+/// redeployment). What the quality gate holds against it is confirmed at the launch. </summary>
 internal static class ReleaseRedeployEnricher
 {
     public static async Task<List<ReleaseDto>> EnrichAsync(
@@ -30,8 +29,8 @@ internal static class ReleaseRedeployEnricher
                 return target.RevertPipelineId is { } revert ? release with { RevertPipelineId = revert } : release;
             if (target.PreviousReleaseId != release.Id)
                 return release;
+            // R-72: a missing grade no longer stops it; the launch confirms what the gate holds against it.
             var redeployable = target.DeployPipelineId is not null
-                && release.AssuranceGrade is not null
                 && release.Artifacts.Count > 0;
             return release with
             {

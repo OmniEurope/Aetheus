@@ -77,7 +77,8 @@ public sealed class MailboxAdministratorOpenHttpIntegrationTests(PostgresFixture
         await using var factory = WithConnector(baseFactory, wire);
         var mailbox = await SeedMailboxAsync(factory);
         var operatorUser = await IntegrationUsers.CreateAsync(factory.Services, "mail-operator",
-            [new IntegrationUsers.Grant(ResourceType.Server, mailbox.ServerId, Permission.Admin)]);
+            [new IntegrationUsers.Grant(ResourceType.Server, mailbox.ServerId, Permission.Admin)],
+            permissionKeys: [PermissionKeys.ServerMailboxRead, PermissionKeys.ServerMailboxManage]);
         using var client = await IntegrationUsers.LoginClientAsync(factory, operatorUser.Username);
         var auditsBefore = await OpeningAuditsAsync(factory, mailbox.ServerId);
 

@@ -52,9 +52,20 @@ public class RkhunterService(IRkhunterRepository repo, IAuditService audit, ITas
 
     public async Task SetupAsync(int serverId, RkhunterSetupRequest request, CancellationToken ct = default)
     {
-        var command = RkhunterCommandHelper.BuildSetupCommand(request.MailOnWarning);
+        // R-119: a typed operation (apt install through the package grant, then the root-owned aetheus-rkhunter
+        // helper); its kind makes the agent collect its RKHunter inventory again at once. The warning address is the
+        // only variable: checked here, by the agent and by the helper, and never part of a command line.
+        var env = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!string.IsNullOrWhiteSpace(request.MailOnWarning))
+        {
+            if (!RkhunterCommandHelper.IsValidEmail(request.MailOnWarning))
+                throw new BadRequestException("Mail on warning must be a valid email address.");
+            env[RkhunterSetupEnv.MailOnWarning] = request.MailOnWarning;
+        }
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, "RKHunter - setup", command, 120), ct).ConfigureAwait(false);
+        // An apt install, a data update and a baseline of every system file: several minutes on a small host.
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, "RKHunter - setup", OperationKind.RkhunterSetup,
+            target: "-", env, timeoutSeconds: 900), ct).ConfigureAwait(false);
 
         await audit.LogAsync("RkhunterSetup", "Rkhunter", serverId, request.MailOnWarning ?? "no-mail", ct).ConfigureAwait(false);
     }

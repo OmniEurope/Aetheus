@@ -73,7 +73,7 @@ public sealed class RunQaDeployedProbesFunctionTests : IDisposable
         Assert.False(File.Exists(Path.Combine(Results, "stale.txt")));
         Assert.True(File.Exists(Path.Combine(Results, "projects.json")));
         var login = Assert.Single(_backend.Requests, request => request.Route == "POST /api/auth/login");
-        Assert.Equal("""{"username":"admin","password":"0123abcd"}""", login.Body);
+        Assert.Equal("""{"email":"admin@aetheus.local","password":"0123abcd"}""", login.Body);
         Assert.All(_backend.Requests.Where(request => request.Route.StartsWith("GET /api/", StringComparison.Ordinal)),
             request => Assert.Equal("jwt-1", request.Bearer));
         Assert.Contains(_harness.Log, entry => entry.Line == "Deployed QA integration current passed 5/5 probes against the migrated stack.");

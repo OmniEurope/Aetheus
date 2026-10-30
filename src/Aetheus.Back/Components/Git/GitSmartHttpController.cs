@@ -51,7 +51,7 @@ public class GitSmartHttpController(IGitSmartHttpService smartHttp, IResourceAut
         if (result is null) return NotFound();
 
         // Mark as pushed after successful receive
-        await smartHttp.MarkPushedAsync(projectId, slug, result.UpdatedRefs, ct);
+        await smartHttp.MarkPushedAsync(projectId, slug, result.UpdatedRefs, ct, User.Identity?.Name);
 
         return new FileStreamResult(result.Body, result.ContentType);
     }

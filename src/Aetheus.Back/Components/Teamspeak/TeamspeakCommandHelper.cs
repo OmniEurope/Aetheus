@@ -15,13 +15,8 @@ public static partial class TeamspeakCommandHelper
     public static bool IsValidChannelName(string name) =>
         !string.IsNullOrWhiteSpace(name) && ChannelNameRegex().IsMatch(name);
 
-    public static string BuildServiceCommand(TeamspeakAction action) => action switch
-    {
-        TeamspeakAction.Start => "systemctl start teamspeak3",
-        TeamspeakAction.Stop => "systemctl stop teamspeak3",
-        TeamspeakAction.Restart => "systemctl restart teamspeak3",
-        _ => throw new ArgumentOutOfRangeException(nameof(action), action, null)
-    };
+    // BuildServiceCommand was removed (recette R-119): its `systemctl ... teamspeak3` strings ran without root
+    // and carried no operation kind. Start/stop/restart dispatch typed OperationKind.TeamspeakStart/Stop/Restart.
 
     // TeamSpeak install is now a typed OperationKind.TeamspeakSetup dispatched to the root-owned
     // teamspeak-setup helper (controlled-sudo recipe) - the old free-form shell pipeline lived here but

@@ -20,7 +20,8 @@ public interface IPipelineRunFinalizer
 
     /// <summary>Fails a run whose stages found no matching runner, persisting the human-readable reasons.</summary>
     Task FailRunWithUnmatchedStagesAsync(
-        int runId, List<string> unmatchedReasons, List<PipelineStepRun> unmatchedStageSteps, CancellationToken ct);
+        int runId, List<string> unmatchedReasons, List<PipelineStepRun> unmatchedStageSteps, CancellationToken ct,
+        string failureCode = TaskFailureCodes.InfrastructureMismatch);
 
     /// <summary>Fails a run the watchdog found stuck, cancelling its pending tail first.</summary>
     Task FailStuckRunAsync(int runId, CancellationToken ct);
@@ -90,7 +91,8 @@ public sealed class PipelineRunFinalizer(
     }
 
     public async Task FailRunWithUnmatchedStagesAsync(
-        int runId, List<string> unmatchedReasons, List<PipelineStepRun> unmatchedStageSteps, CancellationToken ct)
+        int runId, List<string> unmatchedReasons, List<PipelineStepRun> unmatchedStageSteps, CancellationToken ct,
+        string failureCode = TaskFailureCodes.InfrastructureMismatch)
     {
         if (unmatchedReasons.Count > 0)
         {
@@ -100,7 +102,7 @@ public sealed class PipelineRunFinalizer(
             {
                 MarkSystemStepFailed(
                     step,
-                    TaskFailureCodes.InfrastructureMismatch,
+                    failureCode,
                     failureReason,
                     now);
             }

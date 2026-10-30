@@ -97,6 +97,9 @@
   <data name="PipelineChildResultIntro" xml:space="preserve"><value>A pipeline started by another pipeline finished. Open the execution to see its result.</value></data>
   <data name="PipelineApprovalTitle" xml:space="preserve"><value>Your approval is requested</value></data>
   <data name="PipelineApprovalIntro" xml:space="preserve"><value>A pipeline is waiting for approval. Review the execution and the target environment before deciding.</value></data>
+  <data name="ApprovalActionApprove" xml:space="preserve"><value>Approve</value></data>
+  <data name="ApprovalActionReject" xml:space="preserve"><value>Reject</value></data>
+  <data name="ApprovalActionComment" xml:space="preserve"><value>Comment</value></data>
   <data name="PipelineRefusedTitle" xml:space="preserve"><value>Pipeline launch refused</value></data>
   <data name="PipelineRefusedIntro" xml:space="preserve"><value>An automated trigger could not launch the pipeline. Review the reported reason and the pipeline configuration.</value></data>
   <data name="ReleaseDeployedTitle" xml:space="preserve"><value>Release deployed</value></data>
@@ -145,6 +148,8 @@
   <data name="AlertTriggeredIntro" xml:space="preserve"><value>A monitoring rule triggered an alert. Review the affected server and the measurements below.</value></data>
   <data name="CertificateFailedTitle" xml:space="preserve"><value>Certificate renewal check failed</value></data>
   <data name="CertificateFailedIntro" xml:space="preserve"><value>The certificate renewal check failed. Review the server certificate state and the reported diagnostic.</value></data>
+  <data name="CertificateExpiringTitle" xml:space="preserve"><value>Certificate approaching expiry</value></data>
+  <data name="CertificateExpiringIntro" xml:space="preserve"><value>A certificate reached an expiry alert lead time. Check that its renewal works, and renew it by hand if it does not.</value></data>
   <data name="SecretExpiringTitle" xml:space="preserve"><value>Secret approaching expiry</value></data>
   <data name="SecretExpiringIntro" xml:space="preserve"><value>A secret is approaching its expiry date. Review its vault and plan its renewal.</value></data>
   <data name="ServerOfflineTitle" xml:space="preserve"><value>Server offline</value></data>
@@ -163,6 +168,9 @@
   <data name="SecretKey" xml:space="preserve"><value>Secret name</value></data>
   <data name="VaultName" xml:space="preserve"><value>Vault</value></data>
   <data name="DaysRemaining" xml:space="preserve"><value>Days remaining</value></data>
+  <data name="CertificateName" xml:space="preserve"><value>Certificate</value></data>
+  <data name="Domains" xml:space="preserve"><value>Domains</value></data>
+  <data name="LeadDays" xml:space="preserve"><value>Alert lead time (days)</value></data>
   <data name="ContainerName" xml:space="preserve"><value>Container</value></data>
   <data name="Image" xml:space="preserve"><value>Image</value></data>
   <data name="Risks" xml:space="preserve"><value>Host access</value></data>
@@ -199,6 +207,18 @@
   <data name="OomKillUnnamedMany" xml:space="preserve"><value>{0} processes were killed for lack of memory; they could not be named.</value></data>
   <data name="OomKillNamed" xml:space="preserve"><value>Killed for lack of memory: {0}.</value></data>
   <data name="OomKillNamedMore" xml:space="preserve"><value>Killed for lack of memory: {0} and {1} more not named.</value></data>
+  <data name="OomKillHeadMemcgContainer" xml:space="preserve"><value>Container memory limit reached ({0})</value></data>
+  <data name="OomKillHeadMemcgPath" xml:space="preserve"><value>Cgroup memory limit reached ({0})</value></data>
+  <data name="OomKillHeadMemcg" xml:space="preserve"><value>Cgroup memory limit reached</value></data>
+  <data name="OomKillHeadGlobal" xml:space="preserve"><value>Server out of memory</value></data>
+  <data name="OomKillHeadRestricted" xml:space="preserve"><value>Out of memory in a restricted zone (cpuset or memory policy)</value></data>
+  <data name="OomKillHeadUnknown" xml:space="preserve"><value>Killed for lack of memory</value></data>
+  <data name="OomKillKilledLine" xml:space="preserve"><value>{0}: {1} killed{2}.</value></data>
+  <data name="OomKillMemory" xml:space="preserve"><value>, {0} MB resident ({1})</value></data>
+  <data name="OomKillMemAnon" xml:space="preserve"><value>anon {0} MB</value></data>
+  <data name="OomKillMemFile" xml:space="preserve"><value>file {0} MB</value></data>
+  <data name="OomKillMemShmem" xml:space="preserve"><value>shmem {0} MB</value></data>
+  <data name="OomKillMoreUnnamed" xml:space="preserve"><value>{0} more kill(s) not named.</value></data>
   <data name="SshChangeSettingUnknown" xml:space="preserve"><value>{0} is now unknown: a configuration file read before it became unreadable to the agent.</value></data>
   <data name="SshChangeSettingReadable" xml:space="preserve"><value>{0} is readable again: {1}.</value></data>
   <data name="SshChangeSettingChanged" xml:space="preserve"><value>{0} changed to {1} (was {2}).</value></data>

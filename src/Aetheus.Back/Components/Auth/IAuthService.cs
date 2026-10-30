@@ -49,5 +49,5 @@ public interface IAuthService
     Task<bool> UnlockUserAsync(int userId, CancellationToken ct = default);
 
     /// <summary>Validates username/password for Basic-auth flows (e.g. Git Smart HTTP).</summary>
-    Task<bool> ValidateBasicAuthAsync(string username, string password, CancellationToken ct = default);
+    Task<string?> AuthenticateBasicAsync(string email, string password, CancellationToken ct = default);
 }

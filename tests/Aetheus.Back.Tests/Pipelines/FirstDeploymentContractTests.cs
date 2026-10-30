@@ -34,7 +34,7 @@ public sealed class FirstDeploymentContractTests
         // DbInitializer seeds the persisted `admin` from this value on a first run, so it has to be
         // the durable secret the environment file holds.
         Assert.Contains("Auth__AdminPassword=${ADMIN_PASSWORD}", compose, StringComparison.Ordinal);
-        Assert.Contains("Auth__AdminUser=${ADMIN_USER:-admin}", compose, StringComparison.Ordinal);
+        Assert.Contains("Auth__AdminEmail=${ADMIN_EMAIL:-}", compose, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -53,6 +53,6 @@ public sealed class FirstDeploymentContractTests
 
         // The exact shape of the regression: the run-scoped names feeding the admin settings.
         Assert.DoesNotContain("Auth__AdminPassword=${DEPLOYMENT_BOOTSTRAP", compose, StringComparison.Ordinal);
-        Assert.DoesNotContain("Auth__AdminUser=${DEPLOYMENT_BOOTSTRAP", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("Auth__AdminEmail=${DEPLOYMENT_BOOTSTRAP", compose, StringComparison.Ordinal);
     }
 }

@@ -8,6 +8,13 @@ internal static class PipelineRunPresentation
         ? $"/servers/{server}/pipelines"
         : projectId is { } project ? $"/projects/{project}/pipelines" : "/pipelines";
 
+    /// <summary>R-41: where a deleted pipeline sends the user back: the project's (or server's) pipeline list when the page was
+    /// opened from one, else a local returnUrl, else the global list.</summary>
+    public static string DeletedPipelineHref(int? projectId, int? serverId, string? returnUrl) =>
+        serverId is not null || projectId is not null
+            ? EditBackHref(projectId, serverId)
+            : LocalReturnUrl.Validated(returnUrl) ?? "/pipelines";
+
     public static string Href(int runId, int? projectId, int? serverId) => serverId is { } server
         ? $"/pipelines/runs/{runId}?serverId={server}"
         : projectId is { } project ? $"/pipelines/runs/{runId}?projectId={project}" : $"/pipelines/runs/{runId}";

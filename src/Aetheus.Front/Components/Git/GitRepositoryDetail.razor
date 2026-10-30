@@ -18,11 +18,11 @@ else
         <Badges>
             @if (_repo.IsEmpty)
             {
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
             }
             @if (_repo.IsConfiguration)
             {
-                <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Accent" data-testid="git-repo-configuration-badge">@L["GitRepoConfigurationBadge"]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Tonal" Tone="OmniTone.Accent" data-testid="git-repo-configuration-badge">@L["GitRepoConfigurationBadge"]</OmniBadge>
             }
         </Badges>
         <ActionsContent>
@@ -40,20 +40,21 @@ else
             }
         </ActionsContent>
     </OmniPageHeader>
+    <OmniStack>
     @if (!string.IsNullOrEmpty(_repo.Description))
     {
-        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mt-xs">@_repo.Description</OmniText>
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@_repo.Description</OmniText>
     }
     @if (!string.IsNullOrEmpty(_repo.CloneUrl))
     {
         @* The read-only clone field owns copy feedback; only a refused copy adds a warning toast. *@
-        <OmniTextBox Value="@_repo.CloneUrl" ReadOnly="true" ShowCopy="true" OnCopy="@OnCloneUrlCopied"
-                     Class="clone-url-input omni-u-mt-sm" aria-label="@L["CloneUrl"]" ValueExpression="@(() => _repo.CloneUrl)"/>
+        <OmniTextBox Value="@_repo.CloneUrl" ReadOnly="true" ShowCopy="true" CopyIconOnly="true" OnCopy="@OnCloneUrlCopied"
+                     Class="clone-url-input" aria-label="@L["CloneUrl"]" ValueExpression="@(() => _repo.CloneUrl)"/>
     }
 
     @* Keyed by repository: the grids of the previous repository, and the loads they still have in flight,
        go with it instead of holding back the rows of the next one (FRONT-003). *@
-    <UrlSyncedTabs @key="Id" Slugs="@TabSlugs" @bind-SelectedIndex="_selectedTab" class="omni-u-mt-lg">
+    <UrlSyncedTabs @key="Id" Slugs="@TabSlugs" @bind-SelectedIndex="_selectedTab">
         <Tabs>
             <OmniTabsItem Key="commits" Title="@L["Commits"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
                 @if (_commits.Error)
@@ -92,7 +93,7 @@ else
                                 <Template Context="c">
                                     @if (!string.IsNullOrEmpty(c.SourceRef))
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@c.SourceRef</OmniBadge>
+                                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.GitFork))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@c.SourceRef</OmniBadge>
                                     }
                                 </Template>
                             </OmniDataGridColumn>
@@ -124,7 +125,7 @@ else
                                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@b.Name</OmniText>
                                     @if (b.IsDefault)
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Default"]</OmniBadge>
+                                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Star))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Default"]</OmniBadge>
                                     }
                                     @if (IsBranchProtected(b.Name))
                                     {
@@ -215,7 +216,7 @@ else
                             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
                                 <OmniIcon Name="OmniIconName.Document" />
                                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@_blobContent.Path</OmniText>
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@GitRepositoryViewHelpers.FormatSize(_blobContent.Size)</OmniBadge>
+                                <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@GitRepositoryViewHelpers.FormatSize(_blobContent.Size)</NumberBadge>
                                 <div class="pipeline-list-spacer"></div>
                                 @if (!_blobContent.IsBinary)
                                 {
@@ -285,15 +286,15 @@ else
                         <OmniDataGridColumn TItem="InternalPullRequestDto" Property="Title" Truncate="true" Title="@L["Title"]" Width="auto" Filterable="true" />
                         <OmniDataGridColumn TItem="InternalPullRequestDto" Property="SourceBranch" Title="@L["Source"]" Width="140px" Filterable="true" >
                             <Template Context="pr">
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@pr.SourceBranch</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.GitFork))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@pr.SourceBranch</OmniBadge>
                                 <OmniIcon Name="OmniIconName.ArrowRight" Class="omni-u-text-muted" />
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@pr.TargetBranch</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.GitFork))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@pr.TargetBranch</OmniBadge>
                             </Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="InternalPullRequestDto" Property="AuthorLogin" Title="@L["Author"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_grids.Values.PullRequestAuthors" FilterSearchable="true" />
                         <OmniDataGridColumn TItem="InternalPullRequestDto" Property="Status" Title="@L["Status"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@_grids.PrStatusText(L)" >
                             <Template Context="pr">
-                                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@GetPrStatusBadge(pr.Status)">@L.Localize(pr.Status)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(GetPrStatusBadge(pr.Status)))" Fill="OmniFill.Solid" Tone="@GetPrStatusBadge(pr.Status)">@L.Localize(pr.Status)</OmniBadge>
                             </Template>
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="InternalPullRequestDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
@@ -318,14 +319,16 @@ else
                         @L["LoadFailed"] <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadGraph"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
                     </OmniAlert>
                 }
-                else if (_graphLoading)
+                else if (_graphLoading && _graphCommits.Count == 0)
                 {
+                    @* First read of this repository's graph: nothing exists yet, so the loader stays (decision D11). *@
                     <AetheusLoader />
                 }
                 else
                 {
-                    @* O: SVG lane graph (reload lives on the page header - LoadData reloads the graph too). *@
-                    <div class="commit-graph-svg-wrap">
+                    @* O: SVG lane graph (reload lives on the page header - LoadData reloads the graph too).
+                       Recette R-116: a reload keeps the graph mounted under OE's busy veil. *@
+                    <div class="@(_graphLoading ? "commit-graph-svg-wrap omni-busy" : "commit-graph-svg-wrap")" aria-busy="@(_graphLoading ? "true" : "false")">
                         <Aetheus.Front.Components.Git.GitCommitGraph Commits="@_graphCommits" RepoId="@Id" />
                     </div>
                 }
@@ -388,4 +391,5 @@ else
             </ChildContent></OmniTabsItem>
         </Tabs>
     </UrlSyncedTabs>
+    </OmniStack>
 }

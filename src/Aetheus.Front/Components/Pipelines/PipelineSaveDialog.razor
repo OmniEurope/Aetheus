@@ -4,17 +4,36 @@
     @if (Branches.Count > 0)
     {
         <OmniFormField Label="@L["CommitBranch"]" For="oe-formfield-pages-pipelines-pipelinesavedialog-1">
-            <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesavedialog-1" TValue="string" Options="@(Branches.ToOptions(item => (string)item, item => item))" @bind-Value="_branch" />
+            <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesavedialog-1" TValue="string" Options="@(Branches.ToOptions(item => (string)item, item => item))" Value="_branch" ValueChanged="OnBranchChangedAsync" ValueExpression="@(() => _branch)" />
         </OmniFormField>
     }
 
-    <OmniAlert Severity="OmniSeverity.Info">
-        @L["PipelineSaveCommitPreview"]
-    </OmniAlert>
+    @if (_loading)
+    {
+        <OmniAlert Severity="OmniSeverity.Info">@L["PipelineSaveRepositoryLoading"]</OmniAlert>
+    }
+    else if (_repository is null)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning">@L["PipelineSaveRepositoryUnreadable"]</OmniAlert>
+    }
+    else if (AdoptsRepositoryFile)
+    {
+        <OmniAlert Severity="OmniSeverity.Info">@L["PipelineSaveRepositoryFileKept"]</OmniAlert>
+    }
+    else if (OverwritesRepositoryChange)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning">@L["PipelineSaveRepositoryChanged"]</OmniAlert>
+    }
+    else
+    {
+        <OmniAlert Severity="OmniSeverity.Info">
+            @L["PipelineSaveCommitPreview"]
+        </OmniAlert>
+    }
 
-    <MonacoDiffViewer OriginalValue="@SavedYaml" ModifiedValue="@DraftYaml" />
+    <OmniDiffViewer Original="@DiffOriginal" Modified="@DiffModified" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
 
     <DialogFooter OnCancel="Cancel">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="Confirm"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" Busy="_loading" OnClick="Confirm"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

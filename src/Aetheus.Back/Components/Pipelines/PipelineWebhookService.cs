@@ -100,7 +100,7 @@ public partial class PipelineWebhookService(
             // Mandatory catch : inside the transaction the launcher records nothing, since the
             // rollback would erase it; the refusal is recorded here, once the transaction is over.
             await runService.RecordRefusedAutomatedLaunchAsync(
-                pipeline.Id, "Webhook", refusal.Message, variables, ct).ConfigureAwait(false);
+                pipeline.Id, "Webhook", refusal.Message, variables, ct, refusal.Problems).ConfigureAwait(false);
             throw;
         }
     }

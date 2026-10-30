@@ -35,15 +35,16 @@ public sealed class ProjectServersSectionAddFlowTests : BunitContext
         _handler.SetPaginatedJsonResponse(HttpMethod.Get, "api/releases", Array.Empty<ReleaseDto>());
     }
 
-    private IRenderedComponent<ProjectServersSection> RenderSection()
+    // Add sits in the project header (R-109), so the section is rendered next to the header outlet the project layout gives it.
+    private IRenderedComponent<PageHeaderOutletHost> RenderSection()
     {
-        var cut = Render<ProjectServersSection>(parameters => parameters.Add(section => section.ProjectId, 1));
+        var cut = this.RenderWithPageHeader<ProjectServersSection>(parameters => parameters.Add(section => section.ProjectId, 1));
         cut.WaitForState(() => cut.Markup.Contains("Web Server", StringComparison.Ordinal));
         return cut;
     }
 
-    private static Task ClickAddAsync(IRenderedComponent<ProjectServersSection> cut) =>
-        cut.FindAll("button").First(button => button.TextContent.Trim() == "Add").ClickAsync(new());
+    private static Task ClickAddAsync(IRenderedComponent<PageHeaderOutletHost> cut) =>
+        cut.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Trim() == "Add").ClickAsync(new());
 
     private List<string?> CreateBodies() =>
         [.. _handler.RequestDetails

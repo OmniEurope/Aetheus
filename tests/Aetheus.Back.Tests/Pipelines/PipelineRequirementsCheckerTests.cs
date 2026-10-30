@@ -60,8 +60,10 @@ public sealed class PipelineRequirementsCheckerTests
             new PipelineRequiresDefinition { Libraries = ["aetheus-prod-host"] }));
 
         Assert.False(outcome.Satisfied);
-        Assert.Contains("aetheus-prod-host", outcome.Problem!, StringComparison.Ordinal);
-        Assert.Contains("Create it", outcome.Problem!, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.RequiredLibraryMissing, outcome.Problem!.Code);
+        Assert.Equal("aetheus-prod-host", outcome.Problem.Parameters["library"]);
+        Assert.Contains("aetheus-prod-host", outcome.Problem.English, StringComparison.Ordinal);
+        Assert.Contains("Create it", outcome.Problem.English, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -85,7 +87,8 @@ public sealed class PipelineRequirementsCheckerTests
             new PipelineRequiresDefinition { Environments = ["qa"] }));
 
         Assert.False(outcome.Satisfied);
-        Assert.Contains("qa", outcome.Problem!, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.RequiredEnvironmentMissing, outcome.Problem!.Code);
+        Assert.Contains("qa", outcome.Problem.English, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,7 +100,8 @@ public sealed class PipelineRequirementsCheckerTests
             new PipelineRequiresDefinition { Capabilities = ["docker"] }));
 
         Assert.False(outcome.Satisfied);
-        Assert.Contains("Docker", outcome.Problem!, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.RequiredDockerMissing, outcome.Problem!.Code);
+        Assert.Contains("Docker", outcome.Problem.English, StringComparison.Ordinal);
 
         _repo.HasRunnerWithDockerAsync(3, Arg.Any<CancellationToken>()).Returns(true);
         Assert.True(Assert.Single(await CheckAsync(
@@ -113,8 +117,9 @@ public sealed class PipelineRequirementsCheckerTests
             new PipelineRequiresDefinition { Capabilities = ["gpu"] }));
 
         Assert.False(outcome.Satisfied);
-        Assert.Contains("can verify", outcome.Problem!, StringComparison.Ordinal);
-        Assert.Contains("docker", outcome.Problem!, StringComparison.Ordinal);
+        Assert.Equal(PipelineProblemCodes.RequiredCapabilityUnknown, outcome.Problem!.Code);
+        Assert.Contains("can verify", outcome.Problem.English, StringComparison.Ordinal);
+        Assert.Contains("docker", outcome.Problem.English, StringComparison.Ordinal);
     }
 
     [Fact]

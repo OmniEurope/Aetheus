@@ -1,0 +1,24 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* R-72 (owner decision of 2026-10-28): a release that keeps its artifact can always be deployed again. Every
+   reason the quality gate has against it is listed once, each on its own line; the red button deploys anyway. *@
+<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" data-testid="gate-override-dialog">
+    <OmniText>@L["GateOverrideIntro"]</OmniText>
+
+    <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small">
+        @foreach (var warning in Warnings)
+        {
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" data-testid="gate-override-reason">
+                <OmniIcon Name="@IconOf(warning.Kind)" />
+                <OmniText Class="omni-u-m-0">@DeploymentGateWarningText.Describe(warning, L)</OmniText>
+            </OmniStack>
+        }
+    </OmniStack>
+
+    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["GateOverrideRecorded"]</OmniText>
+
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => Dialog.Close(true))" data-testid="gate-override-confirm"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["GateOverrideConfirm"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(false))" data-testid="gate-override-back"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
+    </OmniStack>
+</OmniStack>

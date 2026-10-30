@@ -1,5 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits ProjectPagedSectionBase<ProjectServerDto>
+@using Microsoft.AspNetCore.Components.Sections
 @if (_servers is null)
 {
     <AetheusLoader />
@@ -9,10 +10,10 @@ else
     @* The breadcrumb leaf already reads "Servers" - no need to repeat it as a section title. *@
     @* Server header filters are applied by the endpoint; computed status and action columns have
        no stored filter value. *@
-    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
-        <div class="flex-spacer"></div>
+    @* The main action sits in the project header, on the title line. *@
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
-    </OmniStack>
+    </SectionContent>
 
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_servers" TItem="ProjectServerDto"
                         Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
@@ -39,6 +40,10 @@ else
                             {
                                 @s.DisplayName
                             }
+                            @if (s.ViaEnvironmentName is not null)
+                            {
+                                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@string.Format(L["ProjectServerViaEnvironment"].Value, s.ViaEnvironmentName)</OmniText>
+                            }
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
@@ -46,27 +51,31 @@ else
                 <OmniDataGridColumn TItem="ProjectServerDto" Property="Port" Title="@L["Port"]" Width="90px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
                 <OmniDataGridColumn TItem="ProjectServerDto" Property="Type" Title="@L["Type"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText" >
                     <Template Context="s">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetTypeBadge(s.Type)">@L[s.Type.ToString()]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(GetTypeBadge(s.Type)))" Fill="OmniFill.Solid" Tone="@GetTypeBadge(s.Type)">@L[s.Type.ToString()]</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ProjectServerDto" Title="@L["Status"]" ExportValue="@StatusExport" Width="120px" Sortable="false" Filterable="false" >
                     <Template Context="s">
                         @if (s.Type == ProjectServerType.AgentServer && s.ServerStatus.HasValue)
                         {
-                            <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@GetStatusBadge(s.ServerStatus)">@L[s.ServerStatus.ToString()!]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(GetStatusBadge(s.ServerStatus)))" Fill="OmniFill.Solid" Tone="@GetStatusBadge(s.ServerStatus)">@L[s.ServerStatus.ToString()!]</OmniBadge>
                         }
                         else
                         {
-                            <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["External"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Globe))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["External"]</OmniBadge>
                         }
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ProjectServerDto" Title="" Width="100px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
                     <Template Context="s">
-                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(s))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteServerAsync(s))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
-                        </span>
+                        @* A server reached through an environment has no project link to edit or detach (R-83). *@
+                        @if (s.ViaEnvironmentId is null)
+                        {
+                            <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenEditDialogAsync(s))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteServerAsync(s))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                            </span>
+                        }
                     </Template>
                 </OmniDataGridColumn>
             </Columns>

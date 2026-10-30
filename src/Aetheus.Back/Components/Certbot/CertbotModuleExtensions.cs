@@ -9,6 +9,10 @@ public static class CertbotModuleExtensions
     {
         services.AddScoped<ICertbotRepository, CertbotRepository>();
         services.AddScoped<ICertbotService, CertbotService>();
+        services.AddScoped<ICertificateExpiryAlertRepository, CertificateExpiryAlertRepository>();
+        services.AddScoped<CertificateExpiryAlertService>();
+        services.AddScoped<ICertificateExpiryAlertService>(provider => provider.GetRequiredService<CertificateExpiryAlertService>());
+        services.AddHostedService<CertificateExpiryAlertSchedulerService>();
         services.AddScoped<IDomainEventHandler<CertbotRenewalCheckFailedEvent>, CertbotRenewalCheckNotificationHandler>();
         return services;
     }

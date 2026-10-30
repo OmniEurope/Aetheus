@@ -7,7 +7,10 @@ public interface IOrganizationRepository
 {
     Task<(List<Organization> Items, int Total)> GetPagedAsync(
         string? search, int page, int pageSize, string? sortBy, bool sortDescending, CancellationToken ct,
-        IReadOnlyList<GridFilter>? filters = null);
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null);
+
+    /// <summary>The id and name of the organizations named, every organization when null, by name.</summary>
+    Task<List<(int Id, string Name)>> GetNamesAsync(IReadOnlyList<int>? organizationIds, CancellationToken ct);
     Task<Organization?> GetByIdAsync(int id, CancellationToken ct);
     Task<Organization?> GetWithMembersAndProjectsAsync(int id, CancellationToken ct);
     Task<bool> NameExistsAsync(string name, int? excludeId, CancellationToken ct);
@@ -22,6 +25,10 @@ public interface IOrganizationRepository
     Task<bool> RemoveMemberAsync(int organizationId, int memberId, CancellationToken ct);
 
     Task<User?> GetUserByIdAsync(int userId, CancellationToken ct);
+    /// <summary>The user whose username or e-mail address is exactly <paramref name="login"/>.</summary>
+    Task<User?> GetUserByLoginAsync(string login, CancellationToken ct);
+    /// <summary>The organization's members at the Owner level (Organization Admin role).</summary>
+    Task<int> CountOwnersAsync(int organizationId, CancellationToken ct);
     Task<OrganizationMember?> GetMemberWithUserByIdAsync(int memberId, int organizationId, CancellationToken ct);
     Task AssignProjectsAsync(int organizationId, List<int> projectIds, CancellationToken ct);
     Task<int> CountExistingProjectsAsync(List<int> projectIds, CancellationToken ct);

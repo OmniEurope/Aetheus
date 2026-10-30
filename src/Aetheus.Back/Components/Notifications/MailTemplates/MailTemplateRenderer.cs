@@ -16,14 +16,23 @@ public sealed class MailTemplateRenderer(IMailTemplateRepository repository, ILo
         return MailRecipientStyle.FromPreferences(language, appearance, fallback);
     }
 
+    public Task<OmniMailRenderResult> RenderAsync(
+        MailTemplateKind kind, MailTemplateData data, MailRecipientStyle style, CancellationToken ct = default) =>
+        RenderAsync(kind, data, style, null, ct);
+
     public async Task<OmniMailRenderResult> RenderAsync(
-        MailTemplateKind kind, MailTemplateData data, MailRecipientStyle style, CancellationToken ct = default)
+        MailTemplateKind kind, MailTemplateData data, MailRecipientStyle style, int? organizationId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(style);
         var language = MailTemplateLanguages.Normalize(style.Language);
-        var stored = await repository.FindAsync(kind, language, ct).ConfigureAwait(false);
-        var (subject, body) = stored is null ? MailTemplateDefaults.For(kind, language) : (stored.Subject, stored.Body);
+        var own = organizationId is { } organization && MailTemplateScopes.IsOrganizationKind(kind)
+            ? await repository.FindForOrganizationAsync(organization, kind, language, ct).ConfigureAwait(false)
+            : null;
+        var stored = own is null ? await repository.FindAsync(kind, language, ct).ConfigureAwait(false) : null;
+        var (subject, body) = own is not null ? (own.Subject, own.Body)
+            : stored is not null ? (stored.Subject, stored.Body)
+            : MailTemplateDefaults.For(kind, language);
         var result = Render(subject, body, data, style with { Language = language });
         if (result.MissingVariables.Count > 0)
             logger.LogWarning("[MailTemplates] {Kind} ({Language}) uses variables without a value: {Variables}",

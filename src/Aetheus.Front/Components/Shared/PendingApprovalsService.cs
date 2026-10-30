@@ -14,6 +14,7 @@ public sealed class PendingApprovalsService : IAsyncDisposable
     private readonly SemaphoreSlim _startGate = new(1, 1);
     private readonly TrailingReloadCoalescer _coalescer = new(500);
     private readonly CancellationTokenSource _lifetime = new();
+    private const string JoinRefusedMessage = "Access denied";
     private HubConnection? _hub;
 
     public PendingApprovalsService(
@@ -49,11 +50,11 @@ public sealed class PendingApprovalsService : IAsyncDisposable
             _hub.On<int>("PipelineRunCancelled", _ => RequestReloadAsync());
             _hub.RejoinOnReconnect(async () =>
             {
-                await _hub.InvokeAsync("JoinPipelineUpdatesGroup");
+                await JoinUpdatesGroupAsync(_hub).ConfigureAwait(false);
                 await ReloadAsync();
             });
             await _hub.StartAsync().ConfigureAwait(false);
-            await _hub.InvokeAsync("JoinPipelineUpdatesGroup").ConfigureAwait(false);
+            await JoinUpdatesGroupAsync(_hub).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or HubException)
         {
@@ -66,6 +67,22 @@ public sealed class PendingApprovalsService : IAsyncDisposable
         finally
         {
             _startGate.Release();
+        }
+    }
+
+    /// <summary>Joins the pipeline updates group. The hub refuses the join ("Access denied.") to a user with no
+    /// readable pipeline, a normal state (an organization administrator whose organization owns none yet) and
+    /// not a fault: it is noted at debug, not warned on every page of every session. Any other failure still
+    /// reaches the callers' warnings.</summary>
+    private async Task JoinUpdatesGroupAsync(HubConnection hub)
+    {
+        try
+        {
+            await hub.InvokeAsync("JoinPipelineUpdatesGroup").ConfigureAwait(false);
+        }
+        catch (HubException ex) when (ex.Message.Contains(JoinRefusedMessage, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("[PendingApprovals] the hub offers this user no pipeline updates: {Reason}", ex.Message);
         }
     }
 
@@ -106,7 +123,7 @@ public sealed class PendingApprovalsService : IAsyncDisposable
             var hub = _hub;
             await hub.RestartOnCurrentBackendAsync(async () =>
             {
-                await hub.InvokeAsync("JoinPipelineUpdatesGroup").ConfigureAwait(false);
+                await JoinUpdatesGroupAsync(hub).ConfigureAwait(false);
                 await ReloadAsync().ConfigureAwait(false);
             }).ConfigureAwait(false);
         }

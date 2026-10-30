@@ -5,7 +5,8 @@ namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>What the AI profile preflight found: refusals for the AI steps whose result counts, warnings
 /// for the advisory ones, which never decide anything.</summary>
-public sealed record PipelineAiProfilePreflightResult(IReadOnlyList<string> Blocking, IReadOnlyList<string> Warnings)
+public sealed record PipelineAiProfilePreflightResult(
+    IReadOnlyList<PipelineProblem> Blocking, IReadOnlyList<PipelineProblem> Warnings)
 {
     public static readonly PipelineAiProfilePreflightResult None = new([], []);
 }
@@ -44,8 +45,8 @@ public sealed class PipelineAiProfilePreflight(IAiTaskService aiTasks) : IPipeli
             .ToList();
         if (aiSteps.Count == 0) return PipelineAiProfilePreflightResult.None;
 
-        var blocking = new List<string>();
-        var warnings = new List<string>();
+        var blocking = new List<PipelineProblem>();
+        var warnings = new List<PipelineProblem>();
         var problemsByProfile = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var (stage, step) in aiSteps)
         {
@@ -53,10 +54,18 @@ public sealed class PipelineAiProfilePreflight(IAiTaskService aiTasks) : IPipeli
                 .ConfigureAwait(false);
             if (problem is null) continue;
             var message = $"AI step '{step.Name}' in stage '{stage}': {problem}";
+            // The profile resolver states its own reason in English; it is carried as the detail.
+            var noOrganization = organizationId is null;
             if (step.Advisory)
-                warnings.Add($"{message} The advisory step will be recorded as not run; the run is not blocked.");
+                warnings.Add(PipelineProblem.Of(
+                    noOrganization ? PipelineProblemCodes.AdvisoryAiStepNoOrganization : PipelineProblemCodes.AdvisoryAiStepProfileUnusable,
+                    $"{message} The advisory step will be recorded as not run; the run is not blocked.",
+                    ("step", step.Name), ("stage", stage), ("detail", problem)));
             else
-                blocking.Add(message);
+                blocking.Add(PipelineProblem.Of(
+                    noOrganization ? PipelineProblemCodes.AiStepNoOrganization : PipelineProblemCodes.AiStepProfileUnusable,
+                    message,
+                    ("step", step.Name), ("stage", stage), ("detail", problem)));
         }
         return new PipelineAiProfilePreflightResult(blocking, warnings);
     }

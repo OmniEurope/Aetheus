@@ -311,12 +311,20 @@ public sealed class AnalysisGradeEngineTests
         var result = AnalysisGradeEngine.Evaluate(report, Context(QualityYaml), EvaluatedAt);
         var summary = AnalysisGradeEngine.Aggregate([result.SnapshotJson]);
 
-        Assert.Null(summary!.OverallGrade);
+        // Recette R-73, R-74: the missing coverage and architecture are never a grade F, and never hide the grade of
+        // what was observed (the duplication, an A); the summary only records that required measures are missing.
+        Assert.Equal(AnalysisGrade.A, summary!.OverallGrade);
         Assert.Equal(AnalysisGradeCompleteness.Incomplete, summary.Completeness);
+        Assert.Equal(
+            ["grade.architecture", "grade.coverage"],
+            summary.Domains.SelectMany(domain => domain.Measures)
+                .Where(measure => measure.Required && !measure.Observed)
+                .Select(measure => measure.Key)
+                .Order(StringComparer.Ordinal));
     }
 
     [Fact]
-    public void Evaluate_MissingApplicableRequiredMeasure_IsIncompleteWithoutGrade()
+    public void Evaluate_MissingApplicableRequiredMeasure_KeepsTheGradeOfTheObservedOnes_AndIsFlaggedIncomplete()
     {
         var report = Report(
             AnalysisCategory.Coverage,
@@ -327,7 +335,8 @@ public sealed class AnalysisGradeEngineTests
             Context(CoverageWithMissingRequiredMetricYaml),
             EvaluatedAt);
 
-        Assert.Null(result.Grade);
+        // The branch coverage nobody published is not an A and not a hole in the grade: the line coverage grades it.
+        Assert.Equal(AnalysisGrade.A, result.Grade);
         Assert.Equal(AnalysisGradeCompleteness.Incomplete, result.Completeness);
     }
 

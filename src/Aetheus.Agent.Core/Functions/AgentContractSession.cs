@@ -84,6 +84,10 @@ internal sealed class AgentContractSession(FunctionHttp http, string backendUrl,
     /// <summary>How many times the enrollment and the update confirmation are polled, a second apart.</summary>
     internal const int Polls = 60;
 
+    /// <summary>The sign-in e-mail of the administrator a QA backend seeds when no Auth:AdminEmail is set
+    /// (the backend's <c>SeededAdminEmail.Default</c>): everyone, QA probes included, signs in by e-mail.</summary>
+    internal const string QaAdminEmail = "admin@aetheus.local";
+
     private static readonly HashSet<string> FailedTaskStatuses = new(StringComparer.Ordinal)
     {
         "4", "5", "6", "Failed", "Timeout", "Cancelled"
@@ -99,7 +103,7 @@ internal sealed class AgentContractSession(FunctionHttp http, string backendUrl,
     {
         var password = (await File.ReadAllTextAsync(passwordFile, cancellationToken).ConfigureAwait(false)).TrimEnd('\n');
         var login = await http.PostJsonAsync(
-            backendUrl + "/api/auth/login", JsonSerializer.Serialize(new { username = "admin", password }), null, cancellationToken)
+            backendUrl + "/api/auth/login", JsonSerializer.Serialize(new { email = QaAdminEmail, password }), null, cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(temporary, "login.json"), login, cancellationToken).ConfigureAwait(false);
         _adminToken = Written(login, "token") ?? string.Empty;

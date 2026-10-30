@@ -2,37 +2,38 @@
 
 namespace Aetheus.Front.Components.Users;
 
-public partial class AdminIdentityNav : IDisposable
+public partial class AdminIdentityNav
 {
+    public const string UsersSection = "users";
+    public const string OrganizationsSection = "organizations";
+    public const string RolesSection = "roles";
+
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
-    [Inject] private AdminIdentitySearch Search { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
+    [Inject] private AuthStateProvider Auth { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
 
     [Parameter, EditorRequired] public string ActiveSection { get; set; } = string.Empty;
 
-    protected override void OnInitialized() => Search.Changed += OnSearchChanged;
+    /// <summary>Raised when the organization switcher's choice changed: the page reloads its list.</summary>
+    [Parameter] public EventCallback OrganizationChanged { get; set; }
 
-    private Task OnSearchChanged() => InvokeAsync(StateHasChanged);
+    /// <summary>The key the active page's API resolves its scope with.</summary>
+    private string SwitcherKey => ActiveSection == RolesSection
+        ? PermissionKeys.OrganizationRolesManage
+        : PermissionKeys.OrganizationMembersManage;
 
-    private async Task OnTermChangedAsync(string? term)
+    /// <summary>The route of a section's page.</summary>
+    internal static string RouteOf(string section) => $"/admin/{section}";
+
+    /// <summary>A site Admin sees every tab; an organization's administrator, those its permissions open.</summary>
+    private bool Shows(string section) =>
+        Auth.IsAdmin || OrganizationAdministration.CanOpen(RouteOf(section), Permissions);
+
+    private void OnTabChanged(string? section)
     {
-        var section = await Search.SetAsync(term, ActiveSection);
-        if (!section.Equals(ActiveSection, StringComparison.Ordinal))
-            Nav.NavigateTo($"/admin/{section}");
+        if (string.IsNullOrEmpty(section) || section.Equals(ActiveSection, StringComparison.Ordinal))
+            return;
+        Nav.NavigateTo(RouteOf(section));
     }
-
-    private string LinkText(string label, string section) =>
-        Search.CountFor(section) is > 0 and var count
-            ? $"{label} ({count.ToString(System.Globalization.CultureInfo.CurrentCulture)})"
-            : label;
-
-    private string LinkClass(string section) =>
-        ActiveSection.Equals(section, StringComparison.Ordinal)
-            ? "iam-section-link iam-section-link-active"
-            : "iam-section-link";
-
-    private string? AriaCurrent(string section) =>
-        ActiveSection.Equals(section, StringComparison.Ordinal) ? "page" : null;
-
-    public void Dispose() => Search.Changed -= OnSearchChanged;
 }

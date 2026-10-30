@@ -60,6 +60,7 @@ public sealed class NuGetRegistryServiceTests
             Arg.Is<RegistryPackage>(package =>
                 package.Name == "Aetheus.Telemetry"
                 && package.NormalizedName == "aetheus.telemetry"
+                && package.AllowAnonymousDownload
                 && package.Description == "Internal telemetry package."),
             Arg.Any<CancellationToken>());
         await _repository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());

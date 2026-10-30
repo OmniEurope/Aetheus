@@ -121,6 +121,28 @@ public class ApiClientPipelinesTests
     }
 
     [Fact]
+    public async Task GetRepositoryDefinitionAsync_AsksForTheBranchAndTheName()
+    {
+        _handler.SetJsonResponse("api/pipelines/3/repository-definition",
+            new PipelineRepositoryDefinitionDto { Exists = true, Yaml = "name: a", Sha256 = "abc" });
+
+        var result = await _api.Pipelines.GetRepositoryDefinitionAsync(3, "release/1.0", "deploy prod", Xunit.TestContext.Current.CancellationToken);
+
+        Assert.True(result!.Exists);
+        Assert.Equal("abc", result.Sha256);
+        var url = Uri.UnescapeDataString(_handler.Requests[^1].Url);
+        Assert.Contains("sourceBranch=release/1.0&name=deploy prod", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetRepositoryDefinitionAsync_WhenTheServerFails_ReturnsNull()
+    {
+        _handler.SetResponse("api/pipelines/3/repository-definition", System.Net.HttpStatusCode.InternalServerError);
+
+        Assert.Null(await _api.Pipelines.GetRepositoryDefinitionAsync(3, null, null, Xunit.TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task DeletePipelineAsync_ReturnsStatus()
     {
         const string url = "api/pipelines/1";
@@ -446,9 +468,20 @@ public class ApiClientPipelinesTests
     {
         const string url = "api/projects/1";
         _handler.SetResponse(HttpMethod.Delete, url, HttpStatusCode.NoContent);
-        var r = await _api.Projects.DeleteProjectAsync(1, Xunit.TestContext.Current.CancellationToken);
-        Assert.True(r.Success);
-        AssertLastRequest(HttpMethod.Delete, url);
+        var r = await _api.Projects.DeleteProjectAsync(1, [5, 6], Xunit.TestContext.Current.CancellationToken);
+        Assert.Equal(ProjectDeletionOutcome.Deleted, r);
+        AssertLastRequest(HttpMethod.Delete, url + "?serverTaskIds=5&serverTaskIds=6");
+    }
+
+    [Fact]
+    public async Task R51_DeleteProjectAsync_202_SaysTheProjectWaitsForItsCleanup_AndARefusalIsNull()
+    {
+        const string url = "api/projects/1";
+        _handler.SetResponse(HttpMethod.Delete, url, HttpStatusCode.Accepted);
+        Assert.Equal(ProjectDeletionOutcome.PendingCleanup, await _api.Projects.DeleteProjectAsync(1, [5], Xunit.TestContext.Current.CancellationToken));
+
+        _handler.SetResponse(HttpMethod.Delete, url, HttpStatusCode.Conflict);
+        Assert.Null(await _api.Projects.DeleteProjectAsync(1, [5], Xunit.TestContext.Current.CancellationToken));
     }
 
     // --- Releases (same partial file) ---

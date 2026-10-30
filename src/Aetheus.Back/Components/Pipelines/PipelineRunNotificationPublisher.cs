@@ -92,7 +92,9 @@ public sealed class PipelineRunNotificationPublisher(
             run.BuildNumber,
             ProjectId = projectId,
             domainEvent.StageName,
-            domainEvent.EnvironmentName
+            domainEvent.EnvironmentName,
+            // The mail's Approve / Reject / Comment links open this approval (recette R-24).
+            domainEvent.ApprovalId
         }, ct).ConfigureAwait(false);
     }
 
@@ -111,6 +113,51 @@ public sealed class PipelineRunNotificationPublisher(
                 PipelineName = pipeline.Name,
                 ProjectId = projectId,
                 TriggerSource = triggerSource,
+                Reason = reason
+            }),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Recette R-48: notifies project subscribers that an <c>on_success:</c> follow-up of a
+    /// succeeded run could not be started. It is the launch-refused event (an automated trigger that
+    /// could not launch a pipeline) with the upstream run as the trigger; when the target does not exist
+    /// the event names the target as written in the YAML and points at the upstream pipeline. A run
+    /// without a project records nothing.</summary>
+    public async Task PublishChainRefusedAsync(
+        PipelineRun upstreamRun, int? projectId, string targetName, int? targetPipelineId, string reason,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(upstreamRun);
+        await userNotifications.RecordProjectEventAsync(
+            NotificationEventTypes.PipelineLaunchRefused,
+            JsonSerializer.Serialize(new
+            {
+                // The upstream run: the notification opens it, where the reason is written as a warning.
+                PipelineRunId = upstreamRun.Id,
+                PipelineId = targetPipelineId ?? upstreamRun.PipelineId,
+                PipelineName = targetName,
+                ProjectId = projectId,
+                TriggerSource = $"on_success:{upstreamRun.Pipeline?.Name}#{upstreamRun.Id}",
+                Reason = reason
+            }),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Recette R-49: notifies project subscribers that a pushed <c>.pipeline/</c> file could not
+    /// be read, or that the sync of a ref failed, so its pipelines were not updated. No pipeline is named
+    /// from content that could not be read: the event names the <paramref name="subject"/> (the file, or
+    /// the repository when the whole sync failed), and the reason carries the parser's line and message or
+    /// the failure's.</summary>
+    public async Task PublishDefinitionRefusedAsync(
+        int projectId, string subject, string reference, string commit, string reason, CancellationToken ct = default)
+    {
+        await userNotifications.RecordProjectEventAsync(
+            NotificationEventTypes.PipelineLaunchRefused,
+            JsonSerializer.Serialize(new
+            {
+                PipelineName = subject,
+                ProjectId = projectId,
+                TriggerSource = $"push:{reference}@{commit[..Math.Min(commit.Length, 12)]}",
                 Reason = reason
             }),
             ct).ConfigureAwait(false);

@@ -151,10 +151,10 @@ public sealed class PipelineFleetTests : BunitContext
             .Add(component => component.TargetVersion, 2));
         cut.WaitForState(() => cut.Markup.Contains("OrphanOverridesWarning", StringComparison.Ordinal));
 
-        var diff = cut.FindComponent<MonacoDiffViewer>();
-        Assert.Equal("name: old", diff.Instance.OriginalValue);
-        Assert.Equal("name: new", diff.Instance.ModifiedValue);
-        Assert.True(cut.Find("button[disabled]").TextContent.Contains("ConfirmUpdate", StringComparison.Ordinal));
+        var diff = cut.FindComponent<OmniDiffViewer>();
+        Assert.Equal("name: old", diff.Instance.Original);
+        Assert.Equal("name: new", diff.Instance.Modified);
+        Assert.Contains(cut.FindAll("button[disabled]"), button => button.TextContent.Contains("ConfirmUpdate", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -172,11 +172,11 @@ public sealed class PipelineFleetTests : BunitContext
 
         var cut = Render<PromotePipelineTemplateDialog>(parameters => parameters
             .Add(component => component.PipelineId, 2));
-        cut.WaitForState(() => cut.FindComponents<MonacoDiffViewer>().Count == 1);
+        cut.WaitForState(() => cut.FindComponents<OmniDiffViewer>().Count == 1);
 
-        var diff = cut.FindComponent<MonacoDiffViewer>();
-        Assert.Equal("name: ci\nstages: []", diff.Instance.OriginalValue);
-        Assert.Contains("quality", diff.Instance.ModifiedValue, StringComparison.Ordinal);
+        var diff = cut.FindComponent<OmniDiffViewer>();
+        Assert.Equal("name: ci\nstages: []", diff.Instance.Original);
+        Assert.Contains("quality", diff.Instance.Modified, StringComparison.Ordinal);
         Assert.Equal("name: ci\nstages:\n  - name: quality", cut.FindComponent<MonacoEditor>().Instance.Value);
         Assert.Contains("ChangelogEntry", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("RebaseSourcePipeline", cut.Markup, StringComparison.Ordinal);
@@ -237,7 +237,7 @@ public sealed class PipelineFleetTests : BunitContext
         var update = Render<PipelineFleetUpdateDialog>(parameters => parameters
             .Add(component => component.PipelineId, 4)
             .Add(component => component.TargetVersion, 2));
-        update.WaitForState(() => update.FindComponents<MonacoDiffViewer>().Count == 1);
+        update.WaitForState(() => update.FindComponents<OmniDiffViewer>().Count == 1);
         typeof(PipelineFleetUpdateDialog).GetField("_saving",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(update.Instance, true);
@@ -253,7 +253,7 @@ public sealed class PipelineFleetTests : BunitContext
         });
         var promote = Render<PromotePipelineTemplateDialog>(parameters => parameters
             .Add(component => component.PipelineId, 5));
-        promote.WaitForState(() => promote.FindComponents<MonacoDiffViewer>().Count == 1);
+        promote.WaitForState(() => promote.FindComponents<OmniDiffViewer>().Count == 1);
         typeof(PromotePipelineTemplateDialog).GetField("_saving",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .SetValue(promote.Instance, true);

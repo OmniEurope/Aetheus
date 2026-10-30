@@ -27,7 +27,6 @@ public class AuthServiceLockoutTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Auth:AdminUser"] = "admin",
                 ["Auth:AdminPassword"] = "admin",
                 ["Auth:JwtKey"] = "aetheus-dev-key-minimum-32-bytes!!"
             })
@@ -60,6 +59,7 @@ public class AuthServiceLockoutTests
     {
         Id = 1,
         Username = "testuser",
+        Email = "testuser@example.com",
         PasswordHash = PasswordHash,
         IsActive = true,
         FailedLoginCount = failedCount,
@@ -72,12 +72,12 @@ public class AuthServiceLockoutTests
     public async Task LoginAsync_FailedAttempts_IncrementsCount()
     {
         var user = MakeUser(failedCount: 0);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
 
         // 5 failed login attempts with wrong password
         for (var i = 0; i < 5; i++)
         {
-            await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+            await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
         }
 
         // IncrementFailedLoginAsync must have been called 5 times
@@ -89,10 +89,10 @@ public class AuthServiceLockoutTests
     {
         // User already has 4 failed attempts - the next failure is the 5th (MaxFailedAttempts)
         var user = MakeUser(failedCount: 4);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
         _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(5);
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         await _repo.Received(1).IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>());
@@ -104,10 +104,10 @@ public class AuthServiceLockoutTests
     {
         // Every concurrent request read the same snapshot (0 failures); the store holds all five.
         var user = MakeUser(failedCount: 0);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
         _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(5);
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         await _repo.Received(1).LockoutUserAsync(user.Id, Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
@@ -119,10 +119,10 @@ public class AuthServiceLockoutTests
         // User is locked out until far in the future
         var lockoutEnd = new DateTime(2025, 6, 1, 13, 0, 0, DateTimeKind.Utc);
         var user = MakeUser(failedCount: 5, lockoutEnd: lockoutEnd);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
 
         // Even with the CORRECT password, login must be rejected
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         // IncrementFailedLoginAsync should NOT have been called - we short-circuited before BCrypt
@@ -134,9 +134,9 @@ public class AuthServiceLockoutTests
     {
         // User has 3 prior failures but is NOT locked out
         var user = MakeUser(failedCount: 3);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.False(string.IsNullOrEmpty(result.Token));
@@ -148,10 +148,10 @@ public class AuthServiceLockoutTests
     public async Task LoginAsync_ExponentialBackoff_SecondLockoutIsDoubled()
     {
         var user = MakeUser(failedCount: 9);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
         _repo.IncrementFailedLoginAsync(user.Id, Arg.Any<CancellationToken>()).Returns(10);
 
-        await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+        await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).LockoutUserAsync(
             user.Id,
@@ -164,9 +164,9 @@ public class AuthServiceLockoutTests
     {
         var lockoutEnd = new DateTime(2025, 6, 1, 11, 0, 0, DateTimeKind.Utc);
         var user = MakeUser(failedCount: 5, lockoutEnd: lockoutEnd);
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>()).Returns(user);
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>()).Returns(user);
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
     }

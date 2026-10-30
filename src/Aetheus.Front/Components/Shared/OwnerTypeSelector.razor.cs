@@ -170,7 +170,9 @@ public partial class OwnerTypeSelector
 
     private async Task LoadProjectServersAsync(int projectId)
     {
-        _projectServers = await Api.Projects.GetProjectServersAsync(projectId);
+        // Only the links that are project servers: a server the project reaches through an environment has no
+        // project server to own a pipeline, library or vault (R-83).
+        _projectServers = [.. (await Api.Projects.GetProjectServersAsync(projectId)).Where(server => server.ViaEnvironmentId is null)];
         _projectServersLoadedFor = projectId;
     }
 
@@ -181,7 +183,7 @@ public partial class OwnerTypeSelector
             try
             {
                 var servers = await Api.Projects.GetProjectServersAsync(project.Id);
-                return servers.Any(server => server.Id == projectServerId) ? project.Id : (int?)null;
+                return servers.Any(server => server.ViaEnvironmentId is null && server.Id == projectServerId) ? project.Id : (int?)null;
             }
             catch (HttpRequestException)
             {

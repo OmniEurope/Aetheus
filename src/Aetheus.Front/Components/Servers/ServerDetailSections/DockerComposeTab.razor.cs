@@ -51,8 +51,12 @@ public partial class DockerComposeTab
     private List<DockerComposeStackDto> FilteredCompose => Stacks
         .Where(s => string.IsNullOrWhiteSpace(_composeSearch)
             || s.Name.Contains(_composeSearch, StringComparison.OrdinalIgnoreCase)
-            || s.Status.Contains(_composeSearch, StringComparison.OrdinalIgnoreCase))
+            || s.Status.Contains(_composeSearch, StringComparison.OrdinalIgnoreCase)
+            || ComposeStatusText(s.Status).Contains(_composeSearch, StringComparison.CurrentCultureIgnoreCase))
         .ToList();
+
+    /// <summary>A stack's <c>docker compose ls</c> status ("running(2)") in the user's language (R-113).</summary>
+    internal string ComposeStatusText(string status) => DockerContainerStatusText.FormatCompose(status, L);
 
     /// <summary>
     /// Consumes one completed agent task forwarded by the parent. Returns without touching anything

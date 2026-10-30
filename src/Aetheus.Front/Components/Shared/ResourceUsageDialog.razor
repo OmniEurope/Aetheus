@@ -1,0 +1,21 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+@* Every reader of a library or a vault (R-103), each one a link that goes to it and closes the dialog. *@
+<OmniStack>
+    <ul class="resource-usage-dialog__list" data-testid="resource-usage-dialog-list">
+        @foreach (var user in Users)
+        {
+            <li>
+                @if (ResourceUsageSummary.HrefOf(user) is { } href)
+                {
+                    <OmniLink Href="@href" OnClick="@(_ => Dialog.Close())">@ResourceUsageSummary.NameOf(user, L)</OmniLink>
+                }
+                else
+                {
+                    <span>@ResourceUsageSummary.NameOf(user, L)</span>
+                }
+            </li>
+        }
+    </ul>
+    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]" />
+</OmniStack>

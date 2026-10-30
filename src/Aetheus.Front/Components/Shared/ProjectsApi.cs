@@ -137,8 +137,40 @@ public sealed class ProjectsApi(HttpClient http) : ApiClientBase(http)
         => PutJsonAsync<UpdateProjectRequest, ProjectDto>($"api/projects/{id}", request, ct);
 
 
-    public Task<ApiStatus> DeleteProjectAsync(int id, CancellationToken ct = default)
-        => DeleteAsync($"api/projects/{id}", ct);
+    /// <summary>Deletes the project. <paramref name="serverTaskIds"/> are the deletion's server discoveries and
+    /// removals: when they prove its server resources removed the project is deleted (204), otherwise it waits,
+    /// deleted, for its server cleanup to be relaunched (202, recette R-51). Null when the deletion was refused
+    /// (the global error notification says why).</summary>
+    public async Task<ProjectDeletionOutcome?> DeleteProjectAsync(int id, IReadOnlyCollection<int> serverTaskIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(serverTaskIds);
+        var url = serverTaskIds.Count == 0
+            ? $"api/projects/{id}"
+            : $"api/projects/{id}?{string.Join('&', serverTaskIds.Select(taskId => $"serverTaskIds={taskId}"))}";
+        using var response = await Http.DeleteAsync(url, ct).ConfigureAwait(false);
+        return response.StatusCode switch
+        {
+            System.Net.HttpStatusCode.Accepted => ProjectDeletionOutcome.PendingCleanup,
+            _ when response.IsSuccessStatusCode => ProjectDeletionOutcome.Deleted,
+            _ => null,
+        };
+    }
+
+    /// <summary>Asks the agents of the project's servers what the project deployed there.</summary>
+    public Task<List<ProjectServerResourceTaskDto>?> StartDeletionDiscoveryAsync(int id, CancellationToken ct = default)
+        => PostNoBodyAsync<List<ProjectServerResourceTaskDto>>($"api/projects/{id}/deletion/discovery", ct);
+
+    /// <summary>The deletion's server tasks, as far as they went.</summary>
+    public Task<List<ProjectServerResourceTaskDto>?> GetDeletionServerTasksAsync(int id, IReadOnlyCollection<int> taskIds, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(taskIds);
+        var query = string.Join('&', taskIds.Select(taskId => $"taskIds={taskId}"));
+        return GetJsonAsync<List<ProjectServerResourceTaskDto>>($"api/projects/{id}/deletion/tasks?{query}", ct);
+    }
+
+    /// <summary>Removes, on each server, what its discovery found.</summary>
+    public Task<List<ProjectServerResourceTaskDto>?> StartDeletionCleanupAsync(int id, ProjectServerCleanupRequest request, CancellationToken ct = default)
+        => PostJsonAsync<ProjectServerCleanupRequest, List<ProjectServerResourceTaskDto>>($"api/projects/{id}/deletion/cleanup", request, ct);
 
     /// <summary>The project's « Conservation des données » setting.</summary>
     public Task<ProjectDataRetentionDto?> GetDataRetentionAsync(int id, CancellationToken ct = default)

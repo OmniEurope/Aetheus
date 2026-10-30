@@ -41,8 +41,13 @@ public sealed class PipelineRunToEndFrontTests : BunitContext
 
         var toggle = Assert.Single(cut.FindComponents<OmniSwitch<bool>>());
         Assert.False(toggle.Instance.Value);
-        Assert.Contains("RunToEnd", toggle.Markup, StringComparison.Ordinal);
-        Assert.Contains(cut.FindComponents<OmniFormField>(), field => field.Instance.Help == "RunToEndHelp");
+        // The field's label names the switch and carries the "?" beside it, as for a boolean parameter: a help
+        // mark on a field without label stood alone on its own line (seen on the local instance).
+        var field = Assert.Single(cut.FindComponents<OmniFormField>(), field => field.Instance.Help == "RunToEndHelp");
+        Assert.Equal("RunToEnd", field.Instance.Label);
+        var label = cut.Find("#launch-run-to-end-label");
+        Assert.Contains("RunToEnd", label.TextContent, StringComparison.Ordinal);
+        Assert.Equal("launch-run-to-end-label", cut.Find("#launch-run-to-end").GetAttribute("aria-labelledby"));
         Assert.DoesNotContain("NoRunOptions", cut.Markup, StringComparison.Ordinal);
     }
 

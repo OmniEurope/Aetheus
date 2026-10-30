@@ -14,6 +14,7 @@ public class OrganizationServiceTests
     private readonly IOrganizationRepository _repo = Substitute.For<IOrganizationRepository>();
     private readonly IResourceAuthorizationService _authz = Substitute.For<IResourceAuthorizationService>();
     private readonly IUserChangeNotifier _userNotifier = Substitute.For<IUserChangeNotifier>();
+    private readonly IOrganizationRoleAssignmentService _roleAssignments = Substitute.For<IOrganizationRoleAssignmentService>();
     private readonly OrganizationService _sut;
 
     public OrganizationServiceTests()
@@ -22,7 +23,7 @@ public class OrganizationServiceTests
             .Returns([]);
         _repo.GetProjectOrganizationIdsAsync(Arg.Any<List<int>>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        _sut = new OrganizationService(_repo, _authz, TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), _userNotifier, Substitute.For<IAuditService>());
+        _sut = new OrganizationService(_repo, _authz, TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), _userNotifier, Substitute.For<IAuditService>(), _roleAssignments);
     }
 
     [Fact]
@@ -134,6 +135,44 @@ public class OrganizationServiceTests
     }
 
     [Fact]
+    public async Task CreateOrganizationAsync_EmptySlug_GeneratesItFromTheName()
+    {
+        _repo.NameExistsAsync("Équipe Alpha 2", null, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.SlugExistsAsync(Arg.Any<string>(), null, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _sut.CreateOrganizationAsync(new CreateOrganizationRequest { Name = "Équipe Alpha 2" }, TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddAsync(Arg.Is<Organization>(o => o.Slug == "equipe-alpha-2"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateOrganizationAsync_EmptySlug_AddsASuffixWhenTheGeneratedOneIsTaken()
+    {
+        _repo.NameExistsAsync("Acme", null, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.SlugExistsAsync("acme", null, Arg.Any<CancellationToken>()).Returns(true);
+        _repo.SlugExistsAsync("acme-2", null, Arg.Any<CancellationToken>()).Returns(true);
+        _repo.SlugExistsAsync("acme-3", null, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _sut.CreateOrganizationAsync(new CreateOrganizationRequest { Name = "Acme" }, TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddAsync(Arg.Is<Organization>(o => o.Slug == "acme-3"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateOrganizationAsync_EmptySlug_KeepsTheCurrentSlug()
+    {
+        var org = new Organization { Id = 7, Name = "Acme", Slug = "acme-old", Members = [], Projects = [] };
+        _repo.GetByIdAsync(7, Arg.Any<CancellationToken>()).Returns(org);
+        _repo.NameExistsAsync("Acme 2", 7, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.SlugExistsAsync("acme-old", 7, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _sut.UpdateOrganizationAsync(7, new UpdateOrganizationRequest { Name = "Acme 2" }, TestContext.Current.CancellationToken);
+
+        Assert.Equal("acme-old", org.Slug);
+        Assert.Equal("Acme 2", org.Name);
+    }
+
+    [Fact]
     public async Task CreateOrganizationAsync_DuplicateName_ThrowsConflict()
     {
         _repo.NameExistsAsync("Dup", null, Arg.Any<CancellationToken>()).Returns(true);
@@ -188,6 +227,40 @@ public class OrganizationServiceTests
 
         Assert.NotNull(result);
         Assert.Equal("New", result.Name);
+    }
+
+    /// <summary>R-76: the develop-branch setting is stored by an update, off by default, and the detail reports it.</summary>
+    [Fact]
+    public async Task UpdateOrganizationAsync_StoresTheDevelopBranchSetting_AndTheDetailReportsIt()
+    {
+        var org = new Organization { Id = 1, Name = "Old", Slug = "old", Members = [], Projects = [] };
+        Assert.False(org.AutoCreateDevelopBranch);
+        _repo.GetByIdAsync(1, Arg.Any<CancellationToken>()).Returns(org);
+        _repo.GetWithMembersAndProjectsAsync(1, Arg.Any<CancellationToken>()).Returns(org);
+
+        await _sut.UpdateOrganizationAsync(1,
+            new UpdateOrganizationRequest { Name = "Old", Slug = "old", AutoCreateDevelopBranch = true }, TestContext.Current.CancellationToken);
+        Assert.True(org.AutoCreateDevelopBranch);
+        Assert.True((await _sut.GetOrganizationAsync(1, TestContext.Current.CancellationToken))!.AutoCreateDevelopBranch);
+
+        await _sut.UpdateOrganizationAsync(1,
+            new UpdateOrganizationRequest { Name = "Old", Slug = "old", AutoCreateDevelopBranch = false }, TestContext.Current.CancellationToken);
+        Assert.False(org.AutoCreateDevelopBranch);
+        Assert.False((await _sut.GetOrganizationAsync(1, TestContext.Current.CancellationToken))!.AutoCreateDevelopBranch);
+    }
+
+    [Fact]
+    public async Task CreateOrganizationAsync_DevelopBranchSetting_IsOffUnlessAsked()
+    {
+        var captured = new List<Organization>();
+        _repo.AddAsync(Arg.Any<Organization>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(ci => captured.Add(ci.Arg<Organization>()));
+
+        await _sut.CreateOrganizationAsync(new CreateOrganizationRequest { Name = "Plain", Slug = "plain" }, TestContext.Current.CancellationToken);
+        await _sut.CreateOrganizationAsync(new CreateOrganizationRequest { Name = "Dev", Slug = "dev", AutoCreateDevelopBranch = true }, TestContext.Current.CancellationToken);
+
+        Assert.Equal([false, true], captured.Select(org => org.AutoCreateDevelopBranch));
     }
 
     [Fact]
@@ -253,6 +326,8 @@ public class OrganizationServiceTests
 
         Assert.Equal("bob", result.Username);
         Assert.Equal(OrganizationRole.Member, result.Role);
+        // R-45: the new member receives the role its level gives, before the cache is invalidated.
+        await _roleAssignments.Received(1).GrantMembershipRoleAsync(5, 1, OrganizationRole.Member, Arg.Any<CancellationToken>());
         _authz.Received(1).InvalidateRoleCache("bob");
         await _userNotifier.Received(1).NotifyPermissionsChangedAsync(5, PermissionChangeReasons.OrganizationMembership, Arg.Any<CancellationToken>());
     }

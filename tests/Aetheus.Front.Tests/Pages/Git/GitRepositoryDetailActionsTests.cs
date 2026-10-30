@@ -36,7 +36,8 @@ public sealed class GitRepositoryDetailActionsTests : BunitContext
         Services.GetRequiredService<ApiClient>(),
         _dialog,
         Services.GetRequiredService<NotifyHelper>(),
-        Services.GetRequiredService<IStringLocalizer<AppStrings>>());
+        Services.GetRequiredService<IStringLocalizer<AppStrings>>(),
+        Services.GetRequiredService<BusyVeil>());
 
     private static GitLightBranchDto Branch(string name = "feature/x") => new() { Name = name };
 

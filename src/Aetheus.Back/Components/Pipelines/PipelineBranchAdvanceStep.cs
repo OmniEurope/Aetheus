@@ -75,7 +75,7 @@ public sealed class PipelineBranchAdvanceStep(
                     var reason = $"'{target.Branch}' is at {Short(result.PreviousSha)}, which has diverged from {Short(commit)} "
                         + $"(release {release.Version}): a fast-forward is impossible, the branch was left where it is.";
                     await pipelines.AppendRunWarningsAsync(
-                        runId, [$"Advance branch step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+                        runId, [PipelineStepFailureWarning.AdvanceBranch(stepRun.StepName, reason)], ct).ConfigureAwait(false);
                     return reason;
                 }
             case GitBranchAdvanceOutcome.Protected:
@@ -194,7 +194,7 @@ public sealed class PipelineBranchAdvanceStep(
     {
         MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, timeProvider.GetUtcNow().UtcDateTime);
         await pipelines.AppendRunWarningsAsync(
-            runId, [$"Advance branch step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            runId, [PipelineStepFailureWarning.AdvanceBranch(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private static string? Short(string? sha) => sha is { Length: > 12 } ? sha[..12] : sha;

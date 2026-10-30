@@ -55,6 +55,86 @@ public sealed class MailTemplateService(
         return ToDto(kind, language, null);
     }
 
+    public async Task<List<MailTemplateSummaryDto>> ListForOrganizationAsync(int organizationId, CancellationToken ct = default)
+    {
+        await EnsureOrganizationAsync(organizationId, ct).ConfigureAwait(false);
+        var own = await repository.ListForOrganizationAsync(organizationId, ct).ConfigureAwait(false);
+        return [.. from kind in MailTemplateScopes.OrganizationKinds
+                   from language in MailTemplateLanguages.All
+                   let row = own.FirstOrDefault(template => template.Kind == kind && template.Language == language)
+                   select new MailTemplateSummaryDto
+                   {
+                       Kind = kind,
+                       Language = language,
+                       IsCustomized = row is not null,
+                       UpdatedAt = row?.UpdatedAt,
+                       UpdatedBy = row?.UpdatedBy,
+                       OrganizationId = organizationId
+                   }];
+    }
+
+    public async Task<MailTemplateDto> GetForOrganizationAsync(int organizationId, MailTemplateKind kind, string language, CancellationToken ct = default)
+    {
+        await EnsureOrganizationKindAsync(organizationId, kind, language, ct).ConfigureAwait(false);
+        var own = await repository.FindForOrganizationAsync(organizationId, kind, language, ct).ConfigureAwait(false);
+        return await ForOrganizationAsync(organizationId, kind, language, own, ct).ConfigureAwait(false);
+    }
+
+    public async Task<MailTemplateDto> SaveForOrganizationAsync(
+        int organizationId, MailTemplateKind kind, string language, SaveMailTemplateRequest request, string? username, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await EnsureOrganizationKindAsync(organizationId, kind, language, ct).ConfigureAwait(false);
+        EnsureOfferedVariables(kind, request);
+        var row = await repository.UpsertForOrganizationAsync(
+            organizationId, kind, language, request.Subject.Trim(), request.Body, username, ct).ConfigureAwait(false);
+        await audit.LogAsync("Updated", "OrganizationMailTemplate", row.Id, $"{kind} ({language}) of organization {organizationId}", ct).ConfigureAwait(false);
+        return await ForOrganizationAsync(organizationId, kind, language, row, ct).ConfigureAwait(false);
+    }
+
+    public async Task<MailTemplateDto> ResetForOrganizationAsync(int organizationId, MailTemplateKind kind, string language, CancellationToken ct = default)
+    {
+        await EnsureOrganizationKindAsync(organizationId, kind, language, ct).ConfigureAwait(false);
+        if (await repository.DeleteForOrganizationAsync(organizationId, kind, language, ct).ConfigureAwait(false))
+            await audit.LogAsync("Reset", "OrganizationMailTemplate", null, $"{kind} ({language}) of organization {organizationId}", ct).ConfigureAwait(false);
+        return await ForOrganizationAsync(organizationId, kind, language, null, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The organization's version when it has one, else the platform's as it is sent.</summary>
+    private async Task<MailTemplateDto> ForOrganizationAsync(
+        int organizationId, MailTemplateKind kind, string language, OrganizationMailTemplate? own, CancellationToken ct)
+    {
+        if (own is null)
+        {
+            var platform = ToDto(kind, language, await repository.FindAsync(kind, language, ct).ConfigureAwait(false));
+            return platform with { IsCustomized = false, UpdatedAt = null, UpdatedBy = null, OrganizationId = organizationId };
+        }
+        var stored = new MailTemplate
+        {
+            Kind = kind,
+            Language = language,
+            Subject = own.Subject,
+            Body = own.Body,
+            UpdatedAt = own.UpdatedAt,
+            UpdatedBy = own.UpdatedBy
+        };
+        return ToDto(kind, language, stored) with { OrganizationId = organizationId };
+    }
+
+    private async Task EnsureOrganizationAsync(int organizationId, CancellationToken ct)
+    {
+        if (!await repository.OrganizationExistsAsync(organizationId, ct).ConfigureAwait(false))
+            throw new NotFoundException($"Organization {organizationId} not found.");
+    }
+
+    private async Task EnsureOrganizationKindAsync(int organizationId, MailTemplateKind kind, string language, CancellationToken ct)
+    {
+        EnsureKnown(kind, language);
+        if (!MailTemplateScopes.IsOrganizationKind(kind))
+            throw new BadRequestException($"The '{kind}' mail concerns no organization: only the platform's version exists.");
+        await EnsureOrganizationAsync(organizationId, ct).ConfigureAwait(false);
+    }
+
     public async Task<MailTemplateTestResultDto> SendTestAsync(
         MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? userId, CancellationToken ct = default)
     {

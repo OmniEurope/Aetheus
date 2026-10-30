@@ -22,6 +22,11 @@ public static class AetheusGrid
     /// local virtualization has a measurable window.</summary>
     public const string ScrollMaxHeight = "calc(100vh - 18rem)";
 
+    /// <summary>R-120: about ten rows of the 2.25rem row height plus the header and the inline filter row, then the
+    /// grid scrolls inside. For a page with two lists one above the other, neither of which may take the whole
+    /// remaining height.</summary>
+    public const string TenRowsMaxHeight = "28rem";
+
     /// <summary>Use a single blue Markdown action in the export area's STD-BTN exception; export is
     /// opt-in and ExportMarkdown=false disables it for tables whose contents must not be
     /// exported.</summary>

@@ -231,6 +231,8 @@ public class PipelineRunTests : BunitContext
         Follow(cut, gateTile);
         // The gate heading and findings establish that the requested tab opened.
         cut.WaitForState(() => cut.Markup.Contains("analysis-run-gate-page", StringComparison.Ordinal));
+        // R-14: the tab starts at the page gap, its card carries no margin of its own.
+        Assert.DoesNotContain("omni-u-mt-", cut.Find(".analysis-run-gate-page").ClassName, StringComparison.Ordinal);
         Assert.Contains("/analysis/findings/17", cut.Markup);
         // Title and location on one line each, path:line, the message on hover.
         Assert.EndsWith("Untrusted input reaches a command sink.", cut.Find(".analysis-finding-grid-title").GetAttribute("title"), StringComparison.Ordinal);
@@ -512,6 +514,18 @@ public class PipelineRunTests : BunitContext
         var automatic = Render<PipelineRunLineageTile>(parameters => parameters.Add(component => component.Run, run with { Id = 8 }));
 
         automatic.WaitForAssertion(() => Assert.Equal("RunLaunchedAutomatically", automatic.Find(".run-lineage-actor").TextContent));
+    }
+
+    [Fact]
+    public void ALineageThatCouldNotBeRead_NeverClaimsTheRunWasAutomatic()
+    {
+        // Recette R-28 (2026-10-26): a run launched by hand read "Automatique" until its lineage arrived.
+        var run = new PipelineRunDto { Id = 9, PipelineId = 5, PipelineName = "release-fast", Status = PipelineStatus.Failed, StartedAt = DateTime.UtcNow };
+        _handler.SetResponse("api/pipelines/runs/9/lineage", System.Net.HttpStatusCode.InternalServerError);
+
+        var cut = Render<PipelineRunLineageTile>(parameters => parameters.Add(component => component.Run, run));
+
+        cut.WaitForAssertion(() => Assert.Equal("NotAvailableShort", cut.Find(".run-lineage-actor").TextContent));
     }
 
     [Fact]

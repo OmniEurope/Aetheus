@@ -17,8 +17,8 @@ else
     <OmniPageHeader Title="@_finding.Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("policy")" /></Icon>
         <Badges>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@SeverityStyle(_finding.Severity)">@L[$"AnalysisSeverity{_finding.Severity}"]</OmniBadge>
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L[$"AnalysisFindingStatus{_finding.Status}"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(SeverityStyle(_finding.Severity)))" Fill="OmniFill.Solid" Tone="@SeverityStyle(_finding.Severity)">@L[$"AnalysisSeverity{_finding.Severity}"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L[$"AnalysisFindingStatus{_finding.Status}"]</OmniBadge>
         </Badges>
         <ActionsContent>
             @if (_canWrite)
@@ -32,6 +32,7 @@ else
         <Tabs>
             <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dashboard"))" /></Icon><ChildContent>
                 <OmniCard Class="analysis-finding-summary-card">
+                    <OmniStack>
                     @* The icon sits on the middle of the title it marks, not at the top of the
                        title and the message together. *@
                     <div class="analysis-finding-problem">
@@ -45,7 +46,8 @@ else
                     </div>
                     @if (ShownOccurrence is { } source)
                     {
-                        <OmniCard Class="omni-u-mt-md analysis-source-card">
+                        <OmniCard Class="analysis-source-card">
+                            <OmniStack>
                             <div class="analysis-source-heading">
                                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisExactLocation"]</OmniHeading>
                             </div>
@@ -62,7 +64,7 @@ else
                                     <code>@source.FilePath</code>
                                     @if (source.StartLine is not null)
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@($"{L["Line"]} {LocationRange(source)}")</OmniBadge>
+                                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Info">@($"{L["Line"]} {LocationRange(source)}")</NumberBadge>
                                     }
                                     @if (HasNavigableFile(source))
                                     {
@@ -74,7 +76,7 @@ else
                                     @* The passage keeps the file's own line numbers (OE
                                        FirstLineNumber). *@
                                     <OmniCodeViewer Code="@excerpt.Code" Title="@ExcerptTitle(excerpt)" FirstLineNumber="@excerpt.FirstLine"
-                                                    HighlightedLines="@excerpt.HighlightedLines" ShowWrapToggle="false" Class="omni-u-mt-sm" />
+                                                    HighlightedLines="@excerpt.HighlightedLines" ShowWrapToggle="false" />
                                 }
                             }
                             <div class="analysis-source-metadata">
@@ -104,7 +106,7 @@ else
                             @if (!string.IsNullOrWhiteSpace(source.Message)
                                 && !string.Equals(source.Message, _finding.Message, StringComparison.Ordinal))
                             {
-                                <OmniCodeBlock Code="@source.Message" Title="@L["AnalysisScannerMessage"]" Wrap="true" Class="omni-u-mt-md analysis-source-excerpt code-block-bounded" />
+                                <OmniCodeBlock Code="@source.Message" Title="@L["AnalysisScannerMessage"]" Wrap="true" Class="analysis-source-excerpt code-block-bounded" />
                             }
                             <div class="analysis-source-links">
                                 <span>@L["Report"] #@source.AnalysisReportId</span>
@@ -113,9 +115,10 @@ else
                                     <OmniLink Href="@($"pipelines/runs/{source.PipelineRunId}")">@($"{L["PipelineRun"]} #{source.PipelineRunId}")</OmniLink>
                                 }
                             </div>
+                            </OmniStack>
                         </OmniCard>
                     }
-                    <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-md">
+                    <OmniRow Gap="OmniSpacing.Large">
                         <OmniColumn Span="12" MediumSpan="6"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["AnalysisRule"]</OmniText><OmniText Element="OmniTextElement.Paragraph">@_finding.RuleId</OmniText></OmniColumn>
                         <OmniColumn Span="12" MediumSpan="6"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">CWE</OmniText><OmniText Element="OmniTextElement.Paragraph">@(_finding.Cwe ?? L["NotAvailable"])</OmniText></OmniColumn>
                         <OmniColumn Span="12" MediumSpan="6"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["FirstSeen"]</OmniText><OmniText Element="OmniTextElement.Paragraph">@_finding.FirstSeenAt.ToString("g")</OmniText></OmniColumn>
@@ -123,8 +126,9 @@ else
                     </OmniRow>
                     @if (!string.IsNullOrWhiteSpace(_finding.HelpUri))
                     {
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OpenHelp" Class="omni-u-mt-md"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Documentation"]</span></ChildContent></OmniButton>
+                        <OmniStack Orientation="OmniOrientation.Horizontal"><OmniButton Variant="OmniButtonVariant.Primary" OnClick="OpenHelp"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Documentation"]</span></ChildContent></OmniButton></OmniStack>
                     }
+                    </OmniStack>
                 </OmniCard>
             </ChildContent></OmniTabsItem>
 
@@ -138,7 +142,7 @@ else
                         @* STD-BTN detection 11: CopyAiPrompt visible, the other actions in the menu; the preview is a pressed/unpressed toggle. *@
                         <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="TogglePromptPreview" aria-pressed="@(_showPromptPreview ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("visibility")" /></Icon><ChildContent><span>@L["AnalysisPromptPreview"]</span></ChildContent></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyPromptAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["CopyAiPrompt"]</span></ChildContent></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyPromptAsync" title="@L["CopyAiPrompt"]" Label="@L["CopyAiPrompt"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             <OmniOverflowMenu Label="@L["MoreActions"]">
                                 <OmniMenuItem OnClick="DownloadPromptAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent>@L["DownloadMarkdown"]</ChildContent></OmniMenuItem>
                             </OmniOverflowMenu>
@@ -165,14 +169,10 @@ else
             @if (ShowsDecisionTab)
             {
             <OmniTabsItem Key="decisions" Title="@L["AnalysisDecision"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("gavel"))" /></Icon><ChildContent>
+                <OmniStack>
                 @if (_canAdmin)
                 {
                     <OmniCard Class="analysis-decision-card">
-                        <div class="analysis-decision-heading">
-                            <span class="analysis-decision-icon"><OmniIcon Name="OmniIconName.Gavel" /></span>
-                            @* No arbitration instruction under the title. *@
-                            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisDecision"]</OmniHeading>
-                        </div>
                         <div class="analysis-decision-form"><OmniTemplateForm TModel="DecisionFormModel" Model="@_decision" OnValidSubmit="@SaveDecisionAsync">
                             <OmniDataAnnotationsValidator Localizer="@L" />
                             <div class="analysis-decision-layout">
@@ -229,10 +229,11 @@ else
                         </OmniTemplateForm></div>
                     </OmniCard>
                 }
-                <OmniHeading Level="OmniHeadingLevel.H5" Class="@(_canAdmin ? "omni-u-mt-lg" : "omni-u-m-0 omni-u-mb-md")">@L["AnalysisDecisionHistory"]</OmniHeading>
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["AnalysisDecisionHistory"]</OmniHeading>
                 <OmniDataGrid FillAvailableHeight="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" Items="@_decisions" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AnalysisFindingDecisionDto" EmptyText="@L["NoRecords"]" Class="analysis-table aetheus-grid-fullheight">
-                    <Columns><OmniDataGridColumn Frozen="true" TItem="AnalysisFindingDecisionDto" Property="Status" Title="@L["Status"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText"><Template Context="item"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@DecisionStatusBadgeStyle(item.Status)">@DecisionStatusText(item.Status)</OmniBadge></Template></OmniDataGridColumn><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="Reason" Truncate="true" Title="@L["Reason"]" Filterable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" /></Columns>
+                    <Columns><OmniDataGridColumn Frozen="true" TItem="AnalysisFindingDecisionDto" Property="Status" Title="@L["Status"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText"><Template Context="item"><OmniBadge Icon="@(BadgeIcon.ForState(DecisionStatusBadgeStyle(item.Status)))" Fill="OmniFill.Solid" Tone="@DecisionStatusBadgeStyle(item.Status)">@DecisionStatusText(item.Status)</OmniBadge></Template></OmniDataGridColumn><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="Reason" Truncate="true" Title="@L["Reason"]" Filterable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" /><OmniDataGridColumn TItem="AnalysisFindingDecisionDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" FormatString="{0:g}" Filterable="true" /></Columns>
                 </OmniDataGrid>
+                </OmniStack>
             </ChildContent></OmniTabsItem>
             }
         </Tabs>

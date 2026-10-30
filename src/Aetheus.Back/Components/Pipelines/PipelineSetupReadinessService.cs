@@ -12,8 +12,11 @@ public sealed partial class PipelineSetupReadinessService(
     IGitLightRepository gitRepositories,
     IPipelineTemplateResolver templateResolver,
     IPipelineRequirementsChecker requirements,
+    IProjectConfigRepositoryService configRepository,
     ILogger<PipelineSetupReadinessService> logger) : IPipelineSetupReadinessService
 {
+    private readonly PipelineEnvTemplateNames _envTemplateNames = new(configRepository, git, logger);
+
     /// <summary>
     /// The generic templates require no file of the project (ADR-050): its commands are declared in its
     /// pipeline. A pipeline that still calls a script under <c>.pipeline/scripts/</c> in its own shell
@@ -31,7 +34,7 @@ public sealed partial class PipelineSetupReadinessService(
     {
         ArgumentNullException.ThrowIfNull(templateNames);
 
-        var definitions = await LoadSelectedDefinitionsAsync(templateNames, ct).ConfigureAwait(false);
+        var definitions = await LoadSelectedDefinitionsAsync(templateNames, projectId, ct).ConfigureAwait(false);
         // The wizard writes no command: the templates' defaults are what the new pipelines will run.
         // Nothing exists yet to link to: a template is named by its own definition.
         var owners = definitions.Select(definition => ((int?)null, definition.Name)).ToList();
@@ -138,21 +141,27 @@ public sealed partial class PipelineSetupReadinessService(
     /// <summary>
     /// Flattens every selected template into its stages. A template name the instance does not have
     /// is skipped rather than reported: the wizard cannot select one, and inventing a finding for it
-    /// would put a message on screen that no user action can clear.
+    /// would put a message on screen that no user action can clear. A name resolves as the template
+    /// resolver will run it (R-78): the project's organization's own template, otherwise the delivery
+    /// template the platform shares; never another organization's.
     /// </summary>
     private async Task<List<PipelineYamlDefinition>> LoadSelectedDefinitionsAsync(
         IReadOnlyList<string> templateNames,
+        int projectId,
         CancellationToken ct)
     {
-        var summaries = await templates.GetTemplatesAsync(ct).ConfigureAwait(false);
+        var projectOrganizationId = await pipelines.GetPipelineOwnerOrganizationIdAsync(
+            projectId, null, null, ct).ConfigureAwait(false);
         var definitions = new List<PipelineYamlDefinition>();
         foreach (var name in templateNames.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var summary = summaries.Find(item =>
-                string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (summary is null) continue;
+            var found = (projectOrganizationId is { } organizationId
+                    ? await pipelines.FindTemplateByNameAsync(name, organizationId, ct).ConfigureAwait(false)
+                    : null)
+                ?? await pipelines.FindSharedTemplateByNameAsync(name, ct).ConfigureAwait(false);
+            if (found is null) continue;
 
-            var template = await templates.GetTemplateAsync(summary.Id, ct).ConfigureAwait(false);
+            var template = await templates.GetTemplateAsync(found.Id, ct).ConfigureAwait(false);
             if (template is null) continue;
 
             var definition = YamlParsingHelper.ParseAndValidate(template.YamlContent, logger);
@@ -257,7 +266,14 @@ public sealed partial class PipelineSetupReadinessService(
             // empty value is accepted, so that entry is optional for this pipeline and never "to fill".
             var emptyLibraryKeys = emptyOfDefinition.Where(value => value.Kind == PipelineRequirementsChecker.LibraryKind)
                 .Select(value => value.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            foreach (var key in PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(definition, emptyLibraryKeys).Keys)
+            // R-68: the environment sample reads its variables as #{NAME}#; an empty entry it asks for is as much a
+            // value to fill as one read as $(NAME), the run refusing it by name.
+            var consumedKeys = PipelineUnresolvedVariableGuard.FindConsumedEmptyLibraryKeys(definition, emptyLibraryKeys).Keys.ToList();
+            if (emptyLibraryKeys.Count > 0)
+                consumedKeys.AddRange((await _envTemplateNames.ReadAsync(definition, projectId, ct).ConfigureAwait(false))
+                    .Where(name => emptyLibraryKeys.Contains(name) && !consumedKeys.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    .ToList());
+            foreach (var key in consumedKeys)
             {
                 var value = emptyOfDefinition.First(item => item.Kind == PipelineRequirementsChecker.LibraryKind
                     && string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase));

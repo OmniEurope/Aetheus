@@ -1,0 +1,82 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Fixed-purpose root-owned READ-ONLY helper, invoked via /etc/sudoers.d/aetheus-apache (NOPASSWD) as
+# "aetheus-apache-read-site read": one fixed word, the path of one Apache site file on stdin, never on the command
+# line. It prints that file on stdout and changes nothing.
+#
+# Why it exists: certbot writes its <site>-le-ssl.conf as root with mode 0600, and the agent account cannot read
+# it. The project-deletion operation must read every enabled site to know whether one still uses a certificate
+# (live/<host>/) or a Define before it deletes anything; a site it cannot read blocks the deletion.
+#
+# What it accepts: exactly /etc/apache2/sites-enabled/<name> or /etc/apache2/sites-available/<name>, <name> being a
+# plain file name (letters, digits, dot, underscore, dash; no slash, so no traversal). A sites-enabled entry is a
+# link to sites-available: the link is followed, and the file it reaches must itself lie directly in one of those two
+# directories and be a regular file of at most 1 MiB. The check is made on the OPEN file (/proc/self/fd/3), so a link
+# the agent swaps between the check and the read cannot send the read elsewhere (the agent may create entries in
+# those directories). The open runs in a child under timeout(1): a FIFO swapped in after the kind check would
+# otherwise block for ever. Nothing else is readable through this helper.
+set -u
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+LC_ALL=C
+export LC_ALL
+
+SITES_AVAILABLE=/etc/apache2/sites-available
+SITES_ENABLED=/etc/apache2/sites-enabled
+MAX_BYTES=1048576
+OPEN_TIMEOUT=10
+NAME=aetheus-apache-read-site
+
+refuse() {
+    echo "$NAME: $1" >&2
+    exit 2
+}
+
+# Child of the read below ("sh $0 --open <path>", never reachable through sudo, whose grant is the one word "read").
+if [ "${1:-}" = --open ]; then
+    [ "$#" -eq 2 ] || exit 2
+    exec 3< "$2" || { echo "$NAME: $2 cannot be opened" >&2; exit 1; }
+    real="$(readlink -f /proc/self/fd/3)"
+    case "$real" in
+        "$SITES_AVAILABLE"/*/*|"$SITES_ENABLED"/*/*) echo "$NAME: $2 resolves into a sub-directory: refused" >&2; exit 1 ;;
+        "$SITES_AVAILABLE"/?*|"$SITES_ENABLED"/?*) ;;
+        *) echo "$NAME: $2 resolves outside the Apache site directories: refused" >&2; exit 1 ;;
+    esac
+    case "$(stat -L -c %F /proc/self/fd/3)" in
+        "regular file"|"regular empty file") ;;
+        *) echo "$NAME: $2 is not a regular file: refused" >&2; exit 1 ;;
+    esac
+    size="$(stat -L -c %s /proc/self/fd/3)"
+    [ "$size" -le "$MAX_BYTES" ] || { echo "$NAME: $2 is larger than $MAX_BYTES bytes: refused" >&2; exit 1; }
+    cat <&3
+    exit $?
+fi
+
+[ "$#" -eq 1 ] && [ "$1" = read ] || refuse "usage: $NAME read (the site file path on stdin)"
+
+path=''
+IFS= read -r path || true
+extra=''
+if IFS= read -r extra; then refuse "exactly one path is expected on stdin"; fi
+
+case "$path" in
+    "$SITES_ENABLED"/*) name="${path#"$SITES_ENABLED"/}" ;;
+    "$SITES_AVAILABLE"/*) name="${path#"$SITES_AVAILABLE"/}" ;;
+    *) refuse "the path is not a file of $SITES_ENABLED or $SITES_AVAILABLE" ;;
+esac
+# A letter or digit first (never a dash, so never an option), then letters, digits, dot, underscore or dash.
+case "$name" in
+    ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) refuse "invalid site file name" ;;
+esac
+[ "${#name}" -le 128 ] || refuse "invalid site file name"
+
+# The kind is read without opening (a FIFO or a device is never opened here).
+case "$(stat -L -c %F "$path" 2>/dev/null)" in
+    "regular file"|"regular empty file") ;;
+    *) echo "$NAME: $path is not a readable regular file" >&2; exit 1 ;;
+esac
+
+timeout -k 1 "$OPEN_TIMEOUT" sh "$0" --open "$path"
+rc=$?
+[ "$rc" -ne 124 ] || echo "$NAME: $path did not open within ${OPEN_TIMEOUT}s" >&2
+exit "$rc"

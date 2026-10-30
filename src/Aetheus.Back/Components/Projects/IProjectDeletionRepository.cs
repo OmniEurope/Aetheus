@@ -24,4 +24,8 @@ public interface IProjectDeletionRepository
     /// batches. The caller holds the transaction: nothing here commits on its own.
     /// </summary>
     Task DeleteAsync(ProjectDeletionScope scope, CancellationToken ct = default);
+
+    /// <summary>Recette R-51 (ADR-058): marks the project deleted, waiting for its server cleanup, at
+    /// <paramref name="at"/> unless it already is. False when the project does not exist.</summary>
+    Task<bool> MarkDeletionPendingAsync(int projectId, DateTime at, CancellationToken ct = default);
 }

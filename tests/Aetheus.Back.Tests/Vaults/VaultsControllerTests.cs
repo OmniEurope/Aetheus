@@ -16,6 +16,9 @@ public class VaultsControllerTests
 
     public VaultsControllerTests()
     {
+        // ADR-059: the caller's organization lets it give a vault to the project (the denial has its own test).
+        _authzMock.CanOwnAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new VaultsController(_serviceMock, _authzMock);
         _sut.ControllerContext = new ControllerContext
         {

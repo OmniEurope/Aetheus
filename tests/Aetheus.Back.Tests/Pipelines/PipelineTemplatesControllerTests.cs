@@ -27,8 +27,8 @@ public class PipelineTemplatesControllerTests
                 Aetheus.Shared.Components.Auth.Permission.Read,
                 Arg.Any<CancellationToken>())
             .Returns((List<int>?)null);
-        _authz.GetUserOrganizationIdsAsync(
-                Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+        _authz.GetOrganizationIdsWithPermissionAsync(
+                Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Aetheus.Shared.Components.Auth.ResourceType.PipelineTemplate, Aetheus.Shared.Components.Auth.Permission.Write, Arg.Any<CancellationToken>())
             .Returns([1]);
         _sut = new PipelineTemplatesController(_templateService, _authz);
         _sut.ControllerContext = new ControllerContext
@@ -337,7 +337,7 @@ public class PipelineTemplatesControllerTests
     [Fact]
     public async Task ImportTemplate_ForAUserWithoutOrganization_IsForbidden()
     {
-        _authz.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+        _authz.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Aetheus.Shared.Components.Auth.ResourceType.PipelineTemplate, Aetheus.Shared.Components.Auth.Permission.Write, Arg.Any<CancellationToken>())
             .Returns([]);
 
         Assert.IsType<ForbidResult>((await _sut.ImportTemplate(YamlFile("name: ci"), TestContext.Current.CancellationToken)).Result);

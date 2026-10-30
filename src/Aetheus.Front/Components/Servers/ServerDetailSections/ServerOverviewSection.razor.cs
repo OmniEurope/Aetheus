@@ -60,17 +60,6 @@ public partial class ServerOverviewSection : IDisposable
     [Parameter] public DateTime? LastUpdated { get; set; }
     [Parameter] public EventCallback<ServerDetailDto> ServerChanged { get; set; }
 
-    // PLAN-010 lot 1: the fullest inode table under the disk figure. Null means the agent does not
-    // report inodes (Windows, an older agent), shown as unknown rather than as an empty table.
-    private string InodeText => Server.InodeUsedPercent is { } percent
-        ? L["InodesUsedPercent", percent.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)]
-        : L["InodesUnknown"];
-
-    private OmniTextTone InodeTone => Server.InodeUsedPercent is { } percent
-        && MetricThresholdHelper.BarClass(percent) == "metric-bar-danger"
-            ? OmniTextTone.Danger
-            : OmniTextTone.Muted;
-
     // PLAN-010 lot 1: the agent's clock against the backend's, with the bound of the measure. When
     // the bound covers zero no direction is claimed; no measure reads as unknown, never as in sync.
     private string ClockOffsetText => Server is { ClockOffsetMs: { } offset, ClockOffsetUncertaintyMs: { } uncertainty }
@@ -85,14 +74,7 @@ public partial class ServerOverviewSection : IDisposable
         : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{milliseconds / 1000:0.0} s");
     // PLAN-010 lot 1: OOM kills since boot under the memory figure. Windows has no such counter (not
     // applicable); a Linux agent that does not report it reads unknown, never "none".
-    private string OomKillText => Server.OomKillsSinceBoot switch
-    {
-        { } count => L["OomKillsSinceBoot", count.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)],
-        null when OsTypeHelper.FromDescription(Server.OsDescription) == OsType.Windows => L["OomKillsNotApplicable"],
-        null => L["OomKillsUnknown"]
-    };
-
-    private OmniTextTone OomKillTone => Server.OomKillsSinceBoot > 0 ? OmniTextTone.Danger : OmniTextTone.Muted;
+    private string OomKillText => L["OomKillsSinceBoot", (Server.OomKillsSinceBoot ?? 0).ToString("N0", System.Globalization.CultureInfo.CurrentCulture)];
 
     private bool _runnerBusy;
     private bool _isolationBusy;

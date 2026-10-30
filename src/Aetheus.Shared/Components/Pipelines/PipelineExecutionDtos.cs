@@ -30,6 +30,11 @@ public sealed record PipelinePreflightDto
 {
     public List<PreflightStageDto> Stages { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
+
+    /// <summary>R-72: what the quality gate holds against the release a deployment pipeline is launched
+    /// with (its <c>candidateVersion</c>). Empty for any other launch, and for a release with nothing
+    /// against it. A launch may confirm them and go on with <see cref="PipelineRunRequest.GateOverride"/>.</summary>
+    public List<DeploymentGateWarningDto> GateWarnings { get; init; } = [];
 }
 
 public sealed record PreflightStageDto
@@ -96,17 +101,4 @@ public sealed record PreflightCheckDto
 
     /// <summary>The refusal text when <see cref="Satisfied"/> is false.</summary>
     public string? Detail { get; init; }
-}
-
-/// <summary>Everything the blocking preflight concluded: what it refused, what it verified, and what
-/// it noted without refusing.</summary>
-public sealed record PipelinePreflightOutcomeDto
-{
-    public List<string> Problems { get; init; } = [];
-    public List<PreflightCheckDto> Checks { get; init; } = [];
-
-    /// <summary>Records an undeclared observed listener under observed_port_policy: warning without
-    /// refusing the run. Keep it separate from <see cref="Problems"/> so a warning cannot be
-    /// mistaken for a refusal.</summary>
-    public List<string> Warnings { get; init; } = [];
 }

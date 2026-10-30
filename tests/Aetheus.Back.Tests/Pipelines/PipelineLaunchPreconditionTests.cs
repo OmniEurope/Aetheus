@@ -150,7 +150,7 @@ public sealed class PipelineLaunchPreconditionTests
             .Returns(requiredByContract);
     }
 
-    private Task<PipelinePreflightOutcomeDto> LaunchAsync(PipelineYamlDefinition definition, string? commit = Commit)
+    private Task<PipelinePreflightOutcome> LaunchAsync(PipelineYamlDefinition definition, string? commit = Commit)
     {
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (commit is not null) variables["AETHEUS_SOURCE_COMMIT"] = commit;
@@ -164,7 +164,10 @@ public sealed class PipelineLaunchPreconditionTests
     {
         Runner(AgentProtocol.MaximumSupportedVersion + 1, AgentCapabilities.PipelineBuild);
 
-        var problem = Assert.Single((await LaunchAsync(Build())).Problems);
+        var found = Assert.Single((await LaunchAsync(Build())).Problems);
+        Assert.Equal(PipelineProblemCodes.RunnerCannotTakeStage, found.Code);
+        Assert.Equal("'vps2577917'", found.Parameters["runners"]);
+        var problem = found.English;
 
         Assert.Contains("Stage 'Build'", problem, StringComparison.Ordinal);
         Assert.Contains("'vps2577917' reports agent protocol", problem, StringComparison.Ordinal);
@@ -176,7 +179,7 @@ public sealed class PipelineLaunchPreconditionTests
     {
         Runner(AgentProtocol.CurrentVersion, AgentCapabilities.ShellExecution);
 
-        var problem = Assert.Single((await LaunchAsync(Build())).Problems);
+        var problem = Assert.Single((await LaunchAsync(Build())).Problems).English;
 
         Assert.Contains($"does not advertise {AgentCapabilities.PipelineBuild}", problem, StringComparison.Ordinal);
     }
@@ -198,7 +201,10 @@ public sealed class PipelineLaunchPreconditionTests
         ChildExists(Qa());
         RetainedV1(browserRuntimePresent: false, requiredByContract: true);
 
-        var problem = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        var found = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        Assert.Equal(PipelineProblemCodes.ReleaseArtifactRequiredByContract, found.Code);
+        Assert.Equal("aetheus-qa", found.Parameters["chain"]);
+        var problem = found.English;
 
         Assert.Contains("aetheus-qa", problem, StringComparison.Ordinal);
         Assert.Contains("Restore exact retained V-1 browser runtime", problem, StringComparison.Ordinal);
@@ -212,7 +218,9 @@ public sealed class PipelineLaunchPreconditionTests
         ChildExists(Qa(allowMissing: false));
         RetainedV1(browserRuntimePresent: false, requiredByContract: false);
 
-        var problem = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        var found = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        Assert.Equal(PipelineProblemCodes.ReleaseArtifactNotRetained, found.Code);
+        var problem = found.English;
 
         Assert.DoesNotContain("allow_missing does not apply", problem, StringComparison.Ordinal);
         Assert.Contains("BrowserRuntime-artifacts", problem, StringComparison.Ordinal);
@@ -244,7 +252,10 @@ public sealed class PipelineLaunchPreconditionTests
         ChildExists(Qa(allowMissing: true));
         RetainedV1(browserRuntimePresent: true, requiredByContract: false, payloadFilePresent: false);
 
-        var problem = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        var found = Assert.Single((await LaunchAsync(Candidate())).Problems);
+        Assert.Equal(PipelineProblemCodes.ReleaseVersionArtifactPayloadMissing, found.Code);
+        Assert.Equal("2026.10.3", found.Parameters["version"]);
+        var problem = found.English;
 
         Assert.Contains("Restore exact retained V-1 browser runtime", problem, StringComparison.Ordinal);
         Assert.Contains("release 'previous-deployed' (version 2026.10.3)", problem, StringComparison.Ordinal);
@@ -294,7 +305,8 @@ public sealed class PipelineLaunchPreconditionTests
         var logger = new CapturingLogger();
         var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["AETHEUS_SOURCE_COMMIT"] = Commit };
 
-        var problems = (await BuildSut(logger).FindBlockingProblemsAsync(definition, variables, 3, 5, Ct)).Problems;
+        var problems = (await BuildSut(logger).FindBlockingProblemsAsync(definition, variables, 3, 5, Ct)).Problems
+            .Select(problem => problem.English).ToList();
 
         Assert.Equal(2, problems.Count);
         var count = Assert.Single(logger.Entries, entry => entry.Attributes.ContainsKey("ProblemCount") && !entry.Attributes.ContainsKey("Problem"));
@@ -372,7 +384,9 @@ public sealed class PipelineLaunchPreconditionTests
         var outcome = await LaunchAsync(AiReview(advisory: false));
 
         var problem = Assert.Single(outcome.Problems);
-        Assert.Equal($"AI step 'Review the last commit' in stage 'AI review': {MissingProfile}", problem);
+        Assert.Equal($"AI step 'Review the last commit' in stage 'AI review': {MissingProfile}", problem.English);
+        Assert.Equal(PipelineProblemCodes.AiStepProfileUnusable, problem.Code);
+        Assert.Equal(MissingProfile, problem.Parameters["detail"]);
         var check = Assert.Single(outcome.Checks, check => check.Kind == "ai-profile");
         Assert.False(check.Satisfied);
     }
@@ -385,7 +399,9 @@ public sealed class PipelineLaunchPreconditionTests
         var outcome = await LaunchAsync(AiReview(advisory: true));
 
         Assert.Empty(outcome.Problems);
-        var warning = Assert.Single(outcome.Warnings);
+        var warningProblem = Assert.Single(outcome.Warnings);
+        Assert.Equal(PipelineProblemCodes.AdvisoryAiStepProfileUnusable, warningProblem.Code);
+        var warning = warningProblem.English;
         Assert.Contains(MissingProfile, warning, StringComparison.Ordinal);
         Assert.Contains("advisory step will be recorded as not run", warning, StringComparison.Ordinal);
     }
@@ -398,7 +414,7 @@ public sealed class PipelineLaunchPreconditionTests
 
         var outcome = await LaunchAsync(AiReview(advisory: false, profile: null));
 
-        var problem = Assert.Single(outcome.Problems);
+        var problem = Assert.Single(outcome.Problems).English;
         Assert.Contains(NoneUsable, problem, StringComparison.Ordinal);
     }
 

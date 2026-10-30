@@ -163,7 +163,12 @@ public sealed class PipelineRunControlService(
             && await scheduler.FailUnconfirmedStageAsync(runId, refused.StageName, launcher, ct).ConfigureAwait(false))
         {
             await repo.AppendRunWarningsAsync(runId,
-                [$"Stage '{refused.StageName}' was not confirmed ({refused.Status}); the stage fails and the run's failure handlers run."],
+                [PipelineProblem.Of(
+                    refused.Status == ApprovalStatus.Rejected
+                        ? PipelineProblemCodes.StageConfirmationRejected
+                        : PipelineProblemCodes.StageConfirmationTimedOut,
+                    $"Stage '{refused.StageName}' was not confirmed ({refused.Status}); the stage fails and the run's failure handlers run.",
+                    ("stage", refused.StageName)).ToStored()],
                 ct).ConfigureAwait(false);
             return PipelineStatus.Running;
         }

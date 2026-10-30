@@ -55,11 +55,24 @@ public sealed class PipelineRunNotificationPublisherTests
     public async Task ApprovalRequested_RecordsTheApprovalEvent_WithTheOwningProject()
     {
         await _sut.PublishApprovalRequestedAsync(
-            new PipelineApprovalRequestedEvent(9, "deploy", "prod"), TestContext.Current.CancellationToken);
+            new PipelineApprovalRequestedEvent(9, "deploy", "prod", 77), TestContext.Current.CancellationToken);
 
         await _userNotifications.Received(1).RecordProjectEventAsync(
             NotificationEventTypes.PipelineApprovalRequested,
             Arg.Is<string>(json => UserNotificationService.ReadProjectId(json) == 10),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Recette R-24: the payload names the approval, so the mail's buttons open that approval and no later one of the run.</summary>
+    [Fact]
+    public async Task ApprovalRequested_CarriesTheApprovalId_ForTheMailButtons()
+    {
+        await _sut.PublishApprovalRequestedAsync(
+            new PipelineApprovalRequestedEvent(9, "deploy", "prod", 77), TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            NotificationEventTypes.PipelineApprovalRequested,
+            Arg.Is<string>(json => json.Contains("\"ApprovalId\":77", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
     }
 
@@ -83,7 +96,7 @@ public sealed class PipelineRunNotificationPublisherTests
         await publisher.PublishRunCompletedAsync(9, PipelineStatus.Failed, TestContext.Current.CancellationToken);
         await publisher.PublishRunCompletedAsync(9, PipelineStatus.Success, TestContext.Current.CancellationToken);
         await publisher.PublishApprovalRequestedAsync(
-            new PipelineApprovalRequestedEvent(9, "deploy", "prod"), TestContext.Current.CancellationToken);
+            new PipelineApprovalRequestedEvent(9, "deploy", "prod", 77), TestContext.Current.CancellationToken);
 
         await _userNotifications.ReceivedWithAnyArgs(3)
             .RecordProjectEventAsync(default!, default!, TestContext.Current.CancellationToken);

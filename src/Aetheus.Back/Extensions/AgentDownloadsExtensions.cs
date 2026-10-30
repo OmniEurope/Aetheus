@@ -250,21 +250,33 @@ internal static class AgentDownloadsExtensions
 
                 if (Directory.Exists(windowsBuildPath) && File.Exists(windowsInstallScriptPath))
                 {
-                    var windowsPackageTempPath = Path.Combine(downloadsPath, "_windows_pkg_tmp");
-                    RecreateDirectory(windowsPackageTempPath);
-                    CopyDirectoryContent(windowsBuildPath, windowsPackageTempPath);
-                    File.Copy(windowsInstallScriptPath, Path.Combine(windowsPackageTempPath, "install-agent-windows.ps1"), true);
-                    var windowsArchivePath = Path.Combine(downloadsPath, "aetheus-agent-win-x64.zip");
-                    var replacementArchivePath = Path.Combine(
-                        downloadsPath,
-                        $"_aetheus-agent-win-x64-{Guid.NewGuid():N}.zip");
-                    ZipFile.CreateFromDirectory(
-                        windowsPackageTempPath,
-                        replacementArchivePath,
-                        CompressionLevel.Optimal,
-                        includeBaseDirectory: false);
-                    File.Move(replacementArchivePath, windowsArchivePath, overwrite: true);
-                    Directory.Delete(windowsPackageTempPath, true);
+                    // The lock above is per process: two processes sharing this tree (two test runs, a
+                    // test run beside the dev instance) each stage in their own folder, and a failed
+                    // attempt leaves neither its folder nor its archive behind. The staging folder lives
+                    // in the temp directory, never under wwwroot: the source-scanning guards of a test
+                    // suite running at the same time walk this tree and would meet a folder that vanishes
+                    // mid-scan. The archive itself is written beside its final name, so the move that
+                    // replaces it stays on one volume and a concurrent download never reads half a zip.
+                    var attempt = Guid.NewGuid().ToString("N");
+                    var windowsPackageTempPath = Path.Combine(Path.GetTempPath(), $"aetheus-windows-pkg-{attempt}");
+                    var replacementArchivePath = Path.Combine(downloadsPath, $"_aetheus-agent-win-x64-{attempt}.zip");
+                    try
+                    {
+                        RecreateDirectory(windowsPackageTempPath);
+                        CopyDirectoryContent(windowsBuildPath, windowsPackageTempPath);
+                        File.Copy(windowsInstallScriptPath, Path.Combine(windowsPackageTempPath, "install-agent-windows.ps1"), true);
+                        ZipFile.CreateFromDirectory(
+                            windowsPackageTempPath,
+                            replacementArchivePath,
+                            CompressionLevel.Optimal,
+                            includeBaseDirectory: false);
+                        ReplaceArchive(replacementArchivePath, Path.Combine(downloadsPath, "aetheus-agent-win-x64.zip"));
+                    }
+                    finally
+                    {
+                        if (Directory.Exists(windowsPackageTempPath)) Directory.Delete(windowsPackageTempPath, true);
+                        if (File.Exists(replacementArchivePath)) File.Delete(replacementArchivePath);
+                    }
                 }
             }
         }
@@ -397,6 +409,26 @@ internal static class AgentDownloadsExtensions
         await using var stream = File.OpenRead(filePath);
         var hash = await SHA256.HashDataAsync(stream).ConfigureAwait(false);
         return Convert.ToHexStringLower(hash);
+    }
+
+    /// <summary>Moves the freshly built archive over the served one. On Windows the target stays locked
+    /// while another host process of the same checkout (parallel test hosts, a download in flight) holds
+    /// it open, so the move is retried briefly; a lock that outlasts the retries still fails startup.</summary>
+    private static void ReplaceArchive(string sourcePath, string targetPath)
+    {
+        const int attempts = 10;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(sourcePath, targetPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (attempt < attempts && ex is UnauthorizedAccessException or IOException)
+            {
+                Thread.Sleep(TimeSpan.FromMilliseconds(200 * attempt));
+            }
+        }
     }
 
     private static void RecreateDirectory(string path)

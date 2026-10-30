@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* "Copy all" button plus the consolidated combined command. *@
-<div class="wizard-step-section">
-    <OmniButton Variant="OmniButtonVariant.Secondary" Class="omni-u-mb-sm" OnClick="@CopyAllAsync">
-        <Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent>@L["WizardCopyAll"]</ChildContent>
+<OmniStack Gap="OmniSpacing.Small" Class="wizard-step-section">
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAllAsync" title="@L["WizardCopyAll"]" Label="@L["WizardCopyAll"]">
+        <Icon><OmniIcon Name="OmniIconName.Copy" /></Icon>
     </OmniButton>
     <WizardCodeBlock Code="@Combined" InlineLine="true" />
-</div>
+</OmniStack>

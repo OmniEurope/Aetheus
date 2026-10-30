@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerTeamspeakSection : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -463,7 +464,7 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
     {
         await _operations.RunOperationAsync(
             () => Api.Teamspeak.GetTeamspeakLogsAsync(ServerId, new TeamspeakLogRequest { Lines = _logLines }),
-            L["Logs"]);
+            L["Logs"], settle: false);
     }
 
     private async Task CreateChannelAsync()
@@ -521,9 +522,9 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed == true)
         {
-            await _operations.RunOperationAsync(
+            await Veil.RunAsync(() => _operations.RunOperationAsync(
                 () => Api.Teamspeak.DeleteTeamspeakChannelAsync(ServerId, ch.Id),
-                L["DeleteChannel"]);
+                L["DeleteChannel"]));
         }
     }
 
@@ -564,9 +565,9 @@ public partial class ServerTeamspeakSection : IAsyncDisposable
             L["Unban"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Unban"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
-        await _operations.RunOperationAsync(
+        await Veil.RunAsync(() => _operations.RunOperationAsync(
             () => Api.Teamspeak.UnbanTeamspeakClientAsync(ServerId, banId),
-            L["Unban"]);
+            L["Unban"]));
     }
 
     private Task LoadClientsDataAsync(GridLoadArgs args) => _data.LoadClientsAsync(args);

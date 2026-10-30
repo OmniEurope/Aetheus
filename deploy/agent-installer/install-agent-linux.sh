@@ -65,6 +65,8 @@ SUDOERS_FILE="/etc/sudoers.d/aetheus-agent"
 APACHE_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-apache"
 APACHE_CONFIGTEST_HELPER_PATH="/usr/local/lib/aetheus/aetheus-apache-configtest"
 APACHE_RELOAD_HELPER_PATH="/usr/local/lib/aetheus/aetheus-apache-reload"
+APACHE_MODULE_HELPER_PATH="/usr/local/lib/aetheus/aetheus-apache-module"
+APACHE_READ_SITE_HELPER_PATH="/usr/local/lib/aetheus/aetheus-apache-read-site"
 CERTBOT_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-certbot"
 # Items #10.2/#10.3 - same recipe as Apache for RKHunter scan/update/propupd.
 RKHUNTER_MANAGE_SUDOERS_FILE="/etc/sudoers.d/aetheus-rkhunter"
@@ -555,7 +557,7 @@ MODULE_SERVER_MANAGEMENT=0
 MODULE_DEPLOYMENT=0
 ENABLE_DEPLOYMENT=0        # derived from MODULE_DEPLOYMENT (and preserved on --upgrade)
 DOTNET_CHANNEL="10.0"
-DOTNET_RUNTIME_VERSION="10.0.13"
+DOTNET_RUNTIME_VERSION="10.0.14"
 DOTNET_INSTALLER_URL="https://raw.githubusercontent.com/dotnet/install-scripts/da3ce11ba63f3dbb0fb835d41bda2665d5c48e84/src/dotnet-install.sh"
 DOTNET_INSTALLER_SHA256="082f7685e156738a1b2e2ed8381a621870d4ce8e8c59278034556f05c186eb2e"
 
@@ -1187,6 +1189,9 @@ derive_existing_posture() {
 # Clear only agent state during reinstallation and preserve the deployment tree so delivered
 # applications retain their releases and secrets; keep the work directory for idempotent ownership
 # setup. See docs/retrospectives/RET-001-erreurs-pipelines-aetheus.md.
+# The projects directory holds the state of the blue-green deployments (live colour, transaction
+# journal, lock: STATE_DIR=$WORK_DIR/projects/<slug>-<environment>, R-97): wiping it would make the
+# next deployment forget which colour is live, so it stays too.
 purge_agent_work_dir() {
     [ -d "$WORK_DIR" ] || return 0
     [ -n "$(ls -A "$WORK_DIR" 2>/dev/null)" ] || return 0
@@ -1195,6 +1200,10 @@ purge_agent_work_dir() {
         [ -e "$_entry" ] || [ -L "$_entry" ] || continue
         if [ "$_entry" = "$DEPLOY_BASE_DIR" ]; then
             log_info "  Keeping the deployment tree ($DEPLOY_BASE_DIR)."
+            continue
+        fi
+        if [ "$_entry" = "$WORK_DIR/projects" ]; then
+            log_info "  Keeping the project state directories ($WORK_DIR/projects)."
             continue
         fi
         rm -rf "$_entry" 2>/dev/null || true
@@ -1247,12 +1256,26 @@ write_apache_manage_sudoers() {
     chown root:root "$APACHE_RELOAD_HELPER_PATH"
     chmod 755 "$APACHE_RELOAD_HELPER_PATH"
 
+    # R-119: enable or disable a module. One fixed word on the command line, the module name on stdin,
+    # re-validated by the helper, which rolls the change back when configtest or the restart fails.
+    render_host_config apache/aetheus-apache-module "$APACHE_MODULE_HELPER_PATH"
+    chown root:root "$APACHE_MODULE_HELPER_PATH"
+    chmod 755 "$APACHE_MODULE_HELPER_PATH"
+
+    # Read-only: prints one site file of sites-enabled or sites-available that the agent account cannot open (certbot
+    # writes <site>-le-ssl.conf as root, 0600), so the project deletion can tell whether a site still uses a certificate.
+    render_host_config apache/aetheus-apache-read-site "$APACHE_READ_SITE_HELPER_PATH"
+    chown root:root "$APACHE_READ_SITE_HELPER_PATH"
+    chmod 755 "$APACHE_READ_SITE_HELPER_PATH"
+
     render_host_config apache/sudoers.d/aetheus-apache "$APACHE_MANAGE_SUDOERS_FILE"
     chmod 440 "$APACHE_MANAGE_SUDOERS_FILE"
     visudo -cf "$APACHE_MANAGE_SUDOERS_FILE" || {
         log_error "Invalid Apache-manage sudoers syntax"
         rm -f "$APACHE_MANAGE_SUDOERS_FILE"
         rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
+        rm -f "$APACHE_MODULE_HELPER_PATH"
+        rm -f "$APACHE_READ_SITE_HELPER_PATH"
         rm -f "$APACHE_RELOAD_HELPER_PATH"
         exit 1
     }
@@ -1413,6 +1436,8 @@ apply_sudoers() {
     else
         rm -f "$APACHE_MANAGE_SUDOERS_FILE"
         rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
+        rm -f "$APACHE_MODULE_HELPER_PATH"
+        rm -f "$APACHE_READ_SITE_HELPER_PATH"
     fi
     # Certbot management: root-owned webroot ACME helper + NOPASSWD sudoers.
     if [ "$ENABLE_CERTBOT_MANAGE" -eq 1 ]; then
@@ -2382,6 +2407,8 @@ if [ "$MODE" = "purge" ]; then
         rm -f "$APACHE_MANAGE_SUDOERS_FILE"
     fi
     rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
+    rm -f "$APACHE_MODULE_HELPER_PATH"
+    rm -f "$APACHE_READ_SITE_HELPER_PATH"
     if [ -f "$RKHUNTER_MANAGE_SUDOERS_FILE" ]; then
         log_info "Removing RKHunter-manage sudoers file..."
         rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"
@@ -2704,6 +2731,8 @@ if [ -f "$APACHE_MANAGE_SUDOERS_FILE" ]; then
     rm -f "$APACHE_MANAGE_SUDOERS_FILE"
 fi
 rm -f "$APACHE_CONFIGTEST_HELPER_PATH"
+rm -f "$APACHE_MODULE_HELPER_PATH"
+rm -f "$APACHE_READ_SITE_HELPER_PATH"
 if [ -f "$RKHUNTER_MANAGE_SUDOERS_FILE" ]; then
     log_info "  Removing old RKHunter-manage sudoers rules..."
     rm -f "$RKHUNTER_MANAGE_SUDOERS_FILE" "$RKHUNTER_HELPER_PATH"

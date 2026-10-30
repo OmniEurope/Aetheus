@@ -45,6 +45,7 @@ internal static class PipelineStepStopReason
         {
             TaskFailureCodes.AgentSessionReplaced => l["StepStopAgentSessionReplaced"].Value,
             TaskFailureCodes.InfrastructureMismatch => l["StepStopInfrastructureMismatch"].Value,
+            TaskFailureCodes.ConfigurationIncomplete => l["StepStopConfigurationIncomplete"].Value,
             TaskFailureCodes.ToolError => l["StepStopToolError"].Value,
             TaskFailureCodes.BuildFailed => l["StepStopBuildFailed"].Value,
             TaskFailureCodes.TestsFailed => l["StepStopTestsFailed"].Value,

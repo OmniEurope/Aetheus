@@ -39,40 +39,39 @@ public sealed class ServerOverviewInodeUsageTests : BunitContext
             })
             .Add(x => x.MetricsReceived, true));
 
-    private static AngleSharp.Dom.IElement InodeLine(IRenderedComponent<ServerOverviewSection> cut) =>
-        cut.FindAll("small").Single(element => element.TextContent.StartsWith("Number of files", StringComparison.Ordinal));
-
-    [Fact]
-    public void MeasuredInodes_AreShownUnderTheDisk()
+    [Theory]
+    [InlineData(42.5)]
+    [InlineData(97d)]
+    [InlineData(null)]
+    public void R_10_TheDiskTile_HasNoFileCountLineAndNoHelpMark(double? inodeUsedPercent)
     {
-        var line = InodeLine(RenderSection(42.5));
+        var cut = RenderSection(inodeUsedPercent);
 
-        Assert.Equal(string.Format(CultureInfo.CurrentCulture, "Number of files: {0}% used", 42.5.ToString("0.#", CultureInfo.CurrentCulture)),
-            line.TextContent.Trim());
-        Assert.Contains("omni-text--muted", line.ClassList);
+        Assert.DoesNotContain("Number of files", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid=file-count-help]"));
     }
 
     [Fact]
-    public void UnmeasuredInodes_ReadAsUnknown_NotZero()
+    public void R_10_TheDiskTile_WritesTheSizesAsWholeNumbers()
     {
-        Assert.Equal("Number of files: unknown", InodeLine(RenderSection(null)).TextContent.Trim());
-    }
+        var cut = Render<ServerOverviewSection>(p => p
+            .Add(x => x.Server, new ServerDetailDto
+            {
+                Id = 1,
+                Name = "vps",
+                Hostname = "vps.local",
+                Type = ServerType.Normal,
+                Status = ServerStatus.Online,
+                Tags = [],
+                Services = [],
+                DiskUsedGb = 230.6,
+                DiskTotalGb = 385.7
+            })
+            .Add(x => x.MetricsReceived, true));
 
-    [Fact]
-    public void NearlyFullInodeTable_IsShownInDanger()
-    {
-        Assert.Contains("omni-text--danger", InodeLine(RenderSection(97)).ClassList);
-    }
-
-    [Fact]
-    public void TheDiskTile_ShowsTheFreeSpaceAndAHelpMarkInPlainWords()
-    {
-        var cut = RenderSection(42.5);
-
-        Assert.Contains("60 Go free of 100 Go", cut.Markup);
-        var help = cut.Find("[data-testid='file-count-help']");
-        Assert.Contains("full of small files even when space is free", help.GetAttribute("aria-label"), StringComparison.Ordinal);
-        Assert.DoesNotContain("inode", cut.Markup, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("155 Go free of 386 Go", cut.Markup);
+        Assert.DoesNotContain("155,1", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("155.1", cut.Markup, StringComparison.Ordinal);
     }
 
     private sealed class EnglishResourceLocalizer : IStringLocalizer<AppStrings>

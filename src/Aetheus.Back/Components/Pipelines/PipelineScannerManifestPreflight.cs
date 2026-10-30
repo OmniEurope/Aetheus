@@ -13,7 +13,7 @@ public interface IPipelineScannerManifestPreflight
     /// holding one has at least one configured runner whose last report carries it; otherwise one
     /// readable refusal naming both hashes and each runner.
     /// </summary>
-    Task<string?> FindProblemAsync(
+    Task<PipelineProblem?> FindProblemAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         string? upstreamPipeline,
@@ -35,7 +35,7 @@ public sealed class PipelineScannerManifestPreflight(
     IPipelineRunnerTargetReader repo,
     IPipelineDispatchServerResolver dispatchServers) : IPipelineScannerManifestPreflight
 {
-    public async Task<string?> FindProblemAsync(
+    public async Task<PipelineProblem?> FindProblemAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         string? upstreamPipeline,
@@ -73,13 +73,17 @@ public sealed class PipelineScannerManifestPreflight(
         }
         if (unservedStages.Count == 0) return null;
 
-        return $"Scanner steps of stage(s) '{string.Join("', '", unservedStages)}' of pipeline "
+        var runners = unservedRunners.Values.OrderBy(runner => runner.Name, StringComparer.Ordinal).ToList();
+        return PipelineProblem.Of(
+            PipelineProblemCodes.ScannerManifestNotReported,
+            $"Scanner steps of stage(s) '{string.Join("', '", unservedStages)}' of pipeline "
             + $"'{definition.Name}' need an agent reporting scanner manifest {expected} (the one this backend "
             + "embeds), and no eligible runner reports it: "
-            + string.Join("; ", unservedRunners.Values.OrderBy(runner => runner.Name, StringComparer.Ordinal)
-                .Select(DescribeRunner))
+            + string.Join("; ", runners.Select(DescribeRunner))
             + ". The run would fail at its first scanner step. Update the agent from its server page "
-            + "(Update agent), then launch again once it reports the expected manifest.";
+            + "(Update agent), then launch again once it reports the expected manifest.",
+            ("stages", PipelineProblem.QuotedList(unservedStages)), ("pipeline", definition.Name),
+            ("expected", expected), ("runners", PipelineProblem.QuotedList(runners.Select(runner => runner.Name))));
     }
 
     private async Task<IReadOnlyCollection<int>> FindCandidatesAsync(

@@ -4,13 +4,13 @@
    R-48, R-49: three blocks one under the other (state of the configuration, authorized keys per account,
    recent changes), each one stacked and wrapping, so nothing sits in fixed columns on a phone. *@
 
-<OmniCard Class="omni-u-mb-lg ssh-config-card">
+<OmniCard Class="ssh-config-card">
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="omni-u-mb-md">
         <OmniIcon Name="OmniIconName.LockKey" Class="omni-u-text-muted" />
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["SshConfiguration"]</OmniText>
         @if (Status is null)
         {
-            <OmniBadge Tone="OmniTone.Neutral">@L["SshNotCollected"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Question))" Tone="OmniTone.Neutral">@L["SshNotCollected"]</OmniBadge>
         }
     </OmniStack>
 
@@ -25,11 +25,11 @@
             <OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-mb-sm">@L["SshConfigurationState"]</OmniHeading>
             <OmniDescriptionList Columns="3">
                 <OmniDescriptionItem Term="@L["SshPermitRootLogin"]" Class="ssh-setting-permitrootlogin">
-                    <OmniBadge Tone="@RootLoginTone(snapshot.PermitRootLogin.Value)">@SettingText(snapshot.PermitRootLogin)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(RootLoginTone(snapshot.PermitRootLogin.Value)))" Tone="@RootLoginTone(snapshot.PermitRootLogin.Value)">@SettingText(snapshot.PermitRootLogin)</OmniBadge>
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@SourceText(snapshot, snapshot.PermitRootLogin)</OmniText>
                 </OmniDescriptionItem>
                 <OmniDescriptionItem Term="@L["SshPasswordAuthentication"]" Class="ssh-setting-passwordauthentication">
-                    <OmniBadge Tone="@PasswordTone(snapshot.PasswordAuthentication.Value)">@SettingText(snapshot.PasswordAuthentication)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(PasswordTone(snapshot.PasswordAuthentication.Value)))" Tone="@PasswordTone(snapshot.PasswordAuthentication.Value)">@SettingText(snapshot.PasswordAuthentication)</OmniBadge>
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@SourceText(snapshot, snapshot.PasswordAuthentication)</OmniText>
                 </OmniDescriptionItem>
                 <OmniDescriptionItem Term="@L["SshAuthorizedKeysFile"]" Class="ssh-setting-authorizedkeysfile">
@@ -64,7 +64,7 @@
                                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
                                         <OmniIcon Name="OmniIconName.Key" Class="omni-u-text-muted" />
                                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 flex-1 ssh-keys-path ssh-wrap">@file.Path</OmniText>
-                                        <OmniBadge Tone="@(file.State == AuthorizedKeysFileState.Read ? OmniTone.Neutral : OmniTone.Warning)">@FileStateText(file)</OmniBadge>
+                                        <OmniBadge Icon="@(BadgeIcon.Of(file.State == AuthorizedKeysFileState.Read ? OmniIconName.Check : OmniIconName.Warning))" Tone="@(file.State == AuthorizedKeysFileState.Read ? OmniTone.Neutral : OmniTone.Warning)">@FileStateText(file)</OmniBadge>
                                     </OmniStack>
                                     @if (file.State == AuthorizedKeysFileState.Unreadable)
                                     {
@@ -99,7 +99,7 @@
                     {
                         <div class="ssh-change">
                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true">
-                                <OmniBadge Tone="@ChangeTone(change.Severity)">@ChangeSeverityText(change.Severity)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(ChangeTone(change.Severity)))" Tone="@ChangeTone(change.Severity)">@ChangeSeverityText(change.Severity)</OmniBadge>
                                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" title="@change.DetectedAt.ToString("F")">@RelativeTime.FormatAgo(L, change.DetectedAt)</OmniText>
                             </OmniStack>
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 ssh-wrap">@change.Message</OmniText>

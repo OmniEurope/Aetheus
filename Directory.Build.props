@@ -6,9 +6,9 @@
     <VersionPrefix>1.5.0</VersionPrefix>
     <!-- Central version for production runtime images and the browser runtime packs.
          Server-side test hosts keep the runtime bundled with the pinned SDK. -->
-    <AetheusRuntimeImageVersion>10.0.13</AetheusRuntimeImageVersion>
+    <AetheusRuntimeImageVersion>10.0.14</AetheusRuntimeImageVersion>
     <!-- The IL linker pack is a build tool, not a runtime target: it executes on the SDK's own
-         shared framework, so it follows the global.json FLOOR (10.0.402 bundles 10.0.13), NOT
+         shared framework, so it follows the global.json FLOOR (10.0.403 bundles 10.0.14), NOT
          AetheusRuntimeImageVersion. A newer SDK runs it by rolling forward to its own patch; the
          reverse fails: 10.0.12 under SDK 10.0.100 made `dotnet publish` fail with NETSDK1144
          (checked 2026-09-25, ADR-048). The two values are equal since the floor moved to 10.0.402
@@ -16,18 +16,18 @@
          It is pinned rather than left implicit because its version is otherwise decided by
          machine-global workload manifests and leaks into packages.lock.json, which then fails
          locked-mode restore anywhere the manifests differ. Move it with the floor in global.json. -->
-    <AetheusLinkerPackVersion>10.0.13</AetheusLinkerPackVersion>
+    <AetheusLinkerPackVersion>10.0.14</AetheusLinkerPackVersion>
     <!-- Workload set the frontend publish installs wasm-tools from (STD-WASMOPT). The WebAssembly
          runtime served to browsers (Microsoft.NETCore.App.Runtime.Mono.browser-wasm) is chosen by the
          installed wasm-tools manifest, not by the repository, so a host that installed the workload
          once kept whatever runtime it had (10.0.12 on 2026-10-17 while the images ran 10.0.13).
-         Workload set 10.0.402 carries the mono toolchain manifest 10.0.113, i.e. runtime 10.0.13 =
+         Workload set 10.0.403 carries the mono toolchain manifest 10.0.114, i.e. runtime 10.0.14 =
          AetheusRuntimeImageVersion; the Front's VerifyBrowserRuntimePack target refuses a Release
          publish where the two differ. Not written into global.json (sdk.workloadVersion): that pin
          makes every build of every project fail with MSB4242 until the set is installed, which on a
          machine-wide SDK needs administrator rights. Move it with AetheusRuntimeImageVersion, to a set
          of the floor's feature band (`dotnet workload search version`). -->
-    <AetheusWasmWorkloadVersion>10.0.402</AetheusWasmWorkloadVersion>
+    <AetheusWasmWorkloadVersion>10.0.403</AetheusWasmWorkloadVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
@@ -36,6 +36,11 @@
          Release-canonical packages.lock.json files and make CI locked mode fail with NU1004. -->
     <NuGetLockFilePath Condition="'$(Configuration)' != 'Release'">$(MSBuildProjectDirectory)\obj\packages.$(Configuration).lock.json</NuGetLockFilePath>
     <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+    <!-- The SDK adds its local library-packs folder as an implicit restore source, past the <clear /> of
+         nuget.config. Its Microsoft.NET.Sdk.WebAssembly.Pack has another content hash than nuget.org's, so a
+         lock refresh on a developer machine wrote that hash and CI locked mode failed with NU1403 (0be2f3c1f,
+         then again after 075680933). Restore from nuget.org only, everywhere. -->
+    <DisableImplicitLibraryPacksFolder>true</DisableImplicitLibraryPacksFolder>
     <!-- Recette 2026-10-23: OE 1.9.0 is on disk but not published on nuget.org yet, so a developer machine
          builds against the OE sources again (like R1-57 did for 1.8): UseLocalOmniEurope defaults to true when
          it is empty, CI is not set and the OE project exists. The OE checkout is searched in the nearest

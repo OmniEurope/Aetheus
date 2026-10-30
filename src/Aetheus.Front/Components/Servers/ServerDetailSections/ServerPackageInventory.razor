@@ -6,7 +6,7 @@
 
 @if (!IsWindows)
 {
-    <OmniCard Class="@(Busy ? "omni-u-mb-lg server-package-inventory omni-busy" : "omni-u-mb-lg server-package-inventory")" aria-busy="@(Busy ? "true" : "false")">
+    <OmniCard Class="@(Busy ? "server-package-inventory omni-busy" : "server-package-inventory")" aria-busy="@(Busy ? "true" : "false")">
         <OmniStack Gap="OmniSpacing.Medium">
             <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["InstalledPackagesTitle"]

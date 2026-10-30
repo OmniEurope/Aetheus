@@ -47,7 +47,7 @@ else
     @if (InfoWarnings.Count > 0)
     {
         <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>
-            @foreach (var warning in InfoWarnings) { <div class="run-warning-line">@warning</div> }
+            @foreach (var warning in InfoWarnings) { <div class="run-warning-line">@SayWarning(warning)</div> }
         </ChildContent></OmniAlert>
     }
     @* Recette R-16: information about the run (no baseline on a first release), in blue, with a "?" saying what it implies. *@
@@ -92,6 +92,7 @@ else
             </OmniAlert>
     }
     <PipelineRunToEndAlert Run="@_run" />
+    <PipelineRunGateOverrideAlert Run="@_run" />
 
     @* Tabs *@
     @if (!TabsReady)
@@ -100,7 +101,7 @@ else
     }
     else
     {
-    <UrlSyncedTabs class="pipeline-run-tabs"Slugs="@TabSlugs()" @bind-SelectedIndex="_selectedTab">
+    <UrlSyncedTabs class="pipeline-run-tabs" Slugs="@TabSlugs()" @bind-SelectedIndex="_selectedTab">
         <Tabs>
             @* Tab 1: Overview *@
             <OmniTabsItem Key="overview" Title="@L["Overview"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("dashboard"))" /></Icon><ChildContent>
@@ -126,7 +127,7 @@ else
                        itself the link or the button (OmniCard.Href / OnClick), never wrapped. *@
                     @* R-15: up to four tiles, fewer when the area is narrow: the column count follows the width of
                        the grid itself (MinColumnWidth), sidebar included, never below this width per tile. *@
-                    <OmniTileGrid Columns="4" MinColumnWidth="@RunTileMinColumnWidth" EqualHeights="false" Class="run-overview-tiles">
+                    <OmniTileGrid Columns="4" MinColumnWidth="@RunTileMinColumnWidth" Class="run-overview-tiles">
                         @* R-28: every tile is an OmniFactTile (OE): a title, then rows of icon, term and value on
                            columns shared by all the tiles; the clickable ones are themselves the link or the button. *@
                         @* Recette R1-64: the pipeline's id first; the run's own number is in the page title. *@
@@ -134,12 +135,12 @@ else
                             <Icon><OmniIcon Name="OmniIconName.Tag" /></Icon>
                             <ChildContent>
                                 <OmniFactTileRow Term="@L["RunIdTile"]"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent>@_run.Id</ChildContent></OmniFactTileRow>
-                                <OmniFactTileRow Term="@L["Pipeline"]"><Icon><OmniIcon Name="OmniIconName.Path" /></Icon><ChildContent>@_run.PipelineName</ChildContent></OmniFactTileRow>
+                                <OmniFactTileRow Term="@L["Pipeline"]"><Icon><OmniIcon Name="OmniIconName.Path" /></Icon><ChildContent><OmniLink Href="@PipelineHref" data-testid="run-pipeline-link">@_run.PipelineName</OmniLink></ChildContent></OmniFactTileRow>
                             </ChildContent>
                         </OmniFactTile>
                         @* Status and step progress answer the same question ("where does the run stand?"),
                            so they share one tile that links to the step logs. *@
-                        <OmniFactTile Title="@L["Status"]" Href="@TabHref("logs")" Class="run-status-tile">
+                        <OmniFactTile Title="@L["Status"]" Href="@(TabHref("gate") ?? TabHref("logs"))" Class="run-status-tile">
                             <Icon><OmniIcon Name="OmniIconName.Info" /></Icon>
                             <ChildContent>
                                 <OmniFactTileRow Term="@L["Status"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent><PipelineRunStatusBadge Status="_run.Status" /></ChildContent></OmniFactTileRow>
@@ -147,14 +148,14 @@ else
                                    since when; meanwhile the page reloads a running run by itself. *@
                                 @if (RunInProgress && _live?.InterruptedSince is { } interruptedSince)
                                 {
-                                    <OmniFactTileRow Term="@L["RunLiveUpdates"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
-                                               title="@L["RunLiveInterruptedTitle"]">@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</OmniBadge></ChildContent></OmniFactTileRow>
+                                    <OmniFactTileRow Term="@L["RunLiveUpdates"]"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-live-interrupted-badge"
+                                               title="@L["RunLiveInterruptedTitle"]">@string.Format(L["RunLiveInterrupted"].Value, interruptedSince.ToLocalTime().ToString("t"))</NumberBadge></ChildContent></OmniFactTileRow>
                                 }
                                 @* R1-12: an analysis report takes seconds to publish; say so while it lasts
                                    (the timeline below is veiled too). *@
                                 @if (_live?.AnalysisPublishing == true)
                                 {
-                                    <OmniFactTileRow Term="@L["Quality"]"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Info" Class="run-analysis-publishing-badge"
+                                    <OmniFactTileRow Term="@L["Quality"]"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><OmniBadge Icon="@(BadgeIcon.For(OmniTone.Info))" Fill="OmniFill.Solid" Tone="OmniTone.Info" Class="run-analysis-publishing-badge"
                                                title="@L["AnalysisPublishingTitle"]">@L["AnalysisPublishing"]</OmniBadge></ChildContent></OmniFactTileRow>
                                 }
                                 @* The grade is the Quality tile's; a refused
@@ -164,7 +165,7 @@ else
                                    candidate was refused. *@
                                 @if (AssuranceVerdict is { Deployable: false } && _run.Status != PipelineStatus.Rejected)
                                 {
-                                    <OmniFactTileRow Term="@L["Candidate"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-candidate-verdict-badge"
+                                    <OmniFactTileRow Term="@L["Candidate"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="run-candidate-verdict-badge"
                                                title="@L["CandidateNotDeployableTitle"]">@L["CandidateNotDeployableShort"]</OmniBadge></ChildContent></OmniFactTileRow>
                                 }
                                 <OmniFactTileRow Term="@L["Steps"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>@stepProgress.Completed / @stepProgress.Total</ChildContent></OmniFactTileRow>
@@ -181,11 +182,15 @@ else
                             <ChildContent>
                                 <OmniFactTileRow Term="@L["Started"]" title="@_run.StartedAt.ToString("F")"><Icon><OmniIcon Name="OmniIconName.CalendarBlank" /></Icon><ChildContent>@_run.StartedAt.ToString("g")</ChildContent></OmniFactTileRow>
                                 <OmniFactTileRow Term="@L["Duration"]"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent><PipelineRunLiveDuration StartedAt="@_run.StartedAt" CompletedAt="@_run.CompletedAt" IsRunning="@RunInProgress" /></ChildContent></OmniFactTileRow>
+                                @if (_pipelineRunsSummary is { } runsSummary)
+                                {
+                                    <OmniFactTileRow Term="@L["AverageSuccessDuration"]" data-testid="run-average-success-duration"><Icon><OmniIcon Name="OmniIconName.Timer" /></Icon><ChildContent>@runsSummary.AverageDurationLabel(L["NotAvailableShort"])</ChildContent></OmniFactTileRow>
+                                }
                             </ChildContent>
                         </OmniFactTile>
                         @if (ShowGateTab && _gateState.Result is { } gate)
                         {
-                            <PipelineRunGateOverview Gate="@gate" RunGrade="@_run.GateGrade" Href="@TabHref("gate")" />
+                            <PipelineRunGateOverview Gate="@gate" BlockingTestCount="@(AssuranceVerdict?.BlockingTests.Count ?? 0)" RunGrade="@_run.GateGrade" Href="@TabHref("gate")" />
                         }
                         @if (_run.Parameters.Count > 0)
                         {
@@ -194,6 +199,15 @@ else
                                 <Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon>
                                 <ChildContent>
                                     <OmniFactTileRow Term="@L["RunTileCount"]"><Icon><OmniIcon Name="OmniIconName.Sliders" /></Icon><ChildContent>@_run.Parameters.Count</ChildContent></OmniFactTileRow>
+                                    @* R-37: the libraries and vaults the run read, from the definition it executed. *@
+                                    @if (UsedResources.Libraries.Count > 0)
+                                    {
+                                        <OmniFactTileRow Term="@L["Libraries"]" data-testid="run-used-libraries"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("data_object"))" /></Icon><ChildContent>@string.Join(", ", UsedResources.Libraries)</ChildContent></OmniFactTileRow>
+                                    }
+                                    @if (UsedResources.Vaults.Count > 0)
+                                    {
+                                        <OmniFactTileRow Term="@L["Vaults"]" data-testid="run-used-vaults"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("lock"))" /></Icon><ChildContent>@string.Join(", ", UsedResources.Vaults)</ChildContent></OmniFactTileRow>
+                                    }
                                 </ChildContent>
                             </OmniFactTile>
                         }
@@ -244,12 +258,14 @@ else
                                 </ChildContent>
                             </OmniFactTile>
                         }
+                        @* R-82: where a succeeded deployment put the application; absent when not known. *@
+                        <PipelineRunDeployedTile Run="@_run" />
                     </OmniTileGrid>
 
                     @* The stage timeline precedes secondary details so the run's progress is
                        visible first. *@
                     @* R1-12: OE's veil lies over the timeline while a report is published; it stays mounted. *@
-                    <div class="@(_live?.AnalysisPublishing == true ? "run-timeline-zone omni-busy" : "run-timeline-zone")" aria-busy="@(_live?.AnalysisPublishing == true ? "true" : "false")"
+                    <div id="run-timeline-zone" class="@(_live?.AnalysisPublishing == true ? "run-timeline-zone omni-busy" : "run-timeline-zone")" aria-busy="@(_live?.AnalysisPublishing == true ? "true" : "false")"
                          title="@(_live?.AnalysisPublishing == true ? L["AnalysisPublishingTitle"].Value : null)">
                     <RunTimelineTree Run="_run!" Depth="0" SelectedStepId="_selectedStep?.Id" OnSelectStep="SelectStep"
                                      PreloadedChildren="ChildRuns" Baselines="_baselines.Runs"
@@ -315,19 +331,19 @@ else
                             <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["TestResults"]</OmniText>
                             <OmniRow Gap="OmniSpacing.Large">
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_run.TestResultSummary.TotalTests.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_run.TestResultSummary.TotalTests.ToString()</NumberBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Total"]</OmniText>
                                 </OmniStack>
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@_run.TestResultSummary.Passed.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@_run.TestResultSummary.Passed.ToString()</NumberBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Passed"]</OmniText>
                                 </OmniStack>
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@_run.TestResultSummary.Failed.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@_run.TestResultSummary.Failed.ToString()</NumberBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Failed"]</OmniText>
                                 </OmniStack>
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@_run.TestResultSummary.Skipped.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@_run.TestResultSummary.Skipped.ToString()</NumberBadge>
                                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["Skipped"]</OmniText>
                                 </OmniStack>
                             </OmniRow>
@@ -336,7 +352,7 @@ else
 
                     @* The shared time axis shows actual stage overlap, which the ordered list
                        alone cannot show. *@
-                    <RunGanttStrip Run="_run" Baselines="@(_run is null ? null : _baselines.Runs.GetValueOrDefault(_run.Id))" />
+                    <RunGanttStrip Run="_run" ScrollTargetId="run-timeline-zone" Baselines="@(_run is null ? null : _baselines.Runs.GetValueOrDefault(_run.Id))" />
                 </OmniStack>
             </ChildContent></OmniTabsItem>
 
@@ -344,6 +360,10 @@ else
             <OmniTabsItem Key="logs" Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("terminal"))" /></Icon><ChildContent>
                 @* Side-by-side split: run tree left, logs right. Orchestration runs get a wider left
                    column so the stage label + child-pipeline chip + description fit on one line. *@
+                @* R-80: the container the split asks its width of. The columns stack when this container (the
+                   width really left to the page, side menu included) is too narrow for a readable log, not when
+                   the screen is (see .run-split-container in app.css). *@
+                <div class="run-split-container">
                 <div class="run-split-layout @(IsOrchestration ? "run-split-wide" : "")">
                     @* Left panel: compact timeline *@
                     <div class="run-split-timeline">
@@ -372,7 +392,7 @@ else
                                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 run-step-logs-title" title="@_selectedStep.StepName">@_selectedStep.StepName</OmniText>
                                     @if (_selectedStep.IsSystem)
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="run-system-label">@L["System"]</OmniBadge>
+                                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Settings))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="run-system-label">@L["System"]</OmniBadge>
                                     }
                                     @if (_selectedStep.IsContainerIsolated)
                                     {
@@ -406,7 +426,7 @@ else
                                     <OmniButton Variant="@(_showResults ? OmniButtonVariant.Secondary : OmniButtonVariant.Ghost)" Class="run-logs-toggle" aria-pressed="@(_showResults ? "true" : "false")" OnClick="@(() => _showResults = !_showResults)" title="@(_showResults ? L["HideOutput"] : L["ShowOutput"])"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_showResults ? "visibility" : "visibility_off"))" /></Icon><ChildContent><span>@L["Output"]</span></ChildContent></OmniButton>
                                     <OmniTextBox @bind-Value="_logSearch" Placeholder="@L["SearchLogs"]" aria-label="@L["SearchLogs"]" Class="run-logs-search" />
                                     <div class="run-step-logs-actions">
-                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyLogsAsync" title="@L["CopyLogs"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
+                                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyLogsAsync" title="@L["CopyLogs"]" Label="@L["CopyLogs"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                                         @* STD-BTN detection 11: Copy visible, the other actions in the menu (R-2). *@
                                         <OmniOverflowMenu Label="@L["MoreActions"]">
                                             <OmniMenuItem OnClick="@ScrollLogsToTopAsync"><Icon><OmniIcon Name="OmniIconName.ArrowLineUp" /></Icon><ChildContent>@L["ScrollToTop"]</ChildContent></OmniMenuItem>
@@ -456,7 +476,8 @@ else
                                 }
                                 else if (_logsLoading && _selectedStep.TaskId.HasValue && !_stepLogsCache.ContainsKey(_selectedStep.TaskId.Value))
                                 {
-                                    <AetheusLoader Size="OmniControlSize.Small" />
+                                    @* Recette R-116: the step's logs are being read, OE's busy veil lies over the zone they will fill. *@
+                                    <div class="omni-busy action-veil-placeholder" aria-busy="true" data-testid="step-logs-pending"></div>
                                 }
                                 else
                                 {
@@ -499,6 +520,7 @@ else
                             }
                         }
                     </div>
+                </div>
                 </div>
             </ChildContent></OmniTabsItem>
 

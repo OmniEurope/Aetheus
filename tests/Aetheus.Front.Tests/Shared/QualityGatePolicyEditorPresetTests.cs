@@ -164,7 +164,7 @@ public sealed class QualityGatePolicyEditorPresetTests : BunitContext
         cut.WaitForState(() => cut.FindAll("form").Count > 0);
         var before = _handler.Requests.Count;
 
-        Button(cut, "Cancel").Click();
+        Button(cut, "GoBack").Click();
 
         // The point of Cancel is that the edit is discarded locally; it must never reach the API.
         Assert.Equal(before, _handler.Requests.Count);

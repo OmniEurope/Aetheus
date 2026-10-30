@@ -184,18 +184,20 @@ internal static class PipelineReadinessText
 
     /// <summary>Finding links lead to the relevant configuration page or repository browser.
     /// Creation pages preserve <paramref name="returnUrl"/>; a missing repository is created in a
-    /// dialog.</summary>
-    public static string? RemediationHref(PipelineSetupReadinessKind kind, int projectId, string? returnUrl) => kind switch
-    {
-        PipelineSetupReadinessKind.EmptyBranch or PipelineSetupReadinessKind.MissingAdapterScripts
-            or PipelineSetupReadinessKind.MissingScannerConfiguration => $"/git-repositories?projectId={projectId}",
-        PipelineSetupReadinessKind.ExternalRepositoryNotInspected => $"/projects/{projectId}/external-repo",
-        PipelineSetupReadinessKind.MissingEnvironments
-            => LocalReturnUrl.Append($"/environments/new?projectId={projectId}", returnUrl),
-        PipelineSetupReadinessKind.NoRunnerConfigured or PipelineSetupReadinessKind.NoDeployRunnerConfigured
-            => LocalReturnUrl.Append("/servers/add-agent", returnUrl),
-        PipelineSetupReadinessKind.EmptyLibraryValues => $"/projects/{projectId}/libraries",
-        PipelineSetupReadinessKind.EmptyVaultSecrets => $"/projects/{projectId}/vaults",
-        _ => null
-    };
+    /// dialog. R-61: <paramref name="environmentReturnUrl"/>, when given, is where the creation of an
+    /// environment returns instead (the wizard sends it to the project's overview).</summary>
+    public static string? RemediationHref(PipelineSetupReadinessKind kind, int projectId, string? returnUrl,
+        string? environmentReturnUrl = null) => kind switch
+        {
+            PipelineSetupReadinessKind.EmptyBranch or PipelineSetupReadinessKind.MissingAdapterScripts
+                or PipelineSetupReadinessKind.MissingScannerConfiguration => $"/git-repositories?projectId={projectId}",
+            PipelineSetupReadinessKind.ExternalRepositoryNotInspected => $"/projects/{projectId}/external-repo",
+            PipelineSetupReadinessKind.MissingEnvironments
+                => LocalReturnUrl.Append($"/environments/new?projectId={projectId}", environmentReturnUrl ?? returnUrl),
+            PipelineSetupReadinessKind.NoRunnerConfigured or PipelineSetupReadinessKind.NoDeployRunnerConfigured
+                => LocalReturnUrl.Append("/servers/add-agent", returnUrl),
+            PipelineSetupReadinessKind.EmptyLibraryValues => $"/projects/{projectId}/libraries",
+            PipelineSetupReadinessKind.EmptyVaultSecrets => $"/projects/{projectId}/vaults",
+            _ => null
+        };
 }

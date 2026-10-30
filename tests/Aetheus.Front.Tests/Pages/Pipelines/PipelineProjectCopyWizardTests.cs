@@ -125,6 +125,81 @@ public sealed class PipelineProjectCopyWizardTests : BunitContext
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid='setup-start-from']")));
     }
 
+    private async Task<PipelineProjectCopyRequest> CopyIntoAsync(ProjectDto target)
+    {
+        _handler.SetPaginatedJsonResponse("api/projects", [new ProjectDto { Id = 1, Name = "Aetheus", DefaultBranch = "main" }, target]);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/copy-plan", Plan());
+        _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/setup/copy",
+            new PipelineProjectCopyResultDto { Plan = Plan(created: true), Readiness = new PipelineSetupReadinessDto { RepositoryInspected = true } });
+        Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
+        var cut = Render<PipelineSetupWizard>();
+        cut.WaitForAssertion(() => cut.FindComponent<PipelineSetupStartFrom>());
+        await PipelineSetupWizardTests.SelectStartFromAsync(cut, copy: true);
+        var copy = FlowOf(cut);
+        await cut.InvokeAsync(() => copy.SetSourceProject(1));
+        var wizard = cut.FindComponent<WizardDialog>();
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid='pipeline-copy-item']").Count));
+        await cut.InvokeAsync(wizard.Instance.NextStep);
+        await cut.Find(".omni-wizard__actions button.omni-wizard__finish")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        cut.WaitForAssertion(() => Assert.NotNull(copy.Result));
+        var body = _handler.RequestDetails.Single(request => request.Method == HttpMethod.Post.Method
+            && request.Url.EndsWith("api/pipelines/setup/copy", StringComparison.OrdinalIgnoreCase)).Body!;
+        return JsonSerializer.Deserialize<PipelineProjectCopyRequest>(body, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+    }
+
+    /// <summary>R-76 (c): the copies read the branch the wizard would choose for the new project (develop when its repository has
+    /// it), not the project's default branch and not the branch of the source definition.</summary>
+    [Fact]
+    public async Task TheCopiesAreAskedToReadDevelop_WhenTheNewProjectsRepositoryHasIt_EvenWhenItsDefaultBranchIsMain()
+    {
+        _handler.SetPaginatedJsonResponse("api/git/repos/5/branches", new[] { "main", "develop" }
+            .Select(name => new Aetheus.Shared.Components.Git.GitLightBranchDto { Name = name, IsDefault = name == "main" }));
+        _handler.SetJsonResponse("api/git/repos/5", new Aetheus.Shared.Components.Git.GitLightRepoDto { Id = 5, DefaultBranch = "main" });
+
+        var sent = await CopyIntoAsync(new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = "main", InternalRepositoryId = 5 });
+
+        Assert.Equal("develop", sent.TargetBranch);
+    }
+
+    [Fact]
+    public async Task TheCopiesAreAskedToReadTheRepositoryDefaultBranch_WhenTheProjectNamesNoneAndTheRepositoryHasNoDevelop()
+    {
+        _handler.SetPaginatedJsonResponse("api/git/repos/5/branches", new[] { "trunk" }
+            .Select(name => new Aetheus.Shared.Components.Git.GitLightBranchDto { Name = name, IsDefault = true }));
+        _handler.SetJsonResponse("api/git/repos/5", new Aetheus.Shared.Components.Git.GitLightRepoDto { Id = 5, DefaultBranch = "trunk" });
+
+        var sent = await CopyIntoAsync(new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = null, InternalRepositoryId = 5 });
+
+        Assert.Equal("trunk", sent.TargetBranch);
+    }
+
+    /// <summary>R-76 (b) in the copy mode: no branch anywhere means the copies carry no <c>source_branch:</c>, and the first step says so.</summary>
+    [Fact]
+    public async Task WhenTheNewProjectNamesNoBranchAtAll_TheFirstStepWarns()
+    {
+        _handler.SetPaginatedJsonResponse("api/projects",
+            [new ProjectDto { Id = 1, Name = "Aetheus", DefaultBranch = "main" }, new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = null }]);
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+        Services.GetRequiredService<NavigationManager>().NavigateTo("http://localhost/pipelines/setup?projectId=2");
+        var cut = Render<PipelineSetupWizard>();
+        cut.WaitForAssertion(() => cut.FindComponent<PipelineSetupStartFrom>());
+        await PipelineSetupWizardTests.SelectStartFromAsync(cut, copy: true);
+
+        cut.WaitForAssertion(() => Assert.Contains("PipelineSourceBranchMissing",
+            cut.Find("[data-testid='pipeline-copy-source-branch-missing']").TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WhenTheNewProjectNamesNoBranchAtAll_NoBranchIsSent()
+    {
+        var sent = await CopyIntoAsync(new ProjectDto { Id = 2, Name = "ATS", DefaultBranch = null });
+
+        Assert.Null(sent.TargetBranch);
+    }
+
     private async Task<(IRenderedComponent<PipelineSetupWizard> Cut, PipelineProjectCopyFlow Copy)> CopyAsync()
     {
         _handler.SetPaginatedJsonResponse("api/projects",

@@ -2,8 +2,9 @@
 
 namespace Aetheus.Shared.Components.Pipelines;
 
-/// <summary>Defines lint SARIF categories: code quality by default, or accessibility for axe-core
-/// E2E reports. Both belong to the quality gate scope.</summary>
+/// <summary>Defines lint SARIF categories: code quality by default, accessibility for axe-core E2E reports (both in
+/// the quality gate scope), or container for the SARIF of an image finding such as the .NET runtime CVEs
+/// (<c>scan-dotnet-runtime-cve</c>), which belongs to the security gate scope.</summary>
 public static class LintAnalysisCategories
 {
     /// <summary>The task variable carrying the category from the control plane to the agent.</summary>
@@ -19,6 +20,9 @@ public static class LintAnalysisCategories
                 return true;
             case "accessibility":
                 category = AnalysisCategory.Accessibility;
+                return true;
+            case "container":
+                category = AnalysisCategory.Container;
                 return true;
             default:
                 category = AnalysisCategory.CodeQuality;

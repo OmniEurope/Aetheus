@@ -12,6 +12,7 @@ public sealed record PipelineRunTableItem
     public PipelineStatus Status { get; init; }
     public DateTime StartedAt { get; init; }
     public DateTime? CompletedAt { get; init; }
+    public int? ServerId { get; init; }
     public string? ServerName { get; init; }
     public string? ServerOs { get; init; }
     public string? CurrentStep { get; init; }
@@ -37,6 +38,15 @@ public sealed record PipelineRunTableItem
     /// <summary>The start of the warning PipelineRefusedLaunchRecorder.BuildReason writes.</summary>
     internal const string LaunchRefusedPrefix = "The automated launch (";
 
+    /// <summary>The code of the stored problem PipelineRefusedLaunchRecorder writes for a refused launch.</summary>
+    internal const string LaunchRefusedCode = "LaunchRefused";
+
+    /// <summary>The warning of a refused automated launch: the stored problem, or the sentence runs refused
+    /// before warnings had codes carry.</summary>
+    private static bool IsLaunchRefusedWarning(string warning) =>
+        StoredProblem.CodeOf(warning) == LaunchRefusedCode
+        || warning.StartsWith(LaunchRefusedPrefix, StringComparison.Ordinal);
+
     public static PipelineRunTableItem FromRun(PipelineRunDto run) => new()
     {
         RunId = run.Id,
@@ -47,6 +57,7 @@ public sealed record PipelineRunTableItem
         Status = run.Status,
         StartedAt = run.StartedAt,
         CompletedAt = run.CompletedAt,
+        ServerId = run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerId.HasValue)?.ServerId,
         ServerName = run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerId.HasValue)?.ServerName,
         ServerOs = run.Steps.FirstOrDefault(step => !step.IsSystem && step.ServerId.HasValue)?.ServerOs,
         CurrentStep = PipelineHelper.GetCurrentStepLabel(run),
@@ -58,7 +69,7 @@ public sealed record PipelineRunTableItem
         RepositoryId = run.RepositoryId,
         GateGrade = run.GateGrade,
         LaunchRefused = run.Status == PipelineStatus.Failed
-            && run.Warnings.Any(warning => warning.StartsWith(LaunchRefusedPrefix, StringComparison.Ordinal)),
+            && run.Warnings.Any(IsLaunchRefusedWarning),
         CancellationRequested = run.CancellationRequested,
         LatestStartedAt = run.StartedAt,
         TriggeredRunIds = run.Steps

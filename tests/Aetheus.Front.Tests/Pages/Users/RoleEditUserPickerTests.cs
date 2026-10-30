@@ -16,6 +16,7 @@ public sealed class RoleEditUserPickerTests : BunitContext
     public RoleEditUserPickerTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        _handler.SetOrganizations();
         _handler.SetJsonResponse(HttpMethod.Get, "api/roles/5", new RoleDto { Id = 5, Name = "Editor", Permissions = [] });
         _handler.SetJsonResponse(HttpMethod.Get, "api/roles/5/users", new PaginatedResult<RoleUserDto>());
         _handler.SetJsonResponse(HttpMethod.Get, "api/roles/5/available-users", new PaginatedResult<RoleUserDto>

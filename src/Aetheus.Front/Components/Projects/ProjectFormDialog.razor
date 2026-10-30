@@ -77,6 +77,6 @@
         }
         <div class="flex-spacer"></div>
         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close())" ButtonType="OmniButtonType.Button" Disabled="@_saving"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close())" ButtonType="OmniButtonType.Button" Disabled="@_saving"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniTemplateForm>

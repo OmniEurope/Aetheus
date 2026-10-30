@@ -58,10 +58,10 @@ public sealed class MemoizingPipelineTemplateRepository(IPipelineTemplateReposit
         CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null) =>
         inner.GetTemplateVersionsPagedAsync(templateId, page, pageSize, sortBy, sortDescending, ct, columnFilters);
 
-    public Task<List<string>> GetPipelineYamlDefinitionsByOrganizationAsync(int organizationId, CancellationToken ct = default) =>
+    public Task<List<string>> GetPipelineYamlDefinitionsByOrganizationAsync(int? organizationId, CancellationToken ct = default) =>
         inner.GetPipelineYamlDefinitionsByOrganizationAsync(organizationId, ct);
 
     public Task<List<string>> GetTemplateVersionYamlDefinitionsByOrganizationAsync(
-        int organizationId, int excludedTemplateId, CancellationToken ct = default) =>
+        int? organizationId, int excludedTemplateId, CancellationToken ct = default) =>
         inner.GetTemplateVersionYamlDefinitionsByOrganizationAsync(organizationId, excludedTemplateId, ct);
 }

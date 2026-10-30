@@ -103,16 +103,15 @@ public class AuditSecurityRemediationTests
         var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 8, 21, 12, 0, 0, TimeSpan.Zero));
         var config = BuildConfig(new()
         {
-            ["Auth:AdminUser"] = "admin",
             ["Auth:AdminPassword"] = "seeded-password",
-            ["Auth:DeploymentBootstrapUser"] = "deploy-user",
+            ["Auth:DeploymentBootstrapUser"] = "deploy-user@bootstrap.invalid",
             ["Auth:DeploymentBootstrapPassword"] = "deploy-password",
             ["Auth:DeploymentBootstrapExpiresAtUtc"] =
                 timeProvider.GetUtcNow().AddMinutes(10).UtcDateTime.ToString("O")
         });
 
         var match = BootstrapCredentialPolicy.Match(
-            new LoginRequest { Username = "admin", Password = "seeded-password" },
+            new LoginRequest { Email = "admin@aetheus.local", Password = "seeded-password" },
             config, timeProvider, hasDbUsers: false);
 
         Assert.NotNull(match);
@@ -128,15 +127,14 @@ public class AuditSecurityRemediationTests
         var expiry = timeProvider.GetUtcNow().AddMinutes(10).UtcDateTime;
         var config = BuildConfig(new()
         {
-            ["Auth:AdminUser"] = "admin",
             ["Auth:AdminPassword"] = "seeded-password",
-            ["Auth:DeploymentBootstrapUser"] = "deploy-user",
+            ["Auth:DeploymentBootstrapUser"] = "deploy-user@bootstrap.invalid",
             ["Auth:DeploymentBootstrapPassword"] = "deploy-password",
             ["Auth:DeploymentBootstrapExpiresAtUtc"] = expiry.ToString("O")
         });
 
         var match = BootstrapCredentialPolicy.Match(
-            new LoginRequest { Username = "deploy-user", Password = "deploy-password" },
+            new LoginRequest { Email = "deploy-user@bootstrap.invalid", Password = "deploy-password" },
             config, timeProvider, hasDbUsers: false);
 
         Assert.NotNull(match);

@@ -23,7 +23,7 @@
                 <div class="task-tracker-popover">
                     <div class="task-tracker-header">
                         <OmniHeading Level="OmniHeadingLevel.H5">@L["PendingApprovalsTitle"]</OmniHeading>
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@count.ToString(System.Globalization.CultureInfo.CurrentCulture)</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@count.ToString(System.Globalization.CultureInfo.CurrentCulture)</NumberBadge>
                     </div>
                     <div class="task-tracker-list">
                         @foreach (var approval in Approvals.Items)

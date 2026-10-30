@@ -86,7 +86,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
 
             _phase = dto.Phase;
             _percent = dto.Percent;
-            _message = dto.Message;
+            _message = AgentUpdateDiagnosticText.Localize(null, dto.Message, L);
             if (dto.Phase is AgentUpdatePhase.Failed or AgentUpdatePhase.Done)
                 CancelStaleTimer();
             else
@@ -120,7 +120,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
             CancelStaleTimer();
             _phase = AgentUpdatePhase.Failed;
             _percent = 0;
-            _message = Request?.FailureDiagnostic ?? L["AgentUpdateFailed"];
+            _message = AgentUpdateDiagnosticText.Localize(Request?.FailureCode, Request?.FailureDiagnostic, L) ?? L["AgentUpdateFailed"];
             _ = InvokeAsync(StateHasChanged);
         });
     }
@@ -187,7 +187,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
                 CancelStaleTimer();
                 _phase = AgentUpdatePhase.Failed;
                 _percent = 0;
-                _message = Request.FailureDiagnostic ?? L["AgentUpdateFailed"];
+                _message = AgentUpdateDiagnosticText.Localize(Request.FailureCode, Request.FailureDiagnostic, L) ?? L["AgentUpdateFailed"];
                 return;
             default:
                 AdvanceToPersisted(Request, phase, percent);
@@ -228,7 +228,7 @@ public partial class AgentUpdateProgressCard : IAsyncDisposable
     private string? PersistedMessage(AgentUpdateRequestSummaryDto request) =>
         request.Status == AgentUpdateRequestStatus.WaitingForIdle
             ? string.Format(L["AgentUpdateWaitingForTasks"], request.BlockingTaskCount)
-            : request.FailureDiagnostic;
+            : AgentUpdateDiagnosticText.Localize(request.FailureCode, request.FailureDiagnostic, L);
 
     // S-DES-17: relaunch a failed self-update. Clear the card first so the parent's trigger drives
     // a fresh Queued→… cycle through the existing hub events.

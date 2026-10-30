@@ -34,7 +34,7 @@
                         <a href="/environments/@env.Id" class="pipeline-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@env.Name</a>
                         @if (!IsProjectScope && !string.IsNullOrEmpty(env.ProjectName))
                         {
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@env.ProjectName</OmniText>
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"><EntityNameLink Kind="EntityNameKind.Project" Id="env.ProjectId" Name="@env.ProjectName" /></OmniText>
                         }
                     </OmniStack>
                 </OmniStack>
@@ -42,7 +42,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="EnvironmentDto" Property="Type" Title="@L["Type"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText" >
             <Template Context="env">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@EnvironmentHelper.TypeStyle(env.Type)">@L.Localize(env.Type)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(EnvironmentHelper.TypeStyle(env.Type)))" Fill="OmniFill.Solid" Tone="@EnvironmentHelper.TypeStyle(env.Type)">@L.Localize(env.Type)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="EnvironmentDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
@@ -59,7 +59,7 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="EnvironmentDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+        <OmniDataGridColumn TItem="EnvironmentDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" />
         <OmniDataGridColumn TItem="EnvironmentDto" Title="" Width="60px" Sortable="false" TextAlign="OmniAlignment.Center" Filterable="false" >
             <Template Context="env">
                 @* Duplicate uses the approved blue STD-BTN exception on each row. *@

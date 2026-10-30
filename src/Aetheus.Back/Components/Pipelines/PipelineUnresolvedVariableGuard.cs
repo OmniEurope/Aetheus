@@ -33,9 +33,10 @@ internal static partial class PipelineUnresolvedVariableGuard
     /// upper snake case. Shell builtins and executables are lower case, so the two cannot collide.
     /// Run parameters are camelCase and are exempted by name instead.
     /// A reference carrying a default (<c>$(NAME:-value)</c>) always resolves to something, so it is
-    /// matched only to be skipped, never reported.
+    /// matched only to be skipped, never reported. So is the optional suffix form (<c>$(NAME:suffix=text)</c>,
+    /// R-74), which accepts an empty value.
     /// </summary>
-    [GeneratedRegex(@"\$\(([A-Z][A-Z0-9_]*)(:-[^()]*)?\)")]
+    [GeneratedRegex(@"\$\(([A-Z][A-Z0-9_]*)(:-[^()]*|:suffix=[^()]*)?\)")]
     private static partial Regex VariableReference();
 
     /// <summary>What a step may declare under <c>outputs:</c>: the names its scripts publish.</summary>
@@ -80,12 +81,15 @@ internal static partial class PipelineUnresolvedVariableGuard
 
         var detail = failures.Select(entry =>
             $"'{entry.Key}' (referenced by {string.Join(", ", entry.Value)})");
-        throw new BadRequestException(
+        var problem = PipelineProblem.Of(
+            PipelineProblemCodes.UnresolvedVariables,
             "Pipeline variable(s) could not be resolved: "
             + string.Join("; ", detail)
             + ". A host- or environment-dependent value must come from a Variable Library the pipeline "
             + "lists under `variable_libraries:`; check that the library exists, is accessible to this "
-            + "project, and carries the entry.");
+            + "project, and carries the entry.",
+            ("names", PipelineProblem.QuotedList(failures.Keys)));
+        throw new BadRequestException(problem.English, [problem.ToDto()]);
     }
 
     /// <summary>Names referenced by a variable value that nothing in the run can ever supply, mapped
@@ -181,10 +185,19 @@ internal static partial class PipelineUnresolvedVariableGuard
                 $"'{entry.Key}' (used by {string.Join(", ", entry.Value)})")));
         if (emptySecrets.Count > 0)
             parts.Add("vault secrets " + string.Join(", ", emptySecrets.Select(key => $"'{key}'")));
-        throw new BadRequestException(
+        var code = (emptyLibrary.Count > 0, emptySecrets.Count > 0) switch
+        {
+            (true, true) => PipelineProblemCodes.EmptyLibraryEntriesAndVaultSecrets,
+            (true, false) => PipelineProblemCodes.EmptyLibraryEntries,
+            _ => PipelineProblemCodes.EmptyVaultSecrets,
+        };
+        var problem = PipelineProblem.Of(
+            code,
             "Empty value(s) must be filled in before this pipeline can run: " + string.Join("; ", parts)
             + ". A copied library or vault is created with empty values: enter them in the Variable Library "
-            + "or the Vault (an entry that may stay empty is used as $(NAME:-) in the pipeline).");
+            + "or the Vault (an entry that may stay empty is used as $(NAME:-) in the pipeline).",
+            ("entries", PipelineProblem.QuotedList(emptyLibrary.Keys)), ("secrets", PipelineProblem.QuotedList(emptySecrets)));
+        throw new BadRequestException(problem.English, [problem.ToDto()]);
     }
 
     /// <summary>The library entries among <paramref name="emptyLibraryKeys"/> that the pipeline uses as

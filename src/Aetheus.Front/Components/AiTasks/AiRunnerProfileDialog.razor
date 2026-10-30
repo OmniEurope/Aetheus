@@ -7,9 +7,10 @@ else
 {
     <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="@SubmitAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
+        <OmniStack>
         @if (_needsReconfiguration)
         {
-            <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md">@L["AiProfileNeedsReconfiguration"]</OmniAlert>
+            <OmniAlert Severity="OmniSeverity.Warning">@L["AiProfileNeedsReconfiguration"]</OmniAlert>
         }
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
@@ -96,6 +97,7 @@ else
                 </OmniColumn>
             }
         </OmniRow>
+        </OmniStack>
         <DialogFooter OnCancel="@Cancel">
             <SecondaryContent>
                 @* One action visible, the others in its menu (R3-41): "read the list now" exists only for a

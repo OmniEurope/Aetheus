@@ -1,6 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md">
+@* R-99: OE's veil lies over the dialog while a package is being removed; its content stays mounted under it. *@
+<OmniStack Class="@(_removing ? "omni-busy" : null)" aria-busy="@(_removing ? "true" : "false")" data-testid="package-feed-packages-zone">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["PackageName"]" @bind-Value="_newPackage" Placeholder="@L["PackageName"]" Class="omni-u-grow" />
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAsync" Disabled="@string.IsNullOrWhiteSpace(_newPackage)" Class="@(_adding ? "btn-busy" : null)" Busy="@(_adding)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
         @* STD-BTN detection 11: Add visible, the other actions in the menu. *@
@@ -11,7 +13,7 @@
 
     @if (_lastSync is not null)
     {
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-mb-sm">
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
             @string.Format(L["PackageFeedSyncSummary"], _lastSync.Synced, _lastSync.Failed, _lastSync.Unsupported)
             @if (!string.IsNullOrEmpty(_lastSync.Message)) { <span> - @_lastSync.Message</span> }
         </OmniText>
@@ -47,3 +49,4 @@
     </AetheusDataGrid>
 
     <DialogFooter CancelText="@L["Close"]" OnCancel="@Close" />
+</OmniStack>

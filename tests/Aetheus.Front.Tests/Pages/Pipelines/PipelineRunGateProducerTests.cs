@@ -200,9 +200,52 @@ public sealed class PipelineRunGateProducerTests : BunitContext
 
         var alert = cut.Find(".omni-alert");
         Assert.Contains("GateSealedGradeTitle", alert.TextContent, StringComparison.Ordinal);
+        // R-36: the trace is no longer inside the banner; it is listed with the findings, where it is counted.
+        Assert.Empty(alert.QuerySelectorAll(".run-blocking-test"));
+        var listed = cut.Find("[data-testid=gate-blocking-tests]");
         // Recette R1-79: the link stays on the run on screen (2634); its log tab finds the step of child run 2638.
-        Assert.Equal("/pipelines/runs/2634?tab=logs&step=50", alert.QuerySelector(".run-blocking-test a")!.GetAttribute("href"));
-        Assert.Contains("Auth.LoginLocksOut", alert.TextContent, StringComparison.Ordinal);
+        Assert.Equal("/pipelines/runs/2634?tab=logs&step=50", listed.QuerySelector(".run-blocking-test a")!.GetAttribute("href"));
+        Assert.Contains("Auth.LoginLocksOut", listed.TextContent, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-36, run 2634: an F whose cause is the blocking tests read "0 findings" and an empty list. The blocking
+    /// tests are findings of the gate: counted in the Findings tile and the list badge, listed, each leading to a log.</summary>
+    [Fact]
+    public void R36_TheBlockingTestsAreCountedAsFindings_AndTheEmptyStateIsGone()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings",
+            new AnalysisRunFindingsPageDto { Items = [], TotalCount = 0, Page = 1, PageSize = 25 });
+        var (candidate, children) = Candidate2634();
+        var verdict = PipelineRunAssuranceVerdict.Read(candidate, children)!;
+        var gate = new AnalysisRunGateDto
+        {
+            PipelineRunId = 2634,
+            Grade = new AnalysisGradeSummaryDto { OverallGrade = AnalysisGrade.A, Completeness = AnalysisGradeCompleteness.Complete }
+        };
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters
+            .Add(component => component.Gate, gate)
+            .Add(component => component.RunGrade, AnalysisGrade.F)
+            .Add(component => component.BlockingTests, verdict.BlockingTests));
+
+        Assert.Equal(verdict.BlockingTests.Count.ToString(), cut.Find("[data-testid=gate-findings-count]").TextContent.Trim());
+        Assert.Equal(verdict.BlockingTests.Count.ToString(), cut.Find(".analysis-run-gate-metrics .omni-stat-tile__value").TextContent.Trim());
+        Assert.Empty(cut.FindAll(".analysis-run-gate-empty"));
+        Assert.NotEmpty(cut.FindAll("[data-testid=gate-blocking-tests] .run-blocking-test"));
+    }
+
+    [Fact]
+    public void R36_WithoutBlockingTests_TheGateStillReportsZeroFindings()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings",
+            new AnalysisRunFindingsPageDto { Items = [], TotalCount = 0, Page = 1, PageSize = 25 });
+        var gate = new AnalysisRunGateDto { PipelineRunId = 1 };
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        Assert.Equal("0", cut.Find("[data-testid=gate-findings-count]").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid=gate-blocking-tests]"));
+        Assert.NotEmpty(cut.FindAll(".analysis-run-gate-empty"));
     }
 
     [Fact]

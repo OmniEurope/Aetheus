@@ -9,11 +9,8 @@ public partial class StatusCountBadge
     /// <summary>How many items are in the status. Zero renders nothing.</summary>
     [Parameter] public int Count { get; set; }
 
-    /// <summary>The localized status name: the visible text when wide, the accessible name and tooltip always.</summary>
+    /// <summary>The localized status name: the visible text and the tooltip.</summary>
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
-
-    /// <summary>The status icon shown in place of the name below the phone width.</summary>
-    [Parameter, EditorRequired] public OmniIconName Icon { get; set; }
 
     [Parameter] public OmniTone Tone { get; set; } = OmniTone.Neutral;
 

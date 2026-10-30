@@ -88,8 +88,10 @@ internal sealed record DeploymentBootstrapIdentity(
             info: Encoding.UTF8.GetBytes("deployment-bootstrap:v1:hmac-key"));
 
         return new DeploymentBootstrapIdentity(
-            // A recognisable prefix so an operator reading container environment sees what this is.
-            "deploy-smoke-" + Derive(key, runId, "user")[..16],
+            // A recognisable prefix so an operator reading container environment sees what this is. The
+            // identity signs in like everyone else, by an e-mail address; ".invalid" (RFC 2606) is reserved
+            // so the address can never belong to a real mailbox or to a stored account.
+            "deploy-smoke-" + Derive(key, runId, "user")[..16] + "@bootstrap.invalid",
             Derive(key, runId, "password"),
             Derive(key, runId, "stamp"),
             nowUtc.AddMinutes(LifetimeMinutes).ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture));

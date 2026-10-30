@@ -9,7 +9,14 @@
 }
 else
 {
+    @* The header carries the back action (R-117) and, when the article names a page, Open as its one main action (R-109). *@
     <OmniPageHeader Title="@_article.Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()" Icon="@MaterialIconMap.HeaderIcon(_article.Icon)">
+        <ActionsContent>
+            @if (_pageRoute is not null)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo(_pageRoute))" title="@L["GoToPage"]"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Open"]</span></ChildContent></OmniButton>
+            }
+        </ActionsContent>
     </OmniPageHeader>
 
     <OmniStack Gap="OmniSpacing.ExtraLarge">
@@ -23,13 +30,5 @@ else
                 <div class="markdown-content help-section-content">@((MarkupString)RenderContent(helpSection.Content))</div>
             </OmniCard>
         }
-
-        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
-            <Aetheus.Front.Components.Shared.BrowserBackButton Text="@L["BackToHelp"]" Title="@L["GoBack"]" />
-            @if (_pageRoute is not null)
-            {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo(_pageRoute))" title="@L["GoToPage"]"><Icon><OmniIcon Name="OmniIconName.OpenExternal" /></Icon><ChildContent><span>@L["Open"]</span></ChildContent></OmniButton>
-            }
-        </OmniStack>
     </OmniStack>
 }

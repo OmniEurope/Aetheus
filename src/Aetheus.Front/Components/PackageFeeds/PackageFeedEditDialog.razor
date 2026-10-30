@@ -12,7 +12,7 @@
         </OmniColumn>
         <OmniColumn Span="12" MediumSpan="6">
             <OmniFormField Label="@L["Type"]" Help="@L["PackageFeedCreationSupportedTypes"]" Class="omni-u-w-100" For="oe-formfield-pages-packagefeeds-packagefeededitdialog-1">
-                <OmniDropDown Id="oe-formfield-pages-packagefeeds-packagefeededitdialog-1" @bind-Value="_model.FeedType" Options="@_types" @bind-Value:after="OnTypeChanged" />
+                <OmniDropDown Id="oe-formfield-pages-packagefeeds-packagefeededitdialog-1" @bind-Value="_model.FeedType" Options="@TypeOptions" @bind-Value:after="OnTypeChanged" />
             </OmniFormField>
         </OmniColumn>
         <OmniColumn Span="12">

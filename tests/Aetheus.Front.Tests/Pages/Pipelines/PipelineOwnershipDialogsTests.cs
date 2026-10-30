@@ -51,6 +51,23 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
             .Add(c => c.Scope, new PipelineOwnerTransferRequest { PipelineId = 10 })
             .Add(c => c.DefaultOwner, defaultOwner));
 
+    /// <summary>Recette R-116: while the preview is read, OE's busy veil lies over the zone it will fill; no loader is added.</summary>
+    [Fact]
+    public void TransferDialog_WhileThePreviewIsRead_TheZoneIsVeiled_AndNoLoaderIsAdded()
+    {
+        var preview = new TaskCompletionSource<PipelineOwnerTransferResultDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/pipelines/ownership/preview", _ => preview.Task);
+
+        var cut = RenderTransfer();
+
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=owner-transfer-preview-pending]").GetAttribute("aria-busy")));
+        Assert.Contains("omni-busy", cut.Find("[data-testid=owner-transfer-preview-pending]").ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+
+        preview.SetResult(Result(preview: true, holdsAdmin: true));
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=owner-transfer-preview-pending]")));
+    }
+
     [Fact]
     public void TransferDialog_PreviewsTheDefaultOwner_AndWarnsWhereServerAdminIsMissing()
     {
@@ -117,6 +134,8 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
         Assert.Contains(_handler.RequestDetails, r => r.Url.Contains("ownership/preview")
             && r.Body!.Contains("\"currentOwnerUsername\":\"admin\"") && r.Body.Contains("\"newOwnerUsername\":\"root\""));
 
+        // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
+        cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).HasAttribute("disabled")));
         cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).Click();
 
         Assert.True(Spy().Closed);
@@ -132,6 +151,8 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".user-owned-pipeline-item")));
 
         cut.Find("input[type=checkbox]").Change(true);
+        // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
+        cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Delete")).HasAttribute("disabled")));
         cut.FindAll("button").Single(b => b.TextContent.Contains("Delete")).Click();
 
         Assert.Equal(new UserPipelineHandover(null, true), Spy().LastResult);
@@ -144,6 +165,8 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
 
         var cut = RenderHandover();
         cut.WaitForAssertion(() => Assert.DoesNotContain("UserOwnsPipelinesWarning", cut.Markup));
+        // The confirmation is enabled once the reads, and the default owner's preview when one runs, complete.
+        cut.WaitForAssertion(() => Assert.False(cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).HasAttribute("disabled")));
         cut.FindAll("button").Single(b => b.TextContent.Contains("Deactivate")).Click();
 
         Assert.Equal(new UserPipelineHandover(null, false), Spy().LastResult);
@@ -161,7 +184,11 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
 
         var cut = RenderHandover();
 
-        Assert.Contains("UserHandoverLoadingPipelines", cut.Find(".user-handover-phase").TextContent);
+        // The loading line waits for the read to be slow (a quick read made the dialog jump, read as a second dialog).
+        Assert.Empty(cut.FindAll(".user-handover-phase"));
+        Assert.True(ConfirmDisabled(cut));
+        await cut.WaitForAssertionAsync(
+            () => Assert.Contains("UserHandoverLoadingPipelines", cut.Find(".user-handover-phase").TextContent));
         Assert.True(ConfirmDisabled(cut));
         _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/ownership/preview", Result(preview: true, holdsAdmin: true));
         release.SetResult([new PipelineOwnershipDto { PipelineId = 1, PipelineName = "aetheus-candidate", OwnerUsername = "admin" }]);
@@ -170,6 +197,22 @@ public sealed class PipelineOwnershipDialogsTests : BunitContext
         // loaded-machine ceiling, not bUnit's implicit second.
         await cut.WaitForAssertionAsync(() => Assert.Empty(cut.FindAll(".user-handover-phase")));
         Assert.False(ConfirmDisabled(cut));
+    }
+
+    [Fact]
+    public async Task HandoverDialog_PendingPipelineRead_ShowsNoLoadingLineNorLoader_BeforeTheNoticeDelay()
+    {
+        var release = new TaskCompletionSource<List<PipelineOwnershipDto>>();
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/pipelines/ownership/owned", _ => release.Task);
+
+        var cut = RenderHandover();
+
+        // The dialog keeps its final shape while a quick read is pending: no line or loader that would vanish.
+        Assert.Empty(cut.FindAll(".user-handover-phase"));
+        Assert.DoesNotContain("aetheus-loader", cut.Markup, StringComparison.Ordinal);
+        release.SetResult([]);
+        await cut.WaitForAssertionAsync(() => Assert.False(ConfirmDisabled(cut)));
+        Assert.Empty(cut.FindAll(".user-handover-phase"));
     }
 
     [Fact]

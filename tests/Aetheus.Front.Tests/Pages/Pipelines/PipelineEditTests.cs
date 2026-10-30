@@ -824,6 +824,26 @@ public class PipelineEditTests : BunitContext
         Assert.Contains(_handler.Requests, request => request.Method == "PUT" && request.Url.Contains("api/pipelines/5"));
     }
 
+    // Recette R-95: the review dialog shows the repository's file; the save quotes the hash of the file the
+    // user reviewed, and the server refuses to overwrite a repository change without it.
+    [Fact]
+    public async Task OnSubmit_ExistingPipeline_SendsTheHashOfTheRepositoryFileTheUserReviewed()
+    {
+        SetupEditPipelineMocks();
+        _handler.SetJsonResponse(HttpMethod.Put, "api/pipelines/5", new PipelineDto { Id = 5, Name = "Deploy Prod" });
+        OpenTab("settings");
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+
+        var submit = ClickAsync(ButtonLabelled(cut, "SaveSettings"));
+        await cut.InvokeAsync(() => dialog.Close(new PipelineSaveDecision("main", "reviewed-hash")));
+        await submit;
+
+        var put = Assert.Single(_handler.RequestDetails, request => request.Method == "PUT" && request.Url.Contains("api/pipelines/5"));
+        Assert.Contains("\"confirmedRepositoryYamlSha256\":\"reviewed-hash\"", put.Body, StringComparison.Ordinal);
+    }
+
     // PLAN-002 B7: the confirmation dialog is the save handler's first await, so the render it triggers
     // comes before the save starts; the button must still read busy while the server has not answered.
     [Fact]
@@ -1055,6 +1075,37 @@ public class PipelineEditTests : BunitContext
         Assert.Empty(cut.FindAll("[data-testid='pipeline-not-found']"));
     }
 
+    /// <summary>R-98: while the deletion runs, OE's veil lies over the page, its content still mounted, then the list opens.</summary>
+    [Fact]
+    public async Task R98_WhileTheDeletionRuns_ThePageIsVeiled_ThenTheListOpens()
+    {
+        SetupEditPipelineMocks();
+        var release = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Delete, "api/pipelines/5", _ => release.Task);
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        var dialog = Services.GetRequiredService<OmniDialogService>();
+        Assert.Equal("false", cut.Find("[data-testid='pipeline-detail-page']").GetAttribute("aria-busy"));
+
+        await ClickAsync(cut.WaitForElement(".omni-page-header__menu .omni-overflow-menu__trigger"));
+        var task = ClickAsync(cut.FindAll(".omni-overflow-menu__popup .omni-menu__item").Single(item => item.TextContent.Trim() == "Delete"));
+        await cut.InvokeAsync(() => dialog.Close(true));
+
+        cut.WaitForAssertion(() =>
+        {
+            var page = cut.Find("[data-testid='pipeline-detail-page']");
+            Assert.Contains("omni-busy", page.ClassName, StringComparison.Ordinal);
+            Assert.Equal("true", page.GetAttribute("aria-busy"));
+        });
+        Assert.Contains("Deploy Prod", cut.Markup, StringComparison.Ordinal);
+        Assert.False(nav.Uri.EndsWith("/pipelines", StringComparison.Ordinal));
+
+        release.SetResult(new object());
+        await task;
+        Assert.EndsWith("/pipelines", nav.Uri);
+    }
+
     /// <summary>R-34: a failed deletion keeps the page, says so, and keeps the live updates running.</summary>
     [Fact]
     public async Task R34_OnDelete_WhenTheServerRefuses_StaysOnThePageWithAnErrorToast()
@@ -1098,6 +1149,26 @@ public class PipelineEditTests : BunitContext
         Assert.Empty(cut.FindAll(".omni-page-header__menu"));
     }
 
+    /// <summary>A pipeline of another organization (the API answers 403, the route check only knows the
+    /// caller's grants) ends on the access-denied state, never on the global error boundary, and it is
+    /// told apart from a pipeline that does not exist.</summary>
+    [Fact]
+    public void APipelineTheApiRefuses_ShowsAccessDeniedNotAFailure()
+    {
+        _handler.SetResponse("api/pipelines/166", System.Net.HttpStatusCode.Forbidden);
+        _handler.SetResponse("api/pipelines/166/runs", System.Net.HttpStatusCode.Forbidden);
+        _handler.SetResponse("api/pipelines/166/source", System.Net.HttpStatusCode.Forbidden);
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto> { Items = [], TotalCount = 0 });
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>());
+
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 166));
+
+        cut.WaitForElement("[data-testid='pipeline-forbidden']");
+        Assert.Contains("AccessDenied", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='pipeline-not-found']"));
+        Assert.Empty(cut.FindAll(".omni-page-header__menu"));
+    }
+
     /// <summary>R-34: a pipeline deleted from another session while its page is open ends on the same state.</summary>
     [Fact]
     public async Task R34_APipelineDeletedElsewhere_ShowsNotFoundOnTheNextUpdate()
@@ -1112,6 +1183,24 @@ public class PipelineEditTests : BunitContext
         await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
 
         cut.WaitForElement("[data-testid='pipeline-not-found']");
+    }
+
+    /// <summary>An access withdrawn while the page is open (the API now answers 403) ends on the
+    /// access-denied state on the next update, never on an unhandled exception.</summary>
+    [Fact]
+    public async Task AnAccessWithdrawnWhileOpen_ShowsAccessDeniedOnTheNextUpdate()
+    {
+        SetupEditPipelineMocks();
+        var hubs = CaptureHubs();
+        var cut = Render<PipelineEdit>(p => p.Add(x => x.Id, 5));
+        cut.WaitForState(() => cut.Markup.Contains("Deploy Prod"));
+        cut.WaitForAssertion(() => Assert.True(hubs.ContainsKey("entities")));
+        _handler.SetResponse("api/pipelines/5", System.Net.HttpStatusCode.Forbidden);
+
+        await cut.InvokeAsync(() => HubHandlerInvoker.InvokeAsync(hubs["entities"], "EntityChanged", ResourceType.Pipeline, 5, "Updated"));
+
+        cut.WaitForElement("[data-testid='pipeline-forbidden']");
+        Assert.Empty(cut.FindAll("[data-testid='pipeline-not-found']"));
     }
 
     [Fact]

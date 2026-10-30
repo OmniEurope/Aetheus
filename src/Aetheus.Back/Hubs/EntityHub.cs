@@ -29,7 +29,7 @@ public class EntityHub(IResourceAuthorizationService authz) : Hub
             return;
         }
         var orgIds = IsOrgScoped(type)
-            ? await authz.GetUserOrganizationIdsAsync(Context.User!).ConfigureAwait(false)
+            ? await authz.GetOrganizationIdsWithPermissionAsync(Context.User!, type, Permission.Read).ConfigureAwait(false)
             : [];
         if (ids.Count == 0 && orgIds.Count == 0)
             throw new HubException("Access denied.");
@@ -48,7 +48,7 @@ public class EntityHub(IResourceAuthorizationService authz) : Hub
             return;
         }
         var orgIds = IsOrgScoped(type)
-            ? await authz.GetUserOrganizationIdsAsync(Context.User!).ConfigureAwait(false)
+            ? await authz.GetOrganizationIdsWithPermissionAsync(Context.User!, type, Permission.Read).ConfigureAwait(false)
             : [];
         foreach (var id in ids)
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, HubGroups.Entity(type, id)).ConfigureAwait(false);

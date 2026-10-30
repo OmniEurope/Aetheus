@@ -51,6 +51,81 @@ public class FormFieldHelpAndRequiredMarkGuardTests
             + "icône Question à côté du champ) :\n  " + string.Join("\n  ", violations));
     }
 
+    /// <summary>
+    /// Files that still draw a bare <c>OmniLabel</c> beside a control, with the reason. A filter or toolbar
+    /// selector is no form field (no save, so no star and no help). The "form to migrate" entries are
+    /// known debt of recette R-30 rule 8: each one must move into an <c>OmniFormField</c> and leave this
+    /// list; a new form is never added here.
+    /// </summary>
+    private static readonly Dictionary<string, string> BareLabelAllowList = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Components/Logs/SystemLogs.razor"] = "filter toolbar",
+        ["Components/Projects/AppTelemetryPanel.razor"] = "application selector of a read-only view",
+        ["Components/Servers/ServerDetailSections/DockerRelationsGraph.razor"] = "graph filter",
+        ["Components/Shared/AppMetricsView.razor"] = "chart filters",
+        ["Components/Pipelines/PipelineLaunchDialog.razor"] = "form to migrate (R-30 rule 8)",
+        ["Components/Servers/ServerDetailSections/DockerImagesTab.razor"] = "form to migrate (R-30 rule 8)",
+        ["Components/Servers/ServerDetailSections/ServerPortsentrySection.razor"] = "form to migrate (R-30 rule 8)",
+        ["Components/Servers/ServerDetailSections/ServerRkhunterSection.razor"] = "form to migrate (R-30 rule 8)",
+        ["Components/Settings/AdminSettings.razor"] = "form to migrate (R-30 rule 8)",
+        ["Layout/ServerDetailLayout.razor"] = "form to migrate (R-30 rule 8)",
+    };
+
+    [Fact]
+    public void Forms_PutEveryLabelledControlInAnOmniFormField()
+    {
+        var front = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
+        var violations = RepositoryScan.Enumerate(front, "*.razor")
+            .Where(file => !BareLabelAllowList.ContainsKey(Path.GetRelativePath(front, file).Replace('\\', '/')))
+            .SelectMany(file => ScanBareLabels(File.ReadAllText(file))
+                .Select(violation => $"{Path.GetRelativePath(front, file)}:{violation}"))
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            "Formulaires (R-30 règle 8) : un contrôle libellé est dans un OmniFormField (étoile Required, « ? » Help), "
+            + "jamais un OmniLabel nu à côté de lui :\n  " + string.Join("\n  ", violations));
+    }
+
+    [Fact]
+    public void BareLabelAllowList_NamesOnlyFilesThatStillHaveABareLabel()
+    {
+        var front = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
+        var stale = BareLabelAllowList.Keys
+            .Where(path => !File.Exists(Path.Combine(front, path))
+                           || ScanBareLabels(File.ReadAllText(Path.Combine(front, path))).Count == 0)
+            .ToList();
+
+        Assert.True(stale.Count == 0, "Entrées de la liste d'exceptions sans OmniLabel nu, à retirer :\n  " + string.Join("\n  ", stale));
+    }
+
+    [Theory]
+    [InlineData("<OmniStack>\n  <OmniLabel For=\"a\">A</OmniLabel>\n  <OmniTextBox Id=\"a\" />\n</OmniStack>", 2)]
+    [InlineData("<OmniFormField Label=\"A\" For=\"a\"><OmniTextBox Id=\"a\" /></OmniFormField>\n<OmniLabel For=\"b\">B</OmniLabel>", 2)]
+    public void ScanBareLabels_CatchesALabelOutsideAnOmniFormField(string source, int expectedLine)
+    {
+        Assert.Equal([$"{expectedLine}: bare OmniLabel beside a control; wrap the control in an OmniFormField (Label, Required, Help)"],
+            ScanBareLabels(source));
+    }
+
+    [Theory]
+    [InlineData("<OmniFormField For=\"a\"><LabelContent><OmniLabel For=\"a\">A</OmniLabel></LabelContent><ChildContent><OmniTextBox Id=\"a\" /></ChildContent></OmniFormField>")]
+    [InlineData("@* <OmniLabel For=\"a\">A</OmniLabel> *@\n<OmniFormField Label=\"A\" For=\"a\"><OmniTextBox Id=\"a\" /></OmniFormField>")]
+    public void ScanBareLabels_AcceptsAFieldAndAComment(string source)
+    {
+        Assert.Empty(ScanBareLabels(source));
+    }
+
+    /// <summary>The <c>OmniLabel</c> elements of one Razor source that sit outside any <c>OmniFormField</c>.</summary>
+    internal static IReadOnlyList<string> ScanBareLabels(string source)
+    {
+        var code = MaskRazorComments(source);
+        var withoutFields = Regex.Replace(code, Field,
+            field => Regex.Replace(field.Value, @"[^\r\n]", " "), RegexOptions.Singleline);
+        return Regex.Matches(withoutFields, @"<OmniLabel\b")
+            .Select(label => $"{LineOf(withoutFields, label.Index)}: bare OmniLabel beside a control; wrap the control in an OmniFormField (Label, Required, Help)")
+            .ToList();
+    }
+
     [Theory]
     [InlineData("<OmniFormField Label=\"Nom\" Description=\"Le nom affiché\" For=\"n\"><OmniTextBox Id=\"n\" /></OmniFormField>", "Description")]
     [InlineData("<OmniFormField Label=\"Hôtes\" For=\"h\">\n  <OmniTextArea Id=\"h\" />\n  <OmniText Element=\"OmniTextElement.Small\" Tone=\"OmniTextTone.Muted\">@L[\"HostsHelp\"]</OmniText>\n</OmniFormField>", "help text under the control")]

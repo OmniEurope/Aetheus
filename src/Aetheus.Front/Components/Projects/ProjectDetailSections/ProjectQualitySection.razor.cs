@@ -58,7 +58,6 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private FindingQuery? _lastFindingQueryKey;
     private string? _findingSortBy;
     private bool _findingSortDescending;
-    private bool _exportingPrompt;
 
     private bool HasAny => _summary.Grade is not null
         || _coverage.Count > 0 || _tests.Count > 0 || _complexity.Count > 0;
@@ -287,41 +286,6 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
     private static string SectionText(string label, int count) =>
         count > 0 ? $"{label} · {count:N0}" : label;
 
-    private async Task ExportAllAiPromptAsync()
-    {
-        if (_exportingPrompt || _findingCount == 0) return;
-
-        _exportingPrompt = true;
-        PublishMenuActions();
-        try
-        {
-            const int pageSize = 200;
-            var page = 1;
-            var findings = new List<AnalysisFindingDto>(_findingCount);
-            while (findings.Count < _findingCount)
-            {
-                var result = await FetchFindingsAsync(page, pageSize, _findingSortBy, _findingSortDescending);
-                findings.AddRange(result.Items);
-                if (result.Items.Count == 0 || findings.Count >= result.TotalCount) break;
-                page++;
-            }
-
-            var markdown = AnalysisAiPromptBuilder.BuildBulk(findings, L);
-            await Js.InvokeVoidAsync(
-                "downloadFile",
-                // "<project>-findings-2026-10-01.md"; the loader holds the open project.
-                ExportFileNames.Dated(Loader.Project is { } project && project.Id == ProjectId ? project.Name : null,
-                    $"project-{ProjectId}", "findings", DateTime.Now, "md"),
-                markdown,
-                "text/markdown");
-        }
-        finally
-        {
-            _exportingPrompt = false;
-            PublishMenuActions();
-        }
-    }
-
     private static async Task ReloadFromFirstPageAsync<T>(AetheusDataGrid<T>? grid)
         where T : notnull
     {
@@ -339,7 +303,6 @@ public partial class ProjectQualitySection : ComponentBase, IAsyncDisposable
         _findingDefaults = FindingColumnDefaults.OpenOnly;
         _findingSortBy = null;
         _findingSortDescending = false;
-        _exportingPrompt = false;
         _lastFindingQueryKey = null;
     }
 

@@ -73,6 +73,7 @@ public sealed class AccessibilityAnalysisTests
     [InlineData("code-quality", AnalysisCategory.CodeQuality)]
     [InlineData("accessibility", AnalysisCategory.Accessibility)]
     [InlineData("Accessibility", AnalysisCategory.Accessibility)]
+    [InlineData("container", AnalysisCategory.Container)]
     public void TheLintCategory_Parses(string? value, AnalysisCategory expected)
     {
         Assert.True(LintAnalysisCategories.TryParse(value, out var category));
@@ -80,7 +81,7 @@ public sealed class AccessibilityAnalysisTests
     }
 
     [Fact]
-    public void AnalysisCategory_IsALintField_ParsedStrictly_AndLimitedToItsTwoValues()
+    public void AnalysisCategory_IsALintField_ParsedStrictly_AndLimitedToItsThreeValues()
     {
         const string yaml = """
             name: qa
@@ -102,7 +103,7 @@ public sealed class AccessibilityAnalysisTests
         Assert.Empty(Errors(new PipelineStepDefinition { Name = "a", Type = "lint", AnalysisCategory = "accessibility" }));
 
         Assert.Contains(Errors(new PipelineStepDefinition { Name = "a", Type = "lint", AnalysisCategory = "sast" }),
-            error => error.Contains("must be code-quality or accessibility", StringComparison.Ordinal));
+            error => error.Contains("must be code-quality, accessibility or container", StringComparison.Ordinal));
         Assert.Contains(Errors(new PipelineStepDefinition { Name = "a", Shell = "echo", AnalysisCategory = "accessibility" }),
             error => error.Contains("only valid on a lint step", StringComparison.Ordinal));
     }

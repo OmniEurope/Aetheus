@@ -33,14 +33,24 @@ internal static partial class PipelineCopyAdapter
             ? prefix + sourceName[sourcePrefix.Length..]
             : $"{prefix}-{sourceName}";
 
-    /// <summary>A library or vault keeps its name unless it carries the source prefix: a generic name
-    /// (<c>application-prod-host</c>) is what a template asks for and must not change.</summary>
-    internal static string NewResourceName(string sourceName, string sourcePrefix, string prefix) =>
-        !string.IsNullOrEmpty(sourcePrefix)
+    /// <summary>A library or vault keeps its name unless it carries the source project's identity: a generic
+    /// name (<c>application-prod-host</c>) is what a template asks for and must not change. The identity is
+    /// the source prefix followed by a hyphen (<c>aetheus-prod-host</c>), or the source project's slug
+    /// followed by a dot (<c>w7.share</c>: what <c>${{ project.slug }}.share</c> of a template expands to,
+    /// recette R-86), which becomes the target project's slug, the name its pipelines will read.</summary>
+    internal static string NewResourceName(
+        string sourceName, string sourcePrefix, string prefix, string? sourceSlug = null, string? targetSlug = null)
+    {
+        if (!string.IsNullOrEmpty(sourceSlug) && !string.IsNullOrEmpty(targetSlug)
+            && sourceName.StartsWith(sourceSlug + ".", StringComparison.OrdinalIgnoreCase)
+            && sourceName.Length > sourceSlug.Length + 1)
+            return targetSlug + sourceName[sourceSlug.Length..];
+        return !string.IsNullOrEmpty(sourcePrefix)
             && sourceName.StartsWith(sourcePrefix + "-", StringComparison.OrdinalIgnoreCase)
             && sourceName.Length > sourcePrefix.Length + 1
             ? prefix + sourceName[sourcePrefix.Length..]
             : sourceName;
+    }
 
     /// <param name="yaml">The source definition.</param>
     /// <param name="renames">Source name to copy name: the copied pipelines, libraries and vaults.</param>

@@ -7,8 +7,8 @@ namespace Aetheus.Back.Components.PortAllocation;
 public interface IPortAllocationService
 {
     /// <summary>
-    /// The servers a library may allocate on, with the one to pre-select when the library's own scope
-    /// names exactly one.
+    /// The servers a library may allocate on (a server attached to an environment of the library's
+    /// project counts as one of the project's), with the one to pre-select when exactly one is reachable.
     /// </summary>
     Task<PortAllocationTargetsDto> GetTargetsAsync(int libraryId, CancellationToken ct = default);
 
@@ -21,6 +21,14 @@ public interface IPortAllocationService
     /// </summary>
     Task<List<VariableEntryDto>> AllocateIntoLibraryAsync(
         int libraryId, int serverId, IReadOnlyList<string> keys, CancellationToken ct = default);
+
+    /// <summary>The project the library belongs to, directly or through its environment or project server;
+    /// null when it has none or does not exist.</summary>
+    Task<int?> GetLibraryProjectIdAsync(int libraryId, CancellationToken ct = default);
+
+    /// <summary>The servers <see cref="ReleaseLibraryPortAsync"/> releases on: every server the library
+    /// reaches, none for a library of no project. A missing library throws <see cref="NotFoundException"/>.</summary>
+    Task<List<int>> GetReleaseServerIdsAsync(int libraryId, CancellationToken ct = default);
 
     /// <summary>Checks the library's existing <c>PORT_*</c> entries against one server.</summary>
     Task<PortCheckResultDto> CheckLibraryPortsAsync(

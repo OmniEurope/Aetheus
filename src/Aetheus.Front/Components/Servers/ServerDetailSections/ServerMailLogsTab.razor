@@ -1,15 +1,15 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-<OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
-    <OmniDropDown aria-label="@L["SelectLogType"]" @bind-Value="_unit" Options="@(Units.ToOptions(item => (string)item, item => item))" TValue="string" Placeholder="@L["SelectLogType"]" Class="w-rem-10" />
-    <OmniNumeric aria-label="@L["Lines"]" @bind-Value="_lines" Minimum="10" Maximum="2000" TValue="int" Class="w-rem-6" />
-    <OmniTextBox aria-label="@L["MailLogFilter"]" @bind-Value="_filter" Placeholder="@L["MailLogFilter"]" maxlength="64" />
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@FetchAsync" Disabled="@(_pendingTaskId is not null)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["FetchLogs"]</span></ChildContent></OmniButton>
-    @if (_pendingTaskId is not null)
+@* Recette R-116: while the journal is being read, OE's busy veil lies over the whole tab (the toolbar and the
+   previous journal stay mounted underneath); no loader is added beside the button. *@
+<OmniStack Class="@(Pending ? (_content is null ? "omni-busy action-veil-placeholder" : "omni-busy") : null)" aria-busy="@(Pending ? "true" : "false")" title="@(Pending ? L["MailWaitingForTask"].Value : null)">
+    <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+        <OmniDropDown aria-label="@L["SelectLogType"]" @bind-Value="_unit" Options="@(Units.ToOptions(item => (string)item, item => item))" TValue="string" Placeholder="@L["SelectLogType"]" Class="w-rem-10" />
+        <OmniNumeric aria-label="@L["Lines"]" @bind-Value="_lines" Minimum="10" Maximum="2000" TValue="int" Class="w-rem-6" />
+        <OmniTextBox aria-label="@L["MailLogFilter"]" @bind-Value="_filter" Placeholder="@L["MailLogFilter"]" maxlength="64" />
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@FetchAsync" Disabled="@Pending"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["FetchLogs"]</span></ChildContent></OmniButton>
+    </OmniRow>
+    @if (_content is not null)
     {
-        <AetheusLoader Size="OmniControlSize.Small" />
+        <OmniCodeBlock Code="@(string.IsNullOrWhiteSpace(_content) ? L["NoLogsAvailable"].Value : _content)" Title="@($"{L["Logs"]} - {_unit}")" Wrap="true" Class="docker-logs code-block-bounded" />
     }
-</OmniRow>
-@if (_content is not null)
-{
-    <OmniCodeBlock Code="@(string.IsNullOrWhiteSpace(_content) ? L["NoLogsAvailable"].Value : _content)" Title="@($"{L["Logs"]} - {_unit}")" Wrap="true" Class="docker-logs code-block-bounded" />
-}
+</OmniStack>

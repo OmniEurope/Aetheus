@@ -38,7 +38,8 @@ public interface IPipelineRunLauncher : IPipelineChildRunLauncher
     /// <inheritdoc cref="IPipelineRunService.RecordRefusedAutomatedLaunchAsync"/>
     Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
-        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default);
+        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
+        IReadOnlyList<ProblemDto>? problems = null);
 
     /// <inheritdoc cref="IPipelineRunService.RerunAsync"/>
     Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default);
@@ -95,8 +96,10 @@ public sealed class PipelineRunLauncher(
         ArgumentNullException.ThrowIfNull(preparation);
         idempotencyKey = idempotencyKey?.Trim();
         if (idempotencyKey?.Length > PipelineRunRequest.MaxIdempotencyKeyLength)
-            throw new BadRequestException(
-                $"Idempotency key cannot exceed {PipelineRunRequest.MaxIdempotencyKeyLength} characters.");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.IdempotencyKeyTooLong,
+                $"Idempotency key cannot exceed {PipelineRunRequest.MaxIdempotencyKeyLength} characters.",
+                ("max", PipelineRunRequest.MaxIdempotencyKeyLength)).ToRefusal();
         var definition = preparation.Definition;
         PipelineReleaseNumbers.EnsureValid(definition);
         var trigger = ResolveTriggerVariables(preparation, additionalVariables, parameters);
@@ -139,20 +142,22 @@ public sealed class PipelineRunLauncher(
             .ConfigureAwait(false);
         // R-32: a template a later stage renders is read now, so a token nothing defines refuses the
         // launch before any stage runs (aetheus-demo had already reset the demo when it was refused).
-        var templateProblems = await configTemplates.FindProblemsAsync(
+        // R-82: a template nobody can read is refused here too, before any stage touches the host.
+        var templateFindings = await configTemplates.FindProblemsAsync(
             runtimePreparation.Definition, preLaunchVariables, runtimePreparation.EffectiveProjectId,
             preparation.DefinitionCommitHash ?? preparation.CommitHash, preparation.Pipeline.SourceRepositoryId, ct)
             .ConfigureAwait(false);
         // R-20: read on the definition as declared, before the parameters were substituted into it.
         var emptyTargetProblems = preflight.FindEmptyTargetParameterProblems(
             preparation.Definition, preLaunchVariables, effectiveParams);
-        List<string> preflightProblems = [.. emptyTargetProblems, .. preflightOutcome.Problems, .. templateProblems];
+        List<PipelineProblem> preflightProblems = [.. emptyTargetProblems, .. preflightOutcome.Problems, .. templateFindings.Problems];
         if (preflightProblems.Count > 0)
         {
             // Automated launch refusal is audited before throwing because no run row exists yet.
             // The informational entry links the refusal to the pipeline without duplicating
-            // preflight warnings.
-            var reason = string.Join(" ", preflightProblems);
+            // preflight warnings. The log, the audit and the message stay English; the problems
+            // travel next to the message so the front can say them in the user's language.
+            var reason = string.Join(" ", preflightProblems.Select(problem => problem.English));
             logger.LogInformation(
                 "Preflight refused the launch of pipeline {PipelineId} ({PipelineName}): {Reason}",
                 preparation.PipelineId, preparation.Pipeline.Name, reason);
@@ -160,8 +165,12 @@ public sealed class PipelineRunLauncher(
                 "BlockedByPreflight", "Pipeline", preparation.PipelineId,
                 $"{preparation.Pipeline.Name} | {reason}", ct).ConfigureAwait(false);
             throw new BadRequestException(
-                "This run cannot complete with the current configuration: " + reason);
+                "This run cannot complete with the current configuration: " + reason,
+                [.. preflightProblems.Select(problem => problem.ToDto())]);
         }
+        // R-72: deploying despite the quality gate is checked before the run exists, like the preflight.
+        var gateOverride = await PipelineGateOverride.CheckAsync(
+            runtimePreparation, runtimePreparation.Definition, preLaunchVariables, repo, ct).ConfigureAwait(false);
 
         // The launch is accepted, so the ports it will bind are now this owner's. Declared here rather
         // than at deploy time on purpose: a port claimed only once the container is up is a port two
@@ -179,14 +188,22 @@ public sealed class PipelineRunLauncher(
             runtimePreparation.ReleaseSeries, ct).ConfigureAwait(false);
         run.ReleaseNumber = release?.Number;
         run.ReleaseSeries = release?.Series;
+        if (gateOverride is not null)
+            PipelineGateOverride.Apply(run, preparation.GateOverrideBy!, gateOverride, run.StartedAt);
         var existing = await PersistPipelineRunAsync(run, ct).ConfigureAwait(false);
         if (existing is not null) return existing;
+        if (gateOverride is not null)
+            await audit.LogAsync(
+                "PipelineRunGateOverridden", "PipelineRun", run.Id,
+                PipelineGateOverride.AuditDetails(preparation.Pipeline.Name, gateOverride), ct).ConfigureAwait(false);
 
         // Written once the run exists, which is the only place an operator can read them. A warning
         // kept in the server log alone would be invisible to the person whose deployment is about to
         // fight an undeclared listener for its port.
-        if (preflightOutcome.Warnings.Count > 0)
-            await repo.AppendRunWarningsAsync(run.Id, [.. preflightOutcome.Warnings], ct).ConfigureAwait(false);
+        List<string> preflightWarnings =
+            [.. preflightOutcome.Warnings.Concat(templateFindings.Warnings).Select(warning => warning.ToStored())];
+        if (preflightWarnings.Count > 0)
+            await repo.AppendRunWarningsAsync(run.Id, preflightWarnings, ct).ConfigureAwait(false);
 
         return await LaunchPreparedRunAsync(
             run, preparation, runtimePreparation, variables, ct).ConfigureAwait(false);
@@ -202,10 +219,13 @@ public sealed class PipelineRunLauncher(
             : new Dictionary<string, string>(additionalVariables, StringComparer.OrdinalIgnoreCase);
         var reservedParameter = parameters?.Keys.FirstOrDefault(PipelineParameterResolver.IsReservedName);
         if (reservedParameter is not null)
-            throw new BadRequestException($"Parameter '{reservedParameter}' uses a reserved system variable name.");
-        if (!PipelineParameterResolver.TryResolve(
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.ParameterReservedName,
+                $"Parameter '{reservedParameter}' uses a reserved system variable name.",
+                ("parameter", reservedParameter)).ToRefusal();
+        if (!PipelineParameterResolver.TryResolveProblems(
                 preparation.Definition.Parameters, parameters, out var effective, out var errors))
-            throw new BadRequestException(string.Join(" ", errors));
+            throw PipelineProblem.Refusal(errors);
         if (parameters is not null)
             foreach (var (key, value) in parameters) variables[key] = value;
         foreach (var (key, value) in effective)
@@ -310,7 +330,9 @@ public sealed class PipelineRunLauncher(
     // committed YAML, variable resolution, dispatch). Secret values are masked upstream, so an exception
     // message here carries names/paths, not secrets.
     private static string BuildLaunchFailureReason(Exception ex)
-        => $"The run could not be launched: {ex.Message}";
+        => PipelineProblem.Of(
+            PipelineProblemCodes.LaunchSetupFailed, $"The run could not be launched: {ex.Message}", ("detail", ex.Message))
+            .ToStored((ex as BadRequestException)?.Problems);
 
     // Post-persist launch setup. Git is deliberately not read here: authorization and execution must use
     // the same immutable preparation resolved before the run was created.
@@ -391,18 +413,20 @@ public sealed class PipelineRunLauncher(
             // no run row exists to carry it. It is rethrown once a failed run carries it and the
             // subscribers are told.
             await refusals.RecordAsync(
-                preparation.Pipeline, preparation, triggerSource, refusal.Message, additionalVariables, ct).ConfigureAwait(false);
+                preparation.Pipeline, preparation, triggerSource, refusal.Message, additionalVariables, ct, refusal.Problems)
+                .ConfigureAwait(false);
             throw;
         }
     }
 
     public async Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
-        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default)
+        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
+        IReadOnlyList<ProblemDto>? problems = null)
     {
         var pipeline = await repo.FindPipelineAsync(pipelineId, ct).ConfigureAwait(false);
         if (pipeline is null) return;
-        await refusals.RecordAsync(pipeline, null, triggerSource, reason, additionalVariables, ct).ConfigureAwait(false);
+        await refusals.RecordAsync(pipeline, null, triggerSource, reason, additionalVariables, ct, problems).ConfigureAwait(false);
     }
 
     public async Task<PipelineRunPreparation?> PrepareAutomatedRunAsync(
@@ -413,6 +437,15 @@ public sealed class PipelineRunLauncher(
     {
         var pipeline = await repo.FindPipelineAsync(pipelineId, ct).ConfigureAwait(false);
         if (pipeline is null) return null;
+        // Recette R-51 (ADR-058): a deleted project waiting for its server cleanup runs nothing, and a webhook or
+        // a schedule is no one to tell: the trigger is dropped, logged, without a refused run.
+        if ((pipeline.ProjectId ?? await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false)) is { } projectId
+            && await repo.IsProjectDeletionPendingAsync(projectId, ct).ConfigureAwait(false))
+        {
+            logger.LogInformation("{Trigger} run of pipeline {PipelineId} dropped: its project {ProjectId} is deleted and waits for its server cleanup.",
+                triggerSource, pipelineId, projectId);
+            return null;
+        }
 
         // F-EXEC-1b: a pipeline step is free-form shell (= RCE). Interactive runs authorize the
         // live caller (F-EXEC-1); webhook/scheduler have no principal, so authorize the owner.
@@ -437,7 +470,8 @@ public sealed class PipelineRunLauncher(
             // Mandatory catch, as in TriggerPreparedAutomatedRunAsync: a definition that cannot be
             // prepared (invalid YAML, a source repository that differs or cannot be read) is a
             // refusal nobody reads unless a failed run carries it.
-            await refusals.RecordAsync(pipeline, null, triggerSource, refusal.Message, additionalVariables, ct).ConfigureAwait(false);
+            await refusals.RecordAsync(pipeline, null, triggerSource, refusal.Message, additionalVariables, ct, refusal.Problems)
+                .ConfigureAwait(false);
             throw;
         }
         if (preparation is null) return null;

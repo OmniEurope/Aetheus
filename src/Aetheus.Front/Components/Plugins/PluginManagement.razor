@@ -33,10 +33,10 @@
             <OmniDataGridColumn TItem="PluginRegistrationDto" Property="Author" Title="@L["Author"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.Authors" FilterSearchable="true" />
             <OmniDataGridColumn TItem="PluginRegistrationDto" Property="Status" Title="@L["Status"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="plugin">
-                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(plugin.Status)">@L.Localize(plugin.Status)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetStatusBadgeStyle(plugin.Status)))" Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(plugin.Status)">@L.Localize(plugin.Status)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PluginRegistrationDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+            <OmniDataGridColumn TItem="PluginRegistrationDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" />
             <OmniDataGridColumn TItem="PluginRegistrationDto" Title="@L["Actions"]" Width="160px" Sortable="false" Filterable="false" >
                 <Template Context="plugin">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">

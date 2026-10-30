@@ -66,7 +66,9 @@ public partial class VersionHistoryDialog
             new OmniConfirmOptions { Destructive = true, ConfirmIcon = OmniIconName.ArrowUUpLeft, OkButtonText = L["Restore"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
+        // R-99: the dialog is veiled before the restore runs (the confirmation returned without a render).
         _restoring = true;
+        StateHasChanged();
         try
         {
             var outcome = await Api.Variables.UpdateVariableEntryAsync(LibraryId, EntryId, new UpdateVariableEntryRequest

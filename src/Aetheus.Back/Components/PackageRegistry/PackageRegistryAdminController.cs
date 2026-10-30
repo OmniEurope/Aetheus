@@ -22,6 +22,19 @@ public class PackageRegistryAdminController(IPackageRegistryAdminService registr
         return package is null ? NotFound() : Ok(package);
     }
 
+    /// <summary>Opens or closes anonymous reading of one package (R-58). Admin only, like the whole
+    /// controller; it never changes who may publish.</summary>
+    [HttpPut("{packageId:int}/anonymous-download")]
+    public async Task<IActionResult> UpdateAnonymousDownload(
+        int packageId,
+        [FromBody] UpdatePackageRegistryAnonymousDownloadRequest request,
+        CancellationToken ct)
+    {
+        var updated = await registry.SetAnonymousDownloadAsync(
+            packageId, request.AllowAnonymousDownload, ct);
+        return updated ? NoContent() : NotFound();
+    }
+
     [HttpPut("{packageId:int}/versions/{versionId:int}/deprecation")]
     public async Task<IActionResult> UpdateVersionDeprecation(
         int packageId,

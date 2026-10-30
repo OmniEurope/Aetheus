@@ -7,6 +7,8 @@ public static class OrganizationsModuleExtensions
     {
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<IOrganizationService, OrganizationService>();
+        services.AddScoped<IOrganizationRoleAssignmentRepository, OrganizationRoleAssignmentRepository>();
+        services.AddScoped<IOrganizationRoleAssignmentService, OrganizationRoleAssignmentService>();
         return services;
     }
 }

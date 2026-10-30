@@ -82,10 +82,11 @@ public sealed class AnalysisPortfolioTests : BunitContext
         {
             Assert.Contains("analysis-portfolio-project-card", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("Aetheus", cut.Markup, StringComparison.Ordinal);
-            // One rendering. The grade is the shared badge, A reading as healthy.
+            // One rendering. The grade is the shared filled badge (R-107), A reading as healthy.
             var grade = cut.Find(".analysis-portfolio-grade");
             Assert.Equal("A", grade.TextContent.Trim());
-            Assert.Contains("omni-badge--success", grade.ClassName, StringComparison.Ordinal);
+            Assert.Contains("grade-badge--a", grade.ClassName, StringComparison.Ordinal);
+            Assert.Contains("omni-badge--solid", grade.ClassName, StringComparison.Ordinal);
         });
     }
 

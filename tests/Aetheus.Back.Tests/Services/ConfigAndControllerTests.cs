@@ -22,7 +22,6 @@ public class ConfigAndControllerTests
         Assert.Null(opt.JwtAudience);
         Assert.Equal(30, opt.AccessTokenMinutes);
         Assert.Equal(14, opt.RefreshTokenDays);
-        Assert.Null(opt.AdminUser);
         Assert.Null(opt.AdminPassword);
         Assert.Null(opt.EncryptionKey);
         Assert.Null(opt.EncryptionSalt);
@@ -38,7 +37,6 @@ public class ConfigAndControllerTests
             JwtAudience = "aud",
             AccessTokenMinutes = 60,
             RefreshTokenDays = 7,
-            AdminUser = "admin",
             AdminPassword = "pass",
             EncryptionKey = "ekey",
             EncryptionSalt = "esalt"

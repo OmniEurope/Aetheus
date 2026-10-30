@@ -7,6 +7,7 @@ namespace Aetheus.Front.Components.Users;
 
 public partial class UserEdit : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     private AdminEntitySubscription? _permissionChanges;
 
@@ -24,11 +25,9 @@ public partial class UserEdit : IAsyncDisposable
 
     private UserDto? _user;
     private UserModel _model = new();
-    private bool _isNew => Id is null or 0;
     private bool _saving;
     private bool _savingRoles;
     private bool _savingFlags;
-    private bool _rolesSaved;
     private bool _loading;
     private PasswordChangeModel _passwordChange = new();
     private bool _changingPassword;
@@ -87,26 +86,24 @@ public partial class UserEdit : IAsyncDisposable
 
         try
         {
-            if (!_isNew)
+            _loading = true;
+            var user = await Api.Auth.GetUserDetailAsync(Id!.Value);
+            // FRONT-024: the route moved to another account while this one was loading.
+            if (generation != _loadGeneration) return;
+            _user = user;
+            if (_user is not null)
             {
-                _loading = true;
-                var user = await Api.Auth.GetUserDetailAsync(Id!.Value);
-                // FRONT-024: the route moved to another account while this one was loading.
-                if (generation != _loadGeneration) return;
-                _user = user;
-                if (_user is not null)
+                _model = new UserModel
                 {
-                    _model = new UserModel
-                    {
-                        Username = _user.Username,
-                        Email = _user.Email,
-                        IsActive = _user.IsActive,
-                        MustChangePassword = _user.MustChangePassword,
-                        Roles = _user.Roles.ToList()
-                    };
-                }
-                _loading = false;
+                    Username = _user.Username,
+                    Email = _user.Email,
+                    IsActive = _user.IsActive,
+                    MustChangePassword = _user.MustChangePassword,
+                    Roles = _user.Roles.ToList(),
+                    OrganizationRoles = _user.OrganizationRoles.ToList()
+                };
             }
+            _loading = false;
         }
         catch (HttpRequestException)
         {
@@ -116,34 +113,31 @@ public partial class UserEdit : IAsyncDisposable
             _loading = false;
         }
 
-        if (!_isNew)
+        await LoadEffectivePermissions();
+        // A user's effective permissions follow their roles, those roles' permissions and their
+        // organizations; the admin hub says when any of them changed.
+        if (_permissionChanges is null)
         {
-            await LoadEffectivePermissions();
-            // A user's effective permissions follow their roles, those roles' permissions and their
-            // organizations; the admin hub says when any of them changed.
-            if (_permissionChanges is null)
-            {
-                _permissionChanges = new AdminEntitySubscription(HubFactory);
-                await _permissionChanges.StartAsync(
-                    [AdminEntities.User, AdminEntities.Role, AdminEntities.Organization],
-                    () => InvokeAsync(async () =>
-                    {
-                        // Told before the new list arrives, the grid marks the grants it did not
-                        // hold.
-                        if (_permissionsGrid is not null) await _permissionsGrid.RefreshAsync();
-                        await LoadEffectivePermissions();
-                        StateHasChanged();
-                    }));
-            }
+            _permissionChanges = new AdminEntitySubscription(HubFactory);
+            await _permissionChanges.StartAsync(
+                [AdminEntities.User, AdminEntities.Role, AdminEntities.Organization],
+                () => InvokeAsync(async () =>
+                {
+                    // Told before the new list arrives, the grid marks the grants it did not
+                    // hold.
+                    if (_permissionsGrid is not null) await _permissionsGrid.RefreshAsync();
+                    await LoadEffectivePermissions();
+                    StateHasChanged();
+                }));
         }
 
         Breadcrumb.Set(
             new BreadcrumbItem(L["Administration"], "/admin"),
             new BreadcrumbItem(L["Users"], "/users"),
-            new BreadcrumbItem(_isNew ? L["NewUser"] : _user?.Username ?? L["User"]));
+            new BreadcrumbItem(_user?.Username ?? L["User"]));
 
         // Deep-link straight to the organizations tab: load it up front.
-        if (!_isNew && string.Equals(CurrentTab(), "organizations", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(CurrentTab(), "organizations", StringComparison.OrdinalIgnoreCase))
             await LoadUserOrgsAsync();
     }
 
@@ -161,7 +155,6 @@ public partial class UserEdit : IAsyncDisposable
         _availableOrgs = [];
         _orgsLoaded = false;
         _selectedOrgId = null;
-        _rolesSaved = false;
         return ++_loadGeneration;
     }
 
@@ -186,7 +179,7 @@ public partial class UserEdit : IAsyncDisposable
 
     private async Task LoadUserOrgsAsync()
     {
-        if (_isNew || Id is null or 0) return;
+        if (Id is null or 0) return;
         var generation = _loadGeneration;
         _loadingOrgs = true;
         await InvokeAsync(StateHasChanged);
@@ -266,15 +259,18 @@ public partial class UserEdit : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Remove"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        if (await Api.Servers.RemoveOrganizationMemberAsync(org.OrganizationId, org.MemberId))
+        await Veil.RunAsync(async () =>
         {
-            await LoadUserOrgsAsync();
-            Toast.Success("Deleted", "Saved");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            if (await Api.Servers.RemoveOrganizationMemberAsync(org.OrganizationId, org.MemberId))
+            {
+                await LoadUserOrgsAsync();
+                Toast.Success("Deleted", "Saved");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     internal async Task OnSubmit()
@@ -282,59 +278,26 @@ public partial class UserEdit : IAsyncDisposable
         _saving = true;
         try
         {
-            if (_isNew)
+            var editingCurrentUser = IsEditingCurrentUser;
+            var updated = await Api.Auth.UpdateUserAsync(Id!.Value, new UpdateUserRequest
             {
-                if (string.IsNullOrWhiteSpace(_model.Password) || _model.Password.Length < PasswordPolicy.MinimumLength)
-                {
-                    Toast.Error(L["Error"], L["PasswordMinLength"]);
-                    return;
-                }
-
-                var outcome = await Api.Auth.CreateUserAsync(new CreateUserRequest
-                {
-                    Username = _model.Username,
-                    Password = _model.Password,
-                    Email = string.IsNullOrWhiteSpace(_model.Email) ? null : _model.Email,
-                    MustChangePassword = _model.MustChangePassword,
-                    Roles = _model.Roles
-                });
-                if (outcome.Value is { } created)
-                {
-                    Toast.Success("Created", "UserCreated");
-                    Nav.NavigateTo($"/users/{created.Id}");
-                }
-                else if (!string.IsNullOrWhiteSpace(outcome.Error?.Message))
-                {
-                    Toast.Notify(OmniSeverity.Danger, "Error", outcome.Error.Message);
-                }
-                else
-                {
-                    Toast.Error("Error", "SaveFailed");
-                }
+                Username = _model.Username,
+                Email = string.IsNullOrWhiteSpace(_model.Email) ? null : _model.Email,
+                IsActive = _user!.IsActive,
+                MustChangePassword = _user.MustChangePassword,
+                Roles = _model.Roles
+            });
+            if (updated is not null)
+            {
+                _user = await Api.Auth.GetUserDetailAsync(Id!.Value);
+                await LoadEffectivePermissions();
+                if (editingCurrentUser)
+                    Permissions.SetPermissions(_effectivePermissions ?? [], Auth.IsAdmin);
+                Toast.Success("Saved", "UserSaved");
             }
             else
             {
-                var editingCurrentUser = IsEditingCurrentUser;
-                var updated = await Api.Auth.UpdateUserAsync(Id!.Value, new UpdateUserRequest
-                {
-                    Username = _model.Username,
-                    Email = string.IsNullOrWhiteSpace(_model.Email) ? null : _model.Email,
-                    IsActive = _user!.IsActive,
-                    MustChangePassword = _user.MustChangePassword,
-                    Roles = _model.Roles
-                });
-                if (updated is not null)
-                {
-                    _user = await Api.Auth.GetUserDetailAsync(Id!.Value);
-                    await LoadEffectivePermissions();
-                    if (editingCurrentUser)
-                        Permissions.SetPermissions(_effectivePermissions ?? [], Auth.IsAdmin);
-                    Toast.Success("Saved", "UserSaved");
-                }
-                else
-                {
-                    Toast.Error("Error", "SaveFailed");
-                }
+                Toast.Error("Error", "SaveFailed");
             }
         }
         finally
@@ -375,7 +338,7 @@ public partial class UserEdit : IAsyncDisposable
 
     private async Task UpdateFlagsAsync(bool isActive, bool mustChangePassword, UserPipelineHandover? handover = null)
     {
-        if (_isNew || Id is null or 0 || _user is null || _savingFlags) return;
+        if (Id is null or 0 || _user is null || _savingFlags) return;
         var previousActive = _model.IsActive;
         var previousMustChange = _model.MustChangePassword;
         var editingCurrentUser = IsEditingCurrentUser;
@@ -452,6 +415,35 @@ public partial class UserEdit : IAsyncDisposable
         }
     }
 
+    private bool _sendingLink;
+    private WelcomeMailResultDto? _linkResult;
+    private string? _linkError;
+
+    /// <summary>R-14: sends the person a new set-password link; the page says what became of the mail.</summary>
+    private async Task OnSendPasswordLink()
+    {
+        if (DisplayedTarget() is not { } target || _sendingLink) return;
+        _sendingLink = true;
+        _linkResult = null;
+        _linkError = null;
+        try
+        {
+            var outcome = await Api.Auth.SendPasswordLinkAsync(target.Id);
+            _linkResult = outcome.Value;
+            // Only a mail that left is a success; NotConfigured and Failed stay in the card's alert.
+            if (outcome.Value is { Status: WelcomeMailStatus.Sent } sent)
+                Toast.Success("SendPasswordLink", "PasswordLinkMailSent", sent.To ?? string.Empty);
+            else if (outcome.Value is null)
+                _linkError = outcome.StatusCode == System.Net.HttpStatusCode.TooManyRequests
+                    ? L["SendPasswordLinkTooMany"].Value
+                    : L["SendPasswordLinkRefused"].Value;
+        }
+        finally
+        {
+            _sendingLink = false;
+        }
+    }
+
     private async Task OnChangePassword(PasswordChangeModel model)
     {
         // The button is always clickable; validate here and tell the user exactly why it failed
@@ -488,14 +480,22 @@ public partial class UserEdit : IAsyncDisposable
         Toast.Warning("Error", "PasswordMinLength");
     }
 
-    private async Task OnRolesChangedAsync(List<string> roles)
+    private Task OnRolesChangedAsync(List<string> roles) =>
+        SaveRolesAsync(roles, _model.OrganizationRoles);
+
+    // R-47: a role held for an organization saves through the same autosave as the site-wide Admin role.
+    private Task OnOrganizationRolesChangedAsync(List<OrganizationRoleAssignmentDto> organizationRoles) =>
+        SaveRolesAsync(_model.Roles, organizationRoles);
+
+    private async Task SaveRolesAsync(List<string> roles, List<OrganizationRoleAssignmentDto> organizationRoles)
     {
-        if (_isNew || Id is null or 0 || _user is null || _savingRoles) return;
+        if (Id is null or 0 || _user is null || _savingRoles) return;
 
         var previousRoles = _user.Roles.ToList();
+        var previousOrganizationRoles = _user.OrganizationRoles.ToList();
         var editingCurrentUser = IsEditingCurrentUser;
         _model.Roles = roles.ToList();
-        _rolesSaved = false;
+        _model.OrganizationRoles = organizationRoles.ToList();
         _savingRoles = true;
         try
         {
@@ -507,18 +507,20 @@ public partial class UserEdit : IAsyncDisposable
                 Email = _user.Email,
                 IsActive = _user.IsActive,
                 MustChangePassword = _user.MustChangePassword,
-                Roles = _model.Roles
+                Roles = _model.Roles,
+                OrganizationRoles = _model.OrganizationRoles
             });
             if (updated is null)
             {
                 _model.Roles = previousRoles;
+                _model.OrganizationRoles = previousOrganizationRoles;
                 Toast.Error("Error", "SaveFailed");
                 return;
             }
 
             _user = updated;
             _model.Roles = updated.Roles.ToList();
-            _rolesSaved = true;
+            _model.OrganizationRoles = updated.OrganizationRoles.ToList();
             Toast.Success("Saved", "UserSaved");
 
             try
@@ -542,6 +544,7 @@ public partial class UserEdit : IAsyncDisposable
         catch (HttpRequestException)
         {
             _model.Roles = previousRoles;
+            _model.OrganizationRoles = previousOrganizationRoles;
             Toast.Error("Error", "SaveFailed");
         }
         finally
@@ -552,7 +555,7 @@ public partial class UserEdit : IAsyncDisposable
 
     private async Task LoadEffectivePermissions()
     {
-        if (_isNew || Id is null or 0) return;
+        if (Id is null or 0) return;
 
         var generation = _loadGeneration;
         var summary = await Api.Auth.GetUserEffectivePermissionsAsync(Id!.Value);
@@ -580,15 +583,16 @@ public partial class UserEdit : IAsyncDisposable
         [StringLength(50, ErrorMessage = "UsernameTooLong")]
         public string Username { get; set; } = string.Empty;
 
+        // PLAN-003 P3-2: the sign-in identifier.
+        [Required(ErrorMessage = "EmailRequired")]
         [StringLength(200)]
+        [EmailAddress(ErrorMessage = "EmailInvalid")]
         public string? Email { get; set; }
-
-        [StringLength(100)]
-        public string Password { get; set; } = string.Empty;
 
         public bool IsActive { get; set; } = true;
         public bool MustChangePassword { get; set; } = true;
         public List<string> Roles { get; set; } = [];
+        public List<OrganizationRoleAssignmentDto> OrganizationRoles { get; set; } = [];
     }
 
     private sealed class PasswordChangeModel

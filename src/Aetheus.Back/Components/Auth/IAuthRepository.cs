@@ -16,6 +16,13 @@ public interface IAuthRepository
         int organizationId, string machineIdHash, string hostname, CancellationToken ct = default);
 
     Task<User?> FindUserWithRolesAsync(string username, CancellationToken ct = default);
+
+    /// <summary>The account signing in with <paramref name="email"/>, compared normalized (PLAN-003 P3-2).</summary>
+    Task<User?> FindUserByEmailWithRolesAsync(string email, CancellationToken ct = default);
+
+    /// <summary>True when an account other than <paramref name="exceptUserId"/> already signs in with
+    /// <paramref name="normalizedEmail"/>.</summary>
+    Task<bool> EmailInUseAsync(string normalizedEmail, int? exceptUserId, CancellationToken ct = default);
     Task<User?> FindUserByIdWithRolesAsync(int userId, CancellationToken ct = default);
 
     Task<bool> AnyUsersExistAsync(CancellationToken ct = default);
@@ -76,6 +83,9 @@ public interface IAuthRepository
     Task ResetFailedLoginAsync(int userId, CancellationToken ct = default);
     Task LockoutUserAsync(int userId, DateTime lockoutEndUtc, CancellationToken ct = default);
     Task ClearLockoutAsync(int userId, CancellationToken ct = default);
+
+    /// <summary>Stamps the account last authenticated activity without touching UpdatedAt.</summary>
+    Task TouchLastActivityAsync(int userId, DateTime nowUtc, CancellationToken ct = default);
 
     // --- Refresh Tokens (F-012) ---
     Task AddRefreshTokenAsync(RefreshToken token, CancellationToken ct = default);

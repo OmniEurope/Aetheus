@@ -236,6 +236,14 @@ public class ErrorNotificationHandlerTests
     public async Task SendAsync_AnEmptyJsonBody_FallsBackToTheStatusMessage(string? body) =>
         Assert.Equal("UnexpectedServerError", await DetailOfAsync(HttpStatusCode.InternalServerError, body, "application/json"));
 
+    // PLAN-003 P3-2: a sign-in e-mail another account holds is said in the user's language, not in the
+    // API's English message.
+    [Fact]
+    public async Task SendAsync_AnEmailHeldByAnotherAccount_IsSaidInTheUsersLanguage() =>
+        Assert.Equal("UserEmailInUse", await DetailOfAsync(HttpStatusCode.Conflict,
+            """{"message":"This e-mail address is already used by another account.","code":"UserEmailInUse"}""",
+            "application/json"));
+
     [Fact]
     public async Task SendAsync_ABodyThatIsNotValidJson_FallsBackToTheStatusMessage() =>
         Assert.Equal("AccessDenied", await DetailOfAsync(HttpStatusCode.Forbidden, "<html>proxy error</html>", "application/json"));

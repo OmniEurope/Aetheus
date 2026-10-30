@@ -4,7 +4,8 @@
 @layout Aetheus.Front.Layout.ServerDetailLayout
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 
-<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - Portsentry - Aetheus</PageTitle>
+@* Same title as the breadcrumb: the upstream version is part of it (R-120 rule). *@
+<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @(Loader?.Server is { } server ? Aetheus.Front.Layout.ServerDetailLayout.SectionTitle($"servers/{Id}/portsentry", L["PortSentry"].Value, server) : L["PortSentry"].Value) - Aetheus</PageTitle>
 
 @if (Loader?.Server is not null)
 {

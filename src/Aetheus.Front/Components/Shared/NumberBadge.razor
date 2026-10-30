@@ -1,0 +1,8 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+
+@* The badge of a text that carries a number ("1 En ligne", "3 Rôles", "#42", "v2"): never an icon
+   (recette R-44 and R-59, user rule of 2026-10-25). A badge whose text has no number is an OmniBadge
+   with an Icon (BadgeIcon); the badge architecture guard keeps every badge on one side of that line.
+   OnClick or Href make it the clickable badge of OmniBadge (OE 1.10.0, R-67): one real button or link. *@
+<OmniBadge Fill="Fill" Tone="Tone" Width="Width" Class="@Class" Id="@Id" OnClick="OnClick" Href="@Href" Label="@Label" @attributes="AdditionalAttributes">@ChildContent</OmniBadge>

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Security.Claims;
 using Aetheus.Back.Components.Users;
+using Aetheus.Back.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
@@ -14,7 +15,11 @@ public class UsersControllerTests
 
     public UsersControllerTests()
     {
-        _sut = new UsersController(_serviceMock);
+        // The site Admin administers every organization (null), as the real service answers for the Admin role.
+        var authz = Substitute.For<IResourceAuthorizationService>();
+        authz.GetOrganizationsWithPermissionKeyAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<int>?)null);
+        _sut = new UsersController(_serviceMock, authz, Substitute.For<IOrganizationRoleAssignmentService>());
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -31,7 +36,7 @@ public class UsersControllerTests
         _serviceMock.GetUsersAsync(Arg.Any<PaginationRequest>(), Arg.Any<CancellationToken>())
             .Returns(new PaginatedResult<UserDto> { Items = [new UserDto { Id = 1, Username = "admin" }], TotalCount = 1 });
 
-        var result = await _sut.GetUsers(new PaginationRequest(), TestContext.Current.CancellationToken);
+        var result = await _sut.GetUsers(new PaginationRequest(), null, TestContext.Current.CancellationToken);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.IsType<PaginatedResult<UserDto>>(ok.Value);
@@ -87,9 +92,57 @@ public class UsersControllerTests
         _serviceMock.CreateUserAsync(Arg.Any<CreateUserRequest>(), Arg.Any<CancellationToken>())
             .Returns(new UserDto { Id = 1, Username = "new" });
 
-        var result = await _sut.CreateUser(new CreateUserRequest { Username = "new", Password = "pass123" }, TestContext.Current.CancellationToken);
+        var result = await _sut.CreateUser(new CreateUserRequest { Username = "new", Email = "new@test.com" }, TestContext.Current.CancellationToken);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // R-10 (d): the holder of org.members.manage for organization 7 only; the service is never reached on a refusal.
+    private UsersController OrganizationAdminOf7(bool rolesGiven = true)
+    {
+        var authz = Substitute.For<IResourceAuthorizationService>();
+        authz.GetOrganizationsWithPermissionKeyAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.OrganizationMembersManage, Arg.Any<CancellationToken>())
+            .Returns(new List<int> { 7 });
+        _serviceMock.CreateUserAsync(Arg.Any<CreateUserRequest>(), Arg.Any<CancellationToken>()).Returns(new UserDto { Id = 2, Username = "new" });
+        var roles = Substitute.For<IOrganizationRoleAssignmentService>();
+        roles.AreGivenByOrganizationAdministratorAsync(Arg.Any<IReadOnlyCollection<OrganizationRoleAssignmentDto>>(), Arg.Any<CancellationToken>()).Returns(rolesGiven);
+        return new UsersController(_serviceMock, authz, roles)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "5")], "test")) }
+            }
+        };
+    }
+
+    private static CreateUserRequest In(int organizationId, List<string>? roles = null) => new()
+    {
+        Username = "new",
+        Email = "new@test.com",
+        Roles = roles ?? [],
+        OrganizationRoles = [new OrganizationRoleAssignmentDto { OrganizationId = organizationId, Role = RoleNames.Reader }]
+    };
+
+    [Fact]
+    public async Task CreateUser_OrganizationAdmin_InItsOrganization_ReturnsCreated()
+    {
+        var result = await OrganizationAdminOf7().CreateUser(In(7), TestContext.Current.CancellationToken);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateUser_OrganizationAdmin_OtherOrganizationOrSiteRole_IsForbidden_AndNoOrganizationIsBadRequest()
+    {
+        var sut = OrganizationAdminOf7();
+        var ct = TestContext.Current.CancellationToken;
+
+        Assert.IsType<ForbidResult>((await sut.CreateUser(In(8), ct)).Result);
+        Assert.IsType<ForbidResult>((await sut.CreateUser(In(7, [RoleNames.Admin]), ct)).Result);
+        Assert.IsType<BadRequestObjectResult>((await sut.CreateUser(new CreateUserRequest { Username = "n", Email = "n@test.com" }, ct)).Result);
+        // A role it does not give (Admin, a role of every organization or another organization's): refused too.
+        Assert.IsType<ForbidResult>((await OrganizationAdminOf7(rolesGiven: false).CreateUser(In(7), ct)).Result);
+        await _serviceMock.DidNotReceive().CreateUserAsync(Arg.Any<CreateUserRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

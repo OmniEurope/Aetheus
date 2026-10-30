@@ -10,11 +10,11 @@
 
     @if (_state == ContactState.Running)
     {
-        <OmniStack Gap="OmniSpacing.Small">
+        @* Recette R-116: the attempts run under OE's busy veil over their own lines, no loader beside them. *@
+        <OmniStack Gap="OmniSpacing.Small" Class="omni-busy" aria-busy="true" data-testid="contact-agent-running">
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
                 @string.Format(L["ContactAgentAttempt"], _attempt, MaxAttempts)
             </OmniText>
-            <AetheusLoader Size="OmniControlSize.Small" />
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">
                 @L["ContactAgentWaiting"]
             </OmniText>
@@ -90,7 +90,7 @@
     <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @if (_state == ContactState.Running)
         {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelAndCloseAsync"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelAndCloseAsync"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
         }
         else
         {

@@ -18,6 +18,7 @@ public partial class ServerPortsSection
     /// <summary>The agent is reachable. A scan queued for an offline agent would sit Pending.</summary>
     [Parameter] public bool AgentOnline { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -70,10 +71,13 @@ public partial class ServerPortsSection
     private bool _loading = true;
     private bool _busy;
     private bool _scanning;
+
+    // R-119: the scan is a queued agent task: it is followed, and the section is veiled until it ends.
+    private ServerTaskFollower? _follower;
     private int? _loadedServerId;
     private int _loadGeneration;
 
-    private bool CanWrite => Permissions.CanWrite(ResourceType.Server, ServerId);
+    private bool CanWrite => Permissions.Can(PermissionKeys.ServerPortsReserve, ServerId);
 
     private bool CanScan => !_scanning && AgentOnline && PortObservationAvailable == true;
 
@@ -414,6 +418,7 @@ public partial class ServerPortsSection
 
             // The scan is a queued agent task: the page cannot show its result yet, and saying
             // otherwise would be a green for work not done.
+            _follower?.Follow(L["PortScanRefresh"], outcome.Value.Id);
             Toast.Success("PortScanQueued");
         }
         catch (HttpRequestException)
@@ -437,15 +442,18 @@ public partial class ServerPortsSection
         _busy = true;
         try
         {
-            if ((await Api.ServerTools.ReleasePortReservationAsync(ServerId, row.Id)).Success)
+            await Veil.RunAsync(async () =>
             {
-                Toast.Success("PortReservationReleased");
-                await LoadAsync();
-            }
-            else
-            {
-                Toast.Error("PortReservationFailed");
-            }
+                if ((await Api.ServerTools.ReleasePortReservationAsync(ServerId, row.Id)).Success)
+                {
+                    Toast.Success("PortReservationReleased");
+                    await LoadAsync();
+                }
+                else
+                {
+                    Toast.Error("PortReservationFailed");
+                }
+            });
         }
         catch (HttpRequestException)
         {

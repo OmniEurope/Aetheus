@@ -33,6 +33,149 @@ public class PipelineCommandBuilderTests
     }
 
     [Fact]
+    public void BuildCloneCommands_RouteMandatoryGitNetworkCallsThroughThreeAttemptRetry()
+    {
+        var linux = PipelineCommandBuilder.BuildLinuxCloneCommand("/tmp/workspace");
+        var windows = PipelineCommandBuilder.BuildWindowsCloneCommand(@"C:\workspace");
+
+        Assert.Contains("local attempt=1 max=3", linux, StringComparison.Ordinal);
+        Assert.Contains("git_with_retry git fetch --depth \"$GIT_HISTORY_DEPTH\" origin", linux, StringComparison.Ordinal);
+        Assert.Contains("git_with_retry git fetch --depth 1 origin \"${DEFAULT_BRANCH:-main}\"", linux, StringComparison.Ordinal);
+        Assert.Contains("git_with_retry git clone --branch", linux, StringComparison.Ordinal);
+        Assert.Contains("return \"$rc\"", linux, StringComparison.Ordinal);
+
+        Assert.Contains("$max = 3", windows, StringComparison.Ordinal);
+        Assert.Contains("Invoke-GitWithRetry 'fetch' { git fetch --depth $historyDepth origin $branch }", windows, StringComparison.Ordinal);
+        Assert.Contains("Invoke-GitWithRetry 'fetch' { git fetch --depth 1 origin $branch }", windows, StringComparison.Ordinal);
+        Assert.Contains("Invoke-GitWithRetry 'clone' { git clone --branch", windows, StringComparison.Ordinal);
+        Assert.Contains("throw \"git $Name failed with exit code $code.\"", windows, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LinuxGitWithRetry_SucceedsWhenGitFailsTwiceThenSucceeds()
+    {
+        var result = await RunRetryFunctionAsync(failuresBeforeSuccess: 2);
+
+        Assert.True(result.ExitCode == 0, result.Stderr);
+        Assert.Contains("(attempt 1 of 3, exit 128); retrying in 10 s.", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("(attempt 2 of 3, exit 128); retrying in 30 s.", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("git calls=3", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("sleeps=10 30", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LinuxGitWithRetry_FailsWithGitExitCodeAfterThreeAttempts()
+    {
+        var result = await RunRetryFunctionAsync(failuresBeforeSuccess: 3);
+
+        Assert.True(result.ExitCode == 128, result.Stderr);
+        Assert.Contains("git calls=3", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("giving up", result.Stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("reached", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LinuxGitWithRetry_DoesNotRetryAnAuthenticationFailure()
+    {
+        var result = await RunRetryFunctionAsync(failuresBeforeSuccess: 3,
+            gitError: "fatal: Authentication failed for 'https://api.example.test/git/1/aetheus.git/'");
+
+        Assert.True(result.ExitCode == 128, result.Stderr);
+        Assert.Contains("git calls=1", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("fatal: Authentication failed", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("not retrying", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("sleeps=\n", result.Stdout.Replace("\r\n", "\n"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LinuxGitWithRetry_DoesNotRetryAMissingRepository()
+    {
+        var result = await RunRetryFunctionAsync(failuresBeforeSuccess: 3,
+            gitError: "remote: Repository not found.\nfatal: repository 'https://api.example.test/git/1/missing.git/' not found");
+
+        Assert.True(result.ExitCode == 128, result.Stderr);
+        Assert.Contains("git calls=1", result.Stdout, StringComparison.Ordinal);
+        Assert.Contains("not retrying", result.Stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LinuxGitWithRetry_KeepsTheTransientGitErrorInTheLogAndRetries()
+    {
+        var result = await RunRetryFunctionAsync(failuresBeforeSuccess: 1,
+            gitError: "fatal: unable to access 'https://api.example.test/git/1/aetheus.git/': Failed to connect to api.example.test port 443: Connection refused");
+
+        Assert.True(result.ExitCode == 0, result.Stderr);
+        Assert.Contains("Connection refused", result.Stderr, StringComparison.Ordinal);
+        Assert.Contains("git calls=2", result.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildCloneCommands_ClearAFailedCloneOnlyWhenTheWorkspaceStartedEmpty()
+    {
+        var linux = PipelineCommandBuilder.BuildLinuxCloneCommand("/tmp/workspace");
+        var windows = PipelineCommandBuilder.BuildWindowsCloneCommand(@"C:\workspace");
+
+        Assert.Contains("[ -n \"$(ls -A)\" ] || clone_cleanup=clear_partial_clone", linux, StringComparison.Ordinal);
+        Assert.Contains("GIT_RETRY_CLEANUP=\"$clone_cleanup\" git_with_retry git clone", linux, StringComparison.Ordinal);
+        Assert.Contains("$cloneCleanup = if (Get-ChildItem -Force | Select-Object -First 1) { $null } else { $clearPartialClone }", windows, StringComparison.Ordinal);
+        Assert.Contains("$env:REPOSITORY_URL . } $cloneCleanup", windows, StringComparison.Ordinal);
+        Assert.Contains("not retrying", windows, StringComparison.Ordinal);
+    }
+
+    // On Windows the PATH bash can be the WSL launcher, which cannot run a Windows temp path: use Git for Windows bash.
+    private static string BashExecutable()
+    {
+        if (!OperatingSystem.IsWindows())
+            return "bash";
+        var gitBash = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "usr", "bin", "bash.exe");
+        return File.Exists(gitBash) ? gitBash : "bash";
+    }
+
+    // Runs the generated git_with_retry under set -e with a fake git (function) that fails the requested
+    // number of times with exit 128, and a fake sleep that records the delays instead of waiting.
+    private static async Task<(int ExitCode, string Stdout, string Stderr)> RunRetryFunctionAsync(int failuresBeforeSuccess, string gitError = "")
+    {
+        var script = PipelineCommandBuilder.BuildLinuxCloneCommand("/tmp/workspace");
+        var start = script.IndexOf("git_with_retry() {", StringComparison.Ordinal);
+        var end = script.IndexOf("\n}\n", start, StringComparison.Ordinal) + 3;
+        var function = script[start..end];
+        var harness =
+            "set -e\ncalls=0\nsleeps=''\n" +
+            "GIT_ERROR='" + gitError.Replace("'", "'\\''", StringComparison.Ordinal) + "'\n" +
+            "git() { calls=$((calls + 1)); if [ \"$calls\" -le " + failuresBeforeSuccess + " ]; then [ -z \"$GIT_ERROR\" ] || printf '%s\\n' \"$GIT_ERROR\" >&2; return 128; fi; return 0; }\n" +
+            "sleep() { sleeps=\"${sleeps:+$sleeps }$1\"; }\n" +
+            function +
+            "trap 'echo \"git calls=$calls\"; echo \"sleeps=$sleeps\"' EXIT\n" +
+            "git_with_retry git fetch origin main\necho reached\n";
+
+        var path = Path.Combine(Path.GetTempPath(), $"git-retry-{Guid.NewGuid():N}.sh");
+        await File.WriteAllTextAsync(path, harness.Replace("\r\n", "\n"));
+        try
+        {
+            var bash = BashExecutable();
+            var startInfo = new System.Diagnostics.ProcessStartInfo(bash)
+            {
+                ArgumentList = { path },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            // A non-login Git for Windows bash started from PowerShell does not put its own tools (mktemp) on PATH.
+            if (Path.IsPathRooted(bash))
+                startInfo.Environment["PATH"] = Path.GetDirectoryName(bash) + Path.PathSeparator + startInfo.Environment["PATH"];
+            using var process = System.Diagnostics.Process.Start(startInfo)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            return (process.ExitCode, await stdout, await stderr);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void RewritePwshAndChains_NoChain_ReturnsUnchanged()
     {
         const string cmd = "dotnet build";

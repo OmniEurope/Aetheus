@@ -45,7 +45,11 @@ else
                             }
                         </OmniDescriptionItem>
                         <OmniDescriptionItem Term="@L["PipelineSetupProdStrategy"]">
-                            <span data-testid="setup-production-strategy">@(Analysis.DeclaresBlueGreen ? L["PipelineSetupProdBlueGreen"] : L["PipelineSetupProdReplace"])</span>
+                            <OmniFormField For="setup-production-strategy" Help="@L["PipelineSetupProdStrategyHelp"]" Class="omni-u-w-100">
+                                <OmniDropDown Id="setup-production-strategy" TValue="string" Options="@StrategyOptions"
+                                              Value="@Setup.Strategy" ValueChanged="@ChooseStrategy" ValueExpression="@(() => StrategyValue)"
+                                              Class="omni-u-w-100" />
+                            </OmniFormField>
                         </OmniDescriptionItem>
                         <OmniDescriptionItem Term="@L["PipelineSetupProdServer"]">
                             @if (Analysis.Servers.Count == 0)
@@ -54,11 +58,17 @@ else
                             }
                             else if (Analysis.Servers.Count == 1)
                             {
-                                <strong data-testid="setup-production-server-name">@Analysis.Servers[0].Name</strong>
+                                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                                    <strong data-testid="setup-production-server-name">@Analysis.Servers[0].Name</strong>
+                                    @if (Analysis.Servers[0].Candidate)
+                                    {
+                                        <PipelineInfoTip Text="@ServerHelp" />
+                                    }
+                                </OmniStack>
                             }
                             else
                             {
-                                <OmniFormField For="setup-production-server" Help="@L["PipelineSetupProdServerHelp"]" Class="omni-u-w-100">
+                                <OmniFormField For="setup-production-server" Help="@ServerHelp" Class="omni-u-w-100">
                                     <OmniDropDown Id="setup-production-server" TValue="string" Options="@ServerOptions"
                                                   Value="@Setup.Server" ValueChanged="@ChooseServer" ValueExpression="@(() => ServerValue)"
                                                   AllowEmpty="true" Placeholder="@L["PipelineSetupProdServerChoose"]" Class="omni-u-w-100" />
@@ -69,6 +79,13 @@ else
                             <span data-testid="setup-production-config-repo">@ConfigRepositoryText</span>
                         </OmniDescriptionItem>
                     </OmniDescriptionList>
+
+                    @if (Setup.StrategyMismatch)
+                    {
+                        <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-production-strategy-mismatch">
+                            @(Setup.Strategy == ProductionStrategy.BlueGreen ? L["PipelineSetupProdBlueGreenMismatch"] : L["PipelineSetupProdReplaceMismatch"])
+                        </OmniAlert>
+                    }
 
                     @if (Listed.Count > 0)
                     {
@@ -81,10 +98,10 @@ else
                                 <OmniDescriptionItem Term="@name">
                                     <OmniStack Gap="OmniSpacing.Small">
                                         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Wrap="true" Gap="OmniSpacing.Small">
-                                            <OmniBadge Tone="@Tone(variable)" Fill="OmniFill.Tonal" data-testid="@($"setup-production-kind-{name}")">@KindText(variable)</OmniBadge>
+                                            <OmniBadge Icon="@(BadgeIcon.For(Tone(variable)))" Tone="@Tone(variable)" Fill="OmniFill.Tonal" data-testid="@($"setup-production-kind-{name}")">@KindText(variable)</OmniBadge>
                                             @if (variable.Exists)
                                             {
-                                                <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Outline">@L["PipelineSetupProdExists"]</OmniBadge>
+                                                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Tone="OmniTone.Success" Fill="OmniFill.Outline">@L["PipelineSetupProdExists"]</OmniBadge>
                                             }
                                         </OmniStack>
                                         @if (variable.Kind == ProductionVariableKind.NeedsValue && !variable.Exists)

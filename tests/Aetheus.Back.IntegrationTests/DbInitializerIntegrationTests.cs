@@ -48,10 +48,13 @@ public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
         Assert.True(admin.IsActive);
         Assert.False(string.IsNullOrWhiteSpace(admin.PasswordHash));
         Assert.NotEqual(StrongAdminPassword, admin.PasswordHash); // BCrypt-hashed, never plaintext.
+        // PLAN-003 P3-2: it signs in by e-mail; without Auth:AdminEmail the seed's default address.
+        Assert.Equal("admin@aetheus.local", admin.Email);
 
         // The three default roles are created.
         var roleNames = await verify.Roles.Select(r => r.Name).OrderBy(n => n).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(["Admin", "Contributor", "Reader"], roleNames);
+        // R-10 (ADR-059): Organization Admin is the fourth built-in role, managing one organization.
+        Assert.Equal(["Admin", "Contributor", "Organization Admin", "Reader"], roleNames);
 
         // Admin user is bound to the Admin role.
         var adminRole = await verify.Roles.SingleAsync(r => r.Name == "Admin", cancellationToken: TestContext.Current.CancellationToken);
@@ -98,6 +101,7 @@ public sealed class DbInitializerIntegrationTests(PostgresFixture fixture)
         Assert.Equal(1, await verify.Roles.CountAsync(r => r.Name == "Admin", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(1, await verify.Roles.CountAsync(r => r.Name == "Reader", cancellationToken: TestContext.Current.CancellationToken));
         Assert.Equal(1, await verify.Roles.CountAsync(r => r.Name == "Contributor", cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Equal(1, await verify.Roles.CountAsync(r => r.Name == "Organization Admin", cancellationToken: TestContext.Current.CancellationToken));
 
         var admin = await verify.Users.SingleAsync(u => u.Username == "admin", cancellationToken: TestContext.Current.CancellationToken);
         var org = await verify.Organizations.SingleAsync(o => o.Slug == "aetheus", cancellationToken: TestContext.Current.CancellationToken);

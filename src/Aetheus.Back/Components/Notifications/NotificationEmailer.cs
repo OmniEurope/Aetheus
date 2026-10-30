@@ -65,7 +65,7 @@ public sealed class NotificationEmailer(
         }
 
         var data = NotificationEmailComposer.Build(email, FrontOrigin, style.Language, style.BlockColours, timeZone, clock);
-        var mail = await templates.RenderAsync(MailTemplateKind.NotificationEvent, data, style, ct).ConfigureAwait(false);
+        var mail = await templates.RenderAsync(MailTemplateKind.NotificationEvent, data, style, email.OrganizationId, ct).ConfigureAwait(false);
         return new EmailMessage(address, mail.Subject, mail.Text, mail.Html);
     }
 }

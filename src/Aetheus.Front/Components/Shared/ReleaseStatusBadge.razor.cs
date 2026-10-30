@@ -15,6 +15,22 @@ public partial class ReleaseStatusBadge
         _ => OmniTone.Neutral
     };
 
+    /// <summary>One icon per status, text without number (recette R-59): Close, Reset and Sync are the ones the
+    /// pipeline run statuses already use for failed, rolled back and running.</summary>
+    private OmniIconName StatusIcon => Status switch
+    {
+        ReleaseStatus.Detected => OmniIconName.Search,
+        ReleaseStatus.Building => OmniIconName.Sync,
+        ReleaseStatus.Published => OmniIconName.CloudArrowUp,
+        ReleaseStatus.Failed => OmniIconName.Close,
+        ReleaseStatus.RolledBack => OmniIconName.Reset,
+        ReleaseStatus.Promoted => OmniIconName.ArrowUp,
+        ReleaseStatus.Deployed => OmniIconName.RocketLaunch,
+        ReleaseStatus.Superseded => OmniIconName.Swap,
+        ReleaseStatus.Archived => OmniIconName.Archive,
+        _ => OmniIconName.Question
+    };
+
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     [Parameter, EditorRequired] public ReleaseStatus Status { get; set; }

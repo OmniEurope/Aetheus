@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 
 public partial class ServerServicesSection : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -54,6 +55,8 @@ public partial class ServerServicesSection : IAsyncDisposable
     private int _logLines = 100;
     private bool _logFollow;
     private bool _renewingFollowSession;
+    // R-116: a read the user asked for over lines already on screen (a new line count) veils them until the first new line.
+    private bool _veilKeptLogs;
     private ServiceLogAutoRefresh? _logRefresh;
     private bool _logTaskPending;
     private int? _currentLogTaskId;
@@ -225,7 +228,7 @@ public partial class ServerServicesSection : IAsyncDisposable
             ConfirmOptions(destructive, L[action.ToString()].Value, OmniIconName.Stop));
         if (confirmed != true) return;
 
-        await ExecuteActionAsync(action, serviceName);
+        await Veil.RunAsync(() => ExecuteActionAsync(action, serviceName));
     }
 
     // Bulk bar: apply one action (Start/Stop/Restart/Install/Uninstall) to every checked service after a
@@ -243,25 +246,28 @@ public partial class ServerServicesSection : IAsyncDisposable
         if (confirmed != true) return;
         if (!EnsureAgentOnline()) return;
 
-        var queued = 0;
-        var coordinator = new ServerBulkServiceActionCoordinator(Api, ServerId);
-        foreach (var svc in req.Services)
+        await Veil.RunAsync(async () =>
         {
-            var outcome = await coordinator.QueueAsync(
-                req.Kind, svc, ManageableServiceGrid.IsModuleInstallable(svc));
-            if (!outcome.Queued) continue;
-            queued++;
-            // Each service of the batch is followed on its own row, like a single action.
-            if (outcome.TaskId is { } taskId) _actions.Track(svc, taskId, req.Kind);
-        }
+            var queued = 0;
+            var coordinator = new ServerBulkServiceActionCoordinator(Api, ServerId);
+            foreach (var svc in req.Services)
+            {
+                var outcome = await coordinator.QueueAsync(
+                    req.Kind, svc, ManageableServiceGrid.IsModuleInstallable(svc));
+                if (!outcome.Queued) continue;
+                queued++;
+                // Each service of the batch is followed on its own row, like a single action.
+                if (outcome.TaskId is { } taskId) _actions.Track(svc, taskId, req.Kind);
+            }
 
-        var summary = string.Format(L["BulkServiceQueued"].Value, queued, req.Services.Count);
-        if (queued == 0)
-            Toast.Error(L["Error"], summary);
-        else
-            Toast.Success(L["TaskQueued"], summary);
+            var summary = string.Format(L["BulkServiceQueued"].Value, queued, req.Services.Count);
+            if (queued == 0)
+                Toast.Error(L["Error"], summary);
+            else
+                Toast.Success(L["TaskQueued"], summary);
 
-        await OnServiceChanged.InvokeAsync();
+            await OnServiceChanged.InvokeAsync();
+        });
     }
 
     // Recette R3-37: what became of the task an action of this page launched.
@@ -358,18 +364,21 @@ public partial class ServerServicesSection : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Uninstall"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var taskId = await Api.Auth.UninstallServiceAsync(ServerId, serviceName);
+        await Veil.RunAsync(async () =>
+        {
+            var taskId = await Api.Auth.UninstallServiceAsync(ServerId, serviceName);
 
-        if (taskId is not null)
-        {
-            _actions.Track(serviceName, taskId.Value, "Uninstall");
-            _follower?.Follow($"Uninstall - {serviceName}", taskId.Value);
-            Toast.Success(L["TaskQueued"], $"Uninstall - {serviceName}");
-        }
-        else
-        {
-            Toast.Error(L["Error"], $"Uninstall - {serviceName}");
-        }
+            if (taskId is not null)
+            {
+                _actions.Track(serviceName, taskId.Value, "Uninstall");
+                _follower?.Follow($"Uninstall - {serviceName}", taskId.Value);
+                Toast.Success(L["TaskQueued"], $"Uninstall - {serviceName}");
+            }
+            else
+            {
+                Toast.Error(L["Error"], $"Uninstall - {serviceName}");
+            }
+        });
     }
 
     internal async Task ViewServiceLogsAsync(string serviceName)
@@ -401,6 +410,8 @@ public partial class ServerServicesSection : IAsyncDisposable
     private async Task StartLogStreamAsync()
     {
         var keepContentUntilFirstLine = _renewingFollowSession;
+        var veilKeptContent = _veilKeptLogs;
+        _veilKeptLogs = false;
         _renewingFollowSession = false;
         if (_logsServiceName is null || _disposed) return;
         try
@@ -419,7 +430,7 @@ public partial class ServerServicesSection : IAsyncDisposable
             var serviceName = _logsServiceName;
             await LeaveCurrentLogGroupCoreAsync();
 
-            ResetLogPane(keepContentUntilFirstLine);
+            ResetLogPane(keepContentUntilFirstLine, veilKeptContent);
 
             var taskId = await Api.Security.RequestServiceLogsAsync(
                 serverId, serviceName, _logLines, follow: false, _lifetimeCts.Token);
@@ -450,11 +461,17 @@ public partial class ServerServicesSection : IAsyncDisposable
 
     // A renewed follow session keeps the lines on screen until the new session's first line replaces
     // them (it re-sends the last N lines), instead of flashing an empty pane.
-    private void ResetLogPane(bool keepContentUntilFirstLine)
+    private void ResetLogPane(bool keepContentUntilFirstLine, bool veilKeptContent)
     {
         if (keepContentUntilFirstLine)
         {
             _logBuffer.ReplaceOnNextLine();
+            if (veilKeptContent)
+            {
+                // The lines stay mounted under OE's busy veil until the first new line (or the task output) lands.
+                _logsLoading = true;
+                StateHasChanged();
+            }
             return;
         }
         _logBuffer.Clear();
@@ -546,6 +563,8 @@ public partial class ServerServicesSection : IAsyncDisposable
     internal async Task OnLogLinesChanged(int lines)
     {
         _logLines = lines;
+        _renewingFollowSession = true;
+        _veilKeptLogs = true;
         await StartLogStreamAsync();
     }
 

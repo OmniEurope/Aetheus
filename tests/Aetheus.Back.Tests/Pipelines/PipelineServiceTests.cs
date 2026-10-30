@@ -428,8 +428,11 @@ public class PipelineServiceTests
     [Fact]
     public async Task UpdatePipelineAsync_OwnedPipeline_DoesNotReassignOwner()
     {
+        // Renaming or describing a pipeline leaves its definition, so the owner stays (RBAC audit, finding 3:
+        // only an edited definition moves ownership, see the test below).
         SetCurrentUser("bob");
-        var existing = new Pipeline { Id = 1, Name = "Old", CreatedByUsername = "alice", Runs = [] };
+        const string yaml = "name: p\ntrigger: manual\nstages: []";
+        var existing = new Pipeline { Id = 1, Name = "Old", CreatedByUsername = "alice", YamlDefinition = yaml, Runs = [] };
         _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
         _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
@@ -437,8 +440,75 @@ public class PipelineServiceTests
         {
             Name = "New",
             Description = "d",
-            YamlDefinition = "name: p\ntrigger: manual\nstages: []"
+            YamlDefinition = yaml
         }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("alice", existing.CreatedByUsername);
+    }
+
+    [Fact]
+    public async Task UpdatePipelineAsync_EditedDefinition_MovesOwnershipToTheEditor()
+    {
+        // RBAC audit, finding 3: automated runs are authorized with the owner's Server.Admin grants, so the
+        // user who writes new shell into the definition becomes the owner instead of borrowing alice's grants.
+        SetCurrentUser("bob");
+        var existing = new Pipeline
+        {
+            Id = 1,
+            Name = "Old",
+            CreatedByUsername = "alice",
+            YamlDefinition = "name: p\ntrigger: manual\nstages: []",
+            Runs = []
+        };
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.UpdatePipelineAsync(1, new UpdatePipelineRequest
+        {
+            Name = "Old",
+            Description = "d",
+            YamlDefinition = "name: p\ntrigger: manual\nstages:\n  - name: Build\n    steps:\n      - name: Say\n        shell: echo two"
+        }, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal("bob", existing.CreatedByUsername);
+    }
+
+    [Fact]
+    public async Task UpsertPipelineFromYamlAsync_PushedDefinitionOffRequest_MovesOwnershipToThePusher()
+    {
+        // A git push is synchronised by a background subscriber (no HttpContext): the pusher travels with the
+        // event and becomes the owner of the edited definition (RBAC audit, finding 3).
+        var existing = new Pipeline
+        {
+            Id = 5,
+            Name = "aetheus-ci",
+            CreatedByUsername = "alice",
+            YamlDefinition = "name: aetheus-ci\ntrigger: manual\nstages: []",
+            Runs = []
+        };
+        _repoMock.FindPipelineByNameAndProjectAsync("aetheus-ci", 1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.IsActiveUsernameAsync("alice", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.UpsertPipelineFromYamlAsync(
+            "aetheus-ci", "name: aetheus-ci\ntrigger: webhook\nstages: []", 1, "webhook",
+            ct: TestContext.Current.CancellationToken, actorUsername: "mallory");
+
+        Assert.Equal("mallory", existing.CreatedByUsername);
+    }
+
+    [Fact]
+    public async Task UpsertPipelineFromYamlAsync_UnchangedDefinition_KeepsTheOwner()
+    {
+        // A push that does not touch the definition file gives its pusher nothing to own.
+        const string yaml = "name: aetheus-ci\ntrigger: manual\nstages: []";
+        var existing = new Pipeline { Id = 5, Name = "aetheus-ci", CreatedByUsername = "alice", YamlDefinition = yaml, Runs = [] };
+        _repoMock.FindPipelineByNameAndProjectAsync("aetheus-ci", 1, Arg.Any<CancellationToken>()).Returns(existing);
+        _repoMock.IsActiveUsernameAsync("alice", Arg.Any<CancellationToken>()).Returns(true);
+        _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+
+        await _sut.UpsertPipelineFromYamlAsync(
+            "aetheus-ci", yaml, 1, "manual", ct: TestContext.Current.CancellationToken, actorUsername: "mallory");
 
         Assert.Equal("alice", existing.CreatedByUsername);
     }
@@ -858,6 +928,34 @@ public class PipelineServiceTests
         await _pipelineGitMock.Received(1).ApplyProjectPipelineChangeAsync(
             null, new PipelineGitDefinitionLocation(7, "ToDelete", "main"),
             "name: delete", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    // Recette R-95: a failed delete puts back the repository's file, not Aetheus's older copy of it.
+    [Fact]
+    public async Task DeletePipelineAsync_DbFailure_RestoresTheRepositoryFileNotAetheusCopy()
+    {
+        var existing = new Pipeline
+        {
+            Id = 1,
+            Name = "ToDelete",
+            ProjectId = 7,
+            SourceBranch = "main",
+            YamlDefinition = "name: delete",
+            Runs = []
+        };
+        const string repositoryYaml = "name: delete\nvariables:\n  COMPOSE_FILE: compose.yml";
+        _repoMock.FindPipelineAsync(1, Arg.Any<CancellationToken>()).Returns(existing);
+        _pipelineGitMock.ReadProjectPipelineYamlAsync(
+                7, "ToDelete", Arg.Any<CancellationToken>(), "main", Arg.Any<int?>())
+            .Returns(repositoryYaml);
+        _repoMock.RemovePipelineAsync(existing, Arg.Any<CancellationToken>()).Returns<Task>(_ =>
+            throw new InvalidOperationException("db failed"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.DeletePipelineAsync(1, ct: TestContext.Current.CancellationToken));
+
+        await _pipelineGitMock.Received(1).ApplyProjectPipelineChangeAsync(
+            null, new PipelineGitDefinitionLocation(7, "ToDelete", "main"),
+            repositoryYaml, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

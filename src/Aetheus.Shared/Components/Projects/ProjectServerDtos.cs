@@ -20,6 +20,13 @@ public sealed record ProjectServerDto
     public string? ServerName { get; init; }
     public string? ServerHostname { get; init; }
     public ServerStatus? ServerStatus { get; init; }
+
+    /// <summary>Set when the server belongs to the project only because it is attached to one of the project's
+    /// environments (R-83). Such a line has no project server link behind it (<see cref="Id"/> is 0): it cannot
+    /// be edited or detached from the project, only from that environment.</summary>
+    public int? ViaEnvironmentId { get; init; }
+
+    public string? ViaEnvironmentName { get; init; }
 }
 
 public abstract record ProjectServerMutationRequest

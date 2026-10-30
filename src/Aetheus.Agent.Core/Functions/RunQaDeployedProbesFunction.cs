@@ -109,7 +109,7 @@ public sealed partial class RunQaDeployedProbesFunction : IPipelineFunction
             var password = (await File.ReadAllTextAsync(passwordFile, cancellationToken).ConfigureAwait(false)).TrimEnd('\n');
             var login = await http.PostJsonAsync(
                 backend + "/api/auth/login",
-                JsonSerializer.Serialize(new { username = "admin", password }),
+                JsonSerializer.Serialize(new { email = AgentContractSession.QaAdminEmail, password }),
                 null,
                 cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(results, "login.json"), login, cancellationToken).ConfigureAwait(false);

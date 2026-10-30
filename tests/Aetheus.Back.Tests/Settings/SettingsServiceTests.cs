@@ -37,6 +37,29 @@ public class SettingsServiceTests
     }
 
     [Fact]
+    public async Task GetSettingsAsync_ListsOnlyTheKeysASaveAccepts()
+    {
+        // The General tab showed internal markers and seed rows no code reads, each with a Save the
+        // allow-list refused ("Setting key 'MetricsRetentionDays' is not allowed").
+        _repoMock.GetAllSettingsAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new AppSetting { Key = "Theme", Value = "dark" },
+            new AppSetting { Key = "MetricsRetentionDays", Value = "30" },
+            new AppSetting { Key = "SiteName", Value = "Aetheus" },
+            new AppSetting { Key = "DemoDataSeeded:2026-07-14", Value = "2026-07-14T11:31:17Z" },
+            new AppSetting { Key = "DeliveryTemplates:VersionReset:R1-20", Value = "2026-10-12T10:33:13Z" },
+            new AppSetting { Key = "DailyRecap:LastSentDate", Value = "2026-10-28" },
+            new AppSetting { Key = "CertificateAlerts:LeadDays", Value = "7,3,1" }
+        ]);
+
+        var result = await _sut.GetSettingsAsync(ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(["Theme", "Retention:LogDays", PipelineRunToEndSetting.Key], result.Select(s => s.Key));
+        foreach (var setting in result)
+            await _sut.UpdateSettingAsync(setting.Key, setting.Value, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task GetSettingsAsync_ReturnsMappedDtos_PlusOperationalDefaults()
     {
         var settings = new List<AppSetting>

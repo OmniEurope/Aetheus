@@ -24,9 +24,14 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
     {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        _authz.CanCreateInProjectAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), 7, Arg.Any<CancellationToken>())
+            .Returns(true);
         _authz.GetUserOrganizationIdsAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns([3]);
-        _production.AnalyzeAsync(7, "deploy/compose.yml", Arg.Any<CancellationToken>()).Returns(new PipelineProductionAnalysisDto());
-        _production.ApplyAsync(Apply, Arg.Any<CancellationToken>()).Returns(new PipelineProductionApplyResultDto());
+        _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns([4]);
+        _production.AnalyzeAsync(7, "deploy/compose.yml", Arg.Any<ProductionServerScope>(), Arg.Any<CancellationToken>())
+            .Returns(new PipelineProductionAnalysisDto());
+        _production.ApplyAsync(Apply, Arg.Any<ProductionServerScope>(), Arg.Any<CancellationToken>()).Returns(new PipelineProductionApplyResultDto());
         _sut = new PipelineSetupController(
             Substitute.For<IPipelineSetupReadinessService>(), Substitute.For<IPipelineRequirementsProvisioner>(),
             _production, Substitute.For<IPipelineProjectCopyService>(), Substitute.For<IPipelineOwnerAuthorization>(), _authz)
@@ -35,8 +40,21 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         };
     }
 
-    private void Deny(ResourceType type, int? id, Permission permission) =>
+    /// <summary>Recette R-77: the servers a project with none may be offered are those the user administers.</summary>
+    private static ProductionServerScope Administered =>
+        Arg.Is<ProductionServerScope>(scope => scope.AdministeredServerIds != null && scope.AdministeredServerIds.SequenceEqual(new[] { 4 }));
+
+    // A library or vault right (no id) is read in project 7's organization (RBAC audit, finding 9), so
+    // denying it there denies it whatever another organization grants.
+    private void Deny(ResourceType type, int? id, Permission permission)
+    {
+        if (id is null)
+        {
+            _authz.CanCreateInProjectAsync(Arg.Any<ClaimsPrincipal>(), type, 7, Arg.Any<CancellationToken>()).Returns(false);
+            return;
+        }
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), type, id, permission, Arg.Any<CancellationToken>()).Returns(false);
+    }
 
     [Fact]
     public async Task TheAnalysis_WithWriteOnTheProject_IsWorkedOut()
@@ -44,7 +62,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.AnalyzeProduction(Analysis, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        await _production.Received(1).AnalyzeAsync(7, "deploy/compose.yml", Arg.Any<CancellationToken>());
+        await _production.Received(1).AnalyzeAsync(7, "deploy/compose.yml", Administered, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -55,7 +73,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.AnalyzeProduction(Analysis, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(result.Result);
-        await _production.DidNotReceiveWithAnyArgs().AnalyzeAsync(default, default, TestContext.Current.CancellationToken);
+        await _production.DidNotReceiveWithAnyArgs().AnalyzeAsync(default, default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -64,7 +82,7 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.ApplyProduction(Apply, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
-        await _production.Received(1).ApplyAsync(Apply, Arg.Any<CancellationToken>());
+        await _production.Received(1).ApplyAsync(Apply, Administered, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -102,6 +120,6 @@ public sealed class PipelineSetupControllerProductionAuthorizationTests
         var result = await _sut.ApplyProduction(Apply, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(result.Result);
-        await _production.DidNotReceiveWithAnyArgs().ApplyAsync(default!, TestContext.Current.CancellationToken);
+        await _production.DidNotReceiveWithAnyArgs().ApplyAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 }

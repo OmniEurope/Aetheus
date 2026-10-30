@@ -107,7 +107,7 @@ public sealed class BlueGreenOperationExecutor(
             OperationKind.BlueGreenUp => await UpAsync(context!, journal, envVars, timeoutSeconds, onOutput, ct).ConfigureAwait(false),
             OperationKind.BlueGreenSwitch => await SwitchAsync(context!, journal, envVars, timeoutSeconds, onOutput, ct).ConfigureAwait(false),
             OperationKind.BlueGreenRollback => await RollbackAsync(context!, journal, envVars, timeoutSeconds, onOutput, ct, recoveringOrphan: false).ConfigureAwait(false),
-            OperationKind.BlueGreenRetire => await RetireAsync(context!, journal, envVars, timeoutSeconds, onOutput, ct).ConfigureAwait(false),
+            OperationKind.BlueGreenRetire => await RetireAsync(context!, journal, envVars, timeoutSeconds, onOutput, ct, recoveringOrphan: false).ConfigureAwait(false),
             OperationKind.BlueGreenRevert => await _revert.RevertAsync(
                 context!, journal, envVars, timeoutSeconds,
                 (colour, budget) => WaitForColourAsync(context!, colour, (int)budget.TotalSeconds, onOutput, ct),
@@ -166,8 +166,13 @@ public sealed class BlueGreenOperationExecutor(
         Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
     {
         // Before anything is rebuilt: the idle colour may be what another run's open transaction falls back to.
+        // An orphan with a previous colour is rolled back to it; an orphan FIRST deployment has nothing to
+        // roll back to (the rollback refuses a switched one), so it is retired instead.
         if (await BlueGreenTransactionOwnership.SettleAnotherRunsTransactionAsync(
-                journal, envVars, () => RollbackAsync(context, journal, envVars, timeoutSeconds, onOutput, ct, recoveringOrphan: true),
+                journal, envVars,
+                () => journal.PreviousLive is "blue" or "green"
+                    ? RollbackAsync(context, journal, envVars, timeoutSeconds, onOutput, ct, recoveringOrphan: true)
+                    : RetireAsync(context, journal, envVars, timeoutSeconds, onOutput, ct, recoveringOrphan: true),
                 onOutput).ConfigureAwait(false) is { } refused)
             return refused;
 
@@ -362,9 +367,14 @@ public sealed class BlueGreenOperationExecutor(
     /// </summary>
     private async Task<ExecutorResult> RetireAsync(
         BlueGreenContext context, BlueGreenJournal journal, IReadOnlyDictionary<string, string> envVars,
-        int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+        int timeoutSeconds, Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct, bool recoveringOrphan)
     {
         var state = journal.Exists ? journal.State : null;
+        // A first deployment another run is still validating is not this run's to stop.
+        if (!recoveringOrphan
+            && BlueGreenTransactionOwnership.IsOpen(journal)
+            && await BlueGreenTransactionOwnership.RefuseAnotherLiveRunsRetireAsync(journal, envVars, onOutput).ConfigureAwait(false) is { } notOurs)
+            return notOurs;
         if (state is null or BlueGreenJournal.Committed)
         {
             // Without an open transaction, retirement stops only the reserve, never the live

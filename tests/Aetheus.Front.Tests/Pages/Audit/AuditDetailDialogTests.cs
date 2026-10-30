@@ -36,6 +36,24 @@ public class AuditDetailDialogTests : BunitContext
         Assert.Contains("Server", cut.Markup);  // target
     }
 
+    /// <summary>Recette R-116: while the chain is verified, OE's busy veil lies over the integrity card; no loader is added.</summary>
+    [Fact]
+    public void WhileTheChainIsVerified_TheIntegrityCardIsVeiled_AndNoLoaderIsAdded()
+    {
+        var verification = new TaskCompletionSource<AuditChainVerificationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/audit/1/verify", _ => verification.Task);
+
+        var cut = Render<AuditDetailDialog>(p => p.Add(c => c.Log, Sample()));
+
+        cut.WaitForAssertion(() => Assert.Contains("AuditVerifying", cut.Markup));
+        Assert.Equal("true", cut.Find(".omni-busy").GetAttribute("aria-busy"));
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+
+        verification.SetResult(new AuditChainVerificationResult { IsValid = true, TotalEntries = 7 });
+        cut.WaitForAssertion(() => Assert.Contains("AuditChainIntact", cut.Markup));
+        Assert.Empty(cut.FindAll(".omni-busy"));
+    }
+
     [Fact]
     public void TamperedEntry_ShowsBreakBadge_NotOptimisticGreen()
     {

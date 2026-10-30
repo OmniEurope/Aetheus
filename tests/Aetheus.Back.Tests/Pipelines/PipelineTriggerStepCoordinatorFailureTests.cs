@@ -312,10 +312,94 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
 
         var child = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
 
-        Assert.Null(child);
+        Assert.Null(child.Run);
+        Assert.Equal("owner 'admin' of pipeline 'package-aetheus-telemetry' lacks Server.Admin on target server 42", child.Reason);
         await _launcher.DidNotReceive().TriggerPreparedRunAsync(
             Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(),
             Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>());
+    }
+
+    // ---- Recette R-48: every cause that stops an on_success hop names itself ----
+
+    [Fact]
+    public async Task ChainedRun_TargetGone_SaysSo_NotThatTheOwnerLacksAuthority()
+    {
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns((Pipeline?)null);
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(outcome.Run);
+        Assert.Equal("pipeline 74 no longer exists", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task ChainedRun_PreparationReturnsNothing_SaysThePipelineIsGone()
+    {
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(_childPipeline);
+        _preparations.PrepareRunAsync(74, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns((PipelineRunPreparation?)null);
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(outcome.Run);
+        Assert.DoesNotContain("authority", outcome.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Server.Admin", outcome.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChainedRun_PreparationRefused_CarriesTheRefusalMessageInsteadOfThrowing()
+    {
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(_childPipeline);
+        _preparations.PrepareRunAsync(74, Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new BadRequestException("The pipeline YAML is invalid: found invalid mapping."));
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(outcome.Run);
+        Assert.Equal("its definition cannot be prepared: The pipeline YAML is invalid: found invalid mapping.", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task ChainedRun_UnownedTarget_SaysItHasNoOwner()
+    {
+        var unowned = new Pipeline { Id = 74, Name = "package-aetheus-telemetry", CreatedByUsername = null };
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(unowned);
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(outcome.Run);
+        Assert.Contains("has no owner", outcome.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("lacks", outcome.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChainedRun_LauncherReturnsNoRun_SaysSo()
+    {
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(_childPipeline);
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns((Aetheus.Shared.Components.Pipelines.PipelineRunDto?)null);
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Null(outcome.Run);
+        Assert.Equal("the launch returned no run", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task ChainedRun_Launched_ReturnsTheRunAndNoReason()
+    {
+        _repo.FindPipelineAsync(74, Arg.Any<CancellationToken>()).Returns(_childPipeline);
+        _launcher.TriggerPreparedRunAsync(
+                Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>?>(),
+                Arg.Any<Dictionary<string, string>?>(), Arg.Any<CancellationToken>(), Arg.Any<string?>())
+            .Returns(new Aetheus.Shared.Components.Pipelines.PipelineRunDto { Id = 500 });
+
+        var outcome = await _sut.TriggerChainedRunAsync(74, null, _launcher, CancellationToken.None);
+
+        Assert.Equal(500, outcome.Run?.Id);
+        Assert.Null(outcome.Reason);
     }
 
     /// <summary>Owners lacking Server.Admin are refused and audited; transferring ownership to an
@@ -437,7 +521,11 @@ public sealed class PipelineTriggerStepCoordinatorFailureTests
         Assert.Equal(reason, step.FailureReason);
         await _repo.Received(1).AppendRunWarningsAsync(
             ParentRunId,
-            Arg.Is<IReadOnlyCollection<string>>(w => w.Single() == $"Trigger step 'Validate Telemetry candidate': {reason}"),
+            Arg.Is<IReadOnlyCollection<string>>(w =>
+                StoredProblem.English(w.Single()) == $"Trigger step 'Validate Telemetry candidate': {reason}"
+                && StoredProblem.CodeOf(w.Single()) == "StepFailedTrigger"
+                && StoredProblem.ParameterOf(w.Single(), "step") == "Validate Telemetry candidate"
+                && StoredProblem.ParameterOf(w.Single(), "detail") == reason),
             Arg.Any<CancellationToken>());
         await _launcher.DidNotReceive().TriggerPreparedRunAsync(
             Arg.Any<PipelineRunPreparation>(), Arg.Any<Dictionary<string, string>>(),

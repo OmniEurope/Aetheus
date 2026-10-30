@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.AiTasks;
 
 public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto>
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
 
@@ -91,11 +92,11 @@ public partial class AiRunnerProfiles : PagedDataGridPageBase<AiRunnerProfileDto
             string.Format(L["DeleteAiRunnerProfileConfirm"], profile.Name), L["Delete"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Ai.DeleteAiRunnerProfileAsync(profile.Id),
             "Deleted",
             ReloadPageAsync,
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 }

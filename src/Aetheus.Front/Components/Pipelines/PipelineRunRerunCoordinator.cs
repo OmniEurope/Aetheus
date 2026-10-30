@@ -27,11 +27,6 @@ internal sealed class PipelineRunRerunCoordinator(
         {
             var parameterResult = await TryRerunWithParametersAsync(run);
             if (parameterResult == ParameterRerunResult.Handled) return;
-            if (parameterResult == ParameterRerunResult.LoadFailed)
-            {
-                toast.Error("PipelineRunFailed", "LoadFailed");
-                return;
-            }
         }
         else if (mode == RerunMode.ResumeCheckpoints)
         {
@@ -71,9 +66,9 @@ internal sealed class PipelineRunRerunCoordinator(
 
     private async Task<ParameterRerunResult> TryRerunWithParametersAsync(PipelineRunDto run)
     {
-        List<PipelineRunParameterDto> declared;
-        try { declared = await api.Pipelines.GetPipelineRunParametersAsync(run.PipelineId); }
-        catch (HttpRequestException) { return ParameterRerunResult.LoadFailed; }
+        // A declaration that cannot be read stops the rerun, and says why (R-47), once.
+        var declared = await RunParametersReading.ReadOrNotifyAsync(api, toast, localizer, run.PipelineId, branch: null);
+        if (declared is null) return ParameterRerunResult.Handled;
         if (declared.Count == 0) return ParameterRerunResult.NoParameters;
 
         var result = await dialog.OpenAsync<RunParametersDialog>(
@@ -94,7 +89,7 @@ internal sealed class PipelineRunRerunCoordinator(
         }
         else
         {
-            var reason = outcome.ErrorMessage is { } refusal ? refusal
+            var reason = outcome.LocalizedErrorMessage(localizer) is { } refusal ? refusal
                 : outcome.NotFound ? localizer["RunNotFound"].Value
                 : outcome.StatusCode == System.Net.HttpStatusCode.Forbidden ? localizer["PipelineRunForbidden"].Value
                 : localizer["PipelineRunFailedNoReason"].Value;
@@ -107,7 +102,6 @@ internal sealed class PipelineRunRerunCoordinator(
     private enum ParameterRerunResult
     {
         NoParameters,
-        Handled,
-        LoadFailed
+        Handled
     }
 }

@@ -19,4 +19,8 @@ public interface IGitRefUpdatesEvent : IDomainEvent
     string DiskPath { get; }
 
     IReadOnlyList<GitRefUpdate> RefUpdates { get; }
+
+    /// <summary>The user who pushed, when known. Carried because the push is handled off the request: a
+    /// pushed pipeline definition makes its pusher the owner of its automated runs (RBAC audit, finding 3).</summary>
+    string? PusherUsername { get; }
 }

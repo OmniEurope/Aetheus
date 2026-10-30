@@ -18,6 +18,11 @@ public sealed class EnvironmentsControllerLinkTests
 
     public EnvironmentsControllerLinkTests()
     {
+        // ADR-059: the caller's organization lets it give an environment to the project.
+        _authz.BelongsToProjectOrganizationAsync(Arg.Any<int?>(), Arg.Any<ResourceType>(), Arg.Any<IEnumerable<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authz.CanCreateInProjectAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new EnvironmentsController(_service, _authz)
         {
             ControllerContext = new ControllerContext
@@ -64,6 +69,7 @@ public sealed class EnvironmentsControllerLinkTests
         Allow(ResourceType.Environment, 2, Permission.Read);
         Allow(ResourceType.Environment, null, Permission.Write);
         var copy = new EnvironmentDto { Id = 9, Name = "Dev (copy)" };
+        _service.GetCopyReferencesAsync(2, Arg.Any<CancellationToken>()).Returns(new EnvironmentCopyReferences(7, [], []));
         _service.DuplicateEnvironmentAsync(2, 8, Arg.Any<CancellationToken>()).Returns(copy);
 
         var result = await _sut.DuplicateEnvironment(2, new DuplicateEnvironmentRequest { TargetProjectId = 8 }, TestContext.Current.CancellationToken);
@@ -130,9 +136,57 @@ public sealed class EnvironmentsControllerLinkTests
     {
         Allow(ResourceType.Environment, 2, Permission.Write);
         _service.GetProjectServerProjectIdAsync(30, Arg.Any<CancellationToken>()).Returns(7);
-        Allow(ResourceType.Project, 7, Permission.Read);
+        _service.GetEnvironmentAsync(2, Arg.Any<CancellationToken>()).Returns(new EnvironmentDto { Id = 2, ProjectId = 7 });
+        Allow(ResourceType.Project, 7, link ? Permission.Write : Permission.Read);
         ServiceCall(link).Returns(changed);
 
         Assert.IsType(expected, await LinkOrUnlink(link));
+    }
+
+    // Multi-organization isolation audit: linking enlists the project server in the environment's runs, so
+    // Read on its project is not enough; unlinking keeps Read (see EnsureProjectServerAccessAsync).
+    [Fact]
+    public async Task Link_WithOnlyReadOnTheProjectServersProject_IsForbidden()
+    {
+        Allow(ResourceType.Environment, 2, Permission.Write);
+        _service.GetProjectServerProjectIdAsync(30, Arg.Any<CancellationToken>()).Returns(7);
+        _service.GetEnvironmentAsync(2, Arg.Any<CancellationToken>()).Returns(new EnvironmentDto { Id = 2, ProjectId = 7 });
+        Allow(ResourceType.Project, 7, Permission.Read);
+
+        Assert.IsType<ForbidResult>(await LinkOrUnlink(true));
+        await _service.DidNotReceiveWithAnyArgs().LinkProjectServerAsync(default, default, TestContext.Current.CancellationToken);
+    }
+
+    // RBAC audit, finding 2: reading another organization's project does not let one of its project
+    // servers into this environment.
+    [Theory]
+    [MemberData(nameof(Operations))]
+    public async Task Link_OfAProjectServerOfAnotherOrganization_IsForbidden(bool link)
+    {
+        Allow(ResourceType.Environment, 2, Permission.Write);
+        _service.GetProjectServerProjectIdAsync(30, Arg.Any<CancellationToken>()).Returns(7);
+        _service.GetEnvironmentAsync(2, Arg.Any<CancellationToken>()).Returns(new EnvironmentDto { Id = 2, ProjectId = 4 });
+        Allow(ResourceType.Project, 7, link ? Permission.Write : Permission.Read);
+        _authz.BelongsToProjectOrganizationAsync(4, ResourceType.Project, Arg.Is<IEnumerable<int>?>(ids => ids!.Contains(7)), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        Assert.IsType<ForbidResult>(await LinkOrUnlink(link));
+        await _service.DidNotReceiveWithAnyArgs().LinkProjectServerAsync(default, default, TestContext.Current.CancellationToken);
+        await _service.DidNotReceiveWithAnyArgs().UnlinkProjectServerAsync(default, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Duplicate_CarryingAServerOfAnotherOrganization_IsForbidden()
+    {
+        Allow(ResourceType.Environment, 2, Permission.Read);
+        Allow(ResourceType.Environment, null, Permission.Write);
+        _service.GetCopyReferencesAsync(2, Arg.Any<CancellationToken>()).Returns(new EnvironmentCopyReferences(7, [55], []));
+        _authz.BelongsToProjectOrganizationAsync(8, ResourceType.Server, Arg.Is<IEnumerable<int>?>(ids => ids!.Contains(55)), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.DuplicateEnvironment(2, new DuplicateEnvironmentRequest { TargetProjectId = 8 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _service.DidNotReceiveWithAnyArgs().DuplicateEnvironmentAsync(default, default, TestContext.Current.CancellationToken);
     }
 }

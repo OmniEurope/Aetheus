@@ -7,9 +7,9 @@
                        aria-describedby="@(Feed.UnreadCount > 0 ? "nav-notification-count" : null)" />
     @if (Feed.UnreadCount > 0)
     {
-        <OmniBadge Id="nav-notification-count" Fill="OmniFill.Solid" Tone="OmniTone.Success" Class="nav-alert-count"
+        <NumberBadge Id="nav-notification-count" Fill="OmniFill.Solid" Tone="OmniTone.Success" Class="nav-alert-count"
                    title="@string.Format(L["NotificationBellTooltip"], Feed.UnreadCount)">
             @DisplayFormatting.BadgeCount(Feed.UnreadCount)
-        </OmniBadge>
+        </NumberBadge>
     }
 </div>

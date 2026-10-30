@@ -53,7 +53,7 @@ public class VaultSecretRevealTests
     {
         var service = Substitute.For<IVaultService>();
         var authz = Substitute.For<IResourceAuthorizationService>();
-        authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Vault, 1, Permission.Write, Arg.Any<CancellationToken>())
+        authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.VaultSecretReveal, 1, Arg.Any<CancellationToken>())
             .Returns(false);
         var controller = Controller(service, authz);
 
@@ -69,7 +69,7 @@ public class VaultSecretRevealTests
         var service = Substitute.For<IVaultService>();
         service.RevealSecretValueAsync(1, 5, Arg.Any<CancellationToken>()).Returns("s3cret");
         var authz = Substitute.For<IResourceAuthorizationService>();
-        authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Vault, 1, Permission.Write, Arg.Any<CancellationToken>())
+        authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.VaultSecretReveal, 1, Arg.Any<CancellationToken>())
             .Returns(true);
         var controller = Controller(service, authz);
 

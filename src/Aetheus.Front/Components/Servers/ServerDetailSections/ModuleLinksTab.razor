@@ -1,6 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Small">
+<OmniStack>
     <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <CountBadge Value="@_totalCount" Variant="OmniTone.Accent" />
         <div class="blade-content-spacer"></div>
@@ -12,7 +12,7 @@
     </OmniRow>
 
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
-        Class="pipeline-list-search omni-u-mb-sm" />
+        Class="pipeline-list-search" />
 
     <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_links" TItem="LinkedResourceDto"
         Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
@@ -22,13 +22,13 @@
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="LinkedResourceDto" Property="Type" Title="@L["Type"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText" >
                     <Template Context="l">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetTypeBadge(l.Type)">@L.Localize(l.Type)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(GetTypeBadge(l.Type)))" Fill="OmniFill.Solid" Tone="@GetTypeBadge(l.Type)">@L.Localize(l.Type)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="LinkedResourceDto" Property="Identifier" Title="@L["Resource"]" Filterable="true" />
                 <OmniDataGridColumn TItem="LinkedResourceDto" Property="IsAutoDetected" Title="@L["Source"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@SourceText" >
                     <Template Context="l">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@(l.IsAutoDetected ? OmniTone.Neutral : OmniTone.Neutral)">@(l.IsAutoDetected ? L["Auto"] : L["Manual"])</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.Of(l.IsAutoDetected ? OmniIconName.Sync : OmniIconName.Edit))" Fill="OmniFill.Solid" Tone="@(l.IsAutoDetected ? OmniTone.Neutral : OmniTone.Neutral)">@(l.IsAutoDetected ? L["Auto"] : L["Manual"])</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="LinkedResourceDto" Title="@L["Actions"]" Width="100px" Sortable="false" Filterable="false" >

@@ -78,6 +78,9 @@ public class MainLayoutRenderTests : BunitContext
         var orgs = new ActiveOrganizationService(api, new Aetheus.Front.Tests.TestDoubles.InMemoryUserPreferences());
         SetProperty(instance, "Orgs", orgs);
 
+        // Wire the shared busy veil (R-99)
+        SetProperty(instance, "Veil", Services.GetRequiredService<BusyVeil>());
+
         // Wire ListCacheService (cleared on sign-out / org switch)
         SetProperty(instance, "Cache", new ListCacheService(TimeProvider.System));
 

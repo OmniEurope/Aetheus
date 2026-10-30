@@ -41,6 +41,8 @@
         </PinnedActionsContent>
     </OmniPageHeader>
 
+    @* R-14: the two banners are separated by this stack's gap, not by a margin of their own. *@
+    <OmniStack>
     @* The definition was changed elsewhere while this page holds unsaved edits. *@
     @if (_changedElsewhere)
     {
@@ -52,11 +54,12 @@
 
     @if (HasLegacyTemplateReference)
     {
-        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-md">
+        <OmniAlert Severity="OmniSeverity.Warning">
             @L["LegacyTemplateReferenceWarning"]
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@PinLegacyTemplateAsync"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["PinTemplateVersion"]</span></ChildContent></OmniButton>
         </OmniAlert>
     }
+    </OmniStack>
 }
 
 @if (_isNew)
@@ -65,7 +68,9 @@
     <div>
         <OmniTemplateForm TModel="PipelineModel" Model="@_model" OnValidSubmit="@OnSubmit">
             <OmniDataAnnotationsValidator Localizer="@L" />
-            <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-sm">
+            @* R-14: the form's blocks (fields, YAML title, template picker, parameters card, actions, editor) are separated only by this stack's gap. *@
+            <OmniStack>
+            <OmniRow Gap="OmniSpacing.Large">
                 <OmniColumn Span="12" MediumSpan="6">
                     <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                         <OmniFormField Label="@L["Name"]" For="Name">
@@ -85,10 +90,10 @@
                 </OmniColumn>
             </OmniRow>
 
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-xs">@L["YamlDefinition"]</OmniText>
+            <OmniText Element="OmniTextElement.Strong">@L["YamlDefinition"]</OmniText>
             @if (_templates.Count > 0)
             {
-                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Template"]:</OmniText>
                     <OmniDropDown aria-label="@L["SelectTemplate"]" TValue="int?" Options="@(_templates.ToOptions(item => (int?)item.Id, item => item.Name))"
                         Placeholder="@L["SelectTemplate"]" AllowEmpty="true" @bind-Value="_selectedTemplateId"
@@ -97,19 +102,19 @@
             }
             @if (_templateParameters.Selection?.Parameters.Count > 0)
             {
-                <OmniCard Class="omni-u-mb-md">
+                <OmniCard>
                     <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["TemplateParameters"]</OmniText>
                     <OmniRow Gap="OmniSpacing.Large">
                         @foreach (var parameter in _templateParameters.Selection.Parameters)
                         {
                             var parameterHelp = Aetheus.Front.Components.Pipelines.ParameterText.Pick(parameter.Description, parameter.DescriptionFr);
-                            var describedBy = TemplateParameterDescriptionId(parameter.Name, parameterHelp);
+                            var describedBy = PipelineTemplateParameterIds.Description(parameter.Name, parameterHelp);
                             var parameterValue = TemplateParameterValue(parameter.Name);
-                            var parameterFieldId = TemplateParameterControlId(parameter.Name);
+                            var parameterFieldId = PipelineTemplateParameterIds.Control(parameter.Name);
                             <OmniColumn Span="12" MediumSpan="6">
                                 @* The required mark and the "?" of the description are OE's: Required and Help of the field. *@
                                 <OmniFormField Label="@(Aetheus.Front.Components.Pipelines.ParameterText.Pick(parameter.DisplayName, parameter.DisplayNameFr) ?? parameter.Name)" Class="omni-u-w-100" For="@parameterFieldId"
-                                    Id="@TemplateParameterFieldId(parameter.Name)" Required="@parameter.Required" Help="@parameterHelp">
+                                    Id="@PipelineTemplateParameterIds.Field(parameter.Name)" Required="@parameter.Required" Help="@parameterHelp">
                                     @if (parameter.AllowedValues.Count > 0)
                                     {
                                         <OmniDropDown Id="@parameterFieldId" TValue="string" Options="@(parameter.AllowedValues.ToOptions(item => (string)item, item => item))"
@@ -139,7 +144,7 @@
                     </OmniRow>
                 </OmniCard>
             }
-            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 @* STD-BTN detection 11: Create visible, the other actions in the menu. *@
                 <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -148,13 +153,14 @@
                 </OmniOverflowMenu>
                 @if (_yamlValid.HasValue)
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger)">@(_yamlValid.Value ? L["Valid"] : L["Invalid"])</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger)">@(_yamlValid.Value ? L["Valid"] : L["Invalid"])</OmniBadge>
                 }
             </OmniStack>
 
             <MonacoEditor @ref="_monacoEditor" Value="@_model.YamlDefinition"
                 ValueChanged="@OnYamlValueChanged" DebouncedValueChanged="@OnDebouncedYamlChanged"
                 OnBlur="@OnValidateYaml" OnSave="@OnSubmit" />
+            </OmniStack>
         </OmniTemplateForm>
     </div>
 }
@@ -162,10 +168,14 @@ else if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Large" Class="omni-u-mt-lg" />
 }
+else if (_forbidden)
+{
+    <div data-testid="pipeline-forbidden"><EmptyState Icon="lock" Title="@L["AccessDenied"]" /></div>
+}
 else if (_notFound)
 {
     @* R-34: a pipeline that no longer exists (deleted, or a wrong address) says so and leads back to the list. *@
-    <OmniEmptyState Class="omni-u-mt-md" Title="@L["PipelineNotFound"]" Description="@L["PipelineNotFoundHint"]" data-testid="pipeline-not-found">
+    <OmniEmptyState Title="@L["PipelineNotFound"]" Description="@L["PipelineNotFoundHint"]" data-testid="pipeline-not-found">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon>
         <ActionsContent>
             <OmniLink Href="/pipelines" data-testid="pipeline-not-found-back"><OmniIcon Name="OmniIconName.ArrowRight" /> @L["BackToPipelineList"]</OmniLink>
@@ -174,7 +184,8 @@ else if (_notFound)
 }
 else
 {
-    <div class="pipeline-detail-page">
+    @* R-98: OE's veil lies over the page while the pipeline is being deleted; the content stays mounted under it. *@
+    <div class="@(_deleting ? "pipeline-detail-page omni-busy" : "pipeline-detail-page")" aria-busy="@(_deleting ? "true" : "false")" data-testid="pipeline-detail-page">
     <UrlSyncedTabs Slugs="@(new[] { "runs", "edit", "visual", "settings" })" @bind-SelectedIndex="_selectedTab" class="pipeline-detail-tabs">
         <Tabs>
             <OmniTabsItem Key="runs" Title="@L["Runs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("history"))" /></Icon><ChildContent>
@@ -286,7 +297,7 @@ else
                                     else
                                     {
                                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
+                                            <PipelineRunStatusBadge Status="run.Status" />
                                             @* The gate letter rides with the status because it qualifies it: a
                                                green run that scored D is not the same result as a green run. *@
                                             @if (run.GateGrade.HasValue)
@@ -297,8 +308,8 @@ else
                                     }
                                 </Template>
                             </OmniDataGridColumn>
-                            <OmniDataGridColumn TItem="PipelineRunDto" Property="StartedAt" Title="@L["Started"]" FormatString="{0:g}" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-                            <OmniDataGridColumn TItem="PipelineRunDto" Property="CompletedAt" Title="@L["Completed"]" FormatString="{0:g}" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+                            <OmniDataGridColumn TItem="PipelineRunDto" Property="StartedAt" Title="@L["Started"]" FormatString="{0:g}" Width="150px" Filterable="true" />
+                            <OmniDataGridColumn TItem="PipelineRunDto" Property="CompletedAt" Title="@L["Completed"]" FormatString="{0:g}" Width="150px" Filterable="true" />
                             @* Sortable on the stored end instant, not on the rendered text: the elapsed
                                time is derived, so there is no column to sort and a text sort would order
                                "9m" after "10m". SortProperty hands the server a real field, and a run
@@ -401,7 +412,7 @@ else
                         </OmniOverflowMenu>
                         @if (_yamlValid.HasValue)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger)">@(_yamlValid.Value ? L["Valid"] : L["Invalid"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(_yamlValid.Value ? OmniTone.Success : OmniTone.Danger)">@(_yamlValid.Value ? L["Valid"] : L["Invalid"])</OmniBadge>
                         }
                     </div>
                     @* Editor left; Ctrl+Click on a `pipeline: <name>` ref opens that pipeline's read-only
@@ -416,7 +427,7 @@ else
                         @if (_showDiff)
                         {
                             <div class="pipeline-yaml-editor">
-                                <MonacoDiffViewer OriginalValue="@_savedYaml" ModifiedValue="@_model.YamlDefinition" />
+                                <OmniDiffViewer Original="@_savedYaml" Modified="@_model.YamlDefinition" Language="yaml" FillAvailableHeight="true" Height="12rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
                             </div>
                         }
 
@@ -438,7 +449,7 @@ else
                                       AvailableVaults="@_vaultNames" />
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="settings" Title="@L["Settings"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("settings"))" /></Icon><ChildContent>
-                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="omni-u-mt-sm">
+                <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
                     <OmniRow Gap="OmniSpacing.Large">
                         <OmniColumn Span="12" MediumSpan="6">
                             <OwnerTypeSelector Projects="@_projects"

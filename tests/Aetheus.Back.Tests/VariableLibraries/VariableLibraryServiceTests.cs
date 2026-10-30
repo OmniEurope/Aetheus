@@ -324,6 +324,22 @@ public class VariableLibraryServiceTests
         await _transactionMock.Received(1).CommitAsync(Arg.Any<CancellationToken>());
     }
 
+    // Seen on the local instance: an entry validated as it was gained an "Updated" version with the same value.
+    [Fact]
+    public async Task UpdateEntryAsync_NothingChanged_AddsNoVersion()
+    {
+        var entry = new VariableLibraryEntry { Id = 10, VariableLibraryId = 1, Key = "K", Value = "same" };
+        _repoMock.FindEntryAsync(10, Arg.Any<CancellationToken>())
+            .Returns(entry);
+
+        var result = await _sut.UpdateEntryAsync(1, 10, new UpdateVariableEntryRequest { Key = "K", Value = "same" }, ct: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal("same", result.Value);
+        await _repoMock.DidNotReceive().AddEntryVersionAsync(Arg.Any<VariableLibraryEntryVersion>(), Arg.Any<CancellationToken>());
+        await _repoMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task UpdateEntryAsync_NotFound_ReturnsNull()
     {

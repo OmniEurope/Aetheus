@@ -36,7 +36,7 @@ stages:
         scanner: trivy-iac
         timeout_seconds: 900
 
-  # The severity rules every security pipeline uses (see application-security).
+  # The rules every security pipeline uses, all required (see application-security for the scale).
   - name: Grade security
     group: Security
     execution_role: build
@@ -66,18 +66,24 @@ stages:
               severity: high
               direction: lower-is-better
               a: 0
-              b: 1
-              c: 3
-              d: 5
-              e: 10
+              b: 0
+              c: 0
             - key: grade.security.medium
               domain: security
               severity: medium
-              required: false
               direction: lower-is-better
               a: 0
               b: 5
-              c: 15
-              d: 30
-              e: 60
+            - key: grade.security.low
+              domain: security
+              severity: low
+              direction: lower-is-better
+              a: 0
+              b: 5
+            - key: grade.security.info
+              domain: security
+              severity: info
+              direction: lower-is-better
+              a: 0
+              b: 5
         timeout_seconds: 300

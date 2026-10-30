@@ -55,7 +55,7 @@ public interface IPortRegistryService
     /// <summary>
     /// Releases one port on one server, but only when <paramref name="ownerKey"/> is the holder.
     /// Returns false when the port is free or held by somebody else - releasing another holder's port
-    /// is a Server/Write action taken deliberately from the registry page, never a side effect.
+    /// is a port reservation action (server.ports.reserve) taken deliberately from the registry page, never a side effect.
     /// </summary>
     Task<bool> ReleaseOwnedAsync(
         int serverId, int port, string ownerKey, CancellationToken ct = default);

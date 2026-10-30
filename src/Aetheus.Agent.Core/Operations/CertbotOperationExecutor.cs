@@ -34,6 +34,11 @@ public sealed class CertbotOperationExecutor(
     { get; init; } = static (startInfo, timeoutSeconds, onOutput, processLogger, ct) =>
             ProcessRunner.RunAsync(startInfo, timeoutSeconds, onOutput, processLogger, ct);
 
+    public Task<ExecutorResult> ExecuteAsync(
+        OperationKind kind, string target, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
+        => ExecuteAsync(kind, target, new Dictionary<string, string>(), timeoutSeconds, onOutput, cancellationToken);
+
     public bool CanHandle(OperationKind kind) => kind is OperationKind.CertbotObtain
         or OperationKind.CertbotRenew or OperationKind.CertbotRenewAll
         or OperationKind.CertbotDelete or OperationKind.CertbotRevoke
@@ -52,11 +57,6 @@ public sealed class CertbotOperationExecutor(
             OperationKind.CertbotRemoveDomain => RemoveDomainAsync(target, envVars, timeoutSeconds, onOutput, cancellationToken),
             _ => ManageAsync(kind, target, timeoutSeconds, onOutput, cancellationToken)
         };
-
-    public Task<ExecutorResult> ExecuteAsync(
-        OperationKind kind, string target, int timeoutSeconds,
-        Func<string, TaskLogLevel, Task> onOutput, CancellationToken cancellationToken)
-        => ExecuteAsync(kind, target, new Dictionary<string, string>(), timeoutSeconds, onOutput, cancellationToken);
 
     // Reissues the certificate without one of its names through the manage helper, which reads the names the
     // certificate holds on disk, refuses a name it does not hold or its last one, and keeps the certificate.

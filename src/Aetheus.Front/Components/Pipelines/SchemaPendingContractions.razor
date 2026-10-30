@@ -26,7 +26,7 @@
                 <OmniDataGridColumn TItem="PendingContractionDto" Title="@L["SchemaPendingStep"]" Width="12rem" Sortable="false" Filterable="false" Key="step"
                                     ExportValue="@(contraction => L.Localize(contraction.Step))">
                     <Template Context="contraction">
-                        <OmniBadge Fill="OmniFill.Tonal" Tone="@StepTone(contraction.Step)">@L.Localize(contraction.Step)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(StepTone(contraction.Step)))" Fill="OmniFill.Tonal" Tone="@StepTone(contraction.Step)">@L.Localize(contraction.Step)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="PendingContractionDto" Title="@L["SchemaPendingPossibleFrom"]" Sortable="false" Filterable="false" Key="possible-from"

@@ -1,18 +1,21 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits ProjectWritableSectionBase
+@using Microsoft.AspNetCore.Components.Sections
 
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
-    @* The breadcrumb leaf already reads "Board" - no need to repeat it as a section title. *@
-    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
-        <OmniDropDown aria-label="@L["Assignee"]" TValue="string" Options="@(Assignees.ToOptions(item => (string)item, item => item))" @bind-Value="_assigneeFilter" AllowEmpty="true"
-            Placeholder="@L["Assignee"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
-        <OmniDropDown aria-label="@L["Tags"]" TValue="string" Options="@(Tags.ToOptions(item => (string)item, item => item))" @bind-Value="_tagFilter" AllowEmpty="true"
-            Placeholder="@L["Tags"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
-    </OmniStack>
-    @if (_canWrite)
-    {
+@* The main action sits in the project header, on the title line. *@
+@if (_canWrite)
+{
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
-    }
+    </SectionContent>
+}
+
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Medium">
+    @* The breadcrumb leaf already reads "Board" - no need to repeat it as a section title. *@
+    <OmniDropDown aria-label="@L["Assignee"]" TValue="string" Options="@(Assignees.ToOptions(item => (string)item, item => item))" @bind-Value="_assigneeFilter" AllowEmpty="true"
+        Placeholder="@L["Assignee"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
+    <OmniDropDown aria-label="@L["Tags"]" TValue="string" Options="@(Tags.ToOptions(item => (string)item, item => item))" @bind-Value="_tagFilter" AllowEmpty="true"
+        Placeholder="@L["Tags"]" @bind-Value:after="StateHasChanged" Class="kanban-filter" />
 </OmniStack>
 
 @if (_loading)
@@ -45,14 +48,14 @@ else
                         <OmniCard Class="@($"kanban-card {(_dragged?.Id == card.Id ? "kanban-card-dragging" : "")}")">
                             <div class="kanban-card-title">@card.Title</div>
                             <div class="kanban-card-meta">
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@TypeBadge(card.Type)">@L.Localize(card.Type)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.For(TypeBadge(card.Type)))" Fill="OmniFill.Solid" Tone="@TypeBadge(card.Type)">@L.Localize(card.Type)</OmniBadge>
                                 @if (!string.IsNullOrEmpty(card.AssigneeName))
                                 {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@card.AssigneeName</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.User))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@card.AssigneeName</OmniBadge>
                                 }
                                 @foreach (var tag in card.Tags)
                                 {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
                                 }
                                 @if (_canWrite)
                                 {

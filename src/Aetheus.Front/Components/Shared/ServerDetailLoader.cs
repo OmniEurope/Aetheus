@@ -56,6 +56,41 @@ public sealed class ServerDetailLoader : IAsyncDisposable
     /// <summary>Fired whenever <see cref="Server"/> / metric flags change. UI re-renders.</summary>
     public event Action? OnChanged;
 
+    private int _taskVeils;
+
+    /// <summary>
+    /// R-119: true while at least one task launched from a server page has not ended (queued, running, or
+    /// waiting for the state it changed to arrive). The server layout veils the section body for that whole time:
+    /// the content stays mounted underneath and cannot be acted on, so a row never looks actionable while the agent
+    /// is still changing it.
+    /// </summary>
+    public bool TaskPending => Volatile.Read(ref _taskVeils) > 0;
+
+    /// <summary>Holds the section veil until the returned handle is disposed; disposing twice lifts it once.</summary>
+    public IDisposable HoldTaskVeil()
+    {
+        Interlocked.Increment(ref _taskVeils);
+        OnChanged?.Invoke();
+        return new TaskVeilHold(LiftTaskVeil);
+    }
+
+    private void LiftTaskVeil()
+    {
+        Interlocked.Decrement(ref _taskVeils);
+        OnChanged?.Invoke();
+    }
+
+    private sealed class TaskVeilHold(Action lift) : IDisposable
+    {
+        private int _lifted;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _lifted, 1) == 0)
+                lift();
+        }
+    }
+
     /// <summary>Notify section subscribers when a task for the loaded server completes so each
     /// section refreshes its own affected state.</summary>
     public event Func<TaskCompletedNotification, Task>? OnTaskCompleted;

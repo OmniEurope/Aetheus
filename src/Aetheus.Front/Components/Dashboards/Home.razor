@@ -20,10 +20,11 @@
 
 @if (Permissions.IsLoaded && !CanViewDashboard)
 {
-    <EmptyState Icon="lock" Title="@L["AccessDenied"]" />
+    <MinimalDashboard />
 }
 else
 {
+<OmniStack>
 <InstanceWelcomeWizard Projects="@_dashboard?.Projects" ServerCount="@(_dashboard?.TotalServers ?? 0)" />
 <PendingApprovalsPanel />
 @if (_dashboardLoadFailed || _appSummaryLoadFailed)
@@ -31,11 +32,10 @@ else
     <OmniAlert Severity="OmniSeverity.Danger">@L["GridLoadFailed"]</OmniAlert>
 }
 
-@* R-35 (decision 2026-10-24): no equal-size tiles for now. The four panels sit in an OmniRow whose columns align at the
-   top, so each card is as high as its own content. *@
-<OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Start" Class="omni-u-mb-lg">
-        <OmniColumn Span="12" MediumSpan="6"><OmniCard Class="dashboard-tile">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+@* R-41 (2026-10-25): the four panels are OE tiles of one OmniTileGrid again (same width, same height; on a phone they stack and share the height of the tallest). *@
+<OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="dashboard-tile-row">
+        <OmniCard Class="dashboard-tile">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title">
                     <OmniIcon Name="OmniIconName.Database" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Servers"]</OmniHeading>
@@ -44,11 +44,11 @@ else
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     @if (_dashboard?.OnlineServers > 0)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Success">@($"{_dashboard.OnlineServers} {L.Localize(ServerStatus.Online)}")</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@($"{_dashboard.OnlineServers} {L.Localize(ServerStatus.Online)}")</NumberBadge>
                     }
                     @if (_dashboard?.OfflineServers > 0)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{_dashboard.OfflineServers} {L.Localize(ServerStatus.Offline)}")</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{_dashboard.OfflineServers} {L.Localize(ServerStatus.Offline)}")</NumberBadge>
                     }
                 </OmniStack>
             </OmniStack>
@@ -130,16 +130,16 @@ else
                     </OmniDataGridColumn>
                 </Columns>
             </AetheusDataGrid>
-        </OmniCard></OmniColumn>
-        <OmniColumn Span="12" MediumSpan="6"><OmniCard Class="dashboard-tile">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+        </OmniCard>
+        <OmniCard Class="dashboard-tile">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title">
                     <OmniIcon Name="OmniIconName.Reset" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentRuns"]</OmniHeading>
                 </OmniStack>
                 @* R-36: only the "running" badge, counting root runs (a run nobody triggered), never the runs they triggered. *@
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <StatusCountBadge Count="@RunningRootRunCount" Label="@L.Localize(PipelineStatus.Running)" Icon="OmniIconName.Play" Tone="OmniTone.Info" />
+                    <StatusCountBadge Count="@RunningRootRunCount" Label="@L.Localize(PipelineStatus.Running)" Tone="OmniTone.Info" />
                 </OmniStack>
             </OmniStack>
             @* The dashboard lists runs from every project, so the project is part of reading a row:
@@ -148,9 +148,9 @@ else
             <PipelineRunsGrid Items="@(_dashboard?.RecentRuns ?? [])" Compact="true" ShowDurationInCompact="true" GroupByProject="true"
                 IsLoading="@_dashboardLoading" MaxGroups="10" CssClass="dashboard-clickable-grid"
                 EmptyTitleKey="EmptyDashboardRuns" EmptyDescriptionKey="EmptyDashboardRuns" />
-        </OmniCard></OmniColumn>
-        <OmniColumn Span="12" MediumSpan="6"><OmniCard Class="dashboard-tile">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+        </OmniCard>
+        <OmniCard Class="dashboard-tile">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title">
                     <OmniIcon Name="OmniIconName.Folder" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Projects"]</OmniHeading>
@@ -159,7 +159,7 @@ else
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     @if (_dashboard?.TotalProjects > 0)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@(string.Format(L["Total"], _dashboard.TotalProjects))</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@(string.Format(L["Total"], _dashboard.TotalProjects))</NumberBadge>
                     }
                 </OmniStack>
             </OmniStack>
@@ -183,21 +183,22 @@ else
                     <OmniDataGridColumn TItem="ProjectDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
                 </Columns>
             </AetheusDataGrid>
-        </OmniCard></OmniColumn>
-        <OmniColumn Span="12" MediumSpan="6"><OmniCard Class="dashboard-tile">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+        </OmniCard>
+        <OmniCard Class="dashboard-tile">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title">
                     <OmniIcon Name="OmniIconName.Heartbeat" />
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-0">@L["MonitoredApps"]</OmniHeading>
                 </OmniStack>
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <StatusCountBadge Count="@(_appSummary?.UpCount ?? 0)" Label="@L["AppHealthUp"]" Icon="OmniIconName.Check" Tone="OmniTone.Success" />
-                    <StatusCountBadge Count="@(_appSummary?.DownCount ?? 0)" Label="@L["AppHealthDown"]" Icon="OmniIconName.Close" Tone="OmniTone.Danger" />
-                    <StatusCountBadge Count="@(_appSummary?.DegradedCount ?? 0)" Label="@L["AppHealthDegraded"]" Icon="OmniIconName.Warning" Tone="OmniTone.Warning" />
-                    <StatusCountBadge Count="@(_appSummary?.UnknownCount ?? 0)" Label="@L["AppHealthUnknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
+                    <StatusCountBadge Count="@(_appSummary?.UpCount ?? 0)" Label="@L["AppHealthUp"]" Tone="OmniTone.Success" />
+                    <StatusCountBadge Count="@(_appSummary?.DownCount ?? 0)" Label="@L["AppHealthDown"]" Tone="OmniTone.Danger" />
+                    <StatusCountBadge Count="@(_appSummary?.DegradedCount ?? 0)" Label="@L["AppHealthDegraded"]" Tone="OmniTone.Warning" />
+                    <StatusCountBadge Count="@(_appSummary?.UnknownCount ?? 0)" Label="@L["AppHealthUnknown"]" Tone="OmniTone.Neutral" />
                 </OmniStack>
             </OmniStack>
             <MonitoredAppsStatusGrid Applications="@(_appSummary?.Applications)" IsLoading="@_appSummaryLoading" />
-        </OmniCard></OmniColumn>
-</OmniRow>
+        </OmniCard>
+</OmniTileGrid>
+</OmniStack>
 }

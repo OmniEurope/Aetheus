@@ -3,9 +3,14 @@ using System.Text.Json;
 
 namespace Aetheus.Back.Components.PackageRegistry;
 
+/// <summary>
+/// npm registry. Every endpoint needs a personal access token, except the packument, version and
+/// tarball reads of a package an administrator opened to anonymous download (R-58). Ping, search and
+/// publication stay authenticated.
+/// </summary>
 [ApiController]
 [Route("api/packages/npm")]
-[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName)]
+[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName, Policy = PackageRegistryPolicies.Read)]
 public class NpmRegistryController(
     INpmRegistryService registry,
     PackageRegistryUploadGate uploadGate,
@@ -43,10 +48,11 @@ public class NpmRegistryController(
     }
 
     [HttpGet("{**path}")]
+    [AnonymousPackageDownload(PackageRegistryKind.Npm)]
     public async Task<IActionResult> GetPackage(string path, CancellationToken ct)
     {
-        var decodedPath = DecodePath(path);
-        var tarballMarker = decodedPath.IndexOf("/-/", StringComparison.Ordinal);
+        var decodedPath = NpmRegistryPath.Decode(path);
+        var tarballMarker = decodedPath.IndexOf(NpmRegistryPath.TarballMarker, StringComparison.Ordinal);
         if (tarballMarker >= 0)
         {
             var packageName = decodedPath[..tarballMarker];
@@ -110,19 +116,9 @@ public class NpmRegistryController(
         => $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/packages/npm";
 
     private static (string Name, string? Selector) SplitPackageAndSelector(string path)
-    {
-        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length == 0)
-            return (path, null);
-        var nameLength = segments[0].StartsWith('@') ? 2 : 1;
-        if (segments.Length <= nameLength)
-            return (string.Join('/', segments), null);
-        return (string.Join('/', segments.Take(nameLength)), string.Join('/', segments.Skip(nameLength)));
-    }
+        => NpmRegistryPath.SplitPackageAndSelector(path);
 
-    private static string DecodePath(string path)
-        => Uri.UnescapeDataString(path.Trim('/'))
-            .Replace("%2f", "/", StringComparison.OrdinalIgnoreCase);
+    private static string DecodePath(string path) => NpmRegistryPath.Decode(path);
 
     private static string EncodePackagePath(string packageName)
         => string.Join('/', packageName.Split('/').Select(Uri.EscapeDataString));

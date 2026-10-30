@@ -10,7 +10,7 @@
             <div>
                 @if (wait.Source is { Length: > 0 } source)
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="omni-u-me-sm">@source</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="omni-u-me-sm">@source</OmniBadge>
                 }
                 @wait.Reason
                 @if (wait.Since is { } since)

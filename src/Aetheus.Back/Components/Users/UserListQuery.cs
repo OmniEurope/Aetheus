@@ -17,7 +17,9 @@ internal static class UserListQuery
         .Text("email", u => u.Email)
         .Predicate(RolesKey, HoldsAnyRole)
         .Boolean("isActive", u => u.IsActive)
-        .Date("createdAt", u => u.CreatedAt);
+        .Date("createdAt", u => u.CreatedAt)
+        .Date("updatedAt", u => u.UpdatedAt)
+        .Date("lastActivityAt", u => u.LastActivityAt);
 
     private static Expression<Func<User, bool>> HoldsAnyRole(GridFilter filter)
     {
@@ -28,6 +30,8 @@ internal static class UserListQuery
             _ => throw new BadRequestException($"'{filter.Field}' only accepts a list of role names.")
         };
         var names = ticked.Select(name => name.ToLowerInvariant()).ToList();
-        return u => u.UserRoles.Any(userRole => names.Contains(userRole.Role.Name.ToLower()));
+        // A site-wide Admin, or a role held for any organization (ADR-059).
+        return u => u.UserRoles.Any(userRole => userRole.Role.Name == RoleNames.Admin && names.Contains(userRole.Role.Name.ToLower()))
+            || u.OrganizationRoles.Any(assignment => names.Contains(assignment.Role.Name.ToLower()));
     }
 }

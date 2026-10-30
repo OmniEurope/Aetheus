@@ -1,0 +1,53 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-69: the lead times of the certificate expiry alerts. One alert is raised per lead time reached by a
+   certificate; the channel that carries it is chosen by the notification rules of the user. *@
+
+@if (_loading)
+{
+    <AetheusLoader Size="OmniControlSize.Small" />
+}
+else if (_settings is null)
+{
+    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
+}
+else
+{
+    <OmniSettingsSection Title="@L["CertificateAlertsTitle"]" Description="@L["CertificateAlertsDescription"]" Class="certificate-alert-settings">
+        <OmniTemplateForm TModel="EditModel" Model="@_model" OnValidSubmit="SaveAsync">
+            <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
+                <OmniFormField Label="@L["CertificateAlertsAddLabel"]" For="certificate-alert-new-days" Help="@L["CertificateAlertsAddHelp"]"
+                               Error="@_error" Class="omni-u-w-100 certificate-alert-new-field">
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniNumeric TValue="int?" Id="certificate-alert-new-days" @bind-Value="_model.NewDays"
+                                     Minimum="@CertificateAlertLeadTimes.MinDays" Maximum="@CertificateAlertLeadTimes.MaxDays" Step="1"
+                                     Placeholder="@L["CertificateAlertsDaysPlaceholder"]" Class="certificate-alert-new-days" />
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => AddLeadTime())" Class="certificate-alert-add">
+                            <Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CertificateAlertsAdd"]</span></ChildContent>
+                        </OmniButton>
+                    </OmniStack>
+                </OmniFormField>
+
+                <OmniDataList TItem="int" Items="@_model.LeadDays" Class="certificate-alert-list">
+                    <ItemTemplate Context="days">
+                        <div class="certificate-alert-lead">
+                            <span class="certificate-alert-lead-text">@LeadText(days)</span>
+                            <OmniButton Variant="OmniButtonVariant.Danger" Size="OmniControlSize.Small" OnClick="@(() => RemoveLeadTime(days))"
+                                        Class="certificate-alert-remove" Label="@L["CertificateAlertsRemove", LeadText(days)]" title="@L["CertificateAlertsRemove", LeadText(days)]">
+                                <Icon><OmniIcon Name="OmniIconName.Delete" /></Icon>
+                            </OmniButton>
+                        </div>
+                    </ItemTemplate>
+                    <EmptyContent>
+                        <OmniText Element="OmniTextElement.Paragraph" Tone="OmniTextTone.Muted" Class="omni-u-m-0 certificate-alert-empty">@L["CertificateAlertsEmpty"]</OmniText>
+                    </EmptyContent>
+                </OmniDataList>
+
+                <div>
+                    <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Busy="@_saving" Class="certificate-alert-save">
+                        <Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent>
+                    </OmniButton>
+                </div>
+            </OmniStack>
+        </OmniTemplateForm>
+    </OmniSettingsSection>
+}

@@ -9,13 +9,34 @@ public static class PipelineAnalysisGradingValidator
         PipelineAnalysisGradingDefinition? grading)
     {
         if (grading is null) return [];
-        var errors = new List<string>();
-        ValidateHeader(grading, errors);
-        var requiredDomains = ValidateRequiredDomains(grading.RequiredDomains, errors);
-        var configuredDomains = ValidateRules(scope, grading.Rules, errors);
-        foreach (var domain in requiredDomains.Except(configuredDomains))
-            errors.Add($"analysis_grading required domain '{DomainToken(domain)}' has no grading rule.");
-        return errors;
+        var (header, rules, missingDomains) = Collect(scope, grading);
+        return [.. header, .. rules.SelectMany(errors => errors), .. missingDomains];
+    }
+
+    /// <summary>The same errors as <see cref="Validate"/>, split between the block itself (version, minimum grade,
+    /// rule count, required domains) and each rule, in the order of <see cref="PipelineAnalysisGradingDefinition.Rules"/>
+    /// (the first 100), so the grade engine can grade the valid rules and turn each rejected one into an F.</summary>
+    public static PipelineAnalysisGradingDiagnosis Diagnose(
+        string? scope,
+        PipelineAnalysisGradingDefinition grading)
+    {
+        ArgumentNullException.ThrowIfNull(grading);
+        var (header, rules, missingDomains) = Collect(scope, grading);
+        return new PipelineAnalysisGradingDiagnosis([.. header, .. missingDomains], rules);
+    }
+
+    private static (List<string> Header, List<List<string>> Rules, List<string> MissingDomains) Collect(
+        string? scope,
+        PipelineAnalysisGradingDefinition grading)
+    {
+        var header = new List<string>();
+        ValidateHeader(grading, header);
+        var requiredDomains = ValidateRequiredDomains(grading.RequiredDomains, header);
+        var (rules, configuredDomains) = ValidateRules(scope, grading.Rules);
+        var missingDomains = requiredDomains.Except(configuredDomains)
+            .Select(domain => $"analysis_grading required domain '{DomainToken(domain)}' has no grading rule.")
+            .ToList();
+        return (header, rules, missingDomains);
     }
 
     private static void ValidateHeader(
@@ -47,18 +68,20 @@ public static class PipelineAnalysisGradingValidator
         return requiredDomains;
     }
 
-    private static HashSet<AnalysisGradeDomain> ValidateRules(
+    private static (List<List<string>> Errors, HashSet<AnalysisGradeDomain> ConfiguredDomains) ValidateRules(
         string? scope,
-        IEnumerable<PipelineAnalysisGradeRuleDefinition> rules,
-        ICollection<string> errors)
+        IEnumerable<PipelineAnalysisGradeRuleDefinition> rules)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var configuredDomains = new HashSet<AnalysisGradeDomain>();
+        var errors = new List<List<string>>();
         foreach (var rule in rules.Take(100))
         {
-            ValidateRule(scope, rule, keys, configuredDomains, errors);
+            var ruleErrors = new List<string>();
+            ValidateRule(scope, rule, keys, configuredDomains, ruleErrors);
+            errors.Add(ruleErrors);
         }
-        return configuredDomains;
+        return (errors, configuredDomains);
     }
 
     private static void ValidateRule(
@@ -153,16 +176,21 @@ public static class PipelineAnalysisGradingValidator
         string label,
         ICollection<string> errors)
     {
-        // A finding score, counted or weighted, may leave E open: above D is E, and only a critical
-        // finding gives F. Every other rule needs its five thresholds.
-        var findingScore = IsFindingScore(rule);
-        var values = findingScore && !rule.E.HasValue
-            ? new[] { rule.A, rule.B, rule.C, rule.D }
-            : new[] { rule.A, rule.B, rule.C, rule.D, rule.E };
-        if (values.Any(value => !value.HasValue || !double.IsFinite(value.Value)))
+        // A rule on findings (one severity's count, or a finding score, counted or weighted) may stop its
+        // thresholds after B, C or D: everything beyond the last one is the next grade and never worse
+        // (owner decision of 2026-10-25, recette R-73: "at least one high is a D, never an E nor an F").
+        // A metric rule needs its five thresholds.
+        var openTail = IsFindingScore(rule) || !string.IsNullOrWhiteSpace(rule.Severity);
+        var all = new[] { rule.A, rule.B, rule.C, rule.D, rule.E };
+        var defined = all.TakeWhile(value => value.HasValue).Count();
+        var values = all.Take(defined).ToArray();
+        var acceptable = openTail
+            ? defined >= 2 && all.Skip(defined).All(value => !value.HasValue)
+            : defined == all.Length;
+        if (!acceptable || values.Any(value => !double.IsFinite(value!.Value)))
         {
-            errors.Add(findingScore
-                ? $"analysis grading rule '{label}' must define finite A, B, C and D thresholds (E is optional)."
+            errors.Add(openTail
+                ? $"analysis grading rule '{label}' must define finite A and B thresholds, then C, D and E in order without a gap (the grade beyond the last one is the next grade)."
                 : $"analysis grading rule '{label}' must define finite A, B, C, D and E thresholds.");
             return;
         }
@@ -182,3 +210,9 @@ public static class PipelineAnalysisGradingValidator
 
     private static bool TooLong(string? value, int max) => value?.Length > max;
 }
+
+/// <summary>What <see cref="PipelineAnalysisGradingValidator.Diagnose"/> found: the errors of the grading block itself,
+/// and the errors of each rule (empty for a valid rule), in the order of the block's first 100 rules.</summary>
+public sealed record PipelineAnalysisGradingDiagnosis(
+    IReadOnlyList<string> GradingErrors,
+    IReadOnlyList<IReadOnlyList<string>> RuleErrors);

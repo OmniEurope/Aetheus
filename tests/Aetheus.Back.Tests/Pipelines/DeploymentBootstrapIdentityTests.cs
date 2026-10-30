@@ -37,6 +37,29 @@ public sealed class DeploymentBootstrapIdentityTests
         Assert.Equal(up.Stamp, smoke.Stamp);
     }
 
+    /// <summary>Everyone signs in by e-mail, the deployment identity included: its name is an address in the
+    /// reserved ".invalid" domain, and the backend's bootstrap login accepts exactly that.</summary>
+    [Fact]
+    public void DerivedIdentity_IsAnEmailAddress_ThatTheBootstrapLoginAccepts()
+    {
+        var configuration = Configuration(("Auth:EncryptionKey", "0123456789abcdef0123456789abcdef"));
+        var identity = DeploymentBootstrapIdentity.For(configuration, 1797, Now);
+        Assert.EndsWith("@bootstrap.invalid", identity.User, StringComparison.Ordinal);
+
+        var backend = Configuration(
+            ("Auth:DeploymentBootstrapUser", identity.User),
+            ("Auth:DeploymentBootstrapPassword", identity.Password),
+            ("Auth:DeploymentBootstrapExpiresAtUtc", identity.ExpiresAtUtc));
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(Now, TimeSpan.Zero));
+
+        Assert.NotNull(Aetheus.Back.Components.Auth.BootstrapCredentialPolicy.Match(
+            new Aetheus.Shared.Components.Settings.LoginRequest { Email = identity.User.ToUpperInvariant(), Password = identity.Password },
+            backend, time, hasDbUsers: true));
+        Assert.Null(Aetheus.Back.Components.Auth.BootstrapCredentialPolicy.Match(
+            new Aetheus.Shared.Components.Settings.LoginRequest { Email = identity.User.Split('@')[0], Password = identity.Password },
+            backend, time, hasDbUsers: true));
+    }
+
     [Fact]
     public void DifferentRuns_DeriveDifferentCredentials()
     {

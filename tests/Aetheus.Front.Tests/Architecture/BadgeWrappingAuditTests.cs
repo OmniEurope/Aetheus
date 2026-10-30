@@ -79,4 +79,17 @@ public sealed class BadgeWrappingAuditTests
             "A badge keeps its text on one line (recette R-342); these rules let it wrap, break or truncate:\n  "
             + string.Join("\n  ", offenders));
     }
+
+    /// <summary>Recette R-127: outside a grid a badge (status, type, tag) is as tall as a button, OE's control
+    /// height; in a grid row it keeps the compact badge height shared with the icon-only actions.</summary>
+    [Fact]
+    public void ABadgeIsAsTallAsAButton_OutsideGrids_AndCompactInGridRows()
+    {
+        var rules = AllRules().ToList();
+        Assert.Contains(rules, rule => rule.Selector == ".omni-badge"
+            && Regex.IsMatch(rule.Body, @"(?<![-\w])height\s*:\s*var\(--omni-control-height\)")
+            && Regex.IsMatch(rule.Body, @"min-height\s*:\s*var\(--omni-control-height\)"));
+        Assert.Contains(rules, rule => rule.Selector == ".omni-data-grid .omni-badge"
+            && Regex.IsMatch(rule.Body, @"(?<![-\w])height\s*:\s*var\(--omni-badge-height\)"));
+    }
 }

@@ -45,6 +45,7 @@ else
                 @* Bound chart height so a long daily series remains readable without occupying an
                    oversized card. *@
                 <OmniChart Label="@L["AudienceDailyTitle"]" Description="@L["AudienceDailyCaption"]" AspectRatio="5">
+                    <ChildContent>
                     <OmniLineSeries Data="@DailyVisitorPoints" ColorIndex="0"
                                       Title="@L["UniqueVisitorsPerDay"]" />
                     @* Add per-day markers so each hover identifies its date and value instead of
@@ -57,6 +58,11 @@ else
                     <OmniAxisTitle Text="@L["AudienceDailyCategoryAxis"]" />
                     <OmniCategoryAxis Labels="@OmniChartData.Labels(DailyVisitorPoints)" />
                     <OmniLegend />
+                    </ChildContent>
+                    <FooterContent>
+                        @* R-30: every day is drawn; the handles pick the days shown (the last 7 at first). *@
+                        <OmniRangeNavigator @bind-RangeStart="_rangeStart" @bind-RangeEnd="_rangeEnd" Class="web-analytics-range" />
+                    </FooterContent>
                 </OmniChart>
             </OmniCard>
         }

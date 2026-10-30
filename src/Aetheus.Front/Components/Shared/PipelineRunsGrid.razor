@@ -63,18 +63,18 @@
                         }
                         else
                         {
-                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
+                            <PipelineRunStatusBadge Status="run.Status" />
                         }
                     }
                     else
                     {
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
-                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="run.Status" />
+                            <PipelineRunStatusBadge Status="run.Status" />
                             @if (run.LaunchRefused)
                             {
                                 @* Give refused automated launches their own badge so they remain
                                    distinct from rejected executions. *@
-                                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
+                                <OmniBadge Fill="OmniFill.Outline" Tone="OmniTone.Neutral" Class="pipeline-launch-refused-badge" title="@L["RunLaunchRefusedTitle"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent>@L["RunLaunchRefused"]</ChildContent></OmniBadge>
                             }
                             @if (run.GateGrade.HasValue)
                             {
@@ -93,7 +93,7 @@
             <OmniDataGridColumn TItem="PipelineRunTableItem" Property="ProjectName" Title="@L["Project"]"
                 Visible="@GroupByProject" Class="pipeline-project-column" HeaderClass="pipeline-project-column" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true">
                 <Template Context="run">
-                    <span class="pipeline-project-context">@(run.ProjectName ?? L["Unassigned"])</span>
+                    <span class="pipeline-project-context"><EntityNameLink Kind="EntityNameKind.Project" Id="run.ProjectId" Name="@(run.ProjectName ?? L["Unassigned"])" /></span>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineRunTableItem" Property="StartedAt" Title="@L["Started"]" FormatString="{0:g}" Width="9rem"
@@ -149,7 +149,7 @@
                     }
                     else
                     {
-                        <span class="pipeline-run-ref-link" title="@run.ServerOs">@run.ServerName</span>
+                        <span class="pipeline-run-ref-link" title="@run.ServerOs"><EntityNameLink Kind="EntityNameKind.Server" Id="run.ServerId" Name="@run.ServerName" /></span>
                     }
                 </Template>
             </OmniDataGridColumn>

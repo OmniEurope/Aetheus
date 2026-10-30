@@ -7,6 +7,7 @@ using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using OmniEurope.Blazor.Components;
 
 namespace Aetheus.Front.Tests.Pages;
 
@@ -116,10 +117,14 @@ public sealed class ResourceUsageTests : BunitContext
             Libraries = new() { [1] = [Pipeline(10, "deploy-prod"), Pipeline(11, "release-fast")] }
         });
 
+        var host = Render<OmniComponentsHost>(p => p.Add(h => h.OverlayService, Services.GetRequiredService<OmniOverlayService>()));
         var cut = Render<VariableLibrariesList>();
-        cut.WaitForAssertion(() => Assert.Contains("release-fast", cut.Markup));
-
-        Assert.NotNull(cut.Find("a[href='/pipelines/11']"));
+        // Two readers (R-103): the cell shows their total, the dialog names each as a link.
+        cut.WaitForAssertion(() => Assert.Equal("2", cut.Find("button.omni-badge[data-testid='resource-usage-count']").TextContent.Trim()));
+        Assert.DoesNotContain("release-fast", cut.Markup, StringComparison.Ordinal);
+        cut.Find("button[data-testid='resource-usage-count']").Click();
+        host.WaitForAssertion(() => Assert.NotNull(host.Find(".omni-dialog a[href='/pipelines/11']")));
+        Assert.NotNull(host.Find(".omni-dialog a[href='/pipelines/10']"));
         Assert.Single(cut.FindAll(".omni-badge"), badge => badge.TextContent.Contains("ResourceUnused", StringComparison.Ordinal));
     }
 
@@ -135,11 +140,15 @@ public sealed class ResourceUsageTests : BunitContext
             }
         });
 
+        var host = Render<OmniComponentsHost>(p => p.Add(h => h.OverlayService, Services.GetRequiredService<OmniOverlayService>()));
         var cut = Render<VaultEdit>(p => p.Add(x => x.Id, 1));
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find(".resource-usage-line a[href='/pipelines/10']")));
+        // Two readers (R-103): the line shows their total; the dialog lists both.
+        cut.WaitForAssertion(() => Assert.Equal("2", cut.Find(".resource-usage-line .omni-badge").TextContent.Trim()));
+        cut.Find(".resource-usage-line button").Click();
 
-        Assert.NotNull(cut.Find(".resource-usage-line a[href='/projects/1/monitoring']"));
-        Assert.Contains("ResourceUsageWebAnalytics", cut.Find(".resource-usage-line").TextContent, StringComparison.Ordinal);
+        host.WaitForAssertion(() => Assert.NotNull(host.Find(".omni-dialog a[href='/pipelines/10']")));
+        Assert.NotNull(host.Find(".omni-dialog a[href='/projects/1/monitoring']"));
+        Assert.Contains("ResourceUsageWebAnalytics", host.Find(".omni-dialog").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

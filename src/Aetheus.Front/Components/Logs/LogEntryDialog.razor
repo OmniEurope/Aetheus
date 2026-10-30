@@ -1,17 +1,17 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<div>
+<OmniStack>
     @* R-41: the code block draws the ANSI colours itself (OmniCodeBlock.AnsiMode, Render by default since OE 1.9.0);
        Message stays as stored for the Copy and Markdown buttons and the grid export. *@
     <OmniCodeBlock Code="@Message" Title="@L["Message"]" Wrap="true" Class="code-block-bounded code-block-tall" />
     @if (!string.IsNullOrWhiteSpace(Exception))
     {
-        <OmniCodeBlock Code="@Exception" Title="@(DetailsTitle ?? L["ExceptionDetails"])" Wrap="true" Class="omni-u-mt-md code-block-bounded code-block-tall" />
+        <OmniCodeBlock Code="@Exception" Title="@(DetailsTitle ?? L["ExceptionDetails"])" Wrap="true" Class="code-block-bounded code-block-tall" />
     }
     <DialogFooter CancelText="@L["Close"]" OnCancel="Close">
         <SecondaryContent>
             @* One main action, the other copy in its menu (R-39, one main action per zone). *@
-            <OmniSplitButton Text="@L["Copy"]" Variant="OmniButtonVariant.Primary" OnClick="CopyAsync" Class="log-entry-copy">
+            <OmniSplitButton Text="" Label="@L["Copy"]" title="@L["Copy"]" Variant="OmniButtonVariant.Primary" OnClick="CopyAsync" Class="log-entry-copy">
                 <Icon><OmniIcon Name="OmniIconName.Copy" /></Icon>
                 <ChildContent>
                     <OmniMenuItem OnClick="CopyMarkdownAsync" Class="log-entry-copy-markdown">@L["CopyAsMarkdown"]</OmniMenuItem>
@@ -19,4 +19,4 @@
             </OmniSplitButton>
         </SecondaryContent>
     </DialogFooter>
-</div>
+</OmniStack>

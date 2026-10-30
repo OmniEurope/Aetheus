@@ -21,4 +21,17 @@ internal static class JsonOptions
             new JsonStringEnumConverter()
         }
     };
+
+    /// <summary>
+    /// Layers the UTC→Local DateTime converters on the options of a payload that does not come through
+    /// <see cref="Web"/>: the SignalR hub protocol. A timestamp pushed over a hub (heartbeat inventory,
+    /// task and run events) must read exactly like the same field fetched over HTTP, otherwise a page shows
+    /// browser-local time after it loads and UTC once the next push replaces the value. The hub keeps its
+    /// own enum handling, so only the date converters are shared.
+    /// </summary>
+    public static void AddLocalDateTimeConverters(JsonSerializerOptions options)
+    {
+        options.Converters.Add(new UtcToLocalDateTimeConverter());
+        options.Converters.Add(new NullableUtcToLocalDateTimeConverter());
+    }
 }

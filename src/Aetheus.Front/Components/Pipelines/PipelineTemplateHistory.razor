@@ -18,7 +18,9 @@ else if (_templateLoadFailed)
 }
 else
 {
-    <AetheusDataGrid @ref="_versionsGrid" Data="@_versions" Count="@_versionCount"
+    @* R-14: the grid and the comparison card are separated by this stack's gap. *@
+    <OmniStack Class="page-fill-body">
+    <AetheusDataGrid FullHeight="true" @ref="_versionsGrid" Data="@_versions" Count="@_versionCount"
         TItem="PipelineTemplateVersionSummaryDto" IsLoading="@_versionsLoading"
         LoadData="@LoadVersionsAsync" ExportRead="@ReadVersionsExportAsync" PageSize="10"
         Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -32,13 +34,13 @@ else
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="ChangelogEntry" Title="@L["Changelog"]" Filterable="true" />
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" />
-            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" />
         </Columns>
     </AetheusDataGrid>
 
     @if (_latestVersion > 1)
     {
-        <OmniCard Class="omni-u-mt-lg">
+        <OmniCard>
             <OmniRow Gap="OmniSpacing.Medium" Class="omni-u-mb-md">
                 <OmniFormField For="oe-pages-pipelines-pipelinetemplatehistory-numeric-1"><LabelContent>@L["OriginalVersion"]</LabelContent><ChildContent><OmniNumeric TValue="int" Value="@_originalVersion" ValueChanged="@OnOriginalVersionChanged" Minimum="1" Maximum="@_latestVersion" Id="oe-pages-pipelines-pipelinetemplatehistory-numeric-1"  ValueExpression="@(() => _originalVersion)"/></ChildContent></OmniFormField>
                 <OmniFormField For="oe-pages-pipelines-pipelinetemplatehistory-numeric-2"><LabelContent>@L["ModifiedVersion"]</LabelContent><ChildContent><OmniNumeric TValue="int" Value="@_modifiedVersion" ValueChanged="@OnModifiedVersionChanged" Minimum="1" Maximum="@_latestVersion" Id="oe-pages-pipelines-pipelinetemplatehistory-numeric-2"  ValueExpression="@(() => _modifiedVersion)"/></ChildContent></OmniFormField>
@@ -50,14 +52,15 @@ else
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@LoadSelectedYamlAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
                 </OmniAlert>
             }
-            else if (_yamlLoading)
-            {
-                <AetheusLoader Size="OmniControlSize.Small" />
-            }
             else
             {
-                <MonacoDiffViewer OriginalValue="@_originalYaml" ModifiedValue="@_modifiedYaml" />
+                @* Recette R-116: choosing another version reads its YAML under OE's busy veil; the diff stays mounted
+                   underneath (the viewer repaints when the new values arrive), no loader replaces it. *@
+                <div class="@(_yamlLoading ? "omni-busy" : null)" aria-busy="@(_yamlLoading ? "true" : "false")" data-testid="template-yaml-zone">
+                    <OmniDiffViewer Original="@_originalYaml" Modified="@_modifiedYaml" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
+                </div>
             }
         </OmniCard>
     }
+    </OmniStack>
 }

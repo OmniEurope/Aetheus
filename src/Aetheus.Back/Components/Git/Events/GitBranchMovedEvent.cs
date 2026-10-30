@@ -15,4 +15,5 @@ public sealed record GitBranchMovedEvent(
     string RepositoryName,
     string? DefaultBranch,
     string DiskPath,
-    IReadOnlyList<GitRefUpdate> RefUpdates) : IGitRefUpdatesEvent;
+    IReadOnlyList<GitRefUpdate> RefUpdates,
+    string? PusherUsername = null) : IGitRefUpdatesEvent;

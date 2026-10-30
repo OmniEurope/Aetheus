@@ -4,10 +4,9 @@
 <OmniStack Gap="OmniSpacing.Large">
     <OmniText Element="OmniTextElement.Paragraph">@L["PortCheckLibraryHint"]</OmniText>
 
-    <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="lib-check-server">@L["Server"]</OmniLabel>
-        <OmniDropDown Id="lib-check-server" name="lib-check-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" Placeholder="@L["Server"]" Class="w-100" />
-    </OmniStack>
+    <OmniFormField Label="@L["Server"]" For="lib-check-server" Required="true" Class="omni-u-w-100">
+        <OmniDropDown Id="lib-check-server" name="lib-check-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" AllowEmpty="true" Placeholder="@L["Server"]" Class="w-100" />
+    </OmniFormField>
 
     @if (_error is not null)
     {

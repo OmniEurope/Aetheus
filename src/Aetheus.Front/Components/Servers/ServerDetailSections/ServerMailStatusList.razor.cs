@@ -21,6 +21,9 @@ public partial class ServerMailStatusList : IAsyncDisposable
     [Inject] private ILogger<ServerMailStatusList> Logger { get; set; } = default!;
     [Inject] private TimeProvider Clock { get; set; } = default!;
 
+    /// <summary>R-119: the server layout, asked to veil the section while a task of this list runs.</summary>
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
+
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter, EditorRequired] public MailDataDto Mail { get; set; } = new();
     [Parameter] public bool CanManage { get; set; }
@@ -98,8 +101,13 @@ public partial class ServerMailStatusList : IAsyncDisposable
         StateHasChanged();
     }
 
+    /// <summary>Reads the status again now and waits for it (the section asks for it before its veil lifts).</summary>
+    internal Task ReloadNowAsync() => InvokeAsync(ReloadFromPushAsync);
+
     public async ValueTask DisposeAsync()
     {
+        _veil?.Dispose();
+        _veil = null;
         if (_liveFeed is not null)
             await _liveFeed.DisposeAsync();
     }
@@ -196,6 +204,20 @@ public partial class ServerMailStatusList : IAsyncDisposable
         _failure = null;
         _failureLog = null;
         _running[taskId] = new RunningMailTask(kind, label, Clock.GetUtcNow());
+        SyncVeil();
+    }
+
+    private IDisposable? _veil;
+
+    // R-119: the section stays veiled while a followed mail task runs (content kept mounted, the banner stays readable).
+    private void SyncVeil()
+    {
+        if (_running.Count > 0) _veil ??= Loader?.HoldTaskVeil();
+        else
+        {
+            _veil?.Dispose();
+            _veil = null;
+        }
     }
 
     /// <summary>The services and actions of the services button's menu, in their listed order.</summary>
@@ -355,6 +377,7 @@ public partial class ServerMailStatusList : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(notification);
         if (!_running.Remove(notification.TaskId, out var task)) return;
+        SyncVeil();
         switch (task.Kind)
         {
             case MailTaskKind.ServerCheck:

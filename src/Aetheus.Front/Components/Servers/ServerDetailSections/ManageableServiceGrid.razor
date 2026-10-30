@@ -4,9 +4,10 @@
    same action can be applied to several services at once. Reused by both the Manageable and Other tabs.
    Logs stay per-service (no bulk) - viewing N log streams at once makes no sense. *@
 @namespace Aetheus.Front.Components.Servers.ServerDetailSections
+<OmniStack>
 @if (_selected.Count > 0)
 {
-    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm omni-u-p-sm omni-u-rounded service-bulk-bar">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-p-sm omni-u-rounded service-bulk-bar">
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["ServicesSelected"], _selected.Count)</OmniText>
         <div class="flex-spacer"></div>
         @* Recette R3-41: one visible action per zone (Start, or Install on the available tab); the others and
@@ -41,7 +42,7 @@
 @* R-509: on the module grid a click on the row opens the service's module; the checkbox, the
    buttons and the task link keep their own click and key (SITE-FUNC-HOME-CAPABILITY-001). *@
 <OmniDataGrid @ref="_grid" ShowFooterBar="true" BarButtonSize="OmniControlSize.Medium" ExportTitle="@ExportContext.Title(L["Services"])" ExportFields="@ExportContext.Fields()" Items="@Services.ToList()" TItem="ServiceInfoDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
-    RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+    RowRender="@OnRowRenderInternal" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="@Installed" MaxHeight="@(Installed ? null : AetheusGrid.ScrollMaxHeight)"
     OnRowClick="@OnRowClickedAsync" Class="@(OpensModuleOnRowClick ? "aetheus-clickable-rows" : null)">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="ServiceInfoDto" Key="SelectService" Title="@L["SelectAll"]" Width="2.875rem" Sortable="false" Filterable="false">
@@ -75,7 +76,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServiceInfoDto" Property="Type" Title="@L["Type"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText">
             <Template Context="svc">
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@FormatType(svc.Type)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@FormatType(svc.Type)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="ServiceInfoDto" Property="Status" Title="@L["Status"]" Width="12rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusFilterText">
@@ -86,11 +87,11 @@
                     @if (Installed)
                     {
                         @* The host's word is translated, and only a failure is red. *@
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(svc.Status, svc.IsRunning)" title="@svc.Status">@StatusText(svc.Status, svc.IsRunning)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(GetStatusBadgeStyle(svc.Status, svc.IsRunning)))" Fill="OmniFill.Solid" Tone="@GetStatusBadgeStyle(svc.Status, svc.IsRunning)" title="@svc.Status">@StatusText(svc.Status, svc.IsRunning)</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["NotInstalled"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Prohibit))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["NotInstalled"]</OmniBadge>
                     }
                     @* What the action launched on this service is doing, linked to its task. *@
                     @if (action is not null)
@@ -138,3 +139,4 @@
         </OmniDataGridColumn>
     </Columns>
 </OmniDataGrid>
+</OmniStack>

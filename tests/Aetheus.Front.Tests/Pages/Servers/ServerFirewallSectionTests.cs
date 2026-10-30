@@ -27,7 +27,7 @@ public class ServerFirewallSectionTests : BunitContext
 
     private IRenderedComponent<ServerFirewallSection> RenderWith(ServerFirewallDto dto, bool? cap, bool immediateDialogs = false)
     {
-        _handler = BunitTestHelper.RegisterServices(this);
+        _handler = BunitTestHelper.RegisterServices(this, extraPermissionKeys: [PermissionKeys.ServerFirewallManage]);
         if (immediateDialogs) BunitTestHelper.UseImmediateDialogs(this);
         _handler.SetJsonResponse(HttpMethod.Get, "firewall", dto);
         return Render<ServerFirewallSection>(p => p
@@ -38,7 +38,7 @@ public class ServerFirewallSectionTests : BunitContext
     // Recette R-29: Enable and Disable sit in the page header, rendered here with the section.
     private IRenderedComponent<PageHeaderOutletHost> RenderWithHeader(ServerFirewallDto dto, bool? cap)
     {
-        _handler = BunitTestHelper.RegisterServices(this);
+        _handler = BunitTestHelper.RegisterServices(this, extraPermissionKeys: [PermissionKeys.ServerFirewallManage]);
         BunitTestHelper.UseImmediateDialogs(this);
         _handler.SetJsonResponse(HttpMethod.Get, "firewall", dto);
         return this.RenderWithPageHeader<ServerFirewallSection>(p => p
@@ -66,6 +66,22 @@ public class ServerFirewallSectionTests : BunitContext
         // The add-rule form is absent. Read by its buttons, not by the LockOpen icon: the OE grid now
         // draws one too, on its frozen-column toggle.
         Assert.DoesNotContain(cut.FindComponents<OmniButton>(), button => button.Markup.Contains("FirewallAddRule", StringComparison.Ordinal));
+    }
+
+    // R-11 (owner decision 2026-10-28): a Contributor (Server Write, no server.firewall.manage) reads the
+    // rules but is offered no change; the hint about the agent capability is not shown, the server has it.
+    [Fact]
+    public void WithoutTheFirewallPermission_TheRulesAreReadOnly()
+    {
+        _handler = BunitTestHelper.RegisterServices(this);
+        _handler.SetJsonResponse(HttpMethod.Get, "firewall", Firewall(active: true, cap: true));
+        var cut = Render<ServerFirewallSection>(p => p
+            .Add(c => c.ServerId, 1)
+            .Add(c => c.FirewallManagementAvailable, true));
+
+        cut.WaitForAssertion(() => Assert.Contains("8080", cut.Markup));
+        Assert.DoesNotContain(cut.FindComponents<OmniButton>(), button => button.Markup.Contains("FirewallAddRule", StringComparison.Ordinal));
+        Assert.DoesNotContain("FirewallManageDisabledHint", cut.Markup, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -167,6 +183,21 @@ public class ServerFirewallSectionTests : BunitContext
             Assert.Contains("\"enabled\":false", posts[0].Body, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success && toast.Detail == "FirewallDisableQueued");
         }
+    }
+
+    // R-119: the task a firewall action queues is followed on the page (and veils the section until it ends).
+    [Fact]
+    public async Task R119_AQueuedFirewallToggle_IsFollowedOnThePage()
+    {
+        var cut = RenderWithHeader(Firewall(active: false, cap: true), cap: true);
+        ImmediateDialogs();
+        _handler!.SetJsonResponse(HttpMethod.Post, "firewall/toggle", new ServiceTaskResponse { TaskId = 9 });
+        Assert.Empty(cut.FindAll(".server-task-follower"));
+
+        await ClickAsync(cut, "FirewallEnable");
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".server-task-follower")));
+        Assert.Contains("/tasks/9", cut.Find(".server-task-follower").InnerHtml, StringComparison.Ordinal);
     }
 
     [Fact]

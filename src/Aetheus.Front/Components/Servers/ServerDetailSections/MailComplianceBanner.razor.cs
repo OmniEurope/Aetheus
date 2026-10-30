@@ -58,6 +58,9 @@ public sealed partial class MailComplianceBanner : IAsyncDisposable
         StateHasChanged();
     }
 
+    /// <summary>Reads the status again now and waits for it (the section asks for it before its veil lifts).</summary>
+    internal Task ReloadNowAsync() => InvokeAsync(ReloadFromPushAsync);
+
     private void ShowState() => Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", StateTabSlug));
 
     public async ValueTask DisposeAsync()

@@ -44,7 +44,7 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct))
             return Forbid();
-        if (!await MayProbeFromServerAsync(request.ServerId, ct))
+        if (!await MayProbeFromServerAsync(projectId, request.ServerId, ct))
             return Forbid();
         var app = await service.CreateAppAsync(projectId, request, ct);
         return CreatedAtAction(nameof(GetApp), new { id = app.Id }, app);
@@ -58,7 +58,7 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
             return NotFound();
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId.Value, Permission.Write, ct))
             return Forbid();
-        if (!await MayProbeFromServerAsync(await service.GetProbeServerChangeAsync(id, request, ct), ct))
+        if (!await MayProbeFromServerAsync(projectId.Value, await service.GetProbeServerChangeAsync(id, request, ct), ct))
             return Forbid();
         var app = await service.UpdateAppAsync(id, request, ct);
         return app is null ? NotFound() : Ok(app);
@@ -68,9 +68,12 @@ public class AppMonitoringController(IAppMonitoringService service, IResourceAut
     // a new URL for it) needs Write on the server, not only on the project. Null means no agent target
     // is chosen: the backend probes the app itself behind its SSRF guard (create), or the update keeps
     // the approved server and URL; the unconditional Project/Write gate already covers both.
-    private async Task<bool> MayProbeFromServerAsync(int? serverId, CancellationToken ct) =>
+    // Writing the server is not enough when it sits in another organization than the project (a caller
+    // of both would otherwise bridge them, as ProjectsController.CanLinkServerAsync refuses).
+    private async Task<bool> MayProbeFromServerAsync(int projectId, int? serverId, CancellationToken ct) =>
         serverId is not { } server
-        || await authz.HasPermissionAsync(User, ResourceType.Server, server, Permission.Write, ct);
+        || await authz.HasPermissionAsync(User, ResourceType.Server, server, Permission.Write, ct)
+            && await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.Server, [server], ct);
 
     [HttpDelete("apps/{id:int}")]
     public async Task<IActionResult> DeleteApp(int id, CancellationToken ct)

@@ -84,8 +84,9 @@ public sealed class UserDeactivationPipelineTransferIntegrationTests(PostgresFix
         var put = await admin.PutAsJsonAsync($"/api/users/{owner.Id}", new UpdateUserRequest
         {
             Username = owner.Username,
+            Email = $"{owner.Username}@example.com",
             IsActive = false,
-            Roles = ["Reader"],
+            Roles = [], // ADR-059: only Admin is site-wide; the Reader role it holds per organization is left unchanged.
             TransferPipelinesToUsername = targetUsername
         }, ct);
         var putMs = watch.ElapsedMilliseconds;
@@ -112,9 +113,8 @@ public sealed class UserDeactivationPipelineTransferIntegrationTests(PostgresFix
         var created = await admin.PostAsJsonAsync("/api/users", new CreateUserRequest
         {
             Username = username,
-            Password = IntegrationUsers.Password,
-            Roles = ["Reader"],
-            MustChangePassword = false
+            Email = $"{username}@example.com",
+            OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(admin, "Reader")
         }, ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var user = await created.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct);

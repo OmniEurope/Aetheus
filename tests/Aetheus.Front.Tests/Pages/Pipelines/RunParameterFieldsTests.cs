@@ -55,13 +55,40 @@ public sealed class RunParameterFieldsTests : BunitContext
             .Add(x => x.AvailableReleases, TwoReleases()));
 
         cut.WaitForAssertion(() => Assert.Contains("1.1.482", cut.Markup));
-        // Neither a row click nor a card click may guess between the two fields.
-        cut.FindAll("tr[data-omni-row-index]").First(row => row.TextContent.Contains("1.1.482")).Click();
+        // Neither a row click nor a card click may guess between the two fields. With no field to fill the
+        // table's rows are not selectable at all (R-58), so a row has no click handler to guess with.
+        Assert.Throws<Bunit.MissingEventHandlerException>(() =>
+            cut.FindAll("tr[data-omni-row-index]").First(row => row.TextContent.Contains("1.1.482")).Click());
         cut.FindAll("[data-testid='release-picker-card']").First(card => card.TextContent.Contains("1.1.482")).Click();
         Assert.False(cut.Instance.TryCollect(out var values, out var error));
         Assert.NotNull(error);
         Assert.Empty(values);
         Assert.DoesNotContain("1.1.482", cut.FindAll("input").Select(input => input.GetAttribute("value")));
+    }
+
+    /// <summary>Recette R-76: a deployment asks for the version and for the production server. Clicking a release fills the
+    /// version and leaves the server alone, instead of leaving the list informational as it did.</summary>
+    [Fact]
+    public void ClickingARelease_FillsTheVersion_EvenWhenTheProductionServerIsAlsoRequired()
+    {
+        var parameters = new List<PipelineRunParameterDto>
+        {
+            new() { Name = "candidateVersion", DisplayName = "Candidate", Type = "string", Required = true },
+            new() { Name = "deployServer", DisplayName = "Production server", Type = "string", Required = true }
+        };
+        var cut = Render<RunParameterFields>(p => p
+            .Add(x => x.Parameters, parameters)
+            .Add(x => x.AvailableReleases, TwoReleases()));
+
+        cut.WaitForAssertion(() => Assert.Contains("1.1.482", cut.Markup));
+        cut.FindAll("tr[data-omni-row-index]").First(row => row.TextContent.Contains("1.1.482")).Click();
+
+        Assert.False(cut.Instance.TryCollect(out var values, out _));
+        Assert.Empty(values);
+        cut.Find("#deployServer").Input("vps-prod");
+        Assert.True(cut.Instance.TryCollect(out values, out _));
+        Assert.Equal("1.1.482", values["candidateVersion"]);
+        Assert.Equal("vps-prod", values["deployServer"]);
     }
 
     /// <summary>R3-13: a parameter's description sits behind the "?" of its OE field (Help), named by the

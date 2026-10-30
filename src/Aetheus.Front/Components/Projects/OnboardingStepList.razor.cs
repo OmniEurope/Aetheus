@@ -19,6 +19,9 @@ public partial class OnboardingStepList
     [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
     [Parameter, EditorRequired] public IReadOnlyList<OnboardingStep> Steps { get; set; } = [];
 
+    /// <summary>When set, the heading shows a Done button that raises it (the caller then hides the list).</summary>
+    [Parameter] public EventCallback OnDone { get; set; }
+
     private static string RowCss(OnboardingStep step) => step.State switch
     {
         OnboardingStepState.Done => "onboarding-step-row is-done",

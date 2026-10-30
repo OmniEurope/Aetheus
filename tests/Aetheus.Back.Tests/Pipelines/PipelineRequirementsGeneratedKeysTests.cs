@@ -59,7 +59,8 @@ public sealed class PipelineRequirementsGeneratedKeysTests
 
         var entries = Entries().ToDictionary(entry => entry.Key, entry => entry.Value);
         Assert.Equal("wordmorrow-prod", entries["COMPOSE_PROJECT"]);
-        Assert.Equal("/var/lib/wordmorrow-production", entries["STATE_DIR"]);
+        // R-97: inside the directory the agent owns, so it creates and deletes the state directory itself.
+        Assert.Equal("/var/lib/aetheus-agent/projects/wordmorrow-production", entries["STATE_DIR"]);
         // ADR-057: no environment file path exists any more, the deployment renders its own from the vault and the libraries.
         Assert.DoesNotContain("ENV_FILE", entries.Keys);
         Assert.Equal(string.Empty, entries["DOMAIN"]);

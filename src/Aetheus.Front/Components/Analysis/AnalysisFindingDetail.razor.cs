@@ -252,8 +252,10 @@ public partial class AnalysisFindingDetail : ComponentBase, IDisposable
         {
             ProjectId = _finding.ProjectId,
             Type = WorkItemType.Bug,
-            Title = $"[{_finding.Severity}] {_finding.Title}",
-            Description = $"Analysis finding #{_finding.Id}\n\n{_finding.Message}\n\nRule: {_finding.RuleId}\nFingerprint: {_finding.Fingerprint}",
+            // The ticket is read by people in their language: severity and labels go through the localizer.
+            Title = $"[{L.Localize(_finding.Severity)}] {_finding.Title}",
+            Description = $"{L["AnalysisTicketHeading", _finding.Id]}\n\n{_finding.Message}\n\n"
+                + $"{L["AnalysisTicketRuleLine", _finding.RuleId]}\n{L["AnalysisTicketFingerprintLine", _finding.Fingerprint]}",
             Status = WorkItemStatus.New,
             Priority = (int)_finding.Severity,
             Tags = ["analysis", _finding.Category.ToString().ToLowerInvariant()],

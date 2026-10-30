@@ -13,6 +13,19 @@
         <OmniFormField Label="@L["PipelinePrefix"]" Help="@L["PipelinePrefixHint"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2">
             <OmniTextBox Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-2" Value="@Prefix" ValueChanged="@PrefixChanged" Class="omni-u-w-100"  ValueExpression="@(() => Prefix)"/>
         </OmniFormField>
+        @* R-94: the branch every pipeline reads when it runs; develop when the repository has it. *@
+        @if (SourceBranch is not null)
+        {
+            <OmniFormField Label="@L["PipelineSourceBranch"]" Help="@L["PipelineSourceBranchHint"]" Class="omni-u-w-100" For="oe-formfield-pages-pipelines-pipelinesetupwizardstep-branch">
+                <OmniDropDown Id="oe-formfield-pages-pipelines-pipelinesetupwizardstep-branch" TValue="string" Options="@SourceBranches"
+                              Value="@SourceBranch" ValueChanged="@SourceBranchChanged" ValueExpression="@(() => SourceBranch)" Class="omni-u-w-100" />
+            </OmniFormField>
+        }
+        else if (SourceBranchMissing)
+        {
+            @* R-76: no branch is written, which the user must know before the pipelines are created. *@
+            <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-w-100" data-testid="setup-source-branch-missing">@L["PipelineSourceBranchMissing"]</OmniAlert>
+        }
     </OmniStack>
 }
 else if (Step == 1)
@@ -77,7 +90,7 @@ else if (Step == 2)
        itself (a badge with its OE tooltip), so nobody ticks it without knowing it will fail. *@
     RenderFragment? qaNote = QaNoTestsTip is null ? null :
         @<OmniTooltip Text="@QaNoTestsTip" MaxWidth="OmniTooltipWidth.Wide">
-            <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="setup-qa-no-tests">@L["PipelineSetupQaNoTestsBadge"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Tonal" data-testid="setup-qa-no-tests">@L["PipelineSetupQaNoTestsBadge"]</OmniBadge>
         </OmniTooltip>;
     <OmniStack Gap="OmniSpacing.Medium" Class="pipeline-setup-step">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["SelectPipelineCapabilities"]</OmniHeading>
@@ -97,6 +110,31 @@ else if (Step == 2)
             @if (Proposes("rollback")) { @Option("rollback", OmniIconName.Reset, L["Rollback"], L["RollbackPipelineHint"], Rollback, RollbackChanged) }
             @if (Proposes("packages")) { @Option("packages", OmniIconName.Package, L["Packages"], L["PackagesPipelineHint"], Packages, PackagesChanged) }
         </OmniTileGrid>
+        @* R-105: the quality pipeline is written without the steps of a language the project does not use, so none is
+           shown skipped at every run. Pre-ticked from what the repository holds; the user changes them. *@
+        @if (Proposes("quality") && Quality)
+        {
+            <OmniHeading Level="OmniHeadingLevel.H6">@L["PipelineQualityLanguages"]</OmniHeading>
+            <OmniTileGrid Columns="3" role="group" aria-label="@L["PipelineQualityLanguages"]" data-testid="setup-quality-languages">
+                @Option("lang-dotnet", OmniIconName.Code, L["PipelineStackDotNet"], L["PipelineLanguageDotNetHint"], LangDotNet, LangDotNetChanged)
+                @Option("lang-python", OmniIconName.TerminalWindow, "Python", L["PipelineLanguagePythonHint"], LangPython, LangPythonChanged)
+                @Option("lang-java", OmniIconName.Package, "Java", L["PipelineLanguageJavaHint"], LangJava, LangJavaChanged)
+            </OmniTileGrid>
+            @* A language the repository could not be read for is ticked (keeping a producer that finds nothing is harmless,
+               dropping one is a silent loss): the user confirms which to keep. *@
+            @if (LanguagesUncertain)
+            {
+                <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-quality-languages-uncertain">@L["PipelineQualityLanguagesUncertain"]</OmniAlert>
+            }
+        }
+        @* R-72: the candidate starts the deployment pipeline created with it, unless the user unticks it. Offered only
+           when both are created, ticked by default. *@
+        @if (DeployChainOffered)
+        {
+            <OmniTileGrid Columns="3" role="group" aria-label="@L["PipelineSetupDeployChain"]" data-testid="setup-deploy-chain">
+                @Option("deploy-after-candidate", OmniIconName.RocketLaunch, L["PipelineSetupRunDeployAfterCandidate"], L["PipelineSetupRunDeployAfterCandidateHint"], DeployChain, DeployChainChanged)
+            </OmniTileGrid>
+        }
         @* R-10 to R-13: a selected pipeline whose default commands cannot work on this branch fails at its
            first run; it is blocking for that run, so it is the one alert of the step. *@
         @if (DetectionWarnings.Count > 0)

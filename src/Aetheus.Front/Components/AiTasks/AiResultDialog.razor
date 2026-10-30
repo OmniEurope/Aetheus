@@ -23,19 +23,19 @@ else
         <OmniColumn Span="12" MediumSpan="8">
             @if (_selected is not null)
             {
-                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
-                             Class="omni-u-mb-md">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(_selected.Verdict)">@AiVerdictText.Label(L, _selected.Verdict)</OmniBadge>
+                <OmniStack>
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                    <OmniBadge Icon="@(BadgeIcon.ForState(AiVerdictText.Tone(_selected.Verdict)))" Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(_selected.Verdict)">@AiVerdictText.Label(L, _selected.Verdict)</OmniBadge>
                     <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
                         @_selected.ProfileName · @FormatDuration(_selected.DurationMs) · @_selected.CreatedAt.ToLocalTime().ToString("g")
                     </OmniText>
                     @if (_selected.SendsDataExternally)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["ExternalData"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["ExternalData"]</OmniBadge>
                     }
                     @if (_selected.Truncated)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Truncated"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Truncated"]</OmniBadge>
                     }
                 </OmniStack>
                 <OmniTabs>
@@ -46,17 +46,20 @@ else
                         <OmniTabsItem Title="@L["Diff"]" Disabled="@string.IsNullOrWhiteSpace(_selected.DiffPatch)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("difference"))" /></Icon><ChildContent>
                             @if (!string.IsNullOrWhiteSpace(_selected.DiffPatch))
                             {
-                                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton>
+                                <OmniStack>
+                                <OmniStack Orientation="OmniOrientation.Horizontal"><OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton></OmniStack>
                                 @if (!string.IsNullOrWhiteSpace(_selected.ProposedBranchName))
                                 {
-                                    <OmniAlert Severity="OmniSeverity.Success" Class="omni-u-mb-sm">
+                                    <OmniAlert Severity="OmniSeverity.Success">
                                         @L["ProposedBranchCreated"]: <a href="/git-repositories/@_selected.ProposedRepositoryId">@_selected.ProposedBranchName</a>
                                     </OmniAlert>
                                 }
-                                <MonacoDiffViewer OriginalValue="" ModifiedValue="@_selected.DiffPatch" />
+                                <OmniDiffViewer Modified="@_selected.DiffPatch" Height="28rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
+                                </OmniStack>
                             }
                         </ChildContent></OmniTabsItem>
                 </OmniTabs>
+            </OmniStack>
             }
         </OmniColumn>
     </OmniRow>

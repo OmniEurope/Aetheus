@@ -2,7 +2,8 @@
 @inject GridExportContext ExportContext
 @* Networks tab of the Docker section. Extracted so the parent stops carrying five tabs' worth of
    filter state; it owns nothing but its own search box and grouping. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack>
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredNetworks.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterNetworks"]" @bind-Value="_networkSearch" Placeholder="@L["FilterNetworks"]" Class="docker-search" />
 </OmniStack>
@@ -23,3 +24,4 @@
         </OmniDataGridColumn>
     </Columns>
 </OmniDataGrid>
+</OmniStack>

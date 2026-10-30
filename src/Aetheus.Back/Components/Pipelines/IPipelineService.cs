@@ -17,6 +17,12 @@ public interface IPipelineService
     /// unknown pipeline; <c>Source</c> is null for one no project owns or with no
     /// repository.</summary>
     Task<(bool Found, PipelineSourceDto? Source)> GetPipelineSourceByIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>The definition file the pipeline has in its project's repository on a branch (its own
+    /// branch when none is given), for the review before a save. Null for an unknown pipeline;
+    /// <c>Exists</c> false when the repository holds no such file.</summary>
+    Task<PipelineRepositoryDefinitionDto?> GetRepositoryDefinitionAsync(
+        int id, string? sourceBranch, string? pipelineName, CancellationToken ct = default);
     Task<PipelineDependencyGroupsDto> GetDependencyGroupsAsync(
         List<int>? accessibleIds = null, int? serverId = null, int? projectId = null,
         CancellationToken ct = default);
@@ -35,9 +41,11 @@ public interface IPipelineService
     /// <summary>Returns true if the pipeline has an active (running/pending) run.</summary>
     Task<bool> HasActiveRunAsync(int pipelineId, CancellationToken ct = default);
 
-    /// <summary>Creates or updates a pipeline from YAML content for a given project.</summary>
+    /// <summary>Creates or updates a pipeline from YAML content for a given project. <paramref name="actorUsername"/>
+    /// is who changed the definition (the git pusher) when the call runs outside that user's request; an edited
+    /// definition makes that user the automated-run owner.</summary>
     Task<PipelineDto> UpsertPipelineFromYamlAsync(
         string name, string yamlContent, int projectId, string triggerType,
         CancellationToken ct = default, string? sourceBranch = null, string? defaultBranch = null,
-        int? sourceRepositoryId = null);
+        int? sourceRepositoryId = null, string? actorUsername = null);
 }

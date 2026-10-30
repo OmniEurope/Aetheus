@@ -20,6 +20,7 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("data_object")" /></Icon>
 </OmniPageHeader>
 
+<OmniStack Class="page-fill-body">
 @if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Large" />
@@ -68,7 +69,7 @@ else
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
             @if (!_isNew)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
     </OmniTemplateForm>
@@ -77,11 +78,11 @@ else
     @if (!_isNew && _detail is not null)
     {
         @* Who reads this library (R-65), above the entries: a library read by nothing is the one to delete. *@
-        <div class="@(_editingProperties ? "resource-usage-line omni-u-mt-2xl" : "resource-usage-line")">
+        <div class="resource-usage-line">
             <span class="resource-usage-line__label">@L["UsedBy"]</span>
             <ResourceUsageSummary Users="@_usage" Loaded="@_usageLoaded" />
         </div>
-        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["Entries"]</OmniHeading>
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["Entries"]</OmniHeading>
 
         <OmniTemplateForm TModel="NewEntryModel" Model="@_newEntry" OnValidSubmit="@((EditContext context) => AddEntry((NewEntryModel)context.Model))">
         <OmniDataAnnotationsValidator Localizer="@L" />
@@ -104,7 +105,7 @@ else
 
         @if (_entriesLoadFailed)
         {
-            <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+            <OmniAlert Severity="OmniSeverity.Danger">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                     <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
                     <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryEntriesAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
@@ -124,10 +125,10 @@ else
                            approved STD-BTN exception. *@
                         <span class="library-cell">
                             <span @onclick:stopPropagation="true">
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyAsync(entry.Key))" Class="library-copy-btn"
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyAsync(Shown(entry).Key))" Class="library-copy-btn"
                                             title="@L["CopyKey"]" Label="@L["CopyKey"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             </span>
-                            <span class="library-cell-text">@entry.Key</span>
+                            <span class="library-cell-text" title="@Shown(entry).Key">@Shown(entry).Key</span>
                         </span>
                     </Template>
                     <EditTemplate Context="entry">
@@ -140,10 +141,10 @@ else
                     <Template Context="entry">
                         <span class="library-cell">
                             <span @onclick:stopPropagation="true">
-                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyAsync(entry.Value))" Class="library-copy-btn"
+                                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyAsync(Shown(entry).Value))" Class="library-copy-btn"
                                             title="@L["CopyValue"]" Label="@L["CopyValue"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             </span>
-                            <span class="library-cell-text">@entry.Value</span>
+                            <span class="library-cell-text" title="@Shown(entry).Value">@Shown(entry).Value</span>
                         </span>
                     </Template>
                     <EditTemplate Context="entry">
@@ -162,6 +163,10 @@ else
                         @* One main action (Edit), the others in the row menu (R1-4). *@
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => EditEntry(entry))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                         <OmniOverflowMenu Label="@L["MoreActions"]">
+                            @if (CanAllocatePort(entry))
+                            {
+                                <OmniMenuItem OnClick="@(() => AllocateEntryPortAsync(entry))"><Icon><OmniIcon Name="OmniIconName.Archive" /></Icon><ChildContent>@L["PortAllocateRow"]</ChildContent></OmniMenuItem>
+                            }
                             <OmniMenuItem OnClick="@(() => ShowVersions(entry))"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["History"]</ChildContent></OmniMenuItem>
                             <OmniMenuItem Tone="OmniTone.Danger" OnClick="@(() => DeleteEntry(entry))"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent>@L["Delete"]</ChildContent></OmniMenuItem>
                         </OmniOverflowMenu>
@@ -177,3 +182,4 @@ else
         </AetheusDataGrid>
     }
 }
+</OmniStack>

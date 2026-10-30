@@ -203,6 +203,11 @@ public class VariableLibraryService(IVariableLibraryRepository repo, IDbTransact
     {
         var entry = await repo.FindEntryAsync(entryId, ct).ConfigureAwait(false);
         if (entry is null || entry.VariableLibraryId != libraryId) return null;
+        // A save that changes nothing is no new version (seen on the local instance: an entry opened and
+        // validated as it was gained an "Updated" version holding the same value).
+        if (string.Equals(entry.Key, request.Key, StringComparison.Ordinal)
+            && string.Equals(entry.Value, request.Value, StringComparison.Ordinal))
+            return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
         await EnsureKeyIsFreeAsync(libraryId, request.Key, entryId, ct).ConfigureAwait(false);
 
         entry.Key = request.Key;

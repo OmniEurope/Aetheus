@@ -40,4 +40,49 @@
     <Using Include="Microsoft.Playwright" />
   </ItemGroup>
 
+  <!-- Recette R-30 (PageRulesTests). The baseline of the presentation-rule violations is checked in and embedded, so the
+       QA container, which runs the pre-built outputs without the sources, reads the same file as a developer. -->
+  <ItemGroup>
+    <EmbeddedResource Include="PageRules\page-rules-baseline.txt" LogicalName="page-rules-baseline.txt" />
+  </ItemGroup>
+
+  <!-- The @page directives of Aetheus.Front, captured at build time and embedded, so that PageInventory cannot drift from
+       the routes the front really has without a test failing, and without the QA container needing the sources. -->
+  <UsingTask TaskName="CaptureRazorPageDirectives" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceDirectory ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var directive = new Regex("^@page\\s+\"[^\"]+\"\\s*$", RegexOptions.Multiline);
+        var separator = Path.DirectorySeparatorChar;
+        var lines = Directory.EnumerateFiles(SourceDirectory, "*.razor", SearchOption.AllDirectories)
+            .Where(file => !file.Contains(separator + "obj" + separator) && !file.Contains(separator + "bin" + separator))
+            .OrderBy(file => file, StringComparer.Ordinal)
+            .SelectMany(file => directive.Matches(File.ReadAllText(file)).Cast<Match>().Select(match => match.Value.Trim()))
+            .ToArray();
+        Directory.CreateDirectory(Path.GetDirectoryName(OutputFile));
+        if (!File.Exists(OutputFile) || !File.ReadAllLines(OutputFile).SequenceEqual(lines))
+            File.WriteAllLines(OutputFile, lines);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="CaptureFrontPageDirectives" BeforeTargets="AssignTargetPaths">
+    <PropertyGroup>
+      <FrontPageDirectivesFile>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'front-page-directives.txt'))</FrontPageDirectivesFile>
+    </PropertyGroup>
+    <CaptureRazorPageDirectives SourceDirectory="$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', '..', 'src', 'Aetheus.Front'))"
+                                OutputFile="$(FrontPageDirectivesFile)" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(FrontPageDirectivesFile)" LogicalName="front-page-directives.txt" />
+    </ItemGroup>
+  </Target>
+
 </Project>

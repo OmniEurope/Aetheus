@@ -20,6 +20,7 @@ public static class ProjectDtoMapper
             RepositoryUrl = project.RepositoryUrl,
             DefaultBranch = project.DefaultBranch,
             Status = project.Status,
+            DeletionRequestedAt = project.DeletionRequestedAt,
             Tags = TagsHelper.DeserializeTags(project.Tags),
             PipelineCount = includePipelineSummary ? project.Pipelines.Count : 0,
             OrganizationId = project.OrganizationId,

@@ -1,0 +1,12 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@* Every name a certificate covers (R-123). Removing one stays in the certificate's actions menu. *@
+<OmniStack>
+    <ul class="certbot-domains-dialog__list" data-testid="certbot-domains-dialog-list">
+        @foreach (var domain in Domains)
+        {
+            <li>@domain</li>
+        }
+    </ul>
+    <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]" />
+</OmniStack>

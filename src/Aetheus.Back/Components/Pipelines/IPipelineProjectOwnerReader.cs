@@ -13,4 +13,6 @@ public interface IPipelineProjectOwnerReader
     Task<string?> GetProjectOwnerUsernameAsync(int projectId, CancellationToken ct = default);
     // Checks whether the pipeline owner maps to an active user.
     Task<bool> IsActiveUsernameAsync(string username, CancellationToken ct = default);
+    // Recette R-51 (ADR-058): the project is deleted and waits for its server cleanup, so it runs nothing.
+    Task<bool> IsProjectDeletionPendingAsync(int projectId, CancellationToken ct = default);
 }

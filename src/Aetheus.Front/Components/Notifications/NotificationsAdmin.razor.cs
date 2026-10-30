@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Notifications;
 
 public partial class NotificationsAdmin : ComponentBase
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
@@ -192,7 +193,7 @@ public partial class NotificationsAdmin : ComponentBase
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteNotificationChannelAsync(channel.Id),
             "Deleted",
             async () =>
@@ -202,7 +203,7 @@ public partial class NotificationsAdmin : ComponentBase
                 await ReloadAllAsync();
             },
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private async Task DeleteRuleAsync(NotificationRuleDto rule)
@@ -212,12 +213,12 @@ public partial class NotificationsAdmin : ComponentBase
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteNotificationRuleAsync(rule.Id),
             "Deleted",
             () => _rulesGrid?.Reload() ?? Task.CompletedTask,
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private static OmniTone TestBadge(NotificationTestStatus status) => status switch

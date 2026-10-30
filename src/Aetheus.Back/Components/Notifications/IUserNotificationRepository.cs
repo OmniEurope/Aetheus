@@ -32,6 +32,9 @@ public interface IUserNotificationRepository
 
     Task<string?> GetProjectNameAsync(int projectId, CancellationToken ct = default);
 
+    /// <summary>The organization owning the project; null when it has none.</summary>
+    Task<int?> GetProjectOrganizationIdAsync(int projectId, CancellationToken ct = default);
+
     Task<List<UserNotificationPreference>> GetPreferencesAsync(int userId, CancellationToken ct = default);
 
     /// <summary>The saved on/off choice of each user among <paramref name="userIds"/> for <paramref name="eventType"/>, in one

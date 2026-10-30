@@ -11,7 +11,7 @@
         <dt>@L["NotificationChannel"]</dt>
         <dd>@(Notification.ChannelName ?? L["NotificationChannelNone"].Value)</dd>
         <dt>@L["Status"]</dt>
-        <dd><OmniBadge Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(Notification)">@NotificationLabels.StatusLabel(L, Notification)</OmniBadge></dd>
+        <dd><OmniBadge Icon="@(BadgeIcon.ForState(NotificationLabels.StatusVariant(Notification)))" Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(Notification)">@NotificationLabels.StatusLabel(L, Notification)</OmniBadge></dd>
         @if (!string.IsNullOrWhiteSpace(Notification.ErrorMessage))
         {
             <dt>@L["Error"]</dt>

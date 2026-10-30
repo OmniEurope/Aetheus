@@ -96,10 +96,11 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.Contains("Branch", cut.Markup);
             Assert.Contains("main", cut.Markup);
             Assert.Contains("develop", cut.Markup);
-            // Use the shared grade badge; C has the warning tone.
+            // Use the shared filled grade badge (R-107); C has the warning tone.
             var grade = Assert.Single(cut.FindAll(".grade-badge"));
             Assert.Equal("C", grade.TextContent.Trim());
-            Assert.Contains("omni-badge--warning", grade.ClassName, StringComparison.Ordinal);
+            Assert.Contains("grade-badge--c", grade.ClassName, StringComparison.Ordinal);
+            Assert.Contains("omni-badge--solid", grade.ClassName, StringComparison.Ordinal);
             Assert.Contains("href=\"/projects/1/quality\"", cut.Markup);
             Assert.DoesNotContain("RecentActivity", cut.Markup);
             Assert.Equal(5, cut.FindComponent<PipelineRunsGrid>().Instance.MaxGroups);
@@ -154,15 +155,15 @@ public class ProjectOverviewSectionTests : BunitContext
             Assert.DoesNotContain("variable-libraries/new?projectId=1", cut.Markup);
             Assert.Contains("pipelines/setup?projectId=1", cut.Markup);
             // No Overview tile on the Overview page, 13 of the 14 sections.
-            Assert.Equal(13, cut.FindAll("a.project-section-tile").Count);
-            Assert.Equal(13, cut.FindAll(".project-section-tile").Count);
-            Assert.Empty(cut.FindAll("a.project-section-tile[href='/projects/1/overview']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/quality']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/artifacts']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/environments']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/monitoring']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/git-repositories?projectId=1']"));
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/1/edit']"));
+            Assert.Equal(13, cut.FindAll("a.omni-nav-tile").Count);
+            Assert.Equal(13, cut.FindAll(".omni-nav-tile").Count);
+            Assert.Empty(cut.FindAll("a.omni-nav-tile[href='/projects/1/overview']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/1/quality']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/1/artifacts']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/1/environments']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/1/monitoring']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/git-repositories?projectId=1']"));
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/1/edit']"));
         });
 
         cut.FindAll("[role='tab']").Single(button => button.TextContent.Contains("Readme")).Click();
@@ -353,7 +354,7 @@ public class ProjectOverviewSectionTests : BunitContext
             new ProjectDetailDto { Id = 2, Name = "API" }));
 
         Assert.DoesNotContain("AddGitRepository", cut.Markup, StringComparison.Ordinal);
-        Assert.Equal(6, cut.FindAll("a.project-section-tile").Count);
+        Assert.Equal(6, cut.FindAll("a.omni-nav-tile").Count);
 
         permissions.SetPermissions(
         [
@@ -368,9 +369,9 @@ public class ProjectOverviewSectionTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("AddGitRepository", cut.Markup, StringComparison.Ordinal);
-            Assert.Equal(7, cut.FindAll("a.project-section-tile").Count);
-            Assert.NotNull(cut.Find("a.project-section-tile[href='/projects/2/edit']"));
-            Assert.Empty(cut.FindAll("a.project-section-tile[href='/projects/2/pipelines']"));
+            Assert.Equal(7, cut.FindAll("a.omni-nav-tile").Count);
+            Assert.NotNull(cut.Find("a.omni-nav-tile[href='/projects/2/edit']"));
+            Assert.Empty(cut.FindAll("a.omni-nav-tile[href='/projects/2/pipelines']"));
         });
     }
 
@@ -596,6 +597,54 @@ public class ProjectOverviewSectionTests : BunitContext
 
         next.WaitForAssertion(() => Assert.Contains("NoRecentCommits", next.Markup));
         Assert.DoesNotContain("ProjectGettingStartedTitle", next.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R71_TheLastShowOfAFinishedChecklist_HasADoneButton_ThatHidesItForGood()
+    {
+        StubInitializedProjectReads(7);
+        var preferences = (InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>();
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 1)));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        var done = cut.Find("[data-testid='onboarding-done']");
+        Assert.Equal("Done", done.TextContent.Trim());
+
+        done.Click();
+
+        Assert.DoesNotContain("ProjectGettingStartedTitle", cut.Markup, StringComparison.Ordinal);
+        Assert.True(preferences.Read<bool>(PreferenceKeys.GettingStartedClosed(7)));
+    }
+
+    [Fact]
+    public void R71_AChecklistWhoseLibraryStepIsStillToDo_IsNotFinished_AndStaysOpen()
+    {
+        // Seen on the local instance (2026-10-25): every step done but « Créer une librairie » still « À faire »,
+        // yet the checklist offered Done and wrote its closing preference.
+        StubInitializedProjectReads(7);
+        _handler.SetJsonResponse("api/pipelines/setup/unmet", new List<UnmetRequirementDto>
+        {
+            new() { Kind = "library", Name = "app-prod-host", Pipelines = ["app-prod"] }
+        });
+        var preferences = (InMemoryUserPreferences)Services.GetRequiredService<IUserPreferences>();
+
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 1)));
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='unmet-requirements']")));
+
+        Assert.Contains("ProjectGettingStartedDescription", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='onboarding-done']"));
+        Assert.False(preferences.Read<bool>(PreferenceKeys.GettingStartedClosed(7)));
+    }
+
+    [Fact]
+    public void R71_AnUnfinishedChecklist_HasNoDoneButton()
+    {
+        StubInitializedProjectReads(7);
+        var cut = Render<ProjectOverviewSection>(p => p.Add(x => x.Project, Project(7, serverCount: 0)));
+        cut.WaitForAssertion(() => Assert.Contains("NoRecentCommits", cut.Markup));
+
+        Assert.Contains("ProjectGettingStartedTitle", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='onboarding-done']"));
     }
 
     [Fact]

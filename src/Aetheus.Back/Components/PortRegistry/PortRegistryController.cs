@@ -30,7 +30,12 @@ public class PortRegistryController(
     public async Task<ActionResult<PortReservationDto>> CreateReservation(
         int serverId, [FromBody] CreatePortReservationRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        ArgumentNullException.ThrowIfNull(request);
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerPortsReserve, serverId, ct))
+            return Forbid();
+        // R-11: a reservation recorded under a project is the same claim as an allocation for it, so it
+        // passes the same gate: Write on that project, and a server of its organization.
+        if (request.ProjectId is { } namedProject && !await MayReserveForProjectAsync(namedProject, serverId, ct))
             return Forbid();
         return Ok(await service.AddManualReservationAsync(serverId, request, ct));
     }
@@ -47,12 +52,12 @@ public class PortRegistryController(
     public async Task<ActionResult<PortRangeDto>> SetRange(
         int serverId, [FromBody] PortRangeDto range, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerPortsReserve, serverId, ct))
             return Forbid();
         return Ok(await service.SetPortRangeAsync(serverId, range, ct));
     }
 
-    /// <summary>Allocates and reserves free ports under server write permission because
+    /// <summary>Allocates and reserves free ports under the port reservation permission (server.ports.reserve) because
     /// reservations exclude other projects. Library-scoped allocation has its own narrower
     /// authorization rule.</summary>
     [HttpPost("allocate")]
@@ -60,7 +65,13 @@ public class PortRegistryController(
         int serverId, [FromBody] AllocatePortsRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerPortsReserve, serverId, ct))
+            return Forbid();
+
+        // M4: reserving ports for a project is a write on that project, never on one out of reach, and
+        // only on a server of its organization. Without a project the reservation is a manual one, which
+        // the port reservation permission above already covers.
+        if (request.ProjectId is { } namedProject && !await MayReserveForProjectAsync(namedProject, serverId, ct))
             return Forbid();
 
         // Recorded under the project when one is named, so its own pipeline is not later refused the
@@ -76,8 +87,13 @@ public class PortRegistryController(
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> ReleaseReservation(int serverId, int id, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerPortsReserve, serverId, ct))
             return Forbid();
         return await service.ReleaseAsync(serverId, id, ct) ? NoContent() : NotFound();
     }
+
+    /// <summary>M4: Write on the named project, whose organization owns the server.</summary>
+    private async Task<bool> MayReserveForProjectAsync(int projectId, int serverId, CancellationToken ct) =>
+        await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct)
+        && await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.Server, [serverId], ct);
 }

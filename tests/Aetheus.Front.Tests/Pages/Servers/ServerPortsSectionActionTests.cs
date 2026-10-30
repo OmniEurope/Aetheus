@@ -18,6 +18,7 @@ public sealed class ServerPortsSectionActionTests : BunitContext
     private static readonly DateTime Declared = new(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
 
     private readonly BunitTestHelper.TestHandler _handler;
+    private IRenderedComponent<PageHeaderOutletHost>? _host;
 
     public ServerPortsSectionActionTests()
     {
@@ -39,10 +40,12 @@ public sealed class ServerPortsSectionActionTests : BunitContext
     private IRenderedComponent<ServerPortsSection> Render(params PortReservationDto[] rows)
     {
         _handler.SetJsonResponse(HttpMethod.Get, "/ports", rows.ToList());
-        return Render<ServerPortsSection>(parameters => parameters
+        // The scan sits in the server page header (R-109), so the section is rendered next to the header outlet.
+        _host = this.RenderWithPageHeader<ServerPortsSection>(parameters => parameters
             .Add(c => c.ServerId, 1)
             .Add(c => c.PortObservationAvailable, true)
             .Add(c => c.AgentOnline, true));
+        return _host.FindComponent<ServerPortsSection>();
     }
 
     private static PortReservationDto Reserved(int id, int port, string holder) => new()
@@ -76,8 +79,9 @@ public sealed class ServerPortsSectionActionTests : BunitContext
     private static void FillHolder(IRenderedComponent<ServerPortsSection> cut, string holder) =>
         cut.Find(HolderField).Input(holder);
 
-    private static AngleSharp.Dom.IElement ButtonLabelled(IRenderedComponent<ServerPortsSection> cut, string label) =>
-        cut.FindAll("button").First(button => button.TextContent.Contains(label, StringComparison.Ordinal)
+    // Searches the header outlet too: the scan button lives in the page header.
+    private AngleSharp.Dom.IElement ButtonLabelled(IRenderedComponent<ServerPortsSection> cut, string label) =>
+        _host!.FindAll("button").First(button => button.TextContent.Contains(label, StringComparison.Ordinal)
             || button.GetAttribute("title") == label || button.GetAttribute("aria-label") == label);
 
     [Fact]
@@ -234,7 +238,9 @@ public sealed class ServerPortsSectionActionTests : BunitContext
 
         cut.WaitForAssertion(() => Assert.True(Toasted(OmniSeverity.Success, "PortScanQueued")));
         Assert.Contains(_handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("/ports/observe", StringComparison.Ordinal));
-        Assert.Empty(cut.FindAll(".omni-alert"));
+        // R-119: the only alert is the task follower (waiting for the scan), never a result of the scan.
+        Assert.Single(cut.FindAll(".omni-alert"));
+        Assert.Single(cut.FindAll(".server-task-follower"));
     }
 
     [Theory]

@@ -8,6 +8,23 @@ namespace Aetheus.Front.Components.Shared;
 /// bodies instead of throwing.</summary>
 internal static class ApiErrorText
 {
+    /// <summary>The <c>problems</c> of a middleware error body (<see cref="ApiError.Problems"/>), or null
+    /// for any other body. <see cref="LaunchProblemText"/> says them in the user's language;
+    /// <see cref="Read"/> keeps returning the English message for every body.</summary>
+    public static IReadOnlyList<ProblemDto>? ReadProblems(string? payload)
+    {
+        if (string.IsNullOrWhiteSpace(payload) || payload.TrimStart()[0] != '{') return null;
+        try
+        {
+            var problems = JsonSerializer.Deserialize<ApiError>(payload, JsonOptions.Web)?.Problems;
+            return problems is { Count: > 0 } ? problems : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public static string? Read(string? payload)
     {
         if (string.IsNullOrWhiteSpace(payload)) return null;

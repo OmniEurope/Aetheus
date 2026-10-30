@@ -3,7 +3,7 @@
 @inject GridExportContext ExportContext
 
 @* Recette R-29: the page's main action sits in the page header, on the title line. *@
-@if (CanManage && _firewall is { Installed: true, StatusKnown: true })
+@if (CanEdit && _firewall is { Installed: true, StatusKnown: true })
 {
     <SectionContent SectionName="@PageHeaderActions.SectionName">
         @if (_firewall.Active)
@@ -18,11 +18,12 @@
 }
 
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniIcon Name="OmniIconName.ShieldCheck" />
         @if (_firewall is not null && _firewall.Installed)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(!_firewall.StatusKnown ? OmniTone.Warning : _firewall.Active ? OmniTone.Success : OmniTone.Neutral)">@(!_firewall.StatusKnown ? L["FirewallStatusUnknown"] : _firewall.Active ? L["FirewallActive"] : L["FirewallInactive"])</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(!_firewall.StatusKnown ? OmniTone.Warning : _firewall.Active ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(!_firewall.StatusKnown ? OmniTone.Warning : _firewall.Active ? OmniTone.Success : OmniTone.Neutral)">@(!_firewall.StatusKnown ? L["FirewallStatusUnknown"] : _firewall.Active ? L["FirewallActive"] : L["FirewallInactive"])</OmniBadge>
         }
     </OmniStack>
 
@@ -49,7 +50,7 @@
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@L["FirewallManageDisabledHint"]</OmniText>
         }
 
-        @if (CanManage)
+        @if (CanEdit)
         {
             <OmniCard>
                 <OmniTemplateForm TModel="NewRuleModel" Model="@_rule" OnValidSubmit="@((EditContext context) => SubmitRuleAsync((NewRuleModel)context.Model))">
@@ -83,13 +84,13 @@
                 <OmniDataGridColumn TItem="FirewallRuleDto" Property="Protocol" Title="@L["FirewallProtocol"]" Width="6.25rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                 <OmniDataGridColumn TItem="FirewallRuleDto" Property="Action" Title="@L["FirewallActionColumn"]" Width="6.875rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ActionText">
                     <Template Context="r">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@(r.Action == "allow" ? OmniTone.Success : OmniTone.Danger)">@LocalizeAction(r.Action)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(r.Action == "allow" ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(r.Action == "allow" ? OmniTone.Success : OmniTone.Danger)">@LocalizeAction(r.Action)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="FirewallRuleDto" Property="Source" Title="@L["FirewallSource"]"  Filterable="true"/>
                 <OmniDataGridColumn TItem="FirewallRuleDto" Title="@L["Actions"]" Sortable="false">
                     <Template Context="r">
-                        @if (CanManage && IsDeletable(r))
+                        @if (CanEdit && IsDeletable(r))
                         {
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteRuleAsync(r))" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                         }

@@ -119,12 +119,16 @@ public class ResourceAuthorizationServiceTests
         Assert.False(result);
     }
 
+    // ADR-059 (R-46): a role held for organization 1 never reaches a resource organization 2 owns,
+    // even when the role's wildcard would otherwise grant it.
     [Fact]
-    public async Task HasPermissionAsync_TemplateWriteOutsideMembership_IsDeniedBeforeWildcardRole()
+    public async Task HasPermissionAsync_RoleHeldForAnotherOrganization_IsDeniedBeforeWildcardRole()
     {
-        _permissionRepoMock.IsUserInResourceOrganizationAsync(
-            "contributor", ResourceType.PipelineTemplate, 9, Arg.Any<CancellationToken>()).Returns(false);
-        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([2]);
+        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("contributor", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(1, 2, RoleNames.Contributor)]);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.PipelineTemplate, 9, Arg.Any<CancellationToken>())
+            .Returns(2);
         _permissionRepoMock.HasPermissionAsync(
             Arg.Any<List<int>>(), ResourceType.PipelineTemplate, 9, Permission.Write,
             Arg.Any<CancellationToken>()).Returns(true);
@@ -139,19 +143,39 @@ public class ResourceAuthorizationServiceTests
     }
 
     [Fact]
-    public async Task HasPermissionAsync_TemplateWriteInsideMembership_StillRequiresWriteRole()
+    public async Task HasPermissionAsync_RoleHeldForOwningOrganization_StillRequiresWriteRole()
     {
-        _permissionRepoMock.IsUserInResourceOrganizationAsync(
-            "contributor", ResourceType.PipelineTemplate, 9, Arg.Any<CancellationToken>()).Returns(true);
-        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([2]);
+        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("contributor", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(2, 7, RoleNames.Contributor)]);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.PipelineTemplate, 9, Arg.Any<CancellationToken>())
+            .Returns(2);
         _permissionRepoMock.HasPermissionAsync(
-            Arg.Any<List<int>>(), ResourceType.PipelineTemplate, 9, Permission.Write,
+            Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 7 })), ResourceType.PipelineTemplate, 9, Permission.Write,
             Arg.Any<CancellationToken>()).Returns(true);
 
-        var result = await _sut.HasPermissionAsync(
-            CreateUser("contributor"), ResourceType.PipelineTemplate, 9, Permission.Write, ct: TestContext.Current.CancellationToken);
+        Assert.True(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.PipelineTemplate, 9, Permission.Write, ct: TestContext.Current.CancellationToken));
+        Assert.False(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.PipelineTemplate, 9, Permission.Admin, ct: TestContext.Current.CancellationToken));
+    }
 
-        Assert.True(result);
+    [Fact]
+    public async Task HasPermissionAsync_ResourceWithoutOrganization_IsSiteAdminOnly()
+    {
+        _permissionRepoMock.GetRoleIdsForUserAsync("contributor", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("contributor", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(2, 7, RoleNames.OrganizationAdmin)]);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.Vault, 3, Arg.Any<CancellationToken>())
+            .Returns((int?)null);
+        _permissionRepoMock.HasPermissionAsync(
+            Arg.Any<List<int>>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<Permission>(),
+            Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.False(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.Vault, 3, Permission.Read, ct: TestContext.Current.CancellationToken));
+        Assert.False(await _sut.HasPermissionAsync(
+            CreateUser("contributor"), ResourceType.AgentPool, 1, Permission.Read, ct: TestContext.Current.CancellationToken));
     }
 
     // --- GetAccessibleResourceIdsAsync ---
@@ -208,49 +232,54 @@ public class ResourceAuthorizationServiceTests
         Assert.Equal(3, result.Count);
     }
 
-    [Theory]
-    [InlineData(Permission.Read, true)]
-    [InlineData(Permission.Write, false)]
-    [InlineData(Permission.Admin, false)]
-    public async Task GetAccessibleResourceIdsAsync_ServerOrganizationMembership_GrantsReadOnly(
-        Permission required,
-        bool includesOrganizationServer)
+    // R-45 (ADR-059): membership alone grants nothing; the rights come from the role a member holds.
+    [Fact]
+    public async Task GetAccessibleResourceIdsAsync_MembershipWithoutRole_GrantsNothing()
     {
-        _permissionRepoMock.GetRoleIdsForUserAsync("member", Arg.Any<CancellationToken>())
-            .Returns([1]);
-        _permissionRepoMock.GetAccessibleResourceIdsAsync(
-                Arg.Any<List<int>>(), ResourceType.Server, required, Arg.Any<CancellationToken>())
-            .Returns([10]);
+        _permissionRepoMock.GetRoleIdsForUserAsync("member", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("member", Arg.Any<CancellationToken>()).Returns([]);
         _permissionRepoMock.GetOrganizationIdsForUsernameAsync("member", Arg.Any<CancellationToken>())
             .Returns([4]);
-        _permissionRepoMock.GetResourceIdsByOrganizationsAsync(
-                ResourceType.Server, Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 4 })),
-                Arg.Any<CancellationToken>())
-            .Returns([20]);
 
         var result = await _sut.GetAccessibleResourceIdsAsync(
-            CreateUser("member"), ResourceType.Server, required,
+            CreateUser("member"), ResourceType.Server, Permission.Read,
             ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
-        Assert.Contains(10, result);
-        Assert.Equal(includesOrganizationServer, result.Contains(20));
-        if (!includesOrganizationServer)
-        {
-            await _permissionRepoMock.DidNotReceive().GetResourceIdsByOrganizationsAsync(
-                ResourceType.Server, Arg.Any<List<int>>(), Arg.Any<CancellationToken>());
-        }
+        Assert.Empty(result);
+        await _permissionRepoMock.DidNotReceive().GetResourceIdsByOrganizationsAsync(
+            ResourceType.Server, Arg.Any<List<int>>(), Arg.Any<CancellationToken>());
+    }
+
+    // A role held for organization 4 that names a resource of another organization grants nothing.
+    [Fact]
+    public async Task GetAccessibleResourceIdsAsync_NamedResourceOfAnotherOrganization_IsDropped()
+    {
+        _permissionRepoMock.GetRoleIdsForUserAsync("reader", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("reader", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(4, 3, "Custom")]);
+        _permissionRepoMock.GetAccessibleResourceIdsAsync(
+            Arg.Any<List<int>>(), ResourceType.Server, Permission.Read,
+            Arg.Any<CancellationToken>()).Returns([10, 20]);
+        _permissionRepoMock.GetResourceIdsByOrganizationsAsync(
+            ResourceType.Server, Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 4 })),
+            Arg.Any<CancellationToken>()).Returns([10, 11]);
+
+        var result = await _sut.GetAccessibleResourceIdsAsync(
+            CreateUser("reader"), ResourceType.Server, Permission.Read, ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal([10], result);
     }
 
     [Fact]
-    public async Task GetAccessibleResourceIdsAsync_TemplateWildcard_IsRestrictedToMemberOrganizations()
+    public async Task GetAccessibleResourceIdsAsync_TemplateWildcard_IsRestrictedToTheRoleOrganization()
     {
-        _permissionRepoMock.GetRoleIdsForUserAsync("reader", Arg.Any<CancellationToken>()).Returns([3]);
+        _permissionRepoMock.GetRoleIdsForUserAsync("reader", Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync("reader", Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(4, 3, RoleNames.Reader)]);
         _permissionRepoMock.GetAccessibleResourceIdsAsync(
             Arg.Any<List<int>>(), ResourceType.PipelineTemplate, Permission.Read,
             Arg.Any<CancellationToken>()).Returns((List<int>?)null);
-        _permissionRepoMock.GetOrganizationIdsForUsernameAsync("reader", Arg.Any<CancellationToken>())
-            .Returns([4]);
         _permissionRepoMock.GetResourceIdsByOrganizationsAsync(
             ResourceType.PipelineTemplate, Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 4 })),
             Arg.Any<CancellationToken>()).Returns([10, 11]);
@@ -277,41 +306,50 @@ public class ResourceAuthorizationServiceTests
         await _permissionRepoMock.Received(1).GetRoleIdsForUserAsync("cached", Arg.Any<CancellationToken>());
     }
 
-    // --- Org-membership cache coherence (removed member must lose org-scoped access on invalidation) ---
+    // --- Organization-role cache coherence (a removed member must lose its rights on invalidation) ---
 
-    [Fact]
-    public async Task HasPermissionAsync_CachesOrgMembership()
+    private void GrantServerReadInOrganization(string username)
     {
-        _permissionRepoMock.IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>())
+        _permissionRepoMock.GetRoleIdsForUserAsync(username, Arg.Any<CancellationToken>()).Returns([]);
+        _permissionRepoMock.GetOrganizationRoleGrantsAsync(username, Arg.Any<CancellationToken>())
+            .Returns([new OrganizationRoleGrant(4, 3, RoleNames.Reader)]);
+        _permissionRepoMock.GetResourceOrganizationIdAsync(ResourceType.Server, 5, Arg.Any<CancellationToken>())
+            .Returns(4);
+        _permissionRepoMock.HasPermissionAsync(
+            Arg.Any<List<int>>(), ResourceType.Server, 5, Permission.Read, Arg.Any<CancellationToken>())
             .Returns(true);
-        var user = CreateUser("member");
-
-        await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
-        await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
-
-        await _permissionRepoMock.Received(1)
-            .IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task InvalidateRoleCache_EvictsOrgMembershipCache()
+    public async Task HasPermissionAsync_CachesOrganizationRoles()
     {
-        _permissionRepoMock.IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _permissionRepoMock.GetRoleIdsForUserAsync("member", Arg.Any<CancellationToken>()).Returns([]);
+        GrantServerReadInOrganization("member");
         var user = CreateUser("member");
 
-        // First read caches "is org member = true".
+        await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
+        await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
+
+        await _permissionRepoMock.Received(1)
+            .GetOrganizationRoleGrantsAsync("member", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task InvalidateRoleCache_EvictsOrganizationRoleCache()
+    {
+        GrantServerReadInOrganization("member");
+        var user = CreateUser("member");
+
+        // First read caches the role held for organization 4.
         Assert.True(await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken));
         await _permissionRepoMock.Received(1)
-            .IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>());
+            .GetOrganizationRoleGrantsAsync("member", Arg.Any<CancellationToken>());
 
-        // Removing the member invalidates the cache; the previously-cached org membership must be dropped.
+        // Removing the member invalidates the cache; the previously-cached roles must be dropped.
         _sut.InvalidateRoleCache("member");
 
         await _sut.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
         await _permissionRepoMock.Received(2)
-            .IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>());
+            .GetOrganizationRoleGrantsAsync("member", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -320,13 +358,11 @@ public class ResourceAuthorizationServiceTests
         // Production reality: the request that POPULATES the authz cache and the request that INVALIDATES
         // it run in different DI scopes = different ResourceAuthorizationService instances. The eviction
         // must still cross that boundary, which only works because the eviction tokens live in the SHARED
-        // singleton AuthzCacheEvictor (a per-instance dictionary would leave the orgmember entry stranded).
-        _permissionRepoMock.IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>())
-            .Returns(true);
-        _permissionRepoMock.GetRoleIdsForUserAsync("member", Arg.Any<CancellationToken>()).Returns([]);
+        // singleton AuthzCacheEvictor (a per-instance dictionary would leave the orgroles entry stranded).
+        GrantServerReadInOrganization("member");
         var user = CreateUser("member");
 
-        // Instance A (scope 1) caches "is org member = true".
+        // Instance A (scope 1) caches the role held for organization 4.
         var reader = new ResourceAuthorizationService(_permissionRepoMock, _cache, _evictor);
         Assert.True(await reader.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken));
 
@@ -334,10 +370,10 @@ public class ResourceAuthorizationServiceTests
         var invalidator = new ResourceAuthorizationService(_permissionRepoMock, _cache, _evictor);
         invalidator.InvalidateRoleCache("member");
 
-        // Instance A must now re-query the repository - the stale membership is gone across scopes.
+        // Instance A must now re-query the repository - the stale roles are gone across scopes.
         await reader.HasPermissionAsync(user, ResourceType.Server, 5, Permission.Read, ct: TestContext.Current.CancellationToken);
         await _permissionRepoMock.Received(2)
-            .IsUserInResourceOrganizationAsync("member", ResourceType.Server, 5, Arg.Any<CancellationToken>());
+            .GetOrganizationRoleGrantsAsync("member", Arg.Any<CancellationToken>());
     }
 
     [Fact]

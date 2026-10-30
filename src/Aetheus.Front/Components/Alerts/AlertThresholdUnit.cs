@@ -17,6 +17,18 @@ internal static class AlertThresholdUnit
         _ => "%"
     };
 
+    /// <summary>The comparison as it is read next to a threshold: "&gt;", "&lt;", "≥", "≤". The same sign
+    /// the alert occurrence shows, and the one the edit form's operator list ends with, so a rule reads the
+    /// same everywhere instead of showing the enum's name.</summary>
+    public static string Symbol(ComparisonOperator comparison) => comparison switch
+    {
+        ComparisonOperator.GreaterThan => ">",
+        ComparisonOperator.LessThan => "<",
+        ComparisonOperator.GreaterThanOrEqual => "≥",
+        ComparisonOperator.LessThanOrEqual => "≤",
+        _ => string.Empty
+    };
+
     /// <summary>The threshold with its unit: "20%", "20 Go".</summary>
     public static string Format(MetricType metric, double threshold)
     {

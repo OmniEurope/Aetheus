@@ -52,6 +52,17 @@ public partial class UrlSyncedTabs : ComponentBase, IDisposable
     private bool _tabInitialized;
     private int _lastSelectedIndex;
     private bool _notifyUrlChange;
+    private string? _selectedSlug;
+    private bool _urlTabApplied;
+
+    /// <summary>A pass that changes neither the URL nor the bound index keeps the selected tab, found by its
+    /// slug since tabs may have been added or removed before it; a URL tab the page had not rendered yet is
+    /// selected once it appears (a shared link to a tab that waits for its data).</summary>
+    private int FollowSelectedTab()
+    {
+        if (!_urlTabApplied && IsKnownSlug(Tab)) return IndexForSlug(Tab);
+        return IsKnownSlug(_selectedSlug) ? IndexForSlug(_selectedSlug) : _index;
+    }
 
     protected override void OnParametersSet()
     {
@@ -66,6 +77,7 @@ public partial class UrlSyncedTabs : ComponentBase, IDisposable
         // re-render (the aetheus-qa Settings "Generate Token" regression: the tokens grid vanished
         // because the tab jumped back to General mid-interaction).
         int target;
+        var followed = false;
         var urlChanged = !_tabInitialized || !string.Equals(Tab, _lastTab, StringComparison.Ordinal);
         if (urlChanged)
         {
@@ -81,17 +93,23 @@ public partial class UrlSyncedTabs : ComponentBase, IDisposable
             _lastTab = Tab;
             _tabInitialized = true;
         }
-        else if (SelectedIndex != _lastSelectedIndex)
+        // The page echoing the index this component told it is no choice of its own: the tab is followed below.
+        else if (SelectedIndex != _lastSelectedIndex && SelectedIndex != _index)
         {
             target = SelectedIndex;
         }
         else
         {
-            target = _index;
+            target = FollowSelectedTab();
+            followed = target != _index;
         }
         _lastSelectedIndex = SelectedIndex;
+        // A page can add tabs after the first pass (the run page adds Gate and YAML once its data is in):
+        // the bound page hears of the new index of the same tab, as it does of a URL change.
+        _notifyUrlChange = urlChanged || followed;
         _index = target;
-        _notifyUrlChange = urlChanged;
+        _urlTabApplied = string.IsNullOrEmpty(Tab) || IsKnownSlug(Tab) || (_urlTabApplied && !urlChanged);
+        _selectedSlug = SelectedKey;
     }
 
     protected override async Task OnParametersSetAsync()

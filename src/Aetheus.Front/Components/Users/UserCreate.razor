@@ -1,0 +1,68 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/admin/users/new"
+@page "/users/new"
+
+<PageTitle>@L["NewUser"] - Aetheus</PageTitle>
+
+<div class="iam-page iam-detail-page">
+<OmniPageHeader Title="@L["NewUser"]" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+    <Icon><OmniIcon Name="@MaterialIconMap.Resolve("person")" /></Icon>
+</OmniPageHeader>
+
+<OmniCard Class="iam-detail-card">
+@if (_created is { WelcomeMail: { } welcome } created)
+{
+    @* The account exists but its welcome mail did not leave: said here, where it stays, not in a toast. *@
+    <OmniStack Gap="OmniSpacing.Large" Class="user-create-result">
+        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@string.Format(L["UserCreatedNamed"].Value, created.Username)</OmniText>
+        <PasswordLinkMailAlert Result="@welcome" />
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreated"><Icon><OmniIcon Name="OmniIconName.User" /></Icon><ChildContent><span>@(_administered is null ? L["OpenUser"] : L["BackToUsers"])</span></ChildContent></OmniButton>
+        </OmniStack>
+    </OmniStack>
+}
+else
+{
+<OmniTemplateForm TModel="UserModel" EditContext="@_editContext" OnValidSubmit="@OnSubmit">
+    <OmniDataAnnotationsValidator Localizer="@L" />
+    <OmniStack Gap="OmniSpacing.Large">
+        <div class="form-narrow">
+        <OmniStack Gap="OmniSpacing.Large">
+            <OmniFormField For="user-create-username"><LabelContent>@L["Username"]</LabelContent><ChildContent>
+                <OmniTextBox @bind-Value="_model.Username" Id="user-create-username" />
+                <ValidationMessage For="@(() => _model.Username)" />
+            </ChildContent></OmniFormField>
+
+            @* R-14 (owner decision 2026-10-28): no password here; the person chooses theirs from the
+               welcome mail's link, which the address field's help says. *@
+            <OmniFormField For="user-create-email" Id="user-create-email-field" Help="@L["UserCreatePasswordByMail"]"><LabelContent>@L["Email"]</LabelContent><ChildContent>
+                <OmniTextBox @bind-Value="_model.Email" Id="user-create-email" />
+                <ValidationMessage For="@(() => _model.Email)" />
+            </ChildContent></OmniFormField>
+        </OmniStack>
+        </div>
+
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Roles"]</OmniText>
+            @* R-10 (d): an organization's administrator chooses among its organizations only (the choice is hidden when
+               there is one) and is offered the roles it gives there; the picker waits until those are known. *@
+            @if (_ready)
+            {
+                <RoleAssignmentPicker @bind-SelectedRoles="_model.Roles" @bind-SelectedOrganizationRoles="_model.OrganizationRoles"
+                    AdministeredOrganizations="@_administered" InitialOrganizationId="@_initialOrganizationId" />
+            }
+        </OmniStack>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <OmniAlert Severity="OmniSeverity.Danger"><Icon><OmniIcon Name="OmniIconName.Error" /></Icon><ChildContent>@_error</ChildContent></OmniAlert>
+        }
+
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        </OmniStack>
+    </OmniStack>
+</OmniTemplateForm>
+}
+</OmniCard>
+</div>

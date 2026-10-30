@@ -41,8 +41,9 @@ public sealed class ProjectNotificationReachTests : IDisposable
         _db = new AppDbContext(
             new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options,
             _time);
-        _authz.HasPermissionAsync(Arg.Any<string>(), ResourceType.Project, Arg.Any<int?>(), Permission.Read, Arg.Any<CancellationToken>())
-            .Returns(true);
+        // Every subscriber still reads the project (one query for all of them, RBAC audit finding 12).
+        _authz.GetUsernamesWithPermissionAsync(Arg.Any<IReadOnlyCollection<string>>(), ResourceType.Project, Arg.Any<int>(), Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(call => new HashSet<string>(call.ArgAt<IReadOnlyCollection<string>>(0), StringComparer.Ordinal));
         _sut = new UserNotificationService(new UserNotificationRepository(_db), _authz, _time);
         Seed();
     }
@@ -255,6 +256,8 @@ public sealed class ProjectNotificationReachTests : IDisposable
             new Project { Id = Blog, Name = "Blog" },
             new Project { Id = Docs, Name = "Docs" });
         _db.ProjectSubscriptions.Add(new ProjectSubscription { UserId = Bob, ProjectId = Shop });
+        // The shared server row exists, in the projects' organization: a server reaches only the projects of its own.
+        _db.Servers.Add(new Server { Id = SharedServer, Name = "srv-shared" });
         _db.ProjectServers.AddRange(
             new ProjectServer { Id = 1, ProjectId = Shop, ServerId = SharedServer, Type = ProjectServerType.AgentServer, DisplayName = "web", Host = "web" },
             new ProjectServer { Id = 2, ProjectId = Blog, ServerId = SharedServer, Type = ProjectServerType.AgentServer, DisplayName = "web", Host = "web" },

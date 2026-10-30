@@ -11,10 +11,10 @@ public partial class ProjectExternalRepoSection : ProjectWritableSectionBase
     private ExternalRepoDto? _repo;
     private AttachModel _model = new();
 
-    private static readonly List<OmniOption<GitProviderType>> _providers = Enum.GetValues<GitProviderType>()
-        .Select(t => new OmniOption<GitProviderType>(t, t.ToString())).ToList();
-    private static readonly List<OmniOption<GitAuthType>> _authTypes = Enum.GetValues<GitAuthType>()
-        .Select(t => new OmniOption<GitAuthType>(t, t.ToString())).ToList();
+    private List<OmniOption<GitProviderType>> ProviderOptions =>
+        [.. Enum.GetValues<GitProviderType>().Select(t => new OmniOption<GitProviderType>(t, L.Localize(t)))];
+    private List<OmniOption<GitAuthType>> AuthTypeOptions =>
+        [.. Enum.GetValues<GitAuthType>().Select(t => new OmniOption<GitAuthType>(t, L.Localize(t)))];
 
     protected override async Task LoadAsync()
     {
@@ -78,9 +78,12 @@ public partial class ProjectExternalRepoSection : ProjectWritableSectionBase
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Detach"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Git.DetachExternalRepoAsync(ProjectId);
-        if (status.Success) { _repo = null; StateHasChanged(); }
-        else Toast.Error("Error", "DeleteFailed");
+        await Veil.RunAsync(async () =>
+        {
+            var status = await Api.Git.DetachExternalRepoAsync(ProjectId);
+            if (status.Success) { _repo = null; StateHasChanged(); }
+            else Toast.Error("Error", "DeleteFailed");
+        });
     }
 
     /// <summary>What a pipeline of the project writes to take its workspace from this repository.</summary>

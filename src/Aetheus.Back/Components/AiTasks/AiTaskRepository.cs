@@ -148,10 +148,12 @@ public sealed class AiTaskRepository(AppDbContext db) : IAiTaskRepository
                 .FirstOrDefaultAsync(server => server.Id == definition.ServerId, ct)
                 .ConfigureAwait(false);
 
-        return await db.ProjectServers.AsNoTracking()
-            .Where(link => link.ProjectId == definition.ProjectId
-                && link.Server!.Status == ServerStatus.Online)
-            .Select(link => link.Server!)
+        if (definition.ProjectId is not { } projectId) return null;
+
+        // The servers of the project's environments count as its own (R-83); another project's never do.
+        var projectServerIds = db.ServerIdsOfProject(projectId);
+        return await db.Servers.AsNoTracking()
+            .Where(server => server.Status == ServerStatus.Online && projectServerIds.Contains(server.Id))
             .OrderByDescending(server => server.PipelineRunnerEnabled)
             .ThenBy(server => server.Id)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);

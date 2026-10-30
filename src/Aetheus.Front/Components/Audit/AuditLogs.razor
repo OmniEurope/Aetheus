@@ -12,11 +12,11 @@
     <ActionsContent>
         @if (_chainResult is not null)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(_chainResult.IsValid ? OmniTone.Success : OmniTone.Danger)">@(_chainResult.IsValid ? string.Format(L["AuditChainIntactCount"], _chainResult.TotalEntries) : string.Format(L["AuditBreakAt"], _chainResult.FirstInvalidId))</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="@(_chainResult.IsValid ? OmniTone.Success : OmniTone.Danger)">@(_chainResult.IsValid ? string.Format(L["AuditChainIntactCount"], _chainResult.TotalEntries) : string.Format(L["AuditBreakAt"], _chainResult.FirstInvalidId))</NumberBadge>
         }
         else if (_chainChecked)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AuditIntegrityUnavailable"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AuditIntegrityUnavailable"]</OmniBadge>
         }
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@VerifyChainAsync" Class="@(_verifyingChain ? "btn-busy" : null)" Busy="@(_verifyingChain)"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["AuditVerifyChain"]</span></ChildContent></OmniButton>
         @* No Refresh, new entries arrive over the admin hub. *@
@@ -36,7 +36,7 @@
         <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Filterable="true" />
         <OmniDataGridColumn TItem="AuditLogDto" Property="Action" Title="@L["Action"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_actionOptions" FormatFilterValue="@ActionText" FilterSearchable="true" >
             <Template Context="log">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@AuditActionPresentation.Badge(log.Action)">@ActionText(log.Action)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(AuditActionPresentation.Badge(log.Action)))" Fill="OmniFill.Solid" Tone="@AuditActionPresentation.Badge(log.Action)">@ActionText(log.Action)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="AuditLogDto" Property="EntityType" Title="@L["EntityType"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_entityOptions" FilterSearchable="true" />

@@ -6,14 +6,15 @@
 }
 else
 {
+<OmniStack>
     @* Recette R-29: the page's main action sits in the page header, on the title line. *@
     <SectionContent SectionName="@PageHeaderActions.SectionName">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _addVisible = true)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </SectionContent>
 
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync"
-        Class="pipeline-list-search omni-u-mb-sm" />
-    <AetheusDataGrid @ref="_grid" Data="@_apps" TItem="ServerAppDto"
+        Class="pipeline-list-search" />
+    <AetheusDataGrid FullHeight="true" @ref="_grid" Data="@_apps" TItem="ServerAppDto"
         Count="@_totalCount" IsLoading="@_loading" LoadData="@OnLoadDataAsync" ExportRead="@ReadExportAsync"
         PageSize="25" EmptyText="@L["NoRecords"]"
         Virtualize="@AetheusGrid.RemoteVirtualization"
@@ -22,7 +23,7 @@ else
             <OmniDataGridColumn Frozen="true" TItem="ServerAppDto" Property="Name" Title="@L["Name"]" Filterable="true" />
             <OmniDataGridColumn TItem="ServerAppDto" Property="Status" Title="@L["Status"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
                 <Template Context="a">
-                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@GetAppStatusBadge(a.Status)">@L[a.Status.ToString()]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetAppStatusBadge(a.Status)))" Fill="OmniFill.Solid" Tone="@GetAppStatusBadge(a.Status)">@L[a.Status.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ServerAppDto" Property="Version" Title="@L["Version"]" Width="100px" Filterable="true" />
@@ -38,7 +39,7 @@ else
 
     @if (_addVisible)
     {
-        <OmniCard Class="omni-u-mt-lg">
+        <OmniCard>
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["AddApplication"]</OmniHeading>
             <OmniRow Gap="OmniSpacing.Large">
                 <OmniColumn Span="12" MediumSpan="3">
@@ -62,10 +63,11 @@ else
                 <OmniColumn Span="12" MediumSpan="2">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-xl">
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddAppAsync" Class="@(_addSaving ? "btn-busy" : null)" Busy="@(_addSaving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniColumn>
             </OmniRow>
         </OmniCard>
     }
+</OmniStack>
 }

@@ -66,6 +66,8 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     [InlineData("/api/variable-libraries/names")]
     [InlineData("/api/settings")]
     [InlineData("/api/settings/daily-recap")]
+    [InlineData("/api/settings/certificate-alerts")]
+    [InlineData("/api/certbot/expiry-warning")]
     [InlineData("/api/mail-templates")]
     [InlineData("/api/mail-templates/NotificationChannelTest/fr")]
     [InlineData("/api/environments")]
@@ -171,6 +173,8 @@ public sealed class ApiReadSmokeTests(ApiSmokeFixture fixture)
     /// <summary>The version series of the seeded project: a JSON array, empty before any release.</summary>
     [Theory]
     [InlineData("/api/projects/0/release-series")]
+    // The project deletion task list (R-97) is an array too.
+    [InlineData("/api/projects/0/deletion/tasks?taskIds=1")]
     public async Task ProjectReleaseSeriesGet_AsAdmin_ReturnsAnArray(string template)
     {
         using var client = fixture.CreateAdminClient();

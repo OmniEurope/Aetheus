@@ -38,6 +38,30 @@ public sealed class ConfirmationVerbGuardTests
             "R-407: a confirmation is dismissed by \"Revenir\" (GoBack), not \"Annuler\":\n  " + string.Join("\n  ", violations));
     }
 
+    /// <summary>Reviewed lines that may still use the "Cancel" label: relative file suffix plus a marker the
+    /// line must contain.</summary>
+    private static readonly (string File, string Marker)[] CancelLabelAllowList =
+    [
+        // Icon-only inline-edit cancel in a grid row: "Annuler" is only a tooltip there, not a dismiss button text.
+        ("Components/VariableLibraries/VariableLibraryEdit.razor", "title=\"@L[\"Cancel\"]\""),
+    ];
+
+    [Fact]
+    public void NoDismissButton_IsLabelledCancel()
+    {
+        var violations = FrontFiles()
+            .SelectMany(file => File.ReadAllLines(file).Select((line, index) => (file, line, index)))
+            .Where(x => x.line.Contains("L[\"Cancel\"]", StringComparison.Ordinal))
+            .Where(x => !CancelLabelAllowList.Any(a => Rel(x.file) == a.File
+                                                      && x.line.Contains(a.Marker, StringComparison.Ordinal)))
+            .Select(x => $"{Rel(x.file)}:{x.index + 1}: {x.line.Trim()}")
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            "R-114: a form or dialog dismiss button (OmniButton text or DialogFooter CancelText) says \"Revenir\" (L[\"GoBack\"]), "
+            + "never \"Annuler\" (L[\"Cancel\"]). Reviewed exceptions go in CancelLabelAllowList:\n  " + string.Join("\n  ", violations));
+    }
+
     private static IEnumerable<string> FrontFiles() =>
         RepositoryScan.Enumerate(FrontDirectory(), "*.cs").Concat(RepositoryScan.Enumerate(FrontDirectory(), "*.razor"))
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase)

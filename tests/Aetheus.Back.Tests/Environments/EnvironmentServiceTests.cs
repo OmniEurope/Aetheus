@@ -178,6 +178,8 @@ public class EnvironmentServiceTests
         Assert.Contains("Fill them in", added.Vaults[0].Description, StringComparison.Ordinal);
         Assert.NotSame(source.Pipelines[0], Assert.Single(added.Pipelines));
         Assert.Equal("steps: []", added.Pipelines[0].YamlDefinition);
+        // RBAC audit, finding 3: the copy never inherits the source's owner (no caller here: no owner).
+        Assert.Null(added.Pipelines[0].CreatedByUsername);
         // The copied pipelines are written into the project's repository, as on update.
         _events.Received(1).Publish(Arg.Is<EnvironmentLinkedToProjectEvent>(e =>
             e.EnvironmentName == "target" && e.ProjectId == 3));

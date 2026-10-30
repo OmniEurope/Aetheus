@@ -33,7 +33,7 @@
                     <OmniIcon Name="@MaterialIconMap.Resolve(open ? "expand_more" : "chevron_right")" Class="run-tl-caret" />
                     <StepStatusBadge Step="@step" Class="run-status-badge" />
                     <span class="run-tl-trigger-text">
-                        <span class="run-tl-stage-label">@stage.DisplayName</span>
+                        <span class="run-tl-stage-label" title="@stage.DisplayName">@stage.DisplayName</span>
                         @if (triggerChip is not null)
                         {
                             <a class="run-tl-chip" href="@ChildRunHref(childId)" title="@L["OpenChildRun"]" @onclick:stopPropagation="true"><OmniIcon Name="OmniIconName.Graph" Class="run-tl-chip-icon" />@triggerChip</a>
@@ -86,7 +86,7 @@
                        scrolling row can no longer paint over it as it did after the name. *@
                     @if (PipelineRunGateProducer.HasGateFindings(step) && !step.IsRejected)
                     {
-                        <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="run-tl-gate-findings" title="@L["StepGateFindingsHint"]">@L["StepGateFindings"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="run-tl-gate-findings" title="@L["StepGateFindingsHint"]">@L["StepGateFindings"]</OmniBadge>
                     }
                     <span class="@nameClass">@label</span>
                     @* A one-step stage needs no separate header or skipped chip because its badge

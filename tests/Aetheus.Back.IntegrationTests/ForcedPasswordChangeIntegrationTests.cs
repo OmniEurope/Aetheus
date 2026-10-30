@@ -33,11 +33,15 @@ public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture
         var createResp = await client.PostAsJsonAsync("/api/users", new CreateUserRequest
         {
             Username = username,
-            Password = initialPassword,
-            Roles = ["Reader"],
-            MustChangePassword = true
+            Email = $"{username}@example.com",
+            OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(client, "Reader")
         }, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+        // R-14: creation takes no password any more; the administrator's reset is what arms the forced change.
+        var createdId = (await createResp.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, TestContext.Current.CancellationToken))!.Id;
+        var armResp = await client.PostAsJsonAsync($"/api/users/{createdId}/change-password",
+            new ChangeUserPasswordRequest { NewPassword = initialPassword }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, armResp.StatusCode);
 
         // 2. First login succeeds but is flagged: the response says MustChangePassword and the JWT
         //    carries the aetheus:mcp claim so the Front can force the change-password screen.
@@ -69,7 +73,7 @@ public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture
         // 5. The old (now-stale) initial password no longer authenticates.
         var staleResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = initialPassword
         }, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, staleResp.StatusCode);
@@ -90,12 +94,12 @@ public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture
         var created = await admin.PostAsJsonAsync("/api/users", new CreateUserRequest
         {
             Username = username,
-            Password = password,
-            Roles = ["Reader"],
-            MustChangePassword = false
+            Email = $"{username}@example.com",
+            OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(admin, "Reader")
         }, ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var userId = (await created.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, ct))!.Id;
+        await IntegrationUsers.SetPasswordAsync(factory.Services, userId, password);
 
         // The user mints a personal access token, then an admin resets the password.
         using var user = factory.CreateClient();
@@ -136,7 +140,7 @@ public sealed class ForcedPasswordChangeIntegrationTests(PostgresFixture fixture
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password
         });
         response.EnsureSuccessStatusCode();

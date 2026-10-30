@@ -99,12 +99,15 @@ public sealed class ShortIdentifierLinkAuditTests
         return false;
     }
 
-    /// <summary>Identifies text inside an OmniBadge, where short non-link labels are
-    /// allowed.</summary>
+    /// <summary>Identifies text inside an OmniBadge or a NumberBadge (the badge of a text that carries a
+    /// number, such as a version), where short non-link labels are allowed.</summary>
     private static bool IsBadgeText(string text, int index)
     {
-        var open = text.LastIndexOf("<OmniBadge", index, StringComparison.Ordinal);
-        if (open < 0 || text.IndexOf("</OmniBadge>", open, index - open, StringComparison.Ordinal) >= 0) return false;
+        var tag = text.LastIndexOf("<NumberBadge", index, StringComparison.Ordinal) > text.LastIndexOf("<OmniBadge", index, StringComparison.Ordinal)
+            ? "NumberBadge"
+            : "OmniBadge";
+        var open = text.LastIndexOf($"<{tag}", index, StringComparison.Ordinal);
+        if (open < 0 || text.IndexOf($"</{tag}>", open, index - open, StringComparison.Ordinal) >= 0) return false;
         // The opening tag ends at its first '>' that is not a lambda arrow; a self-closed badge has no content.
         var end = open;
         while (end < index && (text[end] != '>' || text[end - 1] == '=')) end++;

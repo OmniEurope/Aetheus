@@ -120,7 +120,7 @@ variables:
   APPLICATION_QA_BUILDX_SETUP: |
     case "${BUILDX_MAX_PARALLELISM:-}" in
       '') ;;
-      0|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
+      0*|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
     esac
     if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
       case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) echo "Unsafe Buildx builder name: $BUILDX_BUILDER" >&2; exit 2 ;; esac
@@ -138,7 +138,7 @@ variables:
   QA_PORT: "$(BUILD_RUN_PORT)"
   # Hosts are formulas over the library entries, so a domain is written once (ADR-043). The QA domain may be
   # empty: the disposable stack is reached on the runner's loopback.
-  APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN).$(DOMAIN:-)"
+  APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
   API_HOST: "$(HOST_PREFIX:-)$(API_SUBDOMAIN).$(DOMAIN:-)"
   PUBLIC_APP_URL: "https://$(APP_HOST)"
   PUBLIC_API_URL: "https://$(API_HOST)"
@@ -276,6 +276,13 @@ stages:
           if test -z "$COMPOSE_PATH"; then
             echo "WARNING: COMPOSE_FILE is empty in this pipeline: no disposable environment is deployed, so nothing was validated against a running application." >&2
             echo "##aetheus[setvariable name=QA_STACK_DEPLOYED]false"
+            # The run stays a success (the QA commands above did run), but it must not read as a validation: the
+            # control plane puts the RUN_WARNING output on the run page, and on the run that triggered this one
+            # (the candidate).
+            echo "##aetheus[setvariable name=RUN_WARNING]No QA environment was deployed (COMPOSE_FILE is empty in this pipeline): nothing was validated against a running application. Only the project's QA commands ran."
+            # The name of the warning, so the run page says it in the user's language (resource
+            # LaunchProblem_RunWarning_QaComposeFileEmpty).
+            echo "##aetheus[setvariable name=RUN_WARNING_CODE]QaComposeFileEmpty"
             exit 0
           fi
           case "$COMPOSE_PATH" in /*|*..*) echo "COMPOSE_FILE must be a path inside the repository: $COMPOSE_PATH" >&2; exit 1 ;; esac
@@ -484,6 +491,11 @@ stages:
           set -eu
           if test -z "${APPLICATION_QA_E2E_COMMANDS:-}"; then
             echo "WARNING: no browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed V." >&2
+            # Recette R-23 (W8): a stderr line alone left the run a silent success. The control plane puts the
+            # RUN_WARNING output on the run page and on the candidate that triggered this run, said in the user's
+            # language through its name (resource LaunchProblem_RunWarning_QaE2eCommandMissing).
+            echo "##aetheus[setvariable name=RUN_WARNING]No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version."
+            echo "##aetheus[setvariable name=RUN_WARNING_CODE]QaE2eCommandMissing"
             exit 0
           fi
           QA_FRONT_URL="$(cat .qa-front-url 2>/dev/null || true)" \

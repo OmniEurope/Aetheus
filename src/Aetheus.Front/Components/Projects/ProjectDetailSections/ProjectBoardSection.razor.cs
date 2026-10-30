@@ -96,14 +96,17 @@ public partial class ProjectBoardSection : ProjectWritableSectionBase
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Pipelines.DeleteWorkItemAsync(item.Id);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            _items.RemoveAll(i => i.Id == item.Id);
-            StateHasChanged();
-            Toast.Success("Deleted", "Deleted");
-        }
-        else Toast.Error("Error", "DeleteFailed");
+            var status = await Api.Pipelines.DeleteWorkItemAsync(item.Id);
+            if (status.Success)
+            {
+                _items.RemoveAll(i => i.Id == item.Id);
+                StateHasChanged();
+                Toast.Success("Deleted", "Deleted");
+            }
+            else Toast.Error("Error", "DeleteFailed");
+        });
     }
 
     private static OmniTone TypeBadge(WorkItemType type) => type switch

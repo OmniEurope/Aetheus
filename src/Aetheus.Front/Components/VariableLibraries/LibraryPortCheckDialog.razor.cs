@@ -30,7 +30,7 @@ public partial class LibraryPortCheckDialog
         }
 
         _servers = targets.Servers;
-        _serverId = targets.PreselectedServerId;
+        _serverId = LibraryPortTargets.InitialServerId(targets);
     }
 
     private async Task CheckAsync()

@@ -10,7 +10,7 @@
         <p class="omni-u-mb-xs">@L["WizardConfigurePromptTokenLabel"]</p>
         <WizardTokenBlock Token="@Token" />
         <WizardCodeBlock Code="@($"RegistrationToken={Token}")" Label="@L["WizardConfigureTokenLineLabel"]" InlineLine="true" />
-        <div class="omni-u-mt-lg">
+        <div>
             <WizardCodeBlock Code="@("sudo systemctl start aetheus-agent\nsudo systemctl status aetheus-agent")" Label="@L["WizardConfigureVerifyLabel"]" InlineLine="true" />
         </div>
     }
@@ -21,7 +21,7 @@
         </OmniAlert>
         <p class="omni-u-mb-xs">@L["WizardConfigurePromptTokenLabel"]</p>
         <WizardTokenBlock Token="@Token" />
-        <div class="omni-u-mt-lg">
+        <div>
             <WizardCodeBlock Code="@("Start-Service AetheusAgent\nGet-Service -Name AetheusAgent | Select-Object Status")" Label="@L["WizardConfigureVerifyLabel"]" InlineLine="true" />
         </div>
     }

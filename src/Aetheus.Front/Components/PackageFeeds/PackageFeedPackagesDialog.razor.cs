@@ -18,6 +18,7 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
     private bool _loading = true;
     private bool _adding;
     private bool _syncing;
+    private bool _removing;
     private string? _newPackage;
     private string _feedName = string.Empty;
     private List<PackageEntryDto> _packages = [];
@@ -111,14 +112,24 @@ public partial class PackageFeedPackagesDialog : ComponentBase, IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Remove"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
 
-        var status = await Api.Packages.RemovePackageFromFeedAsync(FeedId, package.Id);
-        if (status.Success)
+        // R-99: the dialog is veiled before the removal runs (the confirmation returned without a render).
+        _removing = true;
+        StateHasChanged();
+        try
         {
-            _packages.RemoveAll(p => p.Id == package.Id);
-            StateHasChanged();
-            Toast.Success("Deleted", "Deleted");
+            var status = await Api.Packages.RemovePackageFromFeedAsync(FeedId, package.Id);
+            if (status.Success)
+            {
+                _packages.RemoveAll(p => p.Id == package.Id);
+                Toast.Success("Deleted", "Deleted");
+            }
+            else Toast.Error("Error", "DeleteFailed");
         }
-        else Toast.Error("Error", "DeleteFailed");
+        finally
+        {
+            _removing = false;
+            StateHasChanged();
+        }
     }
 
     private string RemoveConfirmationMessage(PackageEntryDto package)

@@ -2,9 +2,12 @@
 @inject GridExportContext ExportContext
 @namespace Aetheus.Front.Components.Shared
 @* ADR-021 phase 2: OTLP ingestion key management + per-metric alert thresholds. *@
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["IngestionKey"]</OmniHeading>
+@* R-14: the three sections are separated by this stack's gap; each title stays with its block in a smaller one. *@
+<OmniStack>
+<OmniStack Gap="OmniSpacing.Small">
+<OmniHeading Level="OmniHeadingLevel.H5">@L["IngestionKey"]</OmniHeading>
 
-<OmniCard Class="omni-u-mb-md">
+<OmniCard>
     @if (App?.HasIngestKey == true)
     {
         <OmniText Element="OmniTextElement.Paragraph">
@@ -51,10 +54,12 @@
         </OmniStack>
     }
 </OmniCard>
+</OmniStack>
 
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["WebAnalyticsConfiguration"]</OmniHeading>
+<OmniStack Gap="OmniSpacing.Small">
+<OmniHeading Level="OmniHeadingLevel.H5">@L["WebAnalyticsConfiguration"]</OmniHeading>
 
-<OmniCard Class="omni-u-mb-md">
+<OmniCard>
     @if (_analyticsLoading)
     {
         <AetheusLoader Size="OmniControlSize.Small" />
@@ -64,33 +69,29 @@
         <OmniStack Gap="OmniSpacing.Medium">
             <OmniSwitch @bind-Value="_analyticsEnabled" Disabled="@(!CanWrite)">@L["EnableWebAnalytics"]</OmniSwitch>
             <OmniSwitch @bind-Value="_analyticsPublicIngestEnabled" Disabled="@(!CanWrite)">@L["EnablePublicWebAnalyticsIngest"]</OmniSwitch>
-            <OmniStack Gap="OmniSpacing.XSmall">
-                <OmniLabel For="analytics-site-id">@L["AnalyticsSiteId"]</OmniLabel>
+            <OmniFormField Label="@L["AnalyticsSiteId"]" For="analytics-site-id" Required="true">
                 <OmniTextBox Id="analytics-site-id" @bind-Value="_analyticsSiteId"
-
                                Disabled="@(!CanWrite)" Class="w-rem-20" />
-            </OmniStack>
-            <OmniStack Gap="OmniSpacing.XSmall">
-                <OmniLabel For="analytics-allowed-origins">@L["AnalyticsAllowedOrigins"]</OmniLabel>
+            </OmniFormField>
+            <OmniFormField Label="@L["AnalyticsAllowedOrigins"]" For="analytics-allowed-origins" Required="true" Help="@L["AnalyticsAllowedOriginsHint"]">
                 <OmniTextArea Id="analytics-allowed-origins" @bind-Value="_analyticsOrigins"
-
                                 Rows="3" Disabled="@(!CanWrite)"
                                 Placeholder="@L["AnalyticsAllowedOriginsPlaceholder"]" Class="omni-u-w-100" />
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                    @L["AnalyticsAllowedOriginsHint"]
-                </OmniText>
-            </OmniStack>
-            <OmniStack Gap="OmniSpacing.XSmall">
-                <OmniLabel For="analytics-storage-budget">@L["AnalyticsStorageBudgetBytes"]</OmniLabel>
-                <OmniNumeric Id="analytics-storage-budget" TValue="long" @bind-Value="_analyticsStorageBudgetBytes"
-                               Minimum="1048576" Maximum="10737418240" Disabled="@(!CanWrite)" Class="w-rem-20" />
-                @* Show audience storage beside its budget so retention is understandable; reaching
-                   the budget removes the oldest raw rows rather than refusing new events. *@
-                @if (StorageUsageText is { } storageUsage)
-                {
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted web-analytics-storage-usage">@storageUsage</OmniText>
-                }
-            </OmniStack>
+            </OmniFormField>
+            <OmniFormField Label="@L["AnalyticsStorageBudgetBytes"]" For="analytics-storage-budget">
+                <ChildContent>
+                    <OmniNumeric Id="analytics-storage-budget" TValue="long" @bind-Value="_analyticsStorageBudgetBytes"
+                                   Minimum="1048576" Maximum="10737418240" Disabled="@(!CanWrite)" Class="w-rem-20" />
+                </ChildContent>
+                <EndContent>
+                    @* Show audience storage beside its budget so retention is understandable; reaching
+                       the budget removes the oldest raw rows rather than refusing new events. *@
+                    @if (StorageUsageText is { } storageUsage)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted web-analytics-storage-usage">@storageUsage</OmniText>
+                    }
+                </EndContent>
+            </OmniFormField>
             @if (_analyticsConfiguration is not null)
             {
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
@@ -120,8 +121,10 @@
         </OmniStack>
     }
 </OmniCard>
+</OmniStack>
 
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["MetricThresholds"]</OmniHeading>
+<OmniStack Gap="OmniSpacing.Small">
+<OmniHeading Level="OmniHeadingLevel.H5">@L["MetricThresholds"]</OmniHeading>
 
 <OmniDataGrid Items="@_thresholds" ExportTitle="@ExportContext.Title()" ExportFields="@ExportContext.Fields()" TItem="AppMetricThresholdDto" EmptyText="@L["NoThresholds"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
@@ -133,7 +136,7 @@
         @* The status column reads IsBreached, so it filters on breached / OK. *@
         <OmniDataGridColumn TItem="AppMetricThresholdDto" Property="IsBreached" Title="@L["Status"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@BreachedText">
             <Template Context="t">
-                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(t.IsBreached ? OmniTone.Danger : OmniTone.Success)">@(t.IsBreached ? L["Breached"] : L["OK"])</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(t.IsBreached ? OmniTone.Danger : OmniTone.Success))" Fill="OmniFill.Solid" Tone="@(t.IsBreached ? OmniTone.Danger : OmniTone.Success)">@(t.IsBreached ? L["Breached"] : L["OK"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         @if (CanWrite)
@@ -150,20 +153,18 @@
 @if (CanWrite)
 {
     <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Align="OmniAlignment.End">
-        <OmniStack Gap="OmniSpacing.XSmall">
-            <OmniLabel For="analytics-threshold-metric">@L["Metric"]</OmniLabel>
+        <OmniFormField Label="@L["Metric"]" For="analytics-threshold-metric" Required="true">
             <OmniTextBox Id="analytics-threshold-metric" @bind-Value="_newThreshold.MetricName"
-
                            Class="w-rem-16" />
-        </OmniStack>
-        <OmniStack Gap="OmniSpacing.XSmall">
-            <OmniLabel For="analytics-threshold-operator">@L["Operator"]</OmniLabel>
+        </OmniFormField>
+        <OmniFormField Label="@L["Operator"]" For="analytics-threshold-operator">
             <OmniDropDown Id="analytics-threshold-operator" name="analytics-threshold-operator" @bind-Value="_newThreshold.Operator" Options="@(_operators.ToOptions(item => item, item => item))" Class="w-rem-12" />
-        </OmniStack>
-        <OmniStack Gap="OmniSpacing.XSmall">
-            <OmniLabel For="analytics-threshold-value">@L["Threshold"]</OmniLabel>
+        </OmniFormField>
+        <OmniFormField Label="@L["Threshold"]" For="analytics-threshold-value">
             <OmniNumeric Id="analytics-threshold-value" @bind-Value="_newThreshold.Threshold" Class="w-rem-8" />
-        </OmniStack>
+        </OmniFormField>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AddThresholdAsync" title="@L["AddThreshold"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </OmniStack>
 }
+</OmniStack>
+</OmniStack>

@@ -77,7 +77,9 @@ public sealed class PipelineRefusedLaunchRecorderTests
         await _repo.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
         var warnings = System.Text.Json.JsonSerializer.Deserialize<string[]>(refused.WarningsJson!)!;
         Assert.Equal(2, warnings.Length);
-        Assert.StartsWith("Refused 3 times, last at ", warnings[1], StringComparison.Ordinal);
+        Assert.StartsWith("Refused 3 times, last at ", StoredProblem.English(warnings[1]), StringComparison.Ordinal);
+        Assert.Equal("LaunchRefusedRepeated", StoredProblem.CodeOf(warnings[1]));
+        Assert.Equal("3", StoredProblem.ParameterOf(warnings[1], "count"));
         Assert.NotNull(refused.CompletedAt);
         // Each refusal stays audited; the subscribers were told the first time only.
         await _audit.Received(2).LogAsync("LaunchRefused", "PipelineRun", 40, Arg.Any<string>(), Arg.Any<CancellationToken>());

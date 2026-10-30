@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.End" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
-    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAllAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyAllAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
 </OmniStack>
 <OmniDataGrid Items="@VariableList" ExportTitle="@ExportContext.Title(L["ResolvedVariables"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
     <Columns>
@@ -10,11 +10,11 @@
             <Template Context="kv">
                 @if (IsSystemVariable(kv.Key))
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["VarSourceSystem"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["VarSourceSystem"]</OmniBadge>
                 }
                 else
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["VarSourceResolved"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["VarSourceResolved"]</OmniBadge>
                 }
             </Template>
         </OmniDataGridColumn>

@@ -62,6 +62,25 @@ public class PipelineRunsGridTests : BunitContext
         Assert.Null(PipelineHelper.GetRunIcon((PipelineStatus)999));
     }
 
+    [Theory]
+    [InlineData(PipelineStatus.Success)]
+    [InlineData(PipelineStatus.Rejected)]
+    [InlineData(PipelineStatus.Failed)]
+    public void R43_TheStatusBadges_TakeTheWidthOfTheirContent_IconIncluded(PipelineStatus status)
+    {
+        var items = new List<PipelineRunDto>
+        {
+            new() { Id = 1, PipelineId = 1, PipelineName = "ci", Status = status, Warnings = ["The automated launch (Scheduler) was refused: locked"] }
+        };
+        var cut = Render<PipelineRunsGrid>(parameters => parameters.Add(component => component.Items, items));
+
+        cut.WaitForAssertion(() =>
+        {
+            var badges = cut.FindAll(".omni-badge");
+            Assert.NotEmpty(badges);
+            Assert.All(badges, badge => Assert.DoesNotContain("omni-badge--width-", badge.ClassName, StringComparison.Ordinal));
+        });
+    }
     [Fact]
     public void R2_146_ARejectedRun_ReadsRejectedInWarning_AndARefusedLaunch_HasItsOwnBadge()
     {

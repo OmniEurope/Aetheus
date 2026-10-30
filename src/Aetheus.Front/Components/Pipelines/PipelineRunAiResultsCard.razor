@@ -31,7 +31,7 @@
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="AiRunResultDto" Property="Verdict" Title="@L["Verdict"]" Width="6.875rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@VerdictText">
                     <Template Context="result">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@(result.Verdict == AiVerdict.Pass ? OmniTone.Success : result.Verdict == AiVerdict.Fail ? OmniTone.Danger : OmniTone.Accent)">@L.Localize(result.Verdict)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(result.Verdict == AiVerdict.Pass ? OmniTone.Success : result.Verdict == AiVerdict.Fail ? OmniTone.Danger : OmniTone.Accent))" Fill="OmniFill.Solid" Tone="@(result.Verdict == AiVerdict.Pass ? OmniTone.Success : result.Verdict == AiVerdict.Fail ? OmniTone.Danger : OmniTone.Accent)">@L.Localize(result.Verdict)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="AiRunResultDto" Property="DurationMs" Title="@L["Duration"]" Width="6.875rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators">

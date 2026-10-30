@@ -82,6 +82,53 @@ public class OmniButtonIconAuditTests
             + string.Join("\n  ", violations));
     }
 
+    /// <summary>
+    /// R-68 (user decision of 2026-10-25): a copy button shows only its icon, never the word "Copy". This is an
+    /// exception chosen by the user to the web standard (an action named by a label); the accessible name and the
+    /// tooltip stay, enforced by <see cref="IconOnlyButtons_HaveAnAccessibleNameAndTooltip"/>. Menu entries are not
+    /// buttons and keep their text. <c>OmniTextBox ShowCopy</c> is OE's own button: since OE 1.9.2 it is drawn
+    /// icon-only through <c>CopyIconOnly</c>.
+    /// </summary>
+    [Fact]
+    public void CopyButtons_ShowOnlyTheIcon()
+    {
+        var violations = EnumerateButtons()
+            .Where(button => button.Body.Contains("OmniIconName.Copy", StringComparison.Ordinal))
+            .Where(button => !IsIconOnly(button.Body))
+            .Select(button => $"{button.File}: copy button shows text: {button.OpeningTag}")
+            .ToList();
+
+        var front = Path.Combine(RepositoryScan.Root, "src", "Aetheus.Front");
+        foreach (var file in RepositoryScan.Enumerate(front, "*.razor"))
+        {
+            var source = StripRazorComments(File.ReadAllText(file));
+            var relative = Path.GetRelativePath(front, file);
+            foreach (Match split in Regex.Matches(source, @"<OmniSplitButton\b(?<tag>[^>]*)>(?<body>.*?)</OmniSplitButton>", RegexOptions.Singleline))
+            {
+                var text = Attribute(split.Groups["tag"].Value, "Text");
+                if (split.Groups["body"].Value.Contains("OmniIconName.Copy", StringComparison.Ordinal) && !string.IsNullOrEmpty(text))
+                    violations.Add($"{relative}: copy split button shows text: {split.Groups["tag"].Value.Trim()}");
+            }
+
+            // OE 1.10: OmniCopyButton draws its icon alone with IconOnly="true" (its words become its name and title).
+            foreach (Match copy in Regex.Matches(source, @"<OmniCopyButton\b(?<tag>(?:[^>""]|""[^""]*"")*)>", RegexOptions.Singleline))
+            {
+                if (!string.Equals(Attribute(copy.Groups["tag"].Value, "IconOnly"), "true", StringComparison.OrdinalIgnoreCase))
+                    violations.Add($"{relative}: OmniCopyButton shows its label; set IconOnly=\"true\"");
+            }
+
+            foreach (Match box in Regex.Matches(source, @"<OmniTextBox\b(?<tag>(?:[^>""]|""[^""]*"")*)>", RegexOptions.Singleline))
+            {
+                var tag = box.Groups["tag"].Value;
+                if (tag.Contains("ShowCopy=\"true\"", StringComparison.Ordinal) && !tag.Contains("CopyIconOnly=\"true\"", StringComparison.Ordinal))
+                    violations.Add($"{relative}: OmniTextBox ShowCopy draws OE's copy button with its word; add CopyIconOnly=\"true\"");
+            }
+        }
+
+        Assert.True(violations.Count == 0,
+            "R-68: every copy button shows only the icon (name and tooltip stay):\n  " + string.Join("\n  ", violations));
+    }
+
     [Fact]
     public void DataGridButtons_AreIconActions()
     {
@@ -141,7 +188,7 @@ public class OmniButtonIconAuditTests
         Assert.Contains("button.getAttribute('aria-label')", script, StringComparison.Ordinal);
         Assert.Contains("button.setAttribute('title', label)", script, StringComparison.Ordinal);
         Assert.Contains("new MutationObserver", script, StringComparison.Ordinal);
-        Assert.Contains("js/layout.js?v=19", index, StringComparison.Ordinal);
+        Assert.Contains("js/layout.js?v=21", index, StringComparison.Ordinal);
     }
 
     private static IEnumerable<ButtonMarkup> EnumerateButtons()

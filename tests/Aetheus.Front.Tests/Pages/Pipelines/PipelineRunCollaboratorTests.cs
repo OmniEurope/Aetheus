@@ -180,6 +180,36 @@ public class PipelineRunCollaboratorTests : BunitContext
         Domains = [Domain(domain, grade, required: true)]
     };
 
+    /// <summary>Recette R-74: the merged gate keeps the per-category open findings of the tree, read with its figures,
+    /// so the findings tile can split its total by domain.</summary>
+    [Fact]
+    public async Task GateState_KeepsTheOpenFindingsPerCategory_OfTheWholeTree()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/1/result", new AnalysisRunGateDto
+        {
+            PipelineRunId = 1,
+            Status = AnalysisGateStatus.Passed,
+            FindingCount = 3,
+            Grade = Graded(AnalysisGrade.A, AnalysisGradeDomain.CodeQuality)
+        });
+        _handler.SetJsonResponse(HttpMethod.Get, "api/analysis/runs/findings", new AnalysisRunFindingsPageDto
+        {
+            OpenCount = 3,
+            OpenCountsByCategory = [new AnalysisRunGateCategoryCountDto { Category = AnalysisCategory.Architecture, Count = 3 }]
+        });
+        var state = new PipelineRunGateState();
+
+        await state.LoadAsync(
+            Services.GetRequiredService<ApiClient>(),
+            new PipelineRunDto { Id = 1, Status = PipelineStatus.Success }, [],
+            ct: Xunit.TestContext.Current.CancellationToken);
+
+        var architecture = Assert.Single(state.Result!.OpenFindingCounts);
+        Assert.Equal(AnalysisCategory.Architecture, architecture.Category);
+        Assert.Equal(3, architecture.Count);
+        Assert.Equal((AnalysisGradeDomain.Architecture, 3), Assert.Single(PipelineRunGatePresentation.OpenFindingsByDomain(state.Result)));
+    }
+
     /// <summary>Figures that could not be read are not shown as checked.</summary>
     [Fact]
     public async Task GateState_UnreadableCounts_LeaveTheGateIncomplete()

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Layout;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,7 +18,8 @@ namespace Aetheus.Front.Tests.Pages;
 /// </summary>
 public class MainLayoutTemplateBranchTests : BunitContext
 {
-    private BunitTestHelper.TestHandler RegisterWithTaskTracker(bool authenticated = true, bool isAdmin = false)
+    private BunitTestHelper.TestHandler RegisterWithTaskTracker(
+        bool authenticated = true, bool isAdmin = false, bool mustChangePassword = false)
     {
         var handler = BunitTestHelper.RegisterServices(this, authenticated, isAdmin);
         handler.SetResponse(HttpMethod.Get, "health/live", System.Net.HttpStatusCode.ServiceUnavailable);
@@ -36,7 +38,7 @@ public class MainLayoutTemplateBranchTests : BunitContext
         {
             var js = Substitute.For<IJSRuntime>();
             js.InvokeAsync<string?>("localStorage.getItem", Arg.Is<object?[]>(a => a.Length == 1 && (string?)a[0] == "aetheus_auth_token"))
-                .Returns(ValueTask.FromResult<string?>(MakeJwt(isAdmin)));
+                .Returns(ValueTask.FromResult<string?>(MakeJwt(isAdmin, mustChangePassword)));
             var auth = new AuthStateProvider(js, NullLogger<AuthStateProvider>.Instance);
             Services.AddSingleton(auth);
 
@@ -52,12 +54,18 @@ public class MainLayoutTemplateBranchTests : BunitContext
         return handler;
     }
 
-    private static string MakeJwt(bool isAdmin)
+    private static string MakeJwt(bool isAdmin, bool mustChangePassword = false)
     {
         var header = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("{\"alg\":\"HS256\"}"));
-        object claims = isAdmin
-            ? new { sub = "admin", role = "Admin", unique_name = "admin", exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() }
-            : new { sub = "user", unique_name = "user", exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds() };
+        var claims = new Dictionary<string, object>
+        {
+            ["sub"] = isAdmin ? "admin" : "user",
+            ["unique_name"] = isAdmin ? "admin" : "user",
+            ["exp"] = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+        };
+        if (isAdmin) claims["role"] = "Admin";
+        // The claim the backend mints for a forced password change (AetheusClaimTypes.MustChangePassword).
+        if (mustChangePassword) claims["aetheus:mcp"] = "true";
         var payload = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(claims);
         var p64 = Convert.ToBase64String(payload).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         return $"{header}.{p64}.sig";
@@ -108,6 +116,48 @@ public class MainLayoutTemplateBranchTests : BunitContext
         Render<MainLayout>();
 
         Assert.Equal("http://localhost/login?returnUrl=%2Fprojects%2F1%2Fpipelines%3Ftab%3Druns", nav.Uri);
+    }
+
+    /// <summary>R-38: a user whose password must be changed is signed in but never gets a started session
+    /// (the backend refuses everything else, SITE-SEC-001). The layout must show the routed change page
+    /// at once; it used to show the session loader, which never ended because that session never starts.</summary>
+    [Fact]
+    public void ForcedPasswordChange_ShowsTheRoutedPageNotTheSessionLoader()
+    {
+        var handler = RegisterWithTaskTracker(authenticated: true, mustChangePassword: true);
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/account/change-password");
+
+        var cut = Render<MainLayout>(parameters => parameters.Add(
+            layout => layout.Body,
+            (RenderFragment)(builder => builder.AddMarkupContent(0, "<form id=\"change-password-stub\"></form>"))));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("#change-password-stub")));
+        Assert.Empty(cut.FindAll(".session-bootstrap-loader"));
+        // No chrome of a started session, and no request of the session start the backend would refuse.
+        Assert.Empty(cut.FindAll(".omni-app-menu__trigger-name"));
+        Assert.DoesNotContain(handler.RequestsSnapshot(), request =>
+            request.Url.Contains("api/permissions", StringComparison.OrdinalIgnoreCase)
+            || request.Url.Contains("api/organizations", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The set-password page of the welcome mail renders like the login page, signed in or not: the
+    /// visitor may already hold a session, and the sidebar and the account menu must not frame the page.</summary>
+    [Fact]
+    public void SetPasswordPage_WhenAlreadySignedIn_HasNoSidebarNorAccountMenu()
+    {
+        RegisterWithTaskTracker(authenticated: true);
+        var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
+        nav.NavigateTo("http://localhost/login/set-password");
+
+        var cut = Render<MainLayout>(parameters => parameters.Add(
+            layout => layout.Body,
+            (RenderFragment)(builder => builder.AddMarkupContent(0, "<form id=\"set-password-stub\"></form>"))));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("#set-password-stub")));
+        Assert.Empty(cut.FindAll(".omni-app-menu__trigger-name"));
+        Assert.Empty(cut.FindAll("#app-sidebar"));
+        Assert.Empty(cut.FindAll(".omni-sidebar-toggle, .header-actions"));
     }
 
     [Fact]
@@ -168,10 +218,10 @@ public class MainLayoutTemplateBranchTests : BunitContext
         Assert.Equal("Admin", cut.Find(".omni-app-menu__identity .omni-badge").TextContent.Trim());
     }
 
-    // ── Mode row: dark by default; picking light keeps it in the user's appearance ─
+    // ── Mode row: system by default (R-42); picking light keeps it in the user's appearance ─
 
     [Fact]
-    public async Task ModeRow_DefaultsToDark_AndPickingLightKeepsItInTheUsersAppearance()
+    public async Task ModeRow_DefaultsToSystem_AndPickingLightKeepsItInTheUsersAppearance()
     {
         RegisterWithTaskTracker();
         var cut = Render<MainLayout>();
@@ -179,11 +229,11 @@ public class MainLayoutTemplateBranchTests : BunitContext
         cut.Find(".omni-app-menu__trigger").Click();
         cut.WaitForElement(".omni-app-menu__card");
         // OE 1.9.0 (recette R-20): the mode row is a radio group of three joined icon buttons (light, dark,
-        // system); the one in force is checked (dark, the Aetheus default, when nothing is chosen). The menu
+        // system); the one in force is checked (system, the Aetheus default, when nothing is chosen). The menu
         // binds no appearance: it follows OE's OmniAppearanceState.
         const string modes = ".omni-app-menu__mode [role=radiogroup] [role=radio]";
         Assert.Equal(3, cut.FindAll(modes).Count);
-        Assert.Equal("true", cut.FindAll(modes)[1].GetAttribute("aria-checked"));
+        Assert.Equal("true", cut.FindAll(modes)[2].GetAttribute("aria-checked"));
 
         // ClickAsync: the handler is async (it stores and repaints), so the dispatch task is awaited.
         // One click on the light button picks light.

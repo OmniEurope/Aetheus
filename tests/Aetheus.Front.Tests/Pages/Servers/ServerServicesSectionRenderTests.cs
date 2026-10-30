@@ -460,6 +460,27 @@ public class ServerServicesSectionRenderTests : BunitContext
         cut.WaitForAssertion(() => Assert.False(Loading()));
     }
 
+    /// <summary>Recette R-116: opening the log viewer while the read is pending veils the log zone (a block of sensible
+    /// height, nothing in it yet); no loader is added.</summary>
+    [Fact]
+    public async Task PendingLogRead_VeilsTheEmptyLogZone_AndAddsNoLoader()
+    {
+        var queued = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/21/services/logs", _ => queued.Task);
+        var cut = RenderSection();
+
+        var opening = cut.InvokeAsync(() => cut.Instance.ViewServiceLogsAsync("nginx"));
+
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=service-logs-zone]").GetAttribute("aria-busy")));
+        Assert.Contains("omni-busy", cut.Find("[data-testid=service-logs-zone]").ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+        Assert.Empty(cut.FindAll("[data-testid=service-logs-zone] .docker-logs"));
+
+        queued.SetResult(new { taskId = 42 });
+        // The test hub cannot start, so the end of the read is not the subject here, only the veil while it is pending.
+        await Record.ExceptionAsync(() => opening);
+    }
+
     [Fact]
     public void HandleTaskCompleted_MatchingLogTaskId_UsesOutput_WhenLogsEmpty()
     {

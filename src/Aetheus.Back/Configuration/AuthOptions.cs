@@ -14,7 +14,6 @@ public sealed class AuthOptions
     public int AccessTokenMinutes { get; set; } = 30;
     public int RefreshTokenDays { get; set; } = 14;
 
-    public string? AdminUser { get; set; }
     public string? AdminPassword { get; set; }
 
     public string? EncryptionKey { get; set; }

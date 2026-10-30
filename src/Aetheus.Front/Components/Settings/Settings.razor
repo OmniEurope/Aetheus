@@ -14,7 +14,8 @@
             @* Share stored appearance values with the user-menu Theme window through
                OE's OmniAppearanceState (bound, content width included: R1-25). OE lays out full-width appearance settings, while language has
                a separate section. *@
-            <div class="omni-u-mt-sm">
+            @* R-14: the two sections are separated by this stack's gap, not by a margin of their own. *@
+            <OmniStack>
                 <OmniSettingsSection Title="@L["AppearanceLook"]" Description="@L["AppearanceLookHint"]">
                     <OmniAppearanceSettings Appearance="Appearance.Appearance" AppearanceChanged="Appearance.SetAppearanceAsync"
                                             Preset="Appearance.Preset" PresetChanged="Appearance.SetPresetAsync"
@@ -26,7 +27,7 @@
                                             BackdropMotion="Appearance.BackdropMotion" BackdropMotionChanged="Appearance.SetBackdropMotionAsync"
                                             FullWidth="Appearance.FullWidth" FullWidthChanged="Appearance.SetFullWidthAsync" />
                 </OmniSettingsSection>
-                <OmniSettingsSection Title="@L["Language"]" Class="omni-u-mt-md">
+                <OmniSettingsSection Title="@L["Language"]">
                     <OmniSettingsTile Title="@L["Language"]">
                         <Icon><OmniIcon Name="OmniIconName.Globe" /></Icon>
                         <ChildContent>
@@ -34,19 +35,19 @@
                         </ChildContent>
                     </OmniSettingsTile>
                 </OmniSettingsSection>
-            </div>
+            </OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="notifications" Title="@L["NotificationPreferences"]"><Icon><OmniIcon Name="OmniIconName.Bell" /></Icon><ChildContent>
             @* The notification panel supplies its own sections for event preferences and followed
                projects. *@
-            <div class="omni-u-mt-sm">
-                <Aetheus.Front.Components.Notifications.NotificationPreferencesPanel />
-            </div>
+            <Aetheus.Front.Components.Notifications.NotificationPreferencesPanel />
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="security" Title="@L["Security"]"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>
-            <OmniCard Class="omni-u-mt-sm">
+            @* R-14: the two cards are separated by this stack's gap, not by a margin of their own. *@
+            <OmniStack>
+            <OmniCard>
                 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="settings-form">
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["TwoFactorAuth"]</OmniHeading>
 
@@ -98,7 +99,7 @@
                 </OmniStack>
             </OmniCard>
 
-            <OmniCard Class="omni-u-mt-md">
+            <OmniCard>
                 <OmniTemplateForm TModel="PasswordChangeModel" Model="@_pwModel" OnValidSubmit="@ChangePassword">
                     <OmniDataAnnotationsValidator Localizer="@L" />
                     <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="settings-form">
@@ -119,12 +120,13 @@
                     </OmniStack>
                 </OmniTemplateForm>
             </OmniCard>
+            </OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="tokens" Title="@L["PersonalAccessTokens"]"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>
             @if (_selectedTabIndex == 3)
             {
-                <OmniCard Class="omni-u-mt-sm">
+                <OmniCard>
                     <PersonalAccessTokens />
                 </OmniCard>
             }
@@ -133,7 +135,7 @@
         <OmniTabsItem Key="about" Title="@L["About"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
             @* OE labelled lines, each with its icon (OmniDescriptionItem.Icon), as in a project
                overview's Information and Repository cards. *@
-            <OmniCard Class="omni-u-mt-sm">
+            <OmniCard>
                 <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0 omni-u-mb-md">@L["AboutAetheus"]</OmniHeading>
                 <OmniDescriptionList>
                     <OmniDescriptionItem Term="@L["Version"]"><Icon><OmniIcon Name="OmniIconName.Tag" /></Icon><ChildContent>v@_version</ChildContent></OmniDescriptionItem>

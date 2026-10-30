@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.AiTasks;
 
 public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private NotifyHelper Notify { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private PermissionService Permissions { get; set; } = default!;
@@ -186,12 +187,12 @@ public partial class AiTasks : PagedDataGridPageBase<AiTaskDefinitionDto>, IDisp
             string.Format(L["DeleteAiTaskConfirm"], definition.Name), L["Delete"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Ai.DeleteAiTaskAsync(definition.Id),
             "Deleted",
             ReloadAsync,
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private static string FormatDuration(long durationMs) =>

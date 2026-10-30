@@ -41,7 +41,10 @@ public sealed class PipelineSchemaTrackingService(IPipelineMigrationGateReposito
         return new EnvironmentSchemaDto
         {
             EnvironmentId = environmentId,
-            PendingContractions = await ListPendingAsync(ct).ConfigureAwait(false),
+            // The registry is the plan of Aetheus's own schema (recette R-81): only an environment that has received
+            // a deployment with a recorded gate has a schema this tracking can speak about. Like the run page, the
+            // pending list costs several queries and is left out otherwise.
+            PendingContractions = last is null ? [] : await ListPendingAsync(ct).ConfigureAwait(false),
             LastGate = last is null ? null : PipelineMigrationGateService.ToDto(last)
         };
     }

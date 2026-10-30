@@ -60,11 +60,15 @@ public sealed record CreateSecretRequest
     public string Value { get; init; } = string.Empty;
 }
 
+/// <summary>A sign-in. Everyone signs in with their e-mail address, and only with it (owner decision
+/// 2026-10-28): the account's username is a display name, never a credential. A request without an e-mail is
+/// malformed; an e-mail field holding something that is no account's address is refused like a wrong
+/// password.</summary>
 public sealed record LoginRequest
 {
     [Required]
-    [StringLength(100)]
-    public string Username { get; init; } = string.Empty;
+    [StringLength(320)]
+    public string Email { get; init; } = string.Empty;
 
     [Required]
     [StringLength(200)]

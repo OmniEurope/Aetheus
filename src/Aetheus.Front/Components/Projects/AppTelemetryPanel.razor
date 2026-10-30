@@ -11,7 +11,8 @@ else if (_apps.Count == 0)
 }
 else
 {
-    <OmniStack Gap="OmniSpacing.XSmall" Class="omni-u-mb-md">
+    <OmniStack>
+    <OmniStack Gap="OmniSpacing.XSmall">
         <OmniLabel For="telemetry-application">@L["Application"]</OmniLabel>
         <OmniDropDown Id="telemetry-application" TValue="int?" name="telemetry-application" @bind-Value="_selectedAppId" Options="@(_apps.ToOptions(item => (int?)item.Id, item => item.Name))"
                         @bind-Value:after="OnAppChanged" Class="w-rem-20" />
@@ -21,7 +22,7 @@ else
     {
         @* How often this application sends its metrics, stated once above its tabs: what one point of its
            figures and charts stands for. *@
-        <TelemetrySendIntervalNote AppId="_selectedApp.Id" Class="omni-u-mb-md" />
+        <TelemetrySendIntervalNote AppId="_selectedApp.Id" />
         @* Plain OmniTabs (local state, listed as an exact exception in UrlSyncedTabsAuditTests): the
            sub-tabs are scoped to the application picked above, which the URL does not carry, so a
            ?tab= slug alone would not name what is shown. *@
@@ -53,4 +54,5 @@ else
                 </ChildContent></OmniTabsItem>
         </OmniTabs>
     }
+    </OmniStack>
 }

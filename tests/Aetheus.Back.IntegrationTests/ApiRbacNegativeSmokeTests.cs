@@ -97,7 +97,7 @@ public sealed class ApiRbacNegativeSmokeTests(ApiSmokeFixture fixture)
             projectIds.Add(refused);
 
             const string password = "Scoped-Test-Pwd-2026!";
-            string username;
+            string email;
             using (var scope = fixture.Factory.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -119,20 +119,27 @@ public sealed class ApiRbacNegativeSmokeTests(ApiSmokeFixture fixture)
                 var user = new User
                 {
                     Username = $"scoped-{Guid.NewGuid():N}",
+                    Email = $"scoped-{Guid.NewGuid():N}@example.com",
                     PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
                     IsActive = true
                 };
                 db.Users.Add(user);
                 await db.SaveChangesAsync(ct);
                 userId = user.Id;
-                username = user.Username;
+                email = user.Email!;
 
-                db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+                // ADR-059: the role is held for the default organization, which owns both projects.
+                var organizationId = await db.Organizations
+                    .Where(organization => organization.Slug == IntegrationUsers.DefaultOrganizationSlug)
+                    .Select(organization => organization.Id)
+                    .SingleAsync(ct);
+                db.UserOrganizationRoles.Add(new UserOrganizationRole { UserId = user.Id, OrganizationId = organizationId, RoleId = role.Id });
+                db.OrganizationMembers.Add(new OrganizationMember { UserId = user.Id, OrganizationId = organizationId, Role = OrganizationRole.Member });
                 await db.SaveChangesAsync(ct);
             }
 
             using var scoped = fixture.CreateAnonymousClient();
-            IntegrationAuth.SetBearer(scoped, await IntegrationAuth.LoginAsync(scoped, username, password, ct));
+            IntegrationAuth.SetBearer(scoped, await IntegrationAuth.LoginByEmailAsync(scoped, email, password, ct));
 
             using var getAllowed = await scoped.GetAsync($"/api/projects/{allowed}", ct);
             Assert.Equal(HttpStatusCode.OK, getAllowed.StatusCode);

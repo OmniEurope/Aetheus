@@ -51,15 +51,21 @@ public sealed class ProjectDeleteDialogTests : BunitContext
 
         var cut = RenderDialog();
 
-        cut.WaitForAssertion(() => Assert.Contains("Enum_ProjectDeletionItemKind_TaskLogLines", cut.Find(".project-deletion-counts").TextContent));
+        cut.WaitForAssertion(() => Assert.Contains("Enum_ProjectDeletionItemKind_Pipelines", cut.Find(".project-deletion-counts").TextContent));
+        // The test localizer returns the key: each kind is labelled through its enum key. Recette R-49: the most
+        // useful counts stay in sight, the others are behind "Afficher plus".
         var counts = cut.Find(".project-deletion-counts").TextContent;
-        // The test localizer returns the key: each kind is labelled through its enum key.
-        Assert.Contains("Enum_ProjectDeletionItemKind_Pipelines", counts);
         Assert.Contains("4", counts);
-        Assert.Contains("1234", counts);
-        Assert.Contains("Enum_ProjectDeletionItemKind_MonitoredApps", counts);
-        Assert.DoesNotContain("Enum_ProjectDeletionItemKind_Vaults", counts);
+        Assert.DoesNotContain("Enum_ProjectDeletionItemKind_TaskLogLines", counts);
+        var more = cut.Find(".project-deletion-more");
+        Assert.Contains("ProjectDeletionShowMore", more.TextContent);
+        var others = more.QuerySelector(".project-deletion-other-counts")!.TextContent;
+        Assert.Contains("Enum_ProjectDeletionItemKind_TaskLogLines", others);
+        Assert.Contains("1234", others);
+        Assert.Contains("Enum_ProjectDeletionItemKind_MonitoredApps", others);
+        Assert.DoesNotContain("Enum_ProjectDeletionItemKind_Vaults", cut.Markup);
         Assert.Contains("ProjectDeletionTypeName", cut.Markup);
+        Assert.DoesNotContain("ProjectDeletionKeptOutside", cut.Markup);
     }
 
     [Fact]
@@ -77,7 +83,7 @@ public sealed class ProjectDeleteDialogTests : BunitContext
     }
 
     [Fact]
-    public void Delete_StaysDisabled_UntilTheExactProjectNameIsTyped_ThenDeletesAndCloses()
+    public void Delete_StaysDisabled_UntilTheExactProjectNameIsTyped_ThenDeletes()
     {
         _handler.SetJsonResponse("api/projects/7/deletion-preview", Preview());
         _handler.SetResponse(HttpMethod.Delete, "api/projects/7", HttpStatusCode.NoContent);
@@ -92,8 +98,7 @@ public sealed class ProjectDeleteDialogTests : BunitContext
 
         cut.Find("#project-delete-submit").Click();
 
-        cut.WaitForAssertion(() => Assert.Equal(true, Spy().LastResult));
-        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success && toast.Detail == "Deleted");
+        cut.WaitForAssertion(() => Assert.Contains("ProjectDeletionDone", cut.Find(".project-deletion-outcome").TextContent));
         Assert.Contains(_handler.Requests, request => request.Method == "DELETE" && request.Url.EndsWith("api/projects/7", StringComparison.Ordinal));
     }
 

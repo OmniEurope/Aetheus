@@ -4,7 +4,8 @@ namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>The control plane checks the declared deployment-grade threshold before any dispatch;
 /// the agent independently verifies the sealed contract. Unreadable thresholds or missing
-/// release-grade evidence refuse the attempt.</summary>
+/// release-grade evidence refuse the attempt, unless the run was launched despite the gate (R-72); an
+/// unreadable threshold refuses even then.</summary>
 internal sealed class PipelineDeploymentGradeGate(IPipelineRepository repo)
 {
     internal const string MinimumGradeVariable = "AETHEUS_DEPLOY_MINIMUM_GRADE";
@@ -19,6 +20,9 @@ internal sealed class PipelineDeploymentGradeGate(IPipelineRepository repo)
         var minimum = Enum.Parse<AnalysisGrade>(threshold);
 
         var run = await repo.GetPipelineRunWithPipelineAsync(runId, ct).ConfigureAwait(false);
+        // R-72: a deployment launched despite the gate starts; its launch already refused a release that
+        // does not exist or keeps no artifact, and recorded the reasons the gate had (PipelineGateOverride).
+        if (run?.GateOverrideAt is not null) return null;
         var projectId = run?.Pipeline is null
             ? null
             : await repo.GetPipelineProjectIdAsync(run.Pipeline, ct).ConfigureAwait(false);

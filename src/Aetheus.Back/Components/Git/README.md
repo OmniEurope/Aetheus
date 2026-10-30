@@ -45,7 +45,7 @@ External git connections (GitHub/GitLab), internal hosted repositories (GitLight
 | `/api/git/repos/{id}/pull-requests/{n}/diff` | GET | User | PR diff |
 | `/api/git/repos/{id}/branch-protection` | GET/POST | User/Admin | List or create protection rules |
 | `/api/git/repos/{id}/branch-protection/{ruleId}` | PUT/DELETE | User/Admin | Update or delete one protection rule |
-| `/git/{projectId}/{slug}.git/*` | GET/POST | BasicAuth | Smart HTTP clone/push with account credentials, owner-bound PATs, or run-scoped clone tokens |
+| `/git/{projectId}/{slug}.git/*` | GET/POST | BasicAuth | Smart HTTP clone/push with account credentials (Basic username = the account e-mail address, never the username), owner-bound PATs (Basic username = the account username), or run-scoped clone tokens |
 
 ## Key Classes
 

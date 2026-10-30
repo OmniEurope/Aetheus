@@ -10,6 +10,7 @@ public partial class ProjectEdit
     [Inject] private UiActions Ui { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
+    [Inject] private ActiveOrganizationService Organizations { get; set; } = default!;
 
     [Parameter] public int? Id { get; set; }
 
@@ -61,7 +62,9 @@ public partial class ProjectEdit
                 Description = _model.Description,
                 RepositoryUrl = string.IsNullOrWhiteSpace(_model.RepositoryUrl) ? null : _model.RepositoryUrl,
                 DefaultBranch = string.IsNullOrWhiteSpace(_model.DefaultBranch) ? null : _model.DefaultBranch,
-                Tags = tags
+                Tags = tags,
+                // ADR-059: the project belongs to the organization the user is working in.
+                OrganizationId = Organizations.Active?.Id
             }),
             successKey: "ProjectCreated",
             successTitleKey: "Created",

@@ -16,7 +16,7 @@ public interface IReleaseService
 
     /// <summary>One page of a server's releases. Preferred over the unpaged overload for any UI.</summary>
     Task<PaginatedResult<ReleaseDto>> GetServerReleasesAsync(
-        int serverId, PaginationRequest request, CancellationToken ct = default);
+        int serverId, PaginationRequest request, CancellationToken ct = default, List<int>? accessibleIds = null);
 
     /// <summary>The project and source pipeline names across the releases of a scope (a server's
     /// when <paramref name="serverId"/> is set, else the accessible ones, of one project or

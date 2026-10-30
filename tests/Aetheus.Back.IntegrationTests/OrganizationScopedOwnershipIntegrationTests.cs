@@ -24,8 +24,8 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
 {
     private const string AdminPassword = "Integr@tion-Test-Admin-Pwd-2026";
 
-    private static Task<string> LoginAsync(HttpClient client, string username, string password)
-        => IntegrationAuth.LoginAsync(client, username, password, TestContext.Current.CancellationToken);
+    private static Task<string> LoginAsync(HttpClient client, string email, string password)
+        => IntegrationAuth.LoginByEmailAsync(client, email, password, TestContext.Current.CancellationToken);
 
     private static void SetBearer(HttpClient client, string token)
         => IntegrationAuth.SetBearer(client, token);
@@ -36,7 +36,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
         using var client = factory.CreateClient();
 
-        var adminToken = await LoginAsync(client, "admin", AdminPassword);
+        var adminToken = await LoginAsync(client, IntegrationAuth.AdminEmail, AdminPassword);
         SetBearer(client, adminToken);
 
         // Create two organizations
@@ -68,33 +68,28 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         projResp.EnsureSuccessStatusCode();
         var project = await projResp.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
 
-        // Create a user with a custom org-only role (no global resource permissions) and
-        // assign to Org B only. The built-in Contributor role grants global Write on all
-        // resource types (ResourceId=null), which bypasses org-scoped isolation.
+        // ADR-059 (R-46): user B holds the built-in Contributor role for Org B only. Its wildcard
+        // Write permission is bounded by that organization, so it must never reach Org A.
         string userBName;
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var orgOnlyRole = new Role
-            {
-                Name = $"OrgOnly-{Guid.NewGuid():N}",
-                Description = "No global permissions - access only via org membership"
-            };
-            db.Roles.Add(orgOnlyRole);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var orgOnlyRole = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                .SingleAsync(db.Roles.Where(role => role.Name == "Contributor"), TestContext.Current.CancellationToken);
 
             userBName = $"orgb-user-{Guid.NewGuid():N}";
             var userB = new User
             {
                 Username = userBName,
+                Email = $"{userBName}@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("OrgB-User-Pwd-2026!"),
                 IsActive = true
             };
             db.Users.Add(userB);
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            db.UserRoles.Add(new UserRole { UserId = userB.Id, RoleId = orgOnlyRole.Id });
+            db.UserOrganizationRoles.Add(new UserOrganizationRole { UserId = userB.Id, OrganizationId = orgB!.Id, RoleId = orgOnlyRole.Id });
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             // Add user B to Org B
@@ -109,7 +104,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
 
         // Login as user B
         client.DefaultRequestHeaders.Authorization = null;
-        var userBToken = await LoginAsync(client, userBName, "OrgB-User-Pwd-2026!");
+        var userBToken = await LoginAsync(client, $"{userBName}@example.com", "OrgB-User-Pwd-2026!");
         SetBearer(client, userBToken);
 
         // User B should NOT be able to read the Org A project
@@ -123,7 +118,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
         using var client = factory.CreateClient();
 
-        var adminToken = await LoginAsync(client, "admin", AdminPassword);
+        var adminToken = await LoginAsync(client, IntegrationAuth.AdminEmail, AdminPassword);
         SetBearer(client, adminToken);
 
         // Create an organization
@@ -164,33 +159,28 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         otherProjResp.EnsureSuccessStatusCode();
         var otherProject = await otherProjResp.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
 
-        // Create a user and add them to this org. INT-001: the role carries no resource permission at
-        // all; the built-in Contributor grants a global Write on every resource type, which would let
-        // the read below succeed even if organization membership granted nothing.
+        // ADR-059 (R-45): membership alone grants nothing; a member holds the Reader role for its
+        // organization. That role reads the organization's projects and nothing of another one.
         string memberName;
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            var orgOnlyRole = new Role
-            {
-                Name = $"OrgOnlyMember-{Guid.NewGuid():N}",
-                Description = "No global permissions - access only via org membership"
-            };
-            db.Roles.Add(orgOnlyRole);
-            await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+            var readerRole = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                .SingleAsync(db.Roles.Where(role => role.Name == "Reader"), TestContext.Current.CancellationToken);
 
             memberName = $"member-{Guid.NewGuid():N}";
             var member = new User
             {
                 Username = memberName,
+                Email = $"{memberName}@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member-Test-Pwd-2026!"),
                 IsActive = true
             };
             db.Users.Add(member);
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-            db.UserRoles.Add(new UserRole { UserId = member.Id, RoleId = orgOnlyRole.Id });
+            db.UserOrganizationRoles.Add(new UserOrganizationRole { UserId = member.Id, OrganizationId = org!.Id, RoleId = readerRole.Id });
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
             db.OrganizationMembers.Add(new OrganizationMember
@@ -204,10 +194,10 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
 
         // Login as the member
         client.DefaultRequestHeaders.Authorization = null;
-        var memberToken = await LoginAsync(client, memberName, "Member-Test-Pwd-2026!");
+        var memberToken = await LoginAsync(client, $"{memberName}@example.com", "Member-Test-Pwd-2026!");
         SetBearer(client, memberToken);
 
-        // Member CAN read the project owned by their org, through membership alone
+        // Member CAN read the project owned by their org, through the Reader role held for it
         var getProj = await client.GetAsync($"/api/projects/{project!.Id}", cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.OK, getProj.StatusCode);
 
@@ -222,7 +212,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
         using var client = factory.CreateClient();
 
-        SetBearer(client, await LoginAsync(client, "admin", AdminPassword));
+        SetBearer(client, await LoginAsync(client, IntegrationAuth.AdminEmail, AdminPassword));
         var orgResponse = await client.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest
         {
             Name = $"Read-only server org {Guid.NewGuid():N}",
@@ -268,12 +258,13 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
             var user = new User
             {
                 Username = username,
+                Email = $"{username}@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
                 IsActive = true
             };
             db.Users.Add(user);
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-            db.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+            db.UserOrganizationRoles.Add(new UserOrganizationRole { UserId = user.Id, OrganizationId = organization!.Id, RoleId = role.Id });
             db.OrganizationMembers.Add(new OrganizationMember
             {
                 OrganizationId = organization!.Id,
@@ -295,7 +286,7 @@ public sealed class OrganizationScopedOwnershipIntegrationTests(PostgresFixture 
         }
 
         client.DefaultRequestHeaders.Authorization = null;
-        SetBearer(client, await LoginAsync(client, username, password));
+        SetBearer(client, await LoginAsync(client, $"{username}@example.com", password));
 
         var poolResponse = await client.PostAsJsonAsync("/api/agent-pools", new CreateAgentPoolRequest
         {

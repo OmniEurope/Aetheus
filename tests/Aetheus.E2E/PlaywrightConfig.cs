@@ -18,8 +18,15 @@ internal static class PlaywrightConfig
     public static readonly string BackendUrl =
         Environment.GetEnvironmentVariable("E2E_BACKEND_URL") ?? "https://localhost:5301";
 
+    /// <summary>The seeded admin's username: a display name used to find its row in lists, never a
+    /// sign-in (owner decision 2026-10-28; <see cref="AdminEmail"/> signs in).</summary>
     public static readonly string AdminUser =
         Environment.GetEnvironmentVariable("E2E_ADMIN_USER") ?? "admin";
+
+    /// <summary>The seeded admin's sign-in e-mail (PLAN-003 P3-2): Auth:AdminEmail of the backend, whose
+    /// Development configuration and seed default are both this address.</summary>
+    public static readonly string AdminEmail =
+        Environment.GetEnvironmentVariable("E2E_ADMIN_EMAIL") ?? "admin@aetheus.local";
 
     public static readonly string AdminPassword =
         Environment.GetEnvironmentVariable("E2E_ADMIN_PASSWORD") ?? "aetheus-dev-admin-pwd";

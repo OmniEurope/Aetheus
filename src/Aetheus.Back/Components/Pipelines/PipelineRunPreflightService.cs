@@ -22,7 +22,7 @@ public interface IPipelineRunPreflightService
 {
     /// <summary>Preflight records verified checks and launch-blocking problems separately from
     /// nonblocking warnings, so observations cannot accidentally refuse execution.</summary>
-    Task<PipelinePreflightOutcomeDto> FindBlockingProblemsAsync(
+    Task<PipelinePreflightOutcome> FindBlockingProblemsAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
@@ -35,7 +35,7 @@ public interface IPipelineRunPreflightService
     /// no selector and dispatch would silently give it the first online runner (a deployment on a server
     /// nobody chose). A stage that never named a target is not concerned and keeps that behaviour.
     /// </summary>
-    IReadOnlyList<string> FindEmptyTargetParameterProblems(
+    IReadOnlyList<PipelineProblem> FindEmptyTargetParameterProblems(
         PipelineYamlDefinition declaredDefinition,
         IReadOnlyDictionary<string, string> launchVariables,
         IReadOnlyDictionary<string, string> effectiveParameters);
@@ -62,7 +62,7 @@ public sealed class PipelineRunPreflightService(
     IPipelineAiProfilePreflight aiProfilePreflight,
     ILogger<PipelineRunPreflightService> logger) : IPipelineRunPreflightService
 {
-    public async Task<PipelinePreflightOutcomeDto> FindBlockingProblemsAsync(
+    public async Task<PipelinePreflightOutcome> FindBlockingProblemsAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
@@ -72,7 +72,7 @@ public sealed class PipelineRunPreflightService(
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(resolvedVariables);
 
-        var problems = new List<string>();
+        var problems = new List<PipelineProblem>();
         // Shared across the whole chain: one fleet query per distinct selector and one environment
         // probe per distinct environment, however many pipelines name them.
         var state = new ChainPreflightState();
@@ -89,9 +89,9 @@ public sealed class PipelineRunPreflightService(
                 problems, state, depth: 1, path: string.Empty, ct).ConfigureAwait(false);
 
         if (problems.Count > 0)
-            PipelinePreflightRefusalLog.Write(logger, definition.Name, problems);
+            PipelinePreflightRefusalLog.Write(logger, definition.Name, [.. problems.Select(problem => problem.English)]);
 
-        return new PipelinePreflightOutcomeDto
+        return new PipelinePreflightOutcome
         {
             Problems = problems,
             Checks = state.Checks,
@@ -99,7 +99,7 @@ public sealed class PipelineRunPreflightService(
         };
     }
 
-    public IReadOnlyList<string> FindEmptyTargetParameterProblems(
+    public IReadOnlyList<PipelineProblem> FindEmptyTargetParameterProblems(
         PipelineYamlDefinition declaredDefinition,
         IReadOnlyDictionary<string, string> launchVariables,
         IReadOnlyDictionary<string, string> effectiveParameters)
@@ -108,7 +108,7 @@ public sealed class PipelineRunPreflightService(
         ArgumentNullException.ThrowIfNull(launchVariables);
         ArgumentNullException.ThrowIfNull(effectiveParameters);
         return PipelineStageTargetParameters.FindEmptyTargets(declaredDefinition, launchVariables, effectiveParameters)
-            .Select(empty => dispatchServers.BuildEmptyTargetParameterRefusal(empty.Stage.Name, empty.Parameter.Name))
+            .Select(empty => PipelineDispatchServerResolver.EmptyTargetParameterProblem(empty.Stage.Name, empty.Parameter.Name))
             .ToList();
     }
 
@@ -120,7 +120,7 @@ public sealed class PipelineRunPreflightService(
         bool sameSourceCommit,
         int? organizationId,
         int? projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
@@ -131,7 +131,7 @@ public sealed class PipelineRunPreflightService(
 
         // A definition synchronized from a repository was never through the editor's validation: an
         // unsupported condition refuses the launch instead of failing the run at that stage.
-        problems.AddRange(PipelineConditionEvaluator.FindDefinitionProblems(definition));
+        problems.AddRange(PipelineConditionEvaluator.FindDefinitionLaunchProblems(definition));
 
         var stages = YamlParsingHelper.FlattenJobs(definition).ToList();
 
@@ -149,14 +149,14 @@ public sealed class PipelineRunPreflightService(
         {
             problems.Add(manifestProblem);
             state.Record(PreflightCheckKinds.ScannerManifest, definition.Name ?? string.Empty,
-                satisfied: false, detail: manifestProblem);
+                satisfied: false, detail: manifestProblem.ToStored());
         }
 
         var aiProfiles = await aiProfilePreflight.FindProblemsAsync(definition, organizationId, ct).ConfigureAwait(false);
         problems.AddRange(aiProfiles.Blocking);
         state.Warnings.AddRange(aiProfiles.Warnings);
         foreach (var aiProblem in aiProfiles.Blocking)
-            state.Record(PreflightCheckKinds.AiProfile, aiProblem, satisfied: false, detail: aiProblem);
+            state.Record(PreflightCheckKinds.AiProfile, aiProblem.ToStored(), satisfied: false, detail: aiProblem.ToStored());
 
         // Only on the commit the launch knows: an on_success child starts later, on its own commit.
         if (sameSourceCommit && projectId is { } releaseProjectId)
@@ -165,7 +165,7 @@ public sealed class PipelineRunPreflightService(
                 definition, resolvedVariables, releaseProjectId, ct).ConfigureAwait(false);
             problems.AddRange(releaseProblems);
             foreach (var releaseProblem in releaseProblems)
-                state.Record(PreflightCheckKinds.ReleaseArtifact, releaseProblem, satisfied: false, detail: releaseProblem);
+                state.Record(PreflightCheckKinds.ReleaseArtifact, releaseProblem.ToStored(), satisfied: false, detail: releaseProblem.ToStored());
         }
 
         foreach (var environmentGroup in stages
@@ -193,7 +193,7 @@ public sealed class PipelineRunPreflightService(
             PreflightCheckKinds.Ports,
             definition.Name ?? string.Empty,
             portConflicts.Blocking.Count == 0,
-            portConflicts.Blocking.Count == 0 ? null : string.Join(" ", portConflicts.Blocking));
+            PipelineProblem.StoredTogether(portConflicts.Blocking));
     }
 
     /// <summary>
@@ -204,7 +204,7 @@ public sealed class PipelineRunPreflightService(
         PipelineYamlDefinition definition,
         int? organizationId,
         int? projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
@@ -214,7 +214,7 @@ public sealed class PipelineRunPreflightService(
             .CheckAsync(expanded.Requires, projectId, organizationId, ct).ConfigureAwait(false))
         {
             if (outcome.Problem is { } problem) problems.Add(problem);
-            state.Record(outcome.Kind, outcome.Name, outcome.Satisfied, outcome.Problem);
+            state.Record(outcome.Kind, outcome.Name, outcome.Satisfied, outcome.Problem?.ToStored());
         }
     }
 
@@ -248,7 +248,7 @@ public sealed class PipelineRunPreflightService(
         IReadOnlyDictionary<string, string> parentVariables,
         int? organizationId,
         int projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         int depth,
         string path,
@@ -275,8 +275,10 @@ public sealed class PipelineRunPreflightService(
                 // A trigger step's missing target is already reported by name above; an on_success
                 // entry has no step to report it, so it is named here.
                 if (reference.FromOnSuccess)
-                    problems.Add(
-                        $"on_success names pipeline '{reference.Name}', which does not exist in this project.");
+                    problems.Add(PipelineProblem.Of(
+                        PipelineProblemCodes.OnSuccessPipelineMissing,
+                        $"on_success names pipeline '{reference.Name}', which does not exist in this project.",
+                        ("pipeline", reference.Name)));
                 continue;
             }
 
@@ -293,18 +295,18 @@ public sealed class PipelineRunPreflightService(
             // names the pipeline and stage at fault rather than an anonymous requirement.
             // The child runs with UPSTREAM_PIPELINE set to its parent's name (trigger step and
             // on_success alike), which is what decides whether its scanners need the candidate manifest.
-            var childProblems = new List<string>();
+            var childProblems = new List<PipelineProblem>();
             var childOnSameCommit = parentOnSameCommit && !reference.FromOnSuccess && reference.SameSourceCommit;
             await CheckOnePipelineAsync(
                 childDefinition, childVariables, parentPipelineName, parentTemplateName, childOnSameCommit, organizationId,
                 projectId, childProblems, state, ct).ConfigureAwait(false);
-            problems.AddRange(childProblems.Select(problem => $"{childPath}: {problem}"));
+            problems.AddRange(childProblems.Select(problem => problem.InChain(childPath)));
             // The chain itself is a requirement: reaching this line means the child's definition
             // resolved and its variables could be supplied, which is what an orchestrator fails on.
             state.Record(
                 PreflightCheckKinds.ChildPipeline, childPath,
                 childProblems.Count == 0,
-                childProblems.Count == 0 ? null : string.Join(" ", childProblems));
+                PipelineProblem.StoredTogether(childProblems));
 
             await CheckChildPipelinesAsync(
                 childDefinition, target.Name, target.TemplateReferenceName, childOnSameCommit, childVariables,
@@ -325,7 +327,7 @@ public sealed class PipelineRunPreflightService(
 
         /// <summary>Nonblocking observations are retained for the run, including those discovered
         /// while checking child pipelines.</summary>
-        public List<string> Warnings { get; } = [];
+        public List<PipelineProblem> Warnings { get; } = [];
 
         private readonly HashSet<string> _recorded = new(StringComparer.Ordinal);
 
@@ -355,7 +357,7 @@ public sealed class PipelineRunPreflightService(
         // read-only so the contract cannot be widened by accident.
         var substitutions = variables as Dictionary<string, string>
             ?? new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase);
-        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new Dictionary<string, (string Path, string Stage, string Step)>(StringComparer.OrdinalIgnoreCase);
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
         {
             var target = !string.IsNullOrWhiteSpace(stage.Environment)
@@ -371,9 +373,15 @@ public sealed class PipelineRunPreflightService(
                 var key = $"{target}|app:{app}";
                 var path = $"stage '{stage.Name}' / step '{step.Name}'";
                 if (seen.TryGetValue(key, out var first))
-                    throw new BadRequestException(
-                        $"Duplicate deployment target '{app}' on {target}: {first} and {path}. Override the inherited step by using the same name or remove one deployment.");
-                seen[key] = path;
+                {
+                    var problem = PipelineProblem.Of(
+                        PipelineProblemCodes.DuplicateDeploymentTarget,
+                        $"Duplicate deployment target '{app}' on {target}: {first.Path} and {path}. Override the inherited step by using the same name or remove one deployment.",
+                        ("app", app), ("target", target), ("firstStage", first.Stage), ("firstStep", first.Step),
+                        ("secondStage", stage.Name), ("secondStep", step.Name));
+                    throw new BadRequestException(problem.English, [problem.ToDto()]);
+                }
+                seen[key] = (path, stage.Name, step.Name);
             }
         }
     }
@@ -389,11 +397,12 @@ public sealed class PipelineRunPreflightService(
         IReadOnlyDictionary<string, string> resolvedVariables,
         int? organizationId,
         int? projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
         var candidateCache = state.CandidateCache;
+        stage = PipelineStageTargetParameters.WithParameterTargets(stage, resolvedVariables);
         var effective = dispatchServers.ResolveEffectiveStageTarget(stage, resolvedVariables);
         var deploymentStage = dispatchServers.StageHasDeployStep(stage);
         // Stages of one pipeline overwhelmingly share a selector, and the answer cannot change during a
@@ -416,7 +425,7 @@ public sealed class PipelineRunPreflightService(
             var incapable = await FindIncapableRunnerReasonAsync(
                 stage, configured, deploymentStage, state, cacheKey, ct).ConfigureAwait(false);
             if (incapable is not null) problems.Add(incapable);
-            state.Record(PreflightCheckKinds.Runner, selectorLabel, incapable is null, incapable);
+            state.Record(PreflightCheckKinds.Runner, selectorLabel, incapable is null, incapable?.ToStored());
             return;
         }
 
@@ -429,10 +438,10 @@ public sealed class PipelineRunPreflightService(
         if (!hasSelector && !deploymentStage) return;
 
         var reason = deploymentStage
-            ? dispatchServers.BuildNoDeployTargetReason(stage.Name, stage)
-            : dispatchServers.BuildNoServerReason(stage.Name, stage);
+            ? PipelineDispatchServerResolver.NoDeployTargetProblem(stage.Name, stage)
+            : PipelineDispatchServerResolver.NoServerProblem(stage.Name, stage);
         problems.Add(reason);
-        state.Record(PreflightCheckKinds.Runner, selectorLabel, satisfied: false, detail: reason);
+        state.Record(PreflightCheckKinds.Runner, selectorLabel, satisfied: false, detail: reason.ToStored());
     }
 
     /// <summary>
@@ -442,7 +451,7 @@ public sealed class PipelineRunPreflightService(
     /// would release it is an agent update, an explicit fleet operation. Offline runners are judged on
     /// their last report, like everywhere else in the preflight.
     /// </summary>
-    private async Task<string?> FindIncapableRunnerReasonAsync(
+    private async Task<PipelineProblem?> FindIncapableRunnerReasonAsync(
         PipelineStageDefinition stage,
         IReadOnlyCollection<int> configured,
         bool deploymentStage,
@@ -468,9 +477,14 @@ public sealed class PipelineRunPreflightService(
             ? $"'{runner.Name}' reports agent protocol {runner.AgentProtocolVersion?.ToString(CultureInfo.InvariantCulture) ?? "none"}, "
               + $"outside the supported {AgentProtocol.MinimumSupportedVersion}-{AgentProtocol.MaximumSupportedVersion}"
             : $"'{runner.Name}' does not advertise {capability}");
-        return $"Stage '{stage.Name}': no configured {(deploymentStage ? "deployment target" : "runner")} can take it ("
+        return PipelineProblem.Of(
+            deploymentStage ? PipelineProblemCodes.DeployTargetCannotTakeStage : PipelineProblemCodes.RunnerCannotTakeStage,
+            $"Stage '{stage.Name}': no configured {(deploymentStage ? "deployment target" : "runner")} can take it ("
             + string.Join("; ", details)
-            + "), so the stage would wait for a runner forever. Update or reinstall the agent from its server page.";
+            + "), so the stage would wait for a runner forever. Update or reinstall the agent from its server page.",
+            ("stage", stage.Name), ("runners", PipelineProblem.QuotedList(facts.Select(runner => runner.Name))),
+            ("capability", capability), ("minimum", AgentProtocol.MinimumSupportedVersion),
+            ("maximum", AgentProtocol.MaximumSupportedVersion));
     }
 
     /// <summary>The selector as a reader would name it, so two stages sharing one target produce one
@@ -495,7 +509,7 @@ public sealed class PipelineRunPreflightService(
     private async Task CheckEnvironmentAdmitsTheRunAsync(
         IGrouping<string, PipelineStageDefinition> environmentStages,
         int? projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
@@ -508,10 +522,14 @@ public sealed class PipelineRunPreflightService(
         }
 
         var stageNames = string.Join("', '", environmentStages.Select(stage => stage.Name));
-        var reason = $"Stage '{stageNames}': a required check on environment '{environmentStages.Key}' refuses "
-            + "the run. Fix the check before launching; it is evaluated again at dispatch.";
+        var reason = PipelineProblem.Of(
+            PipelineProblemCodes.EnvironmentCheckRefuses,
+            $"Stage '{stageNames}': a required check on environment '{environmentStages.Key}' refuses "
+            + "the run. Fix the check before launching; it is evaluated again at dispatch.",
+            ("stages", PipelineProblem.QuotedList(environmentStages.Select(stage => stage.Name))),
+            ("environment", environmentStages.Key));
         problems.Add(reason);
-        state.Record(PreflightCheckKinds.Environment, environmentStages.Key, satisfied: false, detail: reason);
+        state.Record(PreflightCheckKinds.Environment, environmentStages.Key, satisfied: false, detail: reason.ToStored());
     }
 
     /// <summary>
@@ -532,7 +550,7 @@ public sealed class PipelineRunPreflightService(
         IReadOnlyList<PipelineStageDefinition> stages,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int projectId,
-        List<string> problems,
+        List<PipelineProblem> problems,
         ChainPreflightState state,
         CancellationToken ct)
     {
@@ -546,7 +564,9 @@ public sealed class PipelineRunPreflightService(
                 return stage.Steps.SelectMany(step => ReferencedPipelines(step).Select(reference => (
                     StageName: stage.Name,
                     PipelineName: ExpandAsDispatched(reference.Name, stageVariables, stillToCome),
-                    reference.What)));
+                    reference.What,
+                    StepName: step.Name,
+                    reference.ArtifactSource)));
             })
             .ToList();
 
@@ -559,14 +579,16 @@ public sealed class PipelineRunPreflightService(
             verdicts[name] = target is not null;
         }
 
-        foreach (var (stageName, name, what) in references)
+        foreach (var (stageName, name, what, stepName, artifactSource) in references)
         {
             if (!IsKnownAtLaunch(name))
             {
                 // Not recorded as a check: nothing was verified, and a satisfied entry would say it was.
-                state.Warnings.Add(
+                state.Warnings.Add(PipelineProblem.Of(
+                    artifactSource ? PipelineProblemCodes.ArtifactSourcePipelineKnownLater : PipelineProblemCodes.StepPipelineKnownLater,
                     $"Stage '{stageName}': {what} names pipeline '{name}', whose value is only known once "
-                    + "the run is under way; its existence is checked when the step runs.");
+                    + "the run is under way; its existence is checked when the step runs.",
+                    ("stage", stageName), ("step", stepName), ("pipeline", name)));
                 continue;
             }
             if (verdicts[name])
@@ -574,9 +596,12 @@ public sealed class PipelineRunPreflightService(
                 state.Record(PreflightCheckKinds.PipelineReference, name);
                 continue;
             }
-            var reason = $"Stage '{stageName}': {what} names pipeline '{name}', which does not exist in this project.";
+            var reason = PipelineProblem.Of(
+                artifactSource ? PipelineProblemCodes.ArtifactSourcePipelineMissing : PipelineProblemCodes.StepPipelineMissing,
+                $"Stage '{stageName}': {what} names pipeline '{name}', which does not exist in this project.",
+                ("stage", stageName), ("step", stepName), ("pipeline", name));
             problems.Add(reason);
-            state.Record(PreflightCheckKinds.PipelineReference, name, satisfied: false, detail: reason);
+            state.Record(PreflightCheckKinds.PipelineReference, name, satisfied: false, detail: reason.ToStored());
         }
     }
 
@@ -606,11 +631,11 @@ public sealed class PipelineRunPreflightService(
     private static bool IsKnownAtLaunch(string expandedName)
         => expandedName.Length > 0 && !expandedName.Contains("$(", StringComparison.Ordinal);
 
-    private static IEnumerable<(string Name, string What)> ReferencedPipelines(PipelineStepDefinition step)
+    private static IEnumerable<(string Name, string What, bool ArtifactSource)> ReferencedPipelines(PipelineStepDefinition step)
     {
         if (!string.IsNullOrWhiteSpace(step.Pipeline))
-            yield return (step.Pipeline.Trim(), $"step '{step.Name}'");
+            yield return (step.Pipeline.Trim(), $"step '{step.Name}'", false);
         if (!string.IsNullOrWhiteSpace(step.ArtifactSourcePipeline))
-            yield return (step.ArtifactSourcePipeline.Trim(), $"step '{step.Name}' (artifact source)");
+            yield return (step.ArtifactSourcePipeline.Trim(), $"step '{step.Name}' (artifact source)", true);
     }
 }

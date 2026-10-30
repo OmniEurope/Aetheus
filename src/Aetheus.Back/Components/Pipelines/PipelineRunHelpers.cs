@@ -308,7 +308,8 @@ public static partial class PipelineRunHelpers
             return (PreflightTargetKind.Pool, stage.Pool);
         if (!string.IsNullOrEmpty(stage.Environment))
             return (PreflightTargetKind.Environment, stage.Environment);
-        return (PreflightTargetKind.Agent, string.IsNullOrEmpty(stage.Agent) ? "(unspecified)" : stage.Agent);
+        // A stage naming no agent has no label: the front says "any online agent" in the user's language.
+        return (PreflightTargetKind.Agent, stage.Agent ?? string.Empty);
     }
 
     // --- Step env scoping / dispatch / container isolation (from the task-creation path) ---

@@ -28,7 +28,7 @@ public class MailboxController(
     [HttpGet(Base)]
     public async Task<ActionResult<MailboxAccessDto>> GetAccess(int serverId, int accountId, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         var access = await mailbox.GetAccessAsync(key, ct);
         // Recette R1-41: only an administrator is offered the opening without password.
         if (User.IsInRole(AdministratorRole))
@@ -45,7 +45,7 @@ public class MailboxController(
     public async Task<ActionResult<MailboxAccessDto>> OpenAsAdministrator(int serverId, int accountId, CancellationToken ct)
     {
         if (!User.IsInRole(AdministratorRole)) return Forbid();
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await administratorAccess.OpenAsync(key, isAdministrator: true, ct));
     }
 
@@ -54,14 +54,14 @@ public class MailboxController(
     public async Task<ActionResult<MailboxAccessDto>> Unlock(
         int serverId, int accountId, [FromBody] MailboxUnlockRequest request, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await mailbox.UnlockAsync(key, request.Password, ct));
     }
 
     [HttpPost(Base + "/lock")]
     public async Task<IActionResult> Lock(int serverId, int accountId, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         mailbox.Lock(key);
         return NoContent();
     }
@@ -69,7 +69,7 @@ public class MailboxController(
     [HttpGet(Base + "/folders")]
     public async Task<ActionResult<List<MailboxFolderDto>>> GetFolders(int serverId, int accountId, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await mailbox.ListFoldersAsync(key, ct));
     }
 
@@ -77,7 +77,7 @@ public class MailboxController(
     public async Task<ActionResult<MailboxFolderDto>> CreateFolder(
         int serverId, int accountId, [FromBody] MailboxCreateFolderRequest request, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Write, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxManage, ct) is not { } key) return Forbid();
         return Ok(await mailbox.CreateFolderAsync(key, request.Name, ct));
     }
 
@@ -86,7 +86,7 @@ public class MailboxController(
         int serverId, int accountId, [FromQuery] string folder, [FromQuery] int page = 1, [FromQuery] int pageSize = 25,
         CancellationToken ct = default)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await mailbox.ListMessagesAsync(key, folder, page, pageSize, ct));
     }
 
@@ -95,7 +95,7 @@ public class MailboxController(
         int serverId, int accountId, uint uid, [FromQuery] string folder, [FromQuery] bool loadImages = false,
         CancellationToken ct = default)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await mailbox.GetMessageAsync(key, folder, uid, loadImages, ct));
     }
 
@@ -104,7 +104,7 @@ public class MailboxController(
     public async Task<IActionResult> GetAttachment(
         int serverId, int accountId, uint uid, int index, [FromQuery] string folder, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         var attachment = await mailbox.GetAttachmentAsync(key, folder, uid, index, ct);
         return File(attachment.Content, "application/octet-stream", attachment.FileName);
     }
@@ -114,7 +114,7 @@ public class MailboxController(
         int serverId, int accountId, uint uid, [FromQuery] string folder, [FromQuery] MailboxComposeMode mode,
         [FromQuery] string? language, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Read, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxRead, ct) is not { } key) return Forbid();
         return Ok(await mailbox.GetDraftAsync(key, mode, folder, uid, language, ct));
     }
 
@@ -123,7 +123,7 @@ public class MailboxController(
         int serverId, int accountId, uint uid, [FromQuery] string folder, [FromBody] MailboxReadStateRequest request,
         CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Write, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxManage, ct) is not { } key) return Forbid();
         await mailbox.SetReadAsync(key, folder, uid, request.IsRead, ct);
         return NoContent();
     }
@@ -132,7 +132,7 @@ public class MailboxController(
     public async Task<ActionResult<MailboxDeleteResultDto>> Delete(
         int serverId, int accountId, uint uid, [FromQuery] string folder, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Write, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxManage, ct) is not { } key) return Forbid();
         return Ok(await mailbox.DeleteAsync(key, folder, uid, ct));
     }
 
@@ -144,7 +144,7 @@ public class MailboxController(
     public async Task<ActionResult<MailboxSendResultDto>> Send(
         int serverId, int accountId, [FromBody] MailboxSendRequest request, CancellationToken ct)
     {
-        if (await KeyAsync(serverId, accountId, Permission.Write, ct) is not { } key) return Forbid();
+        if (await KeyAsync(serverId, accountId, PermissionKeys.ServerMailboxManage, ct) is not { } key) return Forbid();
         return Ok(await mailbox.SendAsync(key, request, ct));
     }
 
@@ -152,13 +152,14 @@ public class MailboxController(
         authz.HasPermissionAsync(User, ResourceType.Server, serverId, permission, ct);
 
     /// <summary>
-    /// The held password's key for the signed-in user, or null when the user lacks the right or carries no
+    /// The held password's key for the signed-in user, or null when the user lacks the named permission (R-11:
+    /// server.mailbox.read to read, server.mailbox.manage to change) or carries no
     /// identifier (fail closed: an anonymous key would share one password between callers).
     /// </summary>
-    private async Task<MailboxCredentialKey?> KeyAsync(int serverId, int accountId, Permission permission, CancellationToken ct)
+    private async Task<MailboxCredentialKey?> KeyAsync(int serverId, int accountId, string permissionKey, CancellationToken ct)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userId) || !await CanAsync(serverId, permission, ct)) return null;
+        if (string.IsNullOrEmpty(userId) || !await authz.HasPermissionAsync(User, permissionKey, serverId, ct)) return null;
         // The scheme is part of the key: an agent principal carries its server id as identifier.
         return new MailboxCredentialKey(MailboxCredentialKey.Holder(User.Identity?.AuthenticationType, userId), serverId, accountId);
     }

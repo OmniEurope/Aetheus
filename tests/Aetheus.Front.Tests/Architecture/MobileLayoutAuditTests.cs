@@ -24,9 +24,10 @@ public sealed class MobileLayoutAuditTests
     {
         { "Dashboards/DashboardEdit.razor", "MoveUp(widget)" },
         { "Notifications/NotificationsAdmin.razor", "@L[\"NotificationChannels\"]</OmniHeading>" },
-        { "Notifications/NotificationsAdmin.razor", "OpenChannelDialogAsync(null)" },
+        // R-109: the Create buttons moved into the page header; the rows keep their search box, still a wrapping row.
+        { "Notifications/NotificationsAdmin.razor", "ResetChannelSearchAsync" },
         { "Notifications/NotificationsAdmin.razor", "@L[\"Rules\"]</OmniHeading>" },
-        { "Notifications/NotificationsAdmin.razor", "OpenRuleDialogAsync(null)" },
+        { "Notifications/NotificationsAdmin.razor", "ResetRuleSearchAsync" },
         { "Servers/ServerDetailSections/DockerRelationsGraph.razor", "ResetViewAsync" },
         { "PackageFeeds/PackageFeedPackagesDialog.razor", "OnClick=\"@SyncAsync\"" },
         { "Servers/ServerDetailSections/ServerConfigSection.razor", "PreviewConfigAsync" },
@@ -35,17 +36,21 @@ public sealed class MobileLayoutAuditTests
         { "Projects/ProjectFormDialog.razor", "OnClick=\"@OnDelete\"" },
         { "Servers/ContactAgentDialog.razor", "CancelAndCloseAsync" },
         { "Servers/ServerDetailSections/DockerImagesTab.razor", "PullImageAsync" },
-        { "AiTasks/AiTasks.razor", "OpenDialogAsync(null)" },
+        { "AiTasks/AiTasks.razor", "OnSearchChangedAsync" },
         { "Organizations/OrganizationDetail.razor", "OnAddMember" },
         { "Users/UserEdit.razor", "OnAddOrg" },
         { "Users/UserEdit.razor", "Busy=\"@(_changingPassword)\"" },
-        { "Shared/AppIngestionSettings.razor", "OmniLabel For=\"analytics-threshold-metric\"" },
+        { "Shared/AppIngestionSettings.razor", "OmniFormField Label=\"@L[\"Metric\"]\" For=\"analytics-threshold-metric\"" },
+        // R-109: Create moved into the project header; the filter row (assignee, tags) is the board's remaining row.
         { "Projects/ProjectDetailSections/ProjectBoardSection.razor", "_assigneeFilter" },
-        { "Projects/ProjectDetailSections/ProjectBoardSection.razor", "OnClick=\"@OpenCreateAsync\"" },
         { "Users/RoleEdit.razor", "OnApplyBulk" },
         { "Users/RoleEdit.razor", "OnAddUser" },
         { "Pipelines/StageEditPanel.razor", "OnAddVariable" },
         { "Pipelines/VisualPipelineEditor.razor", "OnAddPipelineVar" },
+        // R-112: the container bulk bar (project, Restart, menu) and the service log header (title, line count, follow,
+        // close) are toolbar rows outside any grid; they wrap rather than run past a 375 px screen.
+        { "Servers/ServerDetailSections/DockerContainersTab.razor", "Id=\"docker-bulk-project\"" },
+        { "Servers/ServerDetailSections/ServerServicesSection.razor", "OnFollowChangedAsync(v)" },
     };
 
     [Theory]

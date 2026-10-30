@@ -54,6 +54,7 @@ internal sealed class PipelineRunConfiguration : IEntityTypeConfiguration<Pipeli
         builder.Property(e => e.RepositoryUrl).HasMaxLength(2048);
         builder.Property(e => e.ReleaseSeries).HasMaxLength(ReleaseSeries.MaxLength);
         builder.Property(e => e.IdempotencyKey).HasMaxLength(PipelineRunRequest.MaxIdempotencyKeyLength);
+        builder.Property(e => e.GateOverrideBy).HasMaxLength(256);
         builder.HasIndex(e => new { e.PipelineId, e.IdempotencyKey })
                .IsUnique()
                .HasFilter("\"IdempotencyKey\" IS NOT NULL");

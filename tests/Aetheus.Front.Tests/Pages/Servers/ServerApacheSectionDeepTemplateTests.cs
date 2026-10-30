@@ -70,10 +70,11 @@ public class ServerApacheSectionDeepTemplateTests : BunitContext
     }
 
     [Fact]
-    public void Renders_RunningApache_WithVersion()
+    public void Renders_RunningApache_WithoutVersionInTheStatusLine()
     {
         var cut = RenderSection();
-        Assert.Contains("2.4.57", cut.Markup);
+        // R-120: the version is in the page title, not in the status line.
+        Assert.DoesNotContain("2.4.57", cut.Markup);
     }
 
     [Fact]
@@ -103,23 +104,13 @@ public class ServerApacheSectionDeepTemplateTests : BunitContext
     }
 
     [Fact]
-    public void FilteredModules_StaticType_ExcludedFromSharedLogic()
+    public void Modules_StaticType_ExcludedFromSharedLogic()
     {
         var cut = RenderSection();
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredModules", Priv)!;
-        var modules = (List<ApacheModuleDto>)prop.GetValue(cut.Instance)!;
+        var prop = typeof(ServerApacheSection).GetProperty("Apache", Priv)!;
+        var modules = ((ApacheDataDto)prop.GetValue(cut.Instance)!).Modules;
         Assert.Equal(3, modules.Count);
         Assert.Contains(modules, m => m.Type == "static");
-    }
-
-    [Fact]
-    public void FilteredModules_WithSearch_FiltersAcrossTypes()
-    {
-        var cut = RenderSection();
-        typeof(ServerApacheSection).GetField("_moduleSearch", Priv)!.SetValue(cut.Instance, "ssl");
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredModules", Priv)!;
-        var modules = (List<ApacheModuleDto>)prop.GetValue(cut.Instance)!;
-        Assert.Single(modules);
     }
 
     [Fact]

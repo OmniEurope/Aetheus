@@ -1,0 +1,9 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* Recette R-51 (ADR-058): a project deleted while something it deployed is still on a server. It is shown
+   instead of the project's pages: nothing else can be done with it but relaunching the cleanup. *@
+<OmniStack Gap="OmniSpacing.Medium" Class="project-deletion-pending-panel" data-testid="project-deletion-pending-panel">
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProjectDeletionPending"]">@L["ProjectDeletionResumeIntro"]</OmniAlert>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@RelaunchAsync" Id="project-deletion-relaunch"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><span>@L["ProjectDeletionRelaunch"]</span></ChildContent></OmniButton>
+    </OmniStack>
+</OmniStack>

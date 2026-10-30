@@ -15,10 +15,13 @@ if ($TestAll)  { $TestUnit = $true; $TestIntegration = $true; $TestE2e = $true }
 if ($TestUnit) { $TestBack = $true; $TestFront = $true; $TestAgent = $true; $TestAnalyzers = $true }
 if ($Coverage) { $TestBack = $true; $TestFront = $true }
 $buildConfiguration = if ($Coverage) { "Release" } else { "Debug" }
-# Every build output read after the build (runtime snapshots, the front publish, playwright.ps1)
+# Every build output read after the build (runtime snapshots, the front publish; the browser image builds its own Release)
 # follows this value: `-c -te` builds Release, and E2E used to copy and run stale Debug outputs.
 $anyTest = $TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegration -or $TestE2e
 $e2eOnly = $TestE2e -and -not ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegration -or $Coverage)
+# The agent suite is built and run in its Linux container (see "Agent suite container"), so a run of that suite
+# alone needs no host build.
+$agentOnly = $TestAgent -and -not ($TestBack -or $TestFront -or $TestAnalyzers -or $TestIntegration -or $TestE2e -or $Coverage)
 $tunnelOnly = $RemoteAgent -and -not $ModeFront -and -not $ModeAgent -and -not $anyTest -and -not $Reset
 if ($RemoteAgent -and -not $tunnelOnly) { $ModeFront = $true }
 if (-not $ModeFront -and -not $ModeAgent -and -not $tunnelOnly) { $ModeFront = $true }
@@ -36,16 +39,17 @@ function Show-Options {
     Write-Host "  -r,  -Reset            Drop & recreate local Postgres docker volume (fresh seed)"
     Write-Host "  -tb, -TestBack         Run backend unit tests"
     Write-Host "  -tf, -TestFront        Run frontend unit tests"
-    Write-Host "  -t,  -TestUnit         Run ALL unit tests (back + front + agent-core + analyzers + observability + JavaScript)"
+    Write-Host "  -tg, -TestAgent        Run agent-core unit tests in a Linux container of the pinned .NET SDK image (as CI), never on the host"
+    Write-Host "  -t,  -TestUnit         Run ALL unit tests (back + front + agent-core in a Linux container + analyzers + observability + JavaScript + the locked ESLint from a clean npm ci in the pipeline's Node container)"
     Write-Host "  -ti, -TestIntegration  Run integration tests (Aetheus.Back.IntegrationTests, Testcontainers)"
-    Write-Host "  -te                    Run ALL E2E tests (isolated dedicated DB :15433, dev DB untouched)"
+    Write-Host "  -te                    Run ALL E2E tests (isolated dedicated DB :15433, dev DB untouched) in the QA browser image (Dockerfile.e2e)"
     Write-Host "  -tec <filter>          Run specific E2E categories (implies -te)"
     Write-Host "    -tec ?               Show interactive category picker"
     Write-Host "    -tec 1               Category by number"
     Write-Host "    -tec 1,2,3           Categories by number"
     Write-Host "    -tec Auth            Category by name"
     Write-Host "    -tec Auth,Acts,3     Mix of names and numbers"
-    Write-Host "  -ta, -TestAll          Run EVERYTHING: unit + integration + E2E (dev DB never reset)"
+    Write-Host "  -ta, -TestAll          Run EVERYTHING: unit + integration + E2E (dev DB never reset, dev instance left running)"
     Write-Host "  -c,  -Coverage         Collect coverage + open HTML report (Back+Front+Agent.Core; integration coverage kept beside it, implies -tb -tf), then the CRAP gate"
     Write-Host "  -mf, -ModeFront        Start Backend + Frontend (default)"
     Write-Host "  -ma, -ModeAgent        Start Agent Worker Service"
@@ -121,6 +125,12 @@ if ($HelpLong) {
     Write-Host "  -w renews the ports. Or hand-write those keys yourself. LABEL=<text> tags this"
     Write-Host "  worktree in the front dev top-bar (-w keeps an existing one, else folder name)."
     Write-Host "  WORKTREE=<id> records the worktree identity (-w sets it to the folder name)."
+    Write-Host ""
+    Write-Host "  Test runs: the unit, package, JavaScript and integration suites of one run start together (each"
+    Write-Host "  prints its block when it ends); with -c they stay one after the other. A full E2E run leaves out the"
+    Write-Host "  sweep of every page (PageRules, owner decision of 2026-10-27: run it by hand, -tec PageRules)."
+    Write-Host "  YLAUNCH_SEQUENTIAL_SUITES=1 runs the suites one after the other; YLAUNCH_E2E_SHARDS=2 runs the"
+    Write-Host "  E2E suite with the sweep, in two shards on their own ports and databases (the second 1000 ports up)."
     Write-Host ""
     exit 0
 }
@@ -311,6 +321,15 @@ if ($script:testRun) {
     Write-Host "  Test run: E2E stack on back $backHttpsPort/$backHttpPort, front $frontPort (the development instance is left running)." -ForegroundColor Magenta
 }
 $script:killPorts = @($backHttpsPort, $frontPort)
+# A full E2E run splits the suite in shards, each on a stack of its own (New-E2eStack): the second stack
+# listens this many ports above the first, so a sweep of leftovers has to look there too.
+$e2eStackPortOffset = 1000
+$e2eShardCount = 1
+# Two shards only on request (YLAUNCH_E2E_SHARDS=2): shard 1 is then the manual sweep of every page (PageRules).
+if ($script:testRun -and $TestE2e -and -not $HotReload -and [string]::IsNullOrEmpty($TestE2eFilter) -and $env:YLAUNCH_E2E_SHARDS -eq '2') {
+    $e2eShardCount = 2
+    $script:killPorts += @(($backHttpsPort + $e2eStackPortOffset), ($frontPort + $e2eStackPortOffset))
+}
 $frontUrl     ="https://localhost:$frontPort"
 $backUrl      = "https://localhost:$backHttpsPort/health/live"
 $backAspUrls  = "https://localhost:$backHttpsPort;http://localhost:$backHttpPort"
@@ -469,13 +488,13 @@ if ($VpsSim) {
     if ($Full -and $AgentAutoInstall -and -not $env:VPSSIM_AGENT_TOKEN) {
         $localBackendUrl = "https://localhost:$backHttpsPort"
         $developmentAuth = (Get-Content (Join-Path $root "src/Aetheus.Back/appsettings.Development.json") -Raw | ConvertFrom-Json).Auth
-        $adminUser = if ($env:VPSSIM_ADMIN_USER) { $env:VPSSIM_ADMIN_USER } else { [string]$developmentAuth.AdminUser }
+        $adminEmail = if ($env:VPSSIM_ADMIN_EMAIL) { $env:VPSSIM_ADMIN_EMAIL } else { [string]$developmentAuth.AdminEmail }
         $adminPassword = if ($env:VPSSIM_ADMIN_PASSWORD) { $env:VPSSIM_ADMIN_PASSWORD } else { [string]$developmentAuth.AdminPassword }
-        if ([string]::IsNullOrWhiteSpace($adminUser) -or [string]::IsNullOrWhiteSpace($adminPassword)) {
+        if ([string]::IsNullOrWhiteSpace($adminEmail) -or [string]::IsNullOrWhiteSpace($adminPassword)) {
             throw "Development admin credentials are missing from appsettings.Development.json."
         }
         try {
-            $loginBody = @{ username = $adminUser; password = $adminPassword } | ConvertTo-Json -Compress
+            $loginBody = @{ email = $adminEmail; password = $adminPassword } | ConvertTo-Json -Compress
             $login = Invoke-RestMethod -Method Post -Uri "$localBackendUrl/api/auth/login" `
                 -ContentType "application/json" -Body $loginBody -SkipCertificateCheck
             if (-not $login.token) { throw "login returned no token" }
@@ -679,7 +698,12 @@ function Write-TestSummary([string]$summaryLine, [double]$elapsedSec) {
     Write-Host ""
 }
 
-function Invoke-TestRun {
+# One `dotnet test` run is split in three steps so that several of them can be in flight at once:
+# Start-TestRun launches the process, Read-TestRunStream prints the per-test lines of a streamed run
+# while it works, Complete-TestRun reads TRX, writes the failure log and prints the summary block once
+# the process has exited. Wait-TestRuns drives them from the one launcher thread, so every block is
+# printed whole, in the order the runs finish.
+function Start-TestRun {
     param(
         [string[]]$ExtraArgs = @(),
         [string]$Label = "Running tests...",
@@ -687,10 +711,11 @@ function Invoke-TestRun {
         [switch]$StreamOutput,
         # Where TRX and Cobertura land instead of the default (PLAN-015: the integration coverage goes
         # beside the product report, which merges exactly the three unit suites).
-        [string]$ResultDirectory = ""
+        [string]$ResultDirectory = "",
+        # Prefixes the per-test lines of a streamed run when several runs share the console.
+        [string]$Tag = ""
     )
     if (-not $Target) { $Target = $solution }
-    Write-Step $Label
 
     $tmpOut = Join-Path $env:TEMP "aetheus_test_$(Get-Random).txt"
     $tmpErr = "$tmpOut.err"
@@ -712,83 +737,78 @@ function Invoke-TestRun {
     # From the repository root: `dotnet test` reads the runner from the global.json of its working
     # directory, and anywhere outside the repository it would fall back to VSTest and refuse these arguments.
     $proc = Start-Process -FilePath "dotnet" -ArgumentList $fullArgs -WorkingDirectory $root -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    return @{
+        Kind = "dotnet"; Label = $Label; Tag = $Tag; Process = $proc; Stream = $StreamOutput.IsPresent
+        OutputPath = $tmpOut; ErrorPath = $tmpErr; ResultDirectory = $resultDirectory; TrxName = $trxName
+        Stopwatch = [System.Diagnostics.Stopwatch]::StartNew(); Reader = $null
+        StreamIndex = 0; StreamPassed = 0; StreamFailed = 0; StreamSkipped = 0; Result = $null
+    }
+}
 
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $testIndex = 0
-    $streamPassed = 0
-    $streamFailed = 0
-    $streamSkipped = 0
-    $streamTotal = 0
-    $processStreamLine = {
-        param([string]$line)
+function Read-TestRunStream([hashtable]$Run) {
+    # Keep one shared reader at its current byte position. Re-running Get-Content against
+    # the entire growing log every 500 ms made streaming I/O quadratic for long suites.
+    if (-not $Run.Reader) {
+        if (-not (Test-Path -LiteralPath $Run.OutputPath)) { return }
+        $outputFile = [System.IO.File]::Open(
+            $Run.OutputPath,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::ReadWrite)
+        $Run.Reader = [System.IO.StreamReader]::new($outputFile)
+    }
+    $prefix = if ($Run.Tag) { "[$($Run.Tag)] " } else { "" }
+    while ($null -ne ($line = $Run.Reader.ReadLine())) {
         # Microsoft.Testing.Platform, --output Detailed: "passed <test> (209ms)", then a "from <dll>" line.
+        # VSTest console logger at normal verbosity (the E2E browser container): "  Passed <test> [209 ms]".
         if ($line -match '^(passed|failed|skipped)\s+(.+?)\s+\(([^()]+)\)\s*$') {
-            $testIndex++
-            $status = $Matches[1]
-            $testName = $Matches[2]
-            $duration = $Matches[3].Trim()
-            $pad = if ($streamTotal -gt 0) { "$streamTotal".Length } else { 2 }
-            $idx = "$testIndex".PadLeft($pad, '0')
-            $tot = if ($streamTotal -gt 0) { "/$streamTotal" } else { "" }
-            if ($status -eq 'passed') {
-                $streamPassed++
-                Write-Host "  [${idx}${tot}] PASS " -NoNewline -ForegroundColor Green
-                Write-Host "$testName " -NoNewline
-                Write-Host "($duration)" -ForegroundColor DarkGray
-            } elseif ($status -eq 'skipped') {
-                $streamSkipped++
-                Write-Host "  [${idx}${tot}] SKIP " -NoNewline -ForegroundColor Yellow
-                Write-Host "$testName " -NoNewline -ForegroundColor Yellow
-                Write-Host "($duration)" -ForegroundColor DarkGray
-            } else {
-                $streamFailed++
-                Write-Host "  [${idx}${tot}] FAIL " -NoNewline -ForegroundColor Red
-                Write-Host "$testName " -NoNewline -ForegroundColor Red
-                Write-Host "($duration)" -ForegroundColor DarkGray
-            }
+            $status = $Matches[1]; $testName = $Matches[2]; $duration = $Matches[3].Trim()
+        } elseif ($line -cmatch '^\s+(Passed|Failed|Skipped)\s+(.+?)(?:\s+\[([^\[\]]+)\])?\s*$') {
+            $status = $Matches[1].ToLowerInvariant(); $testName = $Matches[2]; $duration = "$($Matches[3])".Trim()
+        } else { continue }
+        $Run.StreamIndex++
+        $idx = "$($Run.StreamIndex)".PadLeft(2, '0')
+        if ($status -eq 'passed') {
+            $Run.StreamPassed++
+            Write-Host "  ${prefix}[${idx}] PASS " -NoNewline -ForegroundColor Green
+            Write-Host "$testName " -NoNewline
+            Write-Host "($duration)" -ForegroundColor DarkGray
+        } elseif ($status -eq 'skipped') {
+            $Run.StreamSkipped++
+            Write-Host "  ${prefix}[${idx}] SKIP " -NoNewline -ForegroundColor Yellow
+            Write-Host "$testName " -NoNewline -ForegroundColor Yellow
+            Write-Host "($duration)" -ForegroundColor DarkGray
+        } else {
+            $Run.StreamFailed++
+            Write-Host "  ${prefix}[${idx}] FAIL " -NoNewline -ForegroundColor Red
+            Write-Host "$testName " -NoNewline -ForegroundColor Red
+            Write-Host "($duration)" -ForegroundColor DarkGray
         }
     }
+}
 
-    $outputReader = $null
+function Complete-TestRun([hashtable]$Run) {
+    $Run.Process.WaitForExit()
+    if ($Run.Container) { Copy-E2eContainerResults $Run }
     try {
-        if ($StreamOutput) {
-            # Keep one shared reader at its current byte position. Re-running Get-Content against
-            # the entire growing log every 500 ms made streaming I/O quadratic for long suites.
-            $outputFile = [System.IO.File]::Open(
-                $tmpOut,
-                [System.IO.FileMode]::OpenOrCreate,
-                [System.IO.FileAccess]::Read,
-                [System.IO.FileShare]::ReadWrite)
-            $outputReader = [System.IO.StreamReader]::new($outputFile)
-        }
-
-        while (-not $proc.HasExited) {
-            if ($outputReader) {
-                while ($null -ne ($line = $outputReader.ReadLine())) {
-                    . $processStreamLine $line
-                }
-            } else {
-                Write-Host "`r  Elapsed: $([int]$sw.Elapsed.TotalSeconds)s   " -NoNewline -ForegroundColor DarkGray
-            }
-            Start-Sleep -Milliseconds 500
-        }
-
-        $proc.WaitForExit()
-        if ($outputReader) {
-            while ($null -ne ($line = $outputReader.ReadLine())) {
-                . $processStreamLine $line
-            }
-        }
+        if ($Run.Stream) { Read-TestRunStream $Run }
     } finally {
-        if ($outputReader) {
-            $outputReader.Dispose()
-        }
+        if ($Run.Reader) { $Run.Reader.Dispose(); $Run.Reader = $null }
     }
     Write-Host ""
-    $sw.Stop()
-    $exitCode = $proc.ExitCode
-    $trxPath = Join-Path $resultDirectory $trxName
+    $Run.Stopwatch.Stop()
+    $exitCode = $Run.Process.ExitCode
+    $resultDirectory = $Run.ResultDirectory
+    $tmpOut = $Run.OutputPath
+    $tmpErr = $Run.ErrorPath
+    $trxPath = Join-Path $resultDirectory $Run.TrxName
     $trxCounters = $null
+    # A container run's verdict is the exit code of `dotnet test` in it plus the TRX copied out: without the TRX
+    # nothing proves the tests ran, so a "successful" container that left none is a failure, not a pass.
+    if ($Run.Container -and -not (Test-Path $trxPath) -and $exitCode -eq 0) {
+        Write-Host "  The container exited 0 but left no TRX ($($Run.ContainerTrx)): the run is not accepted." -ForegroundColor Red
+        $exitCode = 1
+    }
     if (Test-Path $trxPath) {
         Write-Host "  TRX: $trxPath" -ForegroundColor DarkGray
         try {
@@ -821,7 +841,7 @@ function Invoke-TestRun {
         $consoleSkipped = if ($consoleCounters.ContainsKey('skipped')) { $consoleCounters['skipped'] } else { 0 }
         $summaryLine = "Test summary: total: $($consoleCounters['total']); failed: $($consoleCounters['failed']); succeeded: $($consoleCounters['succeeded']); skipped: $consoleSkipped"
     }
-    $expectedTotal = $streamTotal
+    $expectedTotal = 0
     if ($trxCounters) {
         # The live console stream is diagnostic only: redirected output can expose its final line
         # after the process-exit edge and previously made a fully green run look incomplete. TRX is
@@ -832,50 +852,50 @@ function Invoke-TestRun {
         $trxSkipped = $trxTotal - $trxFailed - $trxPassed
         $summaryLine = "Test summary: total: ${trxTotal}; failed: ${trxFailed}; succeeded: ${trxPassed}; skipped: ${trxSkipped}"
         $expectedTotal = $trxTotal
-    } elseif (-not $summaryLine -and $StreamOutput -and ($streamPassed + $streamFailed + $streamSkipped) -gt 0) {
-        $completedTotal = $streamPassed + $streamFailed + $streamSkipped
-        $summaryLine = "Test summary: total: ${completedTotal}; failed: ${streamFailed}; succeeded: ${streamPassed}; skipped: ${streamSkipped}"
+    } elseif (-not $summaryLine -and $Run.Stream -and ($Run.StreamPassed + $Run.StreamFailed + $Run.StreamSkipped) -gt 0) {
+        $completedTotal = $Run.StreamPassed + $Run.StreamFailed + $Run.StreamSkipped
+        $summaryLine = "Test summary: total: ${completedTotal}; failed: $($Run.StreamFailed); succeeded: $($Run.StreamPassed); skipped: $($Run.StreamSkipped)"
     }
-    Write-TestSummary -summaryLine "$summaryLine" -elapsedSec $sw.Elapsed.TotalSeconds
+    Write-TestSummary -summaryLine "$summaryLine" -elapsedSec $Run.Stopwatch.Elapsed.TotalSeconds
 
     $passed = 0; $failed = 0; $total = 0; $skipped = 0
     if ($summaryLine -match "total:\s*(\d+).*?failed:\s*(\d+).*?succeeded:\s*(\d+)") {
         $total  = [int]$Matches[1]; $failed = [int]$Matches[2]; $passed = [int]$Matches[3]
         if ($summaryLine -match "skipped:\s*(\d+)") { $skipped = [int]$Matches[1] }
-    } elseif ($StreamOutput -and ($streamPassed + $streamFailed) -gt 0) {
-        $passed = $streamPassed; $failed = $streamFailed; $skipped = $streamSkipped
-        $total = $streamPassed + $streamFailed + $streamSkipped
+    } elseif ($Run.Stream -and ($Run.StreamPassed + $Run.StreamFailed) -gt 0) {
+        $passed = $Run.StreamPassed; $failed = $Run.StreamFailed; $skipped = $Run.StreamSkipped
+        $total = $Run.StreamPassed + $Run.StreamFailed + $Run.StreamSkipped
     }
     return @{
-        Label = $Label
+        Label = $Run.Label
         ExitCode = $exitCode
         Passed = $passed
         Failed = $failed
         Total = $total
         ExpectedTotal = $expectedTotal
         Skipped = $skipped
+        ElapsedSec = $Run.Stopwatch.Elapsed.TotalSeconds
     }
 }
 
-function Invoke-NodeTestRun {
+function Start-NodeTestRun {
     # PLAN-002 lot 9.T: the JavaScript suites (tests/js/deploy/*.test.mjs, tests/js/*) run in the CI and
     # quality pipelines but never ran locally. Runs `node --test` with the TAP reporter over the given
-    # files and reads its final counters. A skipped test fails the run, like the quality stage that
-    # demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
+    # files; Complete-NodeTestRun reads its final counters. A skipped test fails the run, like the quality
+    # stage that demands `# skipped 0`: the PowerShell-driven suites skip themselves when pwsh is missing.
     param(
         [string[]]$Files,
         [string]$Label
     )
-    Write-Step $Label
+    $unlaunched = {
+        param([string]$why)
+        Write-Host "  $why" -ForegroundColor Red
+        @{ Kind = "node"; Label = $Label; Process = $null; Stream = $false
+           Result = @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0; ElapsedSec = 0 } }
+    }
     $nodeExe = Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
-    if (-not $nodeExe) {
-        Write-Host "  node not found on PATH: the JavaScript suites cannot run." -ForegroundColor Red
-        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
-    }
-    if (-not $Files -or $Files.Count -eq 0) {
-        Write-Host "  No JavaScript test file found." -ForegroundColor Red
-        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
-    }
+    if (-not $nodeExe) { return & $unlaunched "node not found on PATH: the JavaScript suites cannot run." }
+    if (-not $Files -or $Files.Count -eq 0) { return & $unlaunched "No JavaScript test file found." }
     # The deploy-script suites drive POSIX shells (`sh -c`, `bash`), as on the Linux CI agent. A Windows
     # PowerShell PATH has no `sh` and its `bash` is WSL's: put Git for Windows' usr\bin first for the
     # node process only, the same tools a Git Bash prompt resolves.
@@ -887,20 +907,29 @@ function Invoke-NodeTestRun {
         if (Test-Path (Join-Path $candidate "sh.exe")) { $posixBin = $candidate }
     }
     if (-not $posixBin -and -not (Get-Command sh -ErrorAction SilentlyContinue)) {
-        Write-Host "  No POSIX sh found (Git for Windows usr\bin): the deploy-script suites cannot run." -ForegroundColor Red
-        return @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0 }
+        return & $unlaunched "No POSIX sh found (Git for Windows usr\bin): the deploy-script suites cannot run."
     }
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    Push-Location $root
+    $tmpOut = Join-Path $env:TEMP "aetheus_node_test_$(Get-Random).txt"
+    $tmpErr = "$tmpOut.err"
     try {
         if ($posixBin) { $env:PATH = "$posixBin;$savedPath" }
-        $lines = @(& $nodeExe --test --test-reporter=tap @Files 2>&1 | ForEach-Object { "$_" })
-        $exitCode = $LASTEXITCODE
+        $proc = Start-Process -FilePath $nodeExe -ArgumentList (@("--test", "--test-reporter=tap") + $Files) -WorkingDirectory $root -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
     } finally {
         $env:PATH = $savedPath
-        Pop-Location
     }
-    $sw.Stop()
+    return @{
+        Kind = "node"; Label = $Label; Tag = ""; Process = $proc; Stream = $false; Files = $Files
+        OutputPath = $tmpOut; ErrorPath = $tmpErr; Stopwatch = [System.Diagnostics.Stopwatch]::StartNew(); Result = $null
+    }
+}
+
+function Complete-NodeTestRun([hashtable]$Run) {
+    $Run.Process.WaitForExit()
+    $Run.Stopwatch.Stop()
+    $Files = $Run.Files
+    $exitCode = $Run.Process.ExitCode
+    $lines = @(@(Get-Content $Run.OutputPath -ErrorAction SilentlyContinue) + @(Get-Content $Run.ErrorPath -ErrorAction SilentlyContinue) | ForEach-Object { "$_" })
+    Remove-Item $Run.OutputPath, $Run.ErrorPath -Force -ErrorAction SilentlyContinue
     $counters = @{}
     foreach ($line in $lines) {
         if ($line -match '^# (tests|pass|fail|cancelled|skipped|todo) (\d+)\s*$') { $counters[$Matches[1]] = [int]$Matches[2] }
@@ -915,9 +944,9 @@ function Invoke-NodeTestRun {
     # for real in a Linux container instead, and only their passing there accounts for the skips.
     $posixSkips = @($lines | Where-Object { $_ -match '# SKIP needs POSIX file modes' })
     if ($exitCode -eq 0 -and $skipped -gt 0 -and $posixSkips.Count -eq $skipped -and $IsWindows) {
-        $posixFiles = @($Files | Where-Object { Select-String -Path $_ -SimpleMatch 'needs POSIX file modes' -Quiet })
+        $posixFiles = @($Files | Where-Object { Select-String -Path (Join-Path $root $_) -SimpleMatch 'needs POSIX file modes' -Quiet })
         Write-Host "  $skipped POSIX-only JavaScript test(s) skipped on Windows: running $($posixFiles.Count) file(s) in a Linux container..." -ForegroundColor Cyan
-        $relative = @($posixFiles | ForEach-Object { [System.IO.Path]::GetRelativePath($root, $_).Replace('\', '/') })
+        $relative = @($posixFiles | ForEach-Object { $_.Replace('\', '/') })
         $posixLines = @(& docker run --rm --user 1000 -v "${root}:/w" -w /w node:22 node --test --test-reporter=tap @relative 2>&1 | ForEach-Object { "$_" })
         $posixExit = $LASTEXITCODE
         $posixRan = @($posixLines | Where-Object { $_ -match '^# skipped 0\s*$' }).Count -eq 1
@@ -938,19 +967,126 @@ function Invoke-NodeTestRun {
         New-Item -ItemType Directory -Path $failureDirectory -Force | Out-Null
         $failureLog = Join-Path $failureDirectory ("node-test-{0:yyyyMMdd-HHmmssfff}.log" -f (Get-Date))
         $lines | Set-Content -Path $failureLog -Encoding utf8
-        Write-Host "  node --test exited with code $exitCode. Full log: $failureLog" -ForegroundColor Red
+        $tool = if ($Run.Tool) { $Run.Tool } else { "node --test" }
+        Write-Host "  $tool exited with code $exitCode. Full log: $failureLog" -ForegroundColor Red
         $lines | Where-Object { $_ -match '^\s*not ok ' } | Select-Object -First 30 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     }
-    Write-TestSummary -summaryLine "Test summary: total: ${total}; failed: ${failed}; succeeded: ${passed}; skipped: ${skipped}" -elapsedSec $sw.Elapsed.TotalSeconds
+    Write-TestSummary -summaryLine "Test summary: total: ${total}; failed: ${failed}; succeeded: ${passed}; skipped: ${skipped}" -elapsedSec $Run.Stopwatch.Elapsed.TotalSeconds
     return @{
-        Label = $Label
+        Label = $Run.Label
         ExitCode = $exitCode
         Passed = $passed
         Failed = $failed
         Total = $total
         ExpectedTotal = $total
         Skipped = $skipped
+        ElapsedSec = $Run.Stopwatch.Elapsed.TotalSeconds
     }
+}
+
+# Waits for every run, printing the block of each (header, TRX, summary) as soon as that run ends. The
+# blocks come one at a time from this thread, so output never interleaves; a streamed run (E2E) prints its
+# per-test lines as they arrive, each tagged with its shard. Returns the results in the order given.
+function Wait-TestRuns {
+    param(
+        [hashtable[]]$Runs,
+        # Parallel runs have no header printed before they start: print it with the block.
+        [switch]$HeaderWithBlock
+    )
+    $pending = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($run in $Runs) {
+        if ($run.Result) {
+            # Never launched (node or POSIX shell missing): the reason is already printed.
+            if ($HeaderWithBlock) { Write-Step $run.Label }
+        } else { $pending.Add($run) }
+    }
+    $wall = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastStatusAt = 0
+    while ($pending.Count -gt 0) {
+        foreach ($run in @($pending)) {
+            if ($run.Stream) { Read-TestRunStream $run }
+            if (-not $run.Process.HasExited) { continue }
+            if ($HeaderWithBlock) { Write-Step $run.Label }
+            $run.Result = if ($run.Kind -eq "node") { Complete-NodeTestRun $run } else { Complete-TestRun $run }
+            [void]$pending.Remove($run)
+        }
+        if ($pending.Count -eq 0) { break }
+        if ($Runs.Count -eq 1) {
+            if (-not $Runs[0].Stream) {
+                Write-Host "`r  Elapsed: $([int]$wall.Elapsed.TotalSeconds)s   " -NoNewline -ForegroundColor DarkGray
+            }
+        } elseif ($wall.Elapsed.TotalSeconds - $lastStatusAt -ge 30) {
+            $lastStatusAt = $wall.Elapsed.TotalSeconds
+            $names = ($pending | ForEach-Object { $_.Label -replace '^Running ', '' -replace '\.\.\.$', '' }) -join '; '
+            Write-Host "  [parallel $([int]$wall.Elapsed.TotalSeconds)s] still running: $names" -ForegroundColor DarkGray
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return @($Runs | ForEach-Object { $_.Result })
+}
+
+function Start-SuiteRun([hashtable]$Suite) {
+    if ($Suite.Kind -eq "node") { return Start-NodeTestRun -Files $Suite.Files -Label $Suite.Title }
+    if ($Suite.Kind -eq "agent-container") { return Start-AgentSuiteContainerRun -Label $Suite.Title -ExtraArgs $Suite.ExtraArgs }
+    if ($Suite.Kind -eq "js-lint-container") { return Start-JsLintContainerRun -Label $Suite.Title }
+    $parameters = @{ Label = $Suite.Title; Target = $Suite.Target; ExtraArgs = $Suite.ExtraArgs }
+    if ($Suite.ResultDirectory) { $parameters.ResultDirectory = $Suite.ResultDirectory }
+    return Start-TestRun @parameters
+}
+# Runs the unit-level suites and returns @{ Results = ...; Failed = ... } (results in the order given, each
+# named by its suite). All the suites start together and each prints its whole block when it ends, so a failed
+# suite never hides the others: every suite finishes and every failure is named. The suites that start the real
+# back end in Development (Back, Integration) run beside the rest because the back end stages the Windows agent
+# package in the temp directory, not under src/Aetheus.Back/wwwroot/downloads that the source-scanning guards
+# walk (they met a folder that vanished mid-scan, seen: Front.Tests NoSourceFile_NamesTheRemovedLibrary).
+# After a failure the caller skips the stages that follow. With -Sequential (coverage, where coverlet
+# instruments one suite at a time) every suite is its own batch.
+function Invoke-TestSuites {
+    param(
+        [hashtable[]]$Suites,
+        [switch]$Sequential
+    )
+    $results = [System.Collections.Generic.List[hashtable]]::new()
+    $failed = [System.Collections.Generic.List[hashtable]]::new()
+    $wall = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $batches = [System.Collections.Generic.List[object[]]]::new()
+    if ($Sequential) {
+        foreach ($suite in $Suites) { $batches.Add(@($suite)) }
+    } else {
+        $batches.Add(@($Suites))
+    }
+
+    foreach ($batch in $batches) {
+        if ($batch.Count -eq 1) {
+            Write-Step $batch[0].Title
+        } else {
+            Write-Step "Running $($batch.Count) test suites in parallel: $(($batch | ForEach-Object { $_.Name }) -join ', ')"
+        }
+        $runs = @($batch | ForEach-Object { Start-SuiteRun $_ })
+        $outcomes = @(Wait-TestRuns -Runs $runs -HeaderWithBlock:($batch.Count -gt 1))
+        $batchFailed = $false
+        for ($i = 0; $i -lt $batch.Count; $i++) {
+            $outcomes[$i].Name = $batch[$i].Name
+            $results.Add($outcomes[$i])
+            if ($outcomes[$i].ExitCode -ne 0) {
+                $batchFailed = $true
+                $failed.Add($batch[$i])
+                Write-Host "$($batch[$i].Failure)." -ForegroundColor Red
+            }
+        }
+        if ($batchFailed) { break }
+    }
+    $wall.Stop()
+    if ($results.Count -gt 1) {
+        $sum = ($results | ForEach-Object { $_.ElapsedSec } | Measure-Object -Sum).Sum
+        Write-Host ""
+        Write-Host "  Suites finished in $([math]::Round($wall.Elapsed.TotalSeconds, 1))s ($([math]::Round($sum, 1))s if run one after the other):" -ForegroundColor DarkGray
+        foreach ($result in $results) {
+            Write-Host ("    {0,-18} {1,7:N1}s" -f $result.Name, $result.ElapsedSec) -ForegroundColor DarkGray
+        }
+    }
+    return @{ Results = $results.ToArray(); Failed = $failed.ToArray() }
 }
 
 function Invoke-CoverageReport {
@@ -1025,6 +1161,376 @@ function Invoke-CrapGate([string]$GatePath, [string]$CoverageRoot, [string]$Scor
     }
 }
 
+# ---------- E2E browser container ----------
+
+# The E2E suite runs in the browser image the candidate's QA runs it in (deploy/docker/Dockerfile.e2e: the pinned
+# Playwright noble image, Chromium only, user pwuser), never in a browser of the Windows host. The host resolves
+# OmniEurope's system-ui font stack to Segoe UI, the QA image to its own Linux fonts, so a layout measured on the
+# host was not the layout QA measured (candidate 2956). There is no fallback to a host browser: a local result has
+# to be the result the CI gets. The stacks stay on the host; the container reaches them through Docker Desktop's
+# host.docker.internal, which forwards to the host's loopback, where the backend and the front listen.
+$e2eContainerHost = "host.docker.internal"
+# CI builds the suite in Release (aetheus-ci.yaml) and the image refuses an output that is not under bin/Release.
+$e2eImageConfiguration = "Release"
+$e2eCheckoutId = (Split-Path $root -Leaf).ToLowerInvariant() -replace '[^a-z0-9_.-]', '-'
+$e2eImageTag = "aetheus-browser-smoke-local:$e2eCheckoutId"
+$e2eImageContext = Join-Path $root "TestResults\YLaunchE2eImageContext"
+$e2eContainerResults = "/tmp/aetheus-e2e-results"
+# The run-qa-e2e-suite function's runner script (E2eRun.RunnerScript), with two local differences: the console
+# logger is at normal verbosity so the launcher can stream one line per test, and the script exits with the
+# code of `dotnet test` (QA records it in raw-exit-code and grades the TRX itself; this script records it too).
+$e2eRunnerScript = @'
+set -u
+RESULTS=/tmp/aetheus-e2e-results
+rm -rf "$RESULTS"
+mkdir -p "$RESULTS"
+RAW_EXIT=0
+if [ -n "$E2E_TEST_FILTER" ]; then set -- --filter "$E2E_TEST_FILTER"; else set --; fi
+dotnet test "$E2E_TEST_PROJECT" -c Release --no-build --no-restore "$@" \
+  --logger "console;verbosity=normal" --logger "trx;LogFileName=e2e.trx" \
+  --results-directory "$RESULTS" --nologo \
+  -- NUnit.NumberOfTestWorkers="$E2E_WORKERS" || RAW_EXIT=$?
+printf "%s\n" "$RAW_EXIT" > "$RESULTS/raw-exit-code"
+exit "$RAW_EXIT"
+'@ -replace "`r`n", "`n"
+
+# Builds the browser image from deploy/docker/Dockerfile.e2e exactly as CI's "Build the browser smoke image" does:
+# the suite compiled in Release, then a context holding only the root build files, the project, its bin output
+# (the Playwright driver kept for linux-x64 only) and its restore outputs. Docker's layer cache reuses the image
+# while that context is unchanged.
+function Build-E2eRunnerImage {
+    $e2eProject = Join-Path $root "tests\Aetheus.E2E\Aetheus.E2E.csproj"
+    # Always, even after a Release solution build: a build on Windows copies only the Windows Playwright driver,
+    # and the image runs the linux-x64 one (CI builds on Linux, where that is the default).
+    Write-Step "Building the E2E suite in $e2eImageConfiguration with the linux-x64 Playwright driver (as CI does)..."
+    dotnet build $e2eProject --configuration $e2eImageConfiguration -p:PlaywrightPlatform=linux-x64 --maxcpucount:1 -p:UseSharedCompilation=false -nodeReuse:false | Out-Host
+    if ($LASTEXITCODE -ne 0) { Write-Host "  E2E suite build failed." -ForegroundColor Red; return $false }
+    Write-Step "Building the QA browser image $e2eImageTag (deploy\docker\Dockerfile.e2e)..."
+    if (Test-Path -LiteralPath $e2eImageContext) { Remove-Item -LiteralPath $e2eImageContext -Recurse -Force }
+    $contextProject = Join-Path $e2eImageContext "tests\Aetheus.E2E"
+    $contextBin = Join-Path $contextProject "bin\$e2eImageConfiguration"
+    $contextObj = Join-Path $contextProject "obj"
+    New-Item -ItemType Directory -Path $contextBin, $contextObj -Force | Out-Null
+    foreach ($file in @("Directory.Build.props", "Directory.Packages.props", "NuGet.config")) {
+        Copy-Item -LiteralPath (Join-Path $root $file) -Destination $e2eImageContext
+    }
+    Copy-Item -LiteralPath $e2eProject -Destination $contextProject
+    $suiteOutput = Join-Path $root "tests\Aetheus.E2E\bin\$e2eImageConfiguration\net10.0"
+    if (-not (Test-Path -LiteralPath (Join-Path $suiteOutput "Aetheus.E2E.dll"))) {
+        Write-Host "  The E2E suite output is missing: $suiteOutput" -ForegroundColor Red
+        return $false
+    }
+    Copy-Item -LiteralPath $suiteOutput -Destination $contextBin -Recurse
+    Get-ChildItem -LiteralPath (Join-Path $contextBin "net10.0\.playwright\node") -Directory |
+        Where-Object Name -ne "linux-x64" | Remove-Item -Recurse -Force
+    if (-not (Test-Path -LiteralPath (Join-Path $contextBin "net10.0\.playwright\node\linux-x64\node"))) {
+        Write-Host "  The Playwright driver for linux-x64 is missing from the E2E suite output." -ForegroundColor Red
+        return $false
+    }
+    $suiteObj = Join-Path $root "tests\Aetheus.E2E\obj"
+    Copy-Item -LiteralPath (Join-Path $suiteObj "project.assets.json") -Destination $contextObj
+    Get-ChildItem -LiteralPath $suiteObj -File | Where-Object { $_.Name -like "*.nuget.g.props" -or $_.Name -like "*.nuget.g.targets" } |
+        Copy-Item -Destination $contextObj
+    $revision = (& git -C $root rev-parse HEAD 2>$null | Select-Object -First 1)
+    $buildOutput = & docker build --label "org.opencontainers.image.revision=$revision" `
+        -f (Join-Path $root "deploy\docker\Dockerfile.e2e") -t $e2eImageTag $e2eImageContext 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $buildOutput | Select-Object -Last 40 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        Write-Host "  docker build of the QA browser image failed (exit $LASTEXITCODE)." -ForegroundColor Red
+        return $false
+    }
+    Write-Host "  Browser image ready: $e2eImageTag ($(& docker image inspect --format '{{.Id}}' $e2eImageTag))." -ForegroundColor Green
+    return $true
+}
+
+# Starts one E2E run in a container of the browser image, against one host stack: the container is created with
+# the environment QA's suite container gets (the URLs as the container reaches the stack, the admin account,
+# the workers, the filter, the project and results paths), the runner script is copied in, and `docker start -a`
+# streams its output to the launcher like a host `dotnet test` would. Complete-TestRun copies the results out of
+# the stopped container (as QA does with docker cp) and removes it.
+function Start-E2eContainerRun {
+    param([hashtable]$Stack, [string[]]$ExtraArgs = @(), [string]$Label, [string]$Tag = "")
+    $resultDirectory = Join-Path $root "TestResults\Launcher"
+    New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null
+    $safeLabel = ($Label -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant()
+    $stamp = "{0:yyyyMMdd-HHmmssfff}" -f (Get-Date)
+    $trxName = "$safeLabel-$stamp.trx"
+    $container = "aetheus-ylaunch-e2e-$e2eCheckoutId-$($Stack.Index)"
+    & docker rm -f $container 2>$null | Out-Null
+    $filter = if ($ExtraArgs.Count -ge 2 -and $ExtraArgs[0] -eq "--filter") { $ExtraArgs[1] } else { "" }
+    $workers = if ($env:AETHEUS_E2E_WORKERS) { $env:AETHEUS_E2E_WORKERS } else { "1" }
+    $environment = [ordered]@{
+        E2E_FRONTEND_URL = $Stack.ContainerFrontUrl
+        E2E_BACKEND_URL = $Stack.ContainerApiBaseUrl
+        E2E_WORKERS = $workers
+        E2E_TEST_FILTER = $filter
+        E2E_TEST_PROJECT = "tests/Aetheus.E2E/Aetheus.E2E.csproj"
+        AETHEUS_E2E_RESULTS_DIR = $e2eContainerResults
+        E2E_REQUIRE_FRONTEND_SECURITY_HEADERS = $env:E2E_REQUIRE_FRONTEND_SECURITY_HEADERS
+        AETHEUS_PAGE_RULES_SWEEP = $env:AETHEUS_PAGE_RULES_SWEEP
+        # The manual sweep's report and proposed baseline land with the results, which are copied out.
+        AETHEUS_PAGE_RULES_OUTPUT = "$e2eContainerResults/page-rules"
+        DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+        DOTNET_NOLOGO = "1"
+    }
+    # Values a developer may set on the host for a run; QA sets its own.
+    foreach ($name in @("E2E_ADMIN_USER", "E2E_ADMIN_EMAIL", "E2E_ADMIN_PASSWORD", "E2E_PRESERVE_DATABASE", "E2E_PREVIOUS_PAYLOAD_ONLY", "E2E_APP_READY_TIMEOUT_MS")) {
+        $value = [Environment]::GetEnvironmentVariable($name)
+        if ($value) { $environment[$name] = $value }
+    }
+    $createArgs = @("create", "--name", $container)
+    foreach ($key in $environment.Keys) { $createArgs += @("-e", "$key=$($environment[$key])") }
+    $createArgs += @($e2eImageTag, "sh", "/tmp/ylaunch-e2e-run.sh")
+    $shown = ($createArgs | ForEach-Object { $_ -replace '^(E2E_ADMIN_PASSWORD=).+$', '$1***' }) -join ' '
+    Write-Host "  Container: docker $shown" -ForegroundColor DarkGray
+    & docker @createArgs | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "docker create of the E2E container $container failed (exit $LASTEXITCODE)." }
+    $scriptFile = Join-Path $env:TEMP "ylaunch-e2e-run-$(Get-Random).sh"
+    [System.IO.File]::WriteAllText($scriptFile, $e2eRunnerScript)
+    & docker cp $scriptFile "${container}:/tmp/ylaunch-e2e-run.sh" | Out-Null
+    $copied = $LASTEXITCODE
+    Remove-Item -LiteralPath $scriptFile -Force -ErrorAction SilentlyContinue
+    if ($copied -ne 0) { throw "docker cp of the E2E runner script into $container failed (exit $copied)." }
+
+    $tmpOut = Join-Path $env:TEMP "aetheus_test_$(Get-Random).txt"
+    $tmpErr = "$tmpOut.err"
+    $proc = Start-Process -FilePath "docker" -ArgumentList @("start", "-a", $container) -WorkingDirectory $root `
+        -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    return @{
+        Kind = "dotnet"; Label = $Label; Tag = $Tag; Process = $proc; Stream = $true
+        OutputPath = $tmpOut; ErrorPath = $tmpErr; ResultDirectory = $resultDirectory; TrxName = $trxName
+        Container = $container; ContainerEvidence = Join-Path $resultDirectory "$safeLabel-$stamp"
+        ContainerResultsPath = $e2eContainerResults; ContainerTrx = "e2e.trx"
+        Stopwatch = [System.Diagnostics.Stopwatch]::StartNew(); Reader = $null
+        StreamIndex = 0; StreamPassed = 0; StreamFailed = 0; StreamSkipped = 0; Result = $null
+    }
+}
+
+# The stopped container's results (TRX, raw exit code, accessibility SARIF), copied out as QA copies them; the TRX
+# is then put where Complete-TestRun reads it, and the container removed. Shared by the E2E and the agent-suite
+# containers: the run names its results folder inside the container and the TRX it holds.
+function Copy-E2eContainerResults([hashtable]$Run) {
+    New-Item -ItemType Directory -Path $Run.ContainerEvidence -Force | Out-Null
+    & docker cp "$($Run.Container):$($Run.ContainerResultsPath)/." $Run.ContainerEvidence 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  docker cp of the results out of $($Run.Container) failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    }
+    $trx = Join-Path $Run.ContainerEvidence $Run.ContainerTrx
+    if (Test-Path -LiteralPath $trx) { Copy-Item -LiteralPath $trx -Destination (Join-Path $Run.ResultDirectory $Run.TrxName) }
+    if ($Run.CopyCoverage) {
+        # coverlet.MTP names the sources as the container saw them (/work/...): rewrite that prefix to this checkout so
+        # the merged report and the CRAP gate read the same files whichever OS ran the suite.
+        $hostRoot = ($root.TrimEnd('\', '/') -replace '\\', '/') + "/"
+        foreach ($report in @(Get-ChildItem -LiteralPath $Run.ContainerEvidence -Filter "coverage.cobertura.*.xml" -File -ErrorAction SilentlyContinue)) {
+            $text = [System.IO.File]::ReadAllText($report.FullName).Replace("$agentSuiteWorkDir/", $hostRoot)
+            [System.IO.File]::WriteAllText((Join-Path $Run.ResultDirectory $report.Name), $text, [System.Text.UTF8Encoding]::new($false))
+        }
+    }
+    if ($Run.PlatformFile) {
+        $platform = Join-Path $Run.ContainerEvidence $Run.PlatformFile
+        if (Test-Path -LiteralPath $platform) { Write-Host "  Ran in: $((Get-Content -LiteralPath $platform -Raw).Trim())" -ForegroundColor Cyan }
+    }
+    Write-Host "  Container results: $($Run.ContainerEvidence)" -ForegroundColor DarkGray
+    & docker rm -f $Run.Container 2>$null | Out-Null
+}
+
+# ---------- Agent suite container ----------
+
+# The agent unit suite (tests/Aetheus.Agent.Core.Tests) runs on Linux in the CI, and several of its tests read the
+# machine they run on (the real /etc/apache2, file modes, POSIX shells): on the Windows host it passed while the
+# candidate 2961 CI failed it. The launcher therefore runs it in a Linux container of the SDK image the release builds
+# use (deploy/docker/Dockerfile.back, the build-source stage), in Release like the CI, and never on the host. There is
+# no fallback: without a usable Docker the suite does not run and the launcher fails.
+#
+# The checkout is mounted read-only and copied into the container's own filesystem (bin/obj/.git and the heavy
+# folders left out), so the build of the container never touches the host's Windows bin/obj or restore outputs.
+# The NuGet cache is a named volume, so only the first run downloads the packages.
+$agentSuiteWorkDir = "/work"
+$agentSuiteResults = "/tmp/aetheus-agent-results"
+$agentSuiteNuGetVolume = "aetheus-ylaunch-nuget"
+$agentSuiteRunnerScript = @'
+set -u
+RESULTS=/tmp/aetheus-agent-results
+rm -rf "$RESULTS" /work /tmp/src.tar
+mkdir -p "$RESULTS" /work
+{ uname -sr; dotnet --version; } | tr '\n' ' ' > "$RESULTS/platform.txt"
+echo "Copying the checkout into the container..."
+# wwwroot/downloads holds the agent packages -ta publishes while this copy runs (git-ignored, not read by the suite):
+# a package still being written cannot be opened and would fail the copy.
+tar -C /src -cf /tmp/src.tar --exclude=.git --exclude=bin --exclude=obj --exclude=node_modules \
+  --exclude=./TestResults --exclude=./.claude/worktrees --exclude=./.worktrees --exclude=./src/Aetheus.Back/wwwroot/downloads . || { echo "Could not read the checkout." >&2; exit 1; }
+tar -C /work -xf /tmp/src.tar || { echo "Could not copy the checkout." >&2; exit 1; }
+rm -f /tmp/src.tar
+# A Linux checkout (the CI's) holds LF where this Windows checkout holds CRLF (.gitattributes: text=auto), so the
+# copy gets the Linux line endings; the files .gitattributes forces to CRLF (*.ps1, *.cmd, *.bat) keep them. Without
+# it the C# raw-string scripts of the tests carry a CR and the shell refuses them.
+grep -rIlZ -e "$(printf '\r')" /work --exclude='*.ps1' --exclude='*.cmd' --exclude='*.bat' | xargs -0 -r sed -i 's/\r$//'
+cd /work
+RAW_EXIT=0
+dotnet test --project tests/Aetheus.Agent.Core.Tests --configuration Release --no-progress \
+  --report-trx --report-trx-filename agent.trx --results-directory "$RESULTS" $AGENT_TEST_ARGS || RAW_EXIT=$?
+printf "%s\n" "$RAW_EXIT" > "$RESULTS/raw-exit-code"
+exit "$RAW_EXIT"
+'@ -replace "`r`n", "`n"
+
+# The SDK image reference (tag and digest) is read from the release Dockerfile, so the suite follows the pin the
+# release builds use and cannot drift from it.
+function Get-AgentSuiteImage {
+    $dockerfile = Join-Path $root "deploy\docker\Dockerfile.back"
+    $match = Select-String -LiteralPath $dockerfile -Pattern '^FROM\s+(mcr\.microsoft\.com/dotnet/sdk:\S+)\s+AS\s+build-source\s*$' | Select-Object -First 1
+    if (-not $match) { return $null }
+    return $match.Matches[0].Groups[1].Value
+}
+
+# A run that could not start: reported as a failed suite (exit 1, no test), never replaced by a host run.
+function New-UnlaunchedAgentSuiteRun([string]$Label, [string]$Why) {
+    Write-Host "  $Why" -ForegroundColor Red
+    Write-Host "  The agent unit tests run only in a Linux container, as the CI runs them: they are NOT run on the Windows host." -ForegroundColor Red
+    return @{ Kind = "dotnet"; Label = $Label; Process = $null; Stream = $false
+              Result = @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0; ElapsedSec = 0 } }
+}
+
+function Start-AgentSuiteContainerRun {
+    param([string]$Label, [string[]]$ExtraArgs = @())
+    $dockerOs = $null
+    try { $dockerOs = (& docker version --format '{{.Server.Os}}' 2>$null | Select-Object -First 1) } catch { $dockerOs = $null }
+    if ("$dockerOs".Trim() -ne "linux") {
+        return New-UnlaunchedAgentSuiteRun $Label "Docker did not report a running Linux engine (docker version --format '{{.Server.Os}}' returned '$dockerOs'): is Docker running in Linux containers mode?"
+    }
+    $image = Get-AgentSuiteImage
+    if (-not $image) {
+        return New-UnlaunchedAgentSuiteRun $Label "The SDK image of the agent suite was not found in deploy\docker\Dockerfile.back (the build-source stage)."
+    }
+    $resultDirectory = if ($Coverage) { $coverageDir } else { Join-Path $root "TestResults\Launcher" }
+    New-Item -ItemType Directory -Path $resultDirectory -Force | Out-Null
+    $safeLabel = ($Label -replace '[^A-Za-z0-9]+', '-').Trim('-').ToLowerInvariant()
+    $stamp = "{0:yyyyMMdd-HHmmssfff}" -f (Get-Date)
+    $trxName = "$safeLabel-$stamp.trx"
+    $container = "aetheus-ylaunch-agent-$e2eCheckoutId"
+    & docker rm -f $container 2>$null | Out-Null
+    $createArgs = @("create", "--name", $container,
+                    "--mount", "type=bind,src=$root,dst=/src,readonly",
+                    "-v", "${agentSuiteNuGetVolume}:/nuget",
+                    "-e", "NUGET_PACKAGES=/nuget",
+                    "-e", "AGENT_TEST_ARGS=$($ExtraArgs -join ' ')",
+                    "-e", "DOTNET_CLI_TELEMETRY_OPTOUT=1", "-e", "DOTNET_NOLOGO=1",
+                    $image, "sh", "/tmp/ylaunch-agent-run.sh")
+    Write-Host "  Container: docker $($createArgs -join ' ')" -ForegroundColor DarkGray
+    & docker @createArgs | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        return New-UnlaunchedAgentSuiteRun $Label "docker create of the agent suite container failed (exit $LASTEXITCODE; is the image $image pullable?)."
+    }
+    $scriptFile = Join-Path $env:TEMP "ylaunch-agent-run-$(Get-Random).sh"
+    [System.IO.File]::WriteAllText($scriptFile, $agentSuiteRunnerScript)
+    & docker cp $scriptFile "${container}:/tmp/ylaunch-agent-run.sh" | Out-Null
+    $copied = $LASTEXITCODE
+    Remove-Item -LiteralPath $scriptFile -Force -ErrorAction SilentlyContinue
+    if ($copied -ne 0) {
+        & docker rm -f $container 2>$null | Out-Null
+        return New-UnlaunchedAgentSuiteRun $Label "docker cp of the runner script into $container failed (exit $copied)."
+    }
+    $tmpOut = Join-Path $env:TEMP "aetheus_test_$(Get-Random).txt"
+    $tmpErr = "$tmpOut.err"
+    $proc = Start-Process -FilePath "docker" -ArgumentList @("start", "-a", $container) -WorkingDirectory $root `
+        -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    return @{
+        Kind = "dotnet"; Label = $Label; Tag = ""; Process = $proc; Stream = $false
+        OutputPath = $tmpOut; ErrorPath = $tmpErr; ResultDirectory = $resultDirectory; TrxName = $trxName
+        Container = $container; ContainerEvidence = Join-Path $resultDirectory "$safeLabel-$stamp"
+        ContainerResultsPath = $agentSuiteResults; ContainerTrx = "agent.trx"
+        CopyCoverage = ($ExtraArgs -contains "--coverlet"); PlatformFile = "platform.txt"
+        Stopwatch = [System.Diagnostics.Stopwatch]::StartNew(); Reader = $null
+        StreamIndex = 0; StreamPassed = 0; StreamFailed = 0; StreamSkipped = 0; Result = $null
+    }
+}
+
+# ---------- JavaScript lint container ----------
+
+# The quality pipeline lints the repository with the project's locked ESLint (scanner-manifest.json, entry
+# "eslint"), installed by `npm ci` from the committed package-lock.json and run in the pinned Node image
+# (candidate 2967, R-48: ESLint 10.13.0 crashed on load in the pipeline while the workstation's own, older,
+# node_modules linted fine, so no local run ever exercised the locked tool). This suite does the same thing:
+# a clean `npm ci` of the committed lock in the manifest's image, then `eslint .` with the same config and the
+# same JSON report as the scanner. A crash (a tool that does not load) and any finding both fail it. The
+# checkout is mounted read-only; only the JavaScript sources and the npm manifests are copied into the
+# container, so the host's node_modules never take part. The npm cache is a named volume. There is no host
+# fallback: without a usable Docker the suite fails.
+$jsLintNpmVolume = "aetheus-ylaunch-npm"
+$jsLintRunnerScript = @'
+set -u
+rm -rf /work /tmp/js-files.lst
+mkdir -p /work
+cd /src
+find . \( -name node_modules -o -name .git -o -name bin -o -name obj -o -name TestResults -o -name .worktrees -o -path ./.claude/worktrees \) -prune -o \
+  -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \
+  -o -name package.json -o -name package-lock.json \) -print > /tmp/js-files.lst
+tar -cf - -T /tmp/js-files.lst | tar -C /work -xf - || { echo "Could not copy the JavaScript sources." >&2; exit 1; }
+cd /work
+node --version
+echo "npm ci from the committed package-lock.json..."
+npm ci --ignore-scripts --no-audit --no-fund --prefer-offline > /tmp/npm-ci.log 2>&1 || {
+  tail -n 30 /tmp/npm-ci.log; echo "not ok - npm ci of the committed lock failed"; printf '# tests 1\n# pass 0\n# fail 1\n# skipped 0\n'; exit 1; }
+node -e "for (const p of ['eslint','@eslint/plugin-kit','@eslint/core']) console.log(p, require('/work/node_modules/'+p+'/package.json').version)"
+RAW=0
+node /work/node_modules/eslint/bin/eslint.js . --format json --output-file /tmp/eslint-report.json || RAW=$?
+if [ "$RAW" -eq 0 ]; then
+  echo "ok - eslint: no finding"; printf '# tests 1\n# pass 1\n# fail 0\n# skipped 0\n'; exit 0
+fi
+if [ "$RAW" -eq 1 ] && [ -s /tmp/eslint-report.json ]; then
+  node -e "const r=require('/tmp/eslint-report.json');let e=0,w=0;for(const f of r)for(const m of f.messages){m.severity>1?e++:w++;console.log(f.filePath.replace('/work/','')+':'+m.line+' '+m.ruleId+' '+m.message)}console.log('errors '+e+', warnings '+w)" | head -n 40
+  echo "not ok - eslint reported findings"
+else
+  echo "not ok - eslint crashed or did not run (exit $RAW): the locked tool does not load"
+fi
+printf '# tests 1\n# pass 0\n# fail 1\n# skipped 0\n'
+exit 1
+'@ -replace "`r`n", "`n"
+
+# The image the quality pipeline's ESLint step runs in, read from the scanner manifest so the suite follows its pin.
+function Get-JsLintImage {
+    $manifest = Join-Path $root "scanner-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifest)) { return $null }
+    $entry = @((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).scanners | Where-Object { $_.key -eq "eslint" }) | Select-Object -First 1
+    if (-not $entry -or [string]::IsNullOrWhiteSpace($entry.image)) { return $null }
+    return [string]$entry.image
+}
+
+# A run that could not start: reported as a failed suite (exit 1, no test), never replaced by a host run.
+function New-UnlaunchedJsLintRun([string]$Label, [string]$Why) {
+    Write-Host "  $Why" -ForegroundColor Red
+    Write-Host "  The locked ESLint runs only in the pipeline's Node container: it is NOT run on the Windows host." -ForegroundColor Red
+    return @{ Kind = "node"; Label = $Label; Process = $null; Stream = $false
+              Result = @{ Label = $Label; ExitCode = 1; Passed = 0; Failed = 0; Total = 0; ExpectedTotal = 0; Skipped = 0; ElapsedSec = 0 } }
+}
+
+function Start-JsLintContainerRun {
+    param([string]$Label)
+    $dockerOs = $null
+    try { $dockerOs = (& docker version --format '{{.Server.Os}}' 2>$null | Select-Object -First 1) } catch { $dockerOs = $null }
+    if ("$dockerOs".Trim() -ne "linux") {
+        return New-UnlaunchedJsLintRun $Label "Docker did not report a running Linux engine (docker version --format '{{.Server.Os}}' returned '$dockerOs'): is Docker running in Linux containers mode?"
+    }
+    $image = Get-JsLintImage
+    if (-not $image) { return New-UnlaunchedJsLintRun $Label "The ESLint image was not found in scanner-manifest.json (entry 'eslint')." }
+    $scriptFile = Join-Path $env:TEMP "ylaunch-jslint-run-$(Get-Random).sh"
+    [System.IO.File]::WriteAllText($scriptFile, $jsLintRunnerScript)
+    $tmpOut = Join-Path $env:TEMP "aetheus_node_test_$(Get-Random).txt"
+    $tmpErr = "$tmpOut.err"
+    $container = "aetheus-ylaunch-jslint-$e2eCheckoutId"
+    & docker rm -f $container 2>$null | Out-Null
+    $runArgs = @("run", "--rm", "-i", "--name", $container,
+                 "--mount", "type=bind,src=$root,dst=/src,readonly",
+                 "-v", "${jsLintNpmVolume}:/npm-cache", "-e", "npm_config_cache=/npm-cache",
+                 $image, "sh", "-s")
+    Write-Host "  Container: docker $($runArgs -join ' ')" -ForegroundColor DarkGray
+    $proc = Start-Process -FilePath "docker" -ArgumentList $runArgs -WorkingDirectory $root -NoNewWindow -PassThru `
+        -RedirectStandardInput $scriptFile -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+    return @{
+        Kind = "node"; Label = $Label; Tool = "ESLint in the pipeline's Node container"; Tag = ""; Process = $proc; Stream = $false; Files = @()
+        OutputPath = $tmpOut; ErrorPath = $tmpErr; Stopwatch = [System.Diagnostics.Stopwatch]::StartNew(); Result = $null
+    }
+}
+
 # ---------- E2E category helpers ----------
 
 # One entry per feature [Category(...)] on the E2E fixtures. Every fixture also carries the broad
@@ -1046,8 +1552,18 @@ $E2eCategories = @(
     'Accessibility',
     'ResponsiveAdmin',
     'ProductionSmoke',
-    'RollbackRelevant'
+    'RollbackRelevant',
+    'PageRules'
 )
+
+# With YLAUNCH_E2E_SHARDS=2 a full E2E run is two shards at the same time, each on its own stack. Shard 1 takes these categories,
+# shard 2 takes every test that is not in them, so a fixture or a category added later is run without
+# touching this list and no test can fall between the two. PageRules is one fixture of four long sweeps;
+# the TRX of 2026-10-27 (90 tests, 516 s of test time) puts it at 245 s against 271 s for all the rest.
+$E2eShardOneCategories = @('PageRules')
+# Categories whose sweep runs only when named (owner decision of 2026-10-27): the sweep of every page is run by hand, from
+# time to time (-tec PageRules), never by -ta nor by the candidate (the test skips itself without AETHEUS_PAGE_RULES_SWEEP=1).
+$E2eManualCategories = @('PageRules')
 
 function Resolve-E2eCategories([string]$filter) {
     if ($filter -eq 'all' -or $filter -eq '*') { return @() }
@@ -1110,10 +1626,90 @@ function Wait-ForEndpoint([string]$url, [string]$label, [int]$maxSeconds = 60) {
     return $false
 }
 
+# One E2E stack: a backend and a frontend on their own ports, from their own runtime snapshots, against
+# their own database. Index 1 is the launcher's own stack (the ports computed above, the snapshots of
+# Section 3, the database aetheus_e2e). Each further index listens another 1000 ports up (index 2 of a
+# default test run: back 7301/7300, front 7401), runs from copies of the snapshots (the backend writes its
+# logs and key ring beside its assemblies, the static server rewrites its appsettings.json at start) and
+# keeps its file stores and its database apart, so two stacks never share a port, a database or a file.
+function New-E2eStack([int]$Index) {
+    $offset = ($Index - 1) * $e2eStackPortOffset
+    $https = $backHttpsPort + $offset
+    $http = $backHttpPort + $offset
+    $front = $frontPort + $offset
+    $first = $Index -eq 1
+    return @{
+        Index = $Index
+        Name = "shard-$Index"
+        BackHttpsPort = $https
+        BackHttpPort = $http
+        FrontPort = $front
+        BackUrl = "https://localhost:${https}/health/live"
+        FrontUrl = "https://localhost:$front"
+        ApiBaseUrl = "https://localhost:$https"
+        BackAspUrls = "https://localhost:${https};http://localhost:$http"
+        FrontAspUrls = "https://localhost:$front"
+        CorsFrontUrl = "https://localhost:$front"
+        # The same front and API as the E2E browser container reaches them (Start-E2eContainerRun): over plain
+        # HTTP, as QA reaches its stack (http://<front>:8080). Over HTTPS the container's Chromium refuses the
+        # service worker of a host the development certificate does not cover ("An SSL certificate error
+        # occurred when fetching the script"), which no test ignores. The front gets an HTTP listener one port
+        # below its HTTPS one, as the backend has.
+        FrontHttpPort = $front - 1
+        ContainerFrontUrl = "http://${e2eContainerHost}:$($front - 1)"
+        ContainerApiBaseUrl = "http://${e2eContainerHost}:$http"
+        PublicApiUrl = if ($first) { $backPublicApiUrl } else { "https://localhost:$https" }
+        DatabaseName = if ($first) { "aetheus_e2e" } else { "aetheus_s${Index}_e2e" }
+        ConnString = if ($first) { $e2eConnString } else { $e2eConnString.Replace("Database=aetheus_e2e;", "Database=aetheus_s${Index}_e2e;") }
+        BackSnapshotDir = if ($first) { $backSnapshotDir } else { Join-Path $root "TestResults\YLaunchE2eShard${Index}Back" }
+        FrontHostDir = if ($first) { $frontSnapshotHostDir } else { Join-Path $root "TestResults\YLaunchE2eShard${Index}Front" }
+        DataRoot = if ($first) { $null } else { Join-Path $root "TestResults\YLaunchE2eShard${Index}Data" }
+    }
+}
+
+# A stack after the first has its own database in the dedicated E2E PostgreSQL container: the name ends in
+# _e2e, which is all the guarded reset endpoint needs, and the destructive reset only ever sees that one.
+function Initialize-E2eStack([hashtable]$Stack) {
+    if ($Stack.Index -eq 1) { return }
+    $database = $Stack.DatabaseName
+    $exists = & docker exec aetheus-e2e-database psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$database'" 2>$null
+    if ("$exists".Trim() -ne "1") {
+        & docker exec aetheus-e2e-database psql -U postgres -d postgres -c "CREATE DATABASE $database" | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the E2E database $database." }
+    }
+    $null = Copy-RuntimeSnapshot (Split-Path $Stack.BackSnapshotDir -Leaf) $backSnapshotDir "Aetheus.Back.dll"
+    $null = Copy-RuntimeSnapshot (Split-Path $Stack.FrontHostDir -Leaf) $frontSnapshotHostDir "StaticServer.dll"
+    if (Test-Path -LiteralPath $Stack.DataRoot) { Remove-Item -LiteralPath $Stack.DataRoot -Recurse -Force }
+    New-Item -ItemType Directory -Path $Stack.DataRoot -Force | Out-Null
+}
+
 function Start-Servers {
-    param([switch]$ForE2e)
+    param(
+        [switch]$ForE2e,
+        # An E2E shard's own stack (New-E2eStack): its ports, runtime snapshots, database and data directories.
+        # Without it the stack is the launcher's own, exactly as before. Only the snapshot branch honours it.
+        [hashtable]$Stack
+    )
 
     $jobs = @{}
+    if (-not $Stack) { $Stack = New-E2eStack -Index 1 }
+    $stackBackHttpsPort = $Stack.BackHttpsPort
+    $stackBackAspUrls = $Stack.BackAspUrls
+    $stackFrontAspUrls = $Stack.FrontAspUrls
+    $stackCorsFrontUrl = $Stack.CorsFrontUrl
+    $stackPublicApiUrl = $Stack.PublicApiUrl
+    $stackApiBaseUrl = $Stack.ApiBaseUrl
+    if ($ForE2e) {
+        # The browser runs in the QA browser container: the WebAssembly front calls the API by the name the
+        # container reaches it by, and the backend accepts that front origin.
+        $stackCorsFrontUrl = $Stack.ContainerFrontUrl
+        $stackApiBaseUrl = $Stack.ContainerApiBaseUrl
+        $stackFrontAspUrls = "$($Stack.FrontAspUrls);http://localhost:$($Stack.FrontHttpPort)"
+    }
+    $stackConnString = $Stack.ConnString
+    $stackBackSnapshotDir = $Stack.BackSnapshotDir
+    $stackFrontHostDir = $Stack.FrontHostDir
+    $stackDataRoot = $Stack.DataRoot
     # Coexisting worktrees intentionally share the development database. Keep every
     # database-backed file store in the same per-user location as well; otherwise a
     # backend started from another worktree can observe valid artifact rows through
@@ -1132,7 +1728,7 @@ function Start-Servers {
     # which is protected by the production "login" rate limiter (5 req / IP /
     # minute). From a single loopback IP the suite blows past that after the
     # first few tests and the backend returns 429, which the UI renders as
-    # "Invalid username or password." Disable the limiter for the E2E backend
+    # "Invalid e-mail address or password." Disable the limiter for the E2E backend
     # only -this is exactly the documented `RateLimiting:Disabled=true`
     # mechanism the integration-test fixtures already use, and it does NOT
     # affect normal dev runs or production behavior.
@@ -1202,7 +1798,7 @@ function Start-Servers {
                 return $jobs
             }
         } else {
-            Write-Step "Starting Backend snapshot (https://localhost:$backHttpsPort)..."
+            Write-Step "Starting Backend snapshot (https://localhost:$stackBackHttpsPort)..."
             $jobs.BackJob = Start-Job -InitializationScript $dotnetJobInitialization -ScriptBlock {
                 if ($using:e2eEnv) {
                     $env:RateLimiting__Disabled = "true"
@@ -1214,31 +1810,38 @@ function Start-Servers {
                     $env:AiTasks__ModelListRefresh__Enabled = "false"
                     # Point the E2E backend at the isolated ephemeral DB (:15433); env vars override
                     # appsettings, so the dev DB (:15432) is never opened. Seed demo data too.
-                    $env:ConnectionStrings__Default = $using:e2eConnString
+                    $env:ConnectionStrings__Default = $using:stackConnString
                     $env:Seed__Demo = "true"
+                    # A second E2E stack shares the content root with the first: its file stores (artifacts,
+                    # packages, git repositories) live in its own directory, so the stacks never share files.
+                    if ($using:stackDataRoot) {
+                        $env:ArtifactStorage__BasePath = Join-Path $using:stackDataRoot "artifacts"
+                        $env:PackageRegistry__BasePath = Join-Path $using:stackDataRoot "packages"
+                        $env:GitLight__RepositoriesPath = Join-Path $using:stackDataRoot "git-repos"
+                    }
                 } else {
                     # Local conformance data remains visible in the ordinary development control plane.
                     $env:ArtifactStorage__BasePath = Join-Path $using:sharedDevelopmentDataRoot "artifacts"
                     $env:PackageRegistry__BasePath = Join-Path $using:sharedDevelopmentDataRoot "packages"
                     $env:GitLight__RepositoriesPath = Join-Path $using:sharedDevelopmentDataRoot "git-repos"
-                    $env:GitLight__CloneBaseUrl = "https://host.docker.internal:$using:backHttpsPort"
+                    $env:GitLight__CloneBaseUrl = "https://host.docker.internal:$using:stackBackHttpsPort"
                     $env:Seed__ConformanceToto = "true"
-                    $env:AppMonitoring__IngestBaseUrl = "https://host.docker.internal:$using:backHttpsPort"
+                    $env:AppMonitoring__IngestBaseUrl = "https://host.docker.internal:$using:stackBackHttpsPort"
                 }
                 $env:ASPNETCORE_ENVIRONMENT = "Development"
-                $env:ASPNETCORE_URLS = $using:backAspUrls
-                $env:Cors__FrontendUrl = $using:corsFrontUrl
-                $env:Aetheus__PublicApiBaseUrl = $using:backPublicApiUrl
+                $env:ASPNETCORE_URLS = $using:stackBackAspUrls
+                $env:Cors__FrontendUrl = $using:stackCorsFrontUrl
+                $env:Aetheus__PublicApiBaseUrl = $using:stackPublicApiUrl
                 Set-Location $using:backDir
-                dotnet (Join-Path $using:backSnapshotDir "Aetheus.Back.dll") 2>&1; "##PROMEXIT##$LASTEXITCODE"
+                dotnet (Join-Path $using:stackBackSnapshotDir "Aetheus.Back.dll") 2>&1; "##PROMEXIT##$LASTEXITCODE"
             }
-            Write-Step "Starting Frontend snapshot (https://localhost:$frontPort)..."
+            Write-Step "Starting Frontend snapshot ($($Stack.FrontUrl))..."
             $jobs.FrontJob = Start-Job -InitializationScript $dotnetJobInitialization -ScriptBlock {
                 $env:ASPNETCORE_ENVIRONMENT = "Development"
-                $env:ASPNETCORE_URLS = $using:frontAspUrls
-                $env:API_BASE_URL = $using:frontApiBaseUrl
-                Set-Location $using:frontSnapshotHostDir
-                dotnet (Join-Path $using:frontSnapshotHostDir "StaticServer.dll") 2>&1; "##PROMEXIT##$LASTEXITCODE"
+                $env:ASPNETCORE_URLS = $using:stackFrontAspUrls
+                $env:API_BASE_URL = $using:stackApiBaseUrl
+                Set-Location $using:stackFrontHostDir
+                dotnet (Join-Path $using:stackFrontHostDir "StaticServer.dll") 2>&1; "##PROMEXIT##$LASTEXITCODE"
             }
         }
     }
@@ -1565,11 +2168,16 @@ if ($DumpDb) {
 
 # ---------- 1. Kill existing instances ----------
 
-Write-Step "Killing existing Aetheus processes..."
+if ($agentOnly) {
+    # The agent suite starts no server and holds no port: nothing of this checkout (or another) is stopped for it.
+    Write-Host "  No process to stop: the agent suite runs in a container and holds no port." -ForegroundColor DarkGray
+} else {
+    Write-Step "Killing existing Aetheus processes..."
 
-Stop-AetheusProcesses
+    Stop-AetheusProcesses
 
-Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 1
+}
 
 # ---------- 1b. Preflight: SDK floor guard + mechanised rules (report only, never blocks) ----------
 
@@ -1595,7 +2203,9 @@ if ($RemoteAgent) {
 if ($HotReload) {
     Write-Host "  Skipping build (dotnet watch handles it)." -ForegroundColor DarkGray
 } else {
-    if ($e2eOnly) {
+    if ($agentOnly) {
+        Write-Host "  Host build skipped: the agent suite is built inside its Linux container." -ForegroundColor DarkGray
+    } elseif ($e2eOnly) {
         Write-Step "Building the E2E runtime projects..."
         foreach ($project in @(
             (Join-Path $root "src\Aetheus.Back\Aetheus.Back.csproj"),
@@ -1618,7 +2228,7 @@ if ($HotReload) {
             return
         }
     }
-    Write-Host "  Build succeeded." -ForegroundColor Green
+    if (-not $agentOnly) { Write-Host "  Build succeeded." -ForegroundColor Green }
 
     if ($anyTest) {
         Write-Host "  Linux agent publish skipped for test-only execution." -ForegroundColor DarkGray
@@ -1746,6 +2356,10 @@ if ($ModeFront -and -not $HotReload -and (-not $anyTest -or $TestE2e)) {
 
 $testResults = @()
 $testLabels  = @()
+# Set when a suite failed: what is left (the coverage report, the E2E stacks, which take minutes) is not run,
+# and the combined summary below names the failures and fails the run.
+$testsAborted = $false
+$testsWatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegration) {
     if ($Coverage) {
@@ -1756,52 +2370,36 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
     # tests/Shared/PlatformSpecificTests.cs, not here: putting it in the tests keeps a plain `dotnet test`
     # behaving exactly like this launcher and like CI, instead of failing on the foreign platform.
 
+    # The suites are independent (each has its own project, output directory and TRX; the integration suite
+    # brings its own Testcontainers databases), so Invoke-TestSuites runs them together. Under -c they stay
+    # one after the other, as coverlet instruments each in turn and the coverage report merges what they wrote.
+    $suites = [System.Collections.Generic.List[hashtable]]::new()
+    $coverletArgs = if ($Coverage) { @("--coverlet") } else { @() }
+
     if ($TestBack) {
-        $backTestDir = Join-Path $root "tests\Aetheus.Back.Tests"
-        if ($Coverage) {
-            $extraBack = @("--coverlet")
-        } else {
-            $extraBack = @()
-        }
-        $rb = Invoke-TestRun -Target $backTestDir -ExtraArgs $extraBack -Label "Running backend unit tests..."
-        $testResults += $rb; $testLabels += "Back"
-        if ($rb.ExitCode -ne 0) { Write-Host "BACKEND TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        $suites.Add(@{ Name = "Back"; Title = "Running backend unit tests..."; Failure = "BACKEND TESTS FAILED"
+                       Target = (Join-Path $root "tests\Aetheus.Back.Tests"); ExtraArgs = $coverletArgs })
     }
 
     if ($TestFront) {
-        $frontTestDir = Join-Path $root "tests\Aetheus.Front.Tests"
-        if ($Coverage) {
-            $extraFront = @("--coverlet")
-        } else {
-            $extraFront = @()
-        }
-        $rf = Invoke-TestRun -Target $frontTestDir -ExtraArgs $extraFront -Label "Running frontend unit tests..."
-        $testResults += $rf; $testLabels += "Front"
-        if ($rf.ExitCode -ne 0) { Write-Host "FRONTEND TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        $suites.Add(@{ Name = "Front"; Title = "Running frontend unit tests..."; Failure = "FRONTEND TESTS FAILED"
+                       Target = (Join-Path $root "tests\Aetheus.Front.Tests"); ExtraArgs = $coverletArgs })
     }
 
     # Agent.Core is the third xUnit suite - part of the unit set (-t) and ALWAYS run under -c so
     # the aggregated coverage % reflects all three xUnit+bUnit suites (Invoke-CoverageReport globs
-    # every cobertura XML in $coverageDir, so its output is picked up automatically).
+    # every cobertura XML in $coverageDir, so its output is picked up automatically). It runs in a Linux
+    # container, as the CI runs it, never on the host (Start-AgentSuiteContainerRun).
     if ($TestAgent -or $Coverage) {
-        $agentTestDir = Join-Path $root "tests\Aetheus.Agent.Core.Tests"
-        if ($Coverage) {
-            $extraAgent = @("--coverlet")
-        } else {
-            $extraAgent = @()
-        }
-        $ra = Invoke-TestRun -Target $agentTestDir -ExtraArgs $extraAgent -Label "Running agent-core unit tests..."
-        $testResults += $ra; $testLabels += "Agent.Core"
-        if ($ra.ExitCode -ne 0) { Write-Host "AGENT-CORE TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        $suites.Add(@{ Name = "Agent.Core"; Title = "Running agent-core unit tests..."; Failure = "AGENT-CORE TESTS FAILED"
+                       Kind = "agent-container"; ExtraArgs = $coverletArgs })
     }
 
     # Analyzers is the Roslyn analyzer regression suite - part of the unit set (-t). Excluded from
     # coverage (it exercises the analyzer harness, not product code).
     if ($TestAnalyzers) {
-        $analyzersTestDir = Join-Path $root "tests\Aetheus.Analyzers.Tests"
-        $ran = Invoke-TestRun -Target $analyzersTestDir -Label "Running analyzer tests..."
-        $testResults += $ran; $testLabels += "Analyzers"
-        if ($ran.ExitCode -ne 0) { Write-Host "ANALYZER TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        $suites.Add(@{ Name = "Analyzers"; Title = "Running analyzer tests..."; Failure = "ANALYZER TESTS FAILED"
+                       Target = (Join-Path $root "tests\Aetheus.Analyzers.Tests"); ExtraArgs = @() })
     }
 
     # Package-level suites are mandatory under both -t and -c, but remain outside the product
@@ -1811,14 +2409,9 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
             @{ Path = "tests\Aetheus.Telemetry.Tests"; Label = "Telemetry" },
             @{ Path = "tests\Aetheus.WebAnalytics.Tests"; Label = "WebAnalytics" }
         )) {
-            $suiteDir = Join-Path $root $observabilitySuite.Path
-            $result = Invoke-TestRun -Target $suiteDir -Label "Running $($observabilitySuite.Label) package tests..."
-            $testResults += $result; $testLabels += $observabilitySuite.Label
-            if ($result.ExitCode -ne 0) {
-                Write-Host "$($observabilitySuite.Label.ToUpperInvariant()) TESTS FAILED - aborting." -ForegroundColor Red
-                $script:ylaunchExitCode = 1
-                return
-            }
+            $suites.Add(@{ Name = $observabilitySuite.Label; Title = "Running $($observabilitySuite.Label) package tests..."
+                           Failure = "$($observabilitySuite.Label.ToUpperInvariant()) TESTS FAILED"
+                           Target = (Join-Path $root $observabilitySuite.Path); ExtraArgs = @() })
         }
     }
 
@@ -1830,14 +2423,12 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
             @{ Files = @(Get-ChildItem -Path (Join-Path $root "tests\js") -File | Where-Object { $_.Name -like "*.test.cjs" -or $_.Name -like "*.test.mjs" }); Label = "JS tests" }
         )) {
             $files = @($jsSuite.Files | Sort-Object Name | ForEach-Object { [IO.Path]::GetRelativePath($root, $_.FullName) })
-            $result = Invoke-NodeTestRun -Files $files -Label "Running $($jsSuite.Label) suites..."
-            $testResults += $result; $testLabels += $jsSuite.Label
-            if ($result.ExitCode -ne 0) {
-                Write-Host "$($jsSuite.Label.ToUpperInvariant()) TESTS FAILED - aborting." -ForegroundColor Red
-                $script:ylaunchExitCode = 1
-                return
-            }
+            $suites.Add(@{ Name = $jsSuite.Label; Title = "Running $($jsSuite.Label) suites..."; Failure = "$($jsSuite.Label.ToUpperInvariant()) TESTS FAILED"
+                           Kind = "node"; Files = $files })
         }
+        # R-48 (candidate 2967): the locked ESLint, from a clean `npm ci`, in the pipeline's Node image.
+        $suites.Add(@{ Name = "JS lint"; Title = "Running the locked ESLint in the pipeline's Node container..."; Failure = "JS LINT FAILED"
+                       Kind = "js-lint-container" })
     }
 
     # PLAN-015 lot 0: the integration tests exercise the controllers and repositories the unit suites do
@@ -1845,13 +2436,22 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
     # still merges exactly the three unit suites, the CRAP measure reads every report under the coverage
     # directory. Without -c they run only when asked (-ti), as before.
     if ($Coverage) {
-        $integrationTestDir = Join-Path $root "tests\Aetheus.Back.IntegrationTests"
-        $rci = Invoke-TestRun -Target $integrationTestDir -ExtraArgs @("--coverlet") -ResultDirectory (Join-Path $coverageDir "Integration") -Label "Running integration tests (Testcontainers) with coverage..."
-        $testResults += $rci; $testLabels += "Integration"
-        if ($rci.ExitCode -ne 0) { Write-Host "INTEGRATION TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
+        $suites.Add(@{ Name = "Integration"; Title = "Running integration tests (Testcontainers) with coverage..."; Failure = "INTEGRATION TESTS FAILED"
+                       Target = (Join-Path $root "tests\Aetheus.Back.IntegrationTests"); ExtraArgs = @("--coverlet")
+                       ResultDirectory = (Join-Path $coverageDir "Integration") })
+    } elseif ($TestIntegration) {
+        $suites.Add(@{ Name = "Integration"; Title = "Running integration tests (Testcontainers)..."; Failure = "INTEGRATION TESTS FAILED"
+                       Target = (Join-Path $root "tests\Aetheus.Back.IntegrationTests"); ExtraArgs = @() })
     }
 
-    if ($Coverage) {
+    $phase = Invoke-TestSuites -Suites $suites.ToArray() -Sequential:($Coverage -or $env:YLAUNCH_SEQUENTIAL_SUITES -eq '1')
+    foreach ($suiteResult in $phase.Results) {
+        $testResults += $suiteResult
+        $testLabels += $suiteResult.Name
+    }
+    if ($phase.Failed.Count -gt 0) { $testsAborted = $true }
+
+    if ($Coverage -and -not $testsAborted) {
         Invoke-CoverageReport
         if (-not (Invoke-CrapGate -GatePath $crapGate -CoverageRoot $coverageDir -ScoresPath (Join-Path $reportDir "crap-scores.csv"))) {
             Write-Host "CRAP GATE FAILED - aborting." -ForegroundColor Red
@@ -1859,18 +2459,15 @@ if ($TestBack -or $TestFront -or $TestAgent -or $TestAnalyzers -or $TestIntegrat
             return
         }
     }
-
-    if ($TestIntegration -and -not $Coverage) {
-        $integrationTestDir = Join-Path $root "tests\Aetheus.Back.IntegrationTests"
-        $ri = Invoke-TestRun -Target $integrationTestDir -Label "Running integration tests (Testcontainers)..."
-        $testResults += $ri; $testLabels += "Integration"
-        if ($ri.ExitCode -ne 0) { Write-Host "INTEGRATION TESTS FAILED - aborting." -ForegroundColor Red; $script:ylaunchExitCode = 1; return }
-    }
 }
 
 # ---------- 4. E2E tests (needs servers) ----------
 
-if ($TestE2e) {
+if ($TestE2e -and $testsAborted) {
+    Write-Host "  E2E tests not started: a suite above failed." -ForegroundColor Yellow
+}
+
+if ($TestE2e -and -not $testsAborted) {
     $e2eRunCategories = @()
     # Same dot-source caveat as the implications block: read the value, not $PSBoundParameters.
     $filterProvided = -not [string]::IsNullOrEmpty($TestE2eFilter)
@@ -1884,6 +2481,8 @@ if ($TestE2e) {
 
     $e2eExtraArgs = @()
     $e2eLabel     = 'Running E2E tests...'
+    # The sweep of every page skips itself unless asked for by name (-tec PageRules) or with the two shards.
+    $env:AETHEUS_PAGE_RULES_SWEEP = if (($e2eRunCategories | Where-Object { $E2eManualCategories -icontains $_ }) -or $e2eShardCount -gt 1) { '1' } else { '0' }
     if ($e2eRunCategories.Count -gt 0) {
         $filterParts = @($e2eRunCategories | ForEach-Object { "Category=$_" })
         $filterExpr = [string]::Join('|', $filterParts)
@@ -1892,62 +2491,90 @@ if ($TestE2e) {
         $e2eLabel = "Running E2E tests [$catList]..."
     }
 
-    # Self-provision Playwright browsers so -te works on any machine without a
-    # manual `playwright.ps1 install`. The generated playwright.ps1 appears
-    # after the solution build above; `install` is idempotent (skips
-    # already-present builds) and pinned to the Microsoft.Playwright NuGet
-    # version, so it stays correct across package upgrades. Fail fast here
-    # rather than letting every test fail with "Executable doesn't exist".
-    $playwrightScript = Join-Path $root "Tests\Aetheus.E2E\bin\$buildConfiguration\net10.0\playwright.ps1"
-    if (-not (Test-Path $playwrightScript)) {
-        Write-Host "playwright.ps1 not found at $playwrightScript - solution not built? Aborting E2E." -ForegroundColor Red
+    # The browsers are the QA browser image's (Build-E2eRunnerImage), never the Windows host's: no Playwright
+    # install on the host and no fallback to a host browser, so a local result is the result the CI gets.
+    if (-not (Build-E2eRunnerImage)) {
+        Write-Host "The QA browser image could not be built - aborting E2E (no host-browser fallback: it would not match the CI)." -ForegroundColor Red
         $script:ylaunchExitCode = 1
         return
     }
-    Write-Step "Ensuring Playwright browsers (idempotent)..."
-    & pwsh -NoProfile -File $playwrightScript install
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Playwright browser install failed (exit $LASTEXITCODE) - aborting E2E." -ForegroundColor Red
-        $script:ylaunchExitCode = 1
-        return
-    }
-    Write-Host "  Playwright browsers ready." -ForegroundColor Green
 
     # E2E runs against its OWN PostgreSQL (:15433), NOT the shared dev DB (:15432). Preserve its
     # dedicated Docker volume; E2ETestBase resets only the guarded aetheus_e2e database through
     # /api/dev/reset-db after the backend starts.
     Ensure-E2eDb
 
-    $servers = Start-Servers -ForE2e
-    $backReady  = Wait-ForEndpoint -url $backUrl  -label "Backend"  -maxSeconds 60
-    $frontReady = Wait-ForEndpoint -url $frontUrl -label "Frontend" -maxSeconds 60
-    if (-not $backReady -or -not $frontReady) {
+    # A full run is split in two shards that run at the same time, each against a stack of its own (ports,
+    # runtime copies, database and file stores: New-E2eStack). A run restricted to categories (-tec) is
+    # one shard on the launcher's own stack, as before. The shards partition the suite by category:
+    # shard 1 takes $E2eShardOneCategories, shard 2 takes everything that is not in them, so no test
+    # can fall between the two.
+    $e2eStacks = @(1..$e2eShardCount | ForEach-Object { New-E2eStack -Index $_ })
+    $e2eShards = @()
+    if ($e2eShardCount -eq 1) {
+        $e2eShards += @{ Name = "E2E"; Label = $e2eLabel; Tag = ""; Stack = $e2eStacks[0]; ExtraArgs = $e2eExtraArgs }
+    } else {
+        $shardOneFilter = [string]::Join('|', @($E2eShardOneCategories | ForEach-Object { "Category=$_" }))
+        $shardTwoFilter = [string]::Join('&', @($E2eShardOneCategories | ForEach-Object { "Category!=$_" }))
+        $e2eShards += @{ Name = "E2E shard 1"; Label = "Running E2E tests (shard 1/2: $($E2eShardOneCategories -join ', '))..."; Tag = "E2E 1/2"
+                         Stack = $e2eStacks[0]; ExtraArgs = @("--filter", $shardOneFilter) }
+        $e2eShards += @{ Name = "E2E shard 2"; Label = "Running E2E tests (shard 2/2: all other categories)..."; Tag = "E2E 2/2"
+                         Stack = $e2eStacks[1]; ExtraArgs = @("--filter", $shardTwoFilter) }
+    }
+
+    $e2eJobs = @{}
+    foreach ($stack in $e2eStacks) {
+        Initialize-E2eStack $stack
+        $stackJobs = Start-Servers -ForE2e -Stack $stack
+        foreach ($key in $stackJobs.Keys) { $e2eJobs["$($stack.Name)-$key"] = $stackJobs[$key] }
+    }
+    $stacksReady = $true
+    foreach ($stack in $e2eStacks) {
+        $suffix = if ($e2eShardCount -eq 1) { "" } else { " ($($stack.Name))" }
+        $backReady  = Wait-ForEndpoint -url $stack.BackUrl  -label "Backend$suffix"  -maxSeconds 60
+        $frontReady = Wait-ForEndpoint -url $stack.FrontUrl -label "Frontend$suffix" -maxSeconds 60
+        if (-not $backReady -or -not $frontReady) { $stacksReady = $false }
+    }
+    if (-not $stacksReady) {
         Write-Host "Servers not ready - aborting E2E." -ForegroundColor Red
-        Stop-Servers $servers $true
+        Stop-Servers $e2eJobs $true
         $script:ylaunchExitCode = 1
         return
     }
-    # Tell the E2E suite which ports the stack is actually on (E2ETestBase reads these, falling back
-    # to the 5301/5401 defaults). Without this, a port-overridden worktree (.ylaunch.local) starts the
-    # servers on its own ports but Playwright would target the defaults and fail to connect.
-    $env:E2E_FRONTEND_URL = "https://localhost:$frontPort"
-    $env:E2E_BACKEND_URL  = "https://localhost:$backHttpsPort"
     # The local Blazor development host does not execute deploy/docker/StaticServer.Program.cs.
     # QA does not set this override, so security headers remain mandatory there by default.
     $env:E2E_REQUIRE_FRONTEND_SECURITY_HEADERS = "false"
-    $re = Invoke-TestRun -Target (Join-Path $root "tests\Aetheus.E2E") `
-                         -ExtraArgs $e2eExtraArgs -Label $e2eLabel -StreamOutput
-    Stop-Servers $servers ($re.ExitCode -ne 0)
-    $testResults += $re; $testLabels += "E2E"
-    if ($re.ExitCode -ne 0) {
-        Write-Host ""
-        if ($re.Failed -gt 0) {
-            Write-Host "  FAILED: $($re.Failed)/$($re.Total) - E2E TESTS FAILED." -ForegroundColor Red
-        } else {
-            Write-Host "  E2E TEST PROCESS FAILED (exit code $($re.ExitCode)) after reporting $($re.Total)/$($re.ExpectedTotal) tests." -ForegroundColor Red
+
+    if ($e2eShardCount -eq 1) {
+        Write-Step $e2eShards[0].Label
+    } else {
+        Write-Step "Running E2E tests: $e2eShardCount shards in parallel, each on its own stack and database..."
+    }
+    $e2eRuns = @()
+    foreach ($shard in $e2eShards) {
+        if ($e2eShardCount -gt 1) {
+            Write-Host "  $($shard.Name): back https://localhost:$($shard.Stack.BackHttpsPort), front $($shard.Stack.FrontUrl), database $($shard.Stack.DatabaseName), filter $($shard.ExtraArgs[1])" -ForegroundColor Magenta
+        }
+        # The suite in the container reads the URLs its stack answers on from there (Start-E2eContainerRun:
+        # host.docker.internal and the stack's ports, so a port-overridden worktree is targeted too).
+        $e2eRuns += Start-E2eContainerRun -Stack $shard.Stack -ExtraArgs $shard.ExtraArgs -Label $shard.Label -Tag $shard.Tag
+    }
+    $e2eResults = @(Wait-TestRuns -Runs $e2eRuns -HeaderWithBlock:($e2eShardCount -gt 1))
+    Stop-Servers $e2eJobs (@($e2eResults | Where-Object { $_.ExitCode -ne 0 }).Count -gt 0)
+    for ($shardIndex = 0; $shardIndex -lt $e2eShards.Count; $shardIndex++) {
+        $re = $e2eResults[$shardIndex]
+        $testResults += $re; $testLabels += $e2eShards[$shardIndex].Name
+        if ($re.ExitCode -ne 0) {
+            Write-Host ""
+            if ($re.Failed -gt 0) {
+                Write-Host "  FAILED: $($re.Failed)/$($re.Total) - $($e2eShards[$shardIndex].Name.ToUpperInvariant()) TESTS FAILED." -ForegroundColor Red
+            } else {
+                Write-Host "  $($e2eShards[$shardIndex].Name.ToUpperInvariant()) TEST PROCESS FAILED (exit code $($re.ExitCode)) after reporting $($re.Total)/$($re.ExpectedTotal) tests." -ForegroundColor Red
+            }
         }
     }
 }
+$testsWatch.Stop()
 
 # ---------- 5. Combined summary + exit (if any test ran) ----------
 
@@ -1977,6 +2604,14 @@ if ($testResults.Count -gt 0) {
     Write-Host "  Total  : $totalAll" -ForegroundColor White
     Write-Host "  =========================================" -ForegroundColor Cyan
     Write-Host ""
+    # Suites and E2E shards overlap, so the stage times add up to more than the wall time of the tests.
+    Write-Host "  Stage times (the suites of a stage run at the same time):" -ForegroundColor DarkGray
+    for ($stageIndex = 0; $stageIndex -lt $testResults.Count; $stageIndex++) {
+        Write-Host ("    {0,-18} {1,7:N1}s" -f $testLabels[$stageIndex], $testResults[$stageIndex].ElapsedSec) -ForegroundColor DarkGray
+    }
+    $stageSum = ($testResults | ForEach-Object { $_.ElapsedSec } | Measure-Object -Sum).Sum
+    Write-Host ("  Test stages wall time: {0:N1}s (the stages added up: {1:N1}s)" -f $testsWatch.Elapsed.TotalSeconds, $stageSum) -ForegroundColor DarkGray
+    Write-Host ""
     if ($totalFailed -gt 0 -or $processFailures.Count -gt 0) {
         Write-Host "  SOME TESTS FAILED." -ForegroundColor Red
         $script:ylaunchExitCode = 1
@@ -2002,7 +2637,7 @@ if ($Reset) {
 # user secrets of the project, then its appsettings.Development.json and appsettings.json. A key found
 # nowhere prints "password not found": a password is never invented. Never shown during a test run.
 $seedAccounts = @(
-    @{ Login = "admin"; PasswordKey = "Auth:AdminPassword"; Project = "src\Aetheus.Back\Aetheus.Back.csproj"; Role = "Admin" }
+    @{ Login = "admin@aetheus.local"; PasswordKey = "Auth:AdminPassword"; Project = "src\Aetheus.Back\Aetheus.Back.csproj"; Role = "Admin" }
 )
 
 function Test-YSeedAccounts([object[]]$Accounts) {

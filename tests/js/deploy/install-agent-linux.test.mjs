@@ -463,6 +463,39 @@ purge_agent_work_dir
   }
 });
 
+test("a reinstall keeps the project state directories byte for byte (R-97)", () => {
+  const root = mkdtempSync(join(tmpdir(), "aetheus-workdir-")).replace(/\\/g, "/");
+  try {
+    const work = `${root}/var/lib/aetheus-agent`;
+    const kept = {
+      "projects/w9-production/live-color": "green",
+      "projects/w9-production/source-commit": "abc123",
+      "projects/w9-production/deployment-transaction/state": "committed",
+      "projects/w9-production/reserve/blue.tar": "reserve",
+      "projects/shop-production/live-color": "blue"
+    };
+    const files = { ...kept, "keys/agent.key": "enrollment key", "w/1/s/build.log": "workspace", "projectsx/stray": "agent state" };
+    for (const [path, content] of Object.entries(files)) {
+      mkdirSync(join(work, path, ".."), { recursive: true });
+      writeFileSync(join(work, path), content);
+    }
+    const body = `${stubs}
+WORK_DIR="${work}"; DEPLOY_BASE_DIR="$WORK_DIR/deploy"
+${extractFunction("purge_agent_work_dir")}
+purge_agent_work_dir
+`;
+    const result = spawnSync("sh", ["-c", body], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readdirSync(work), ["projects"]);
+    for (const [path, content] of Object.entries(kept)) {
+      assert.equal(readFileSync(join(work, path), "utf8"), content, path);
+    }
+    assert.match(result.stdout, /Keeping the project state directories/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("the reinstall calls the purge, not a wipe of the whole work dir", () => {
   const cleanup = installer.slice(installer.indexOf("# --- Clean any previous installation ---"));
   assert.match(cleanup, /\npurge_agent_work_dir\n/);

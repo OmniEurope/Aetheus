@@ -9,6 +9,9 @@ public static class ProjectsModuleExtensions
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<IProjectDeletionRepository, ProjectDeletionRepository>();
         services.AddScoped<IProjectDeletionService, ProjectDeletionService>();
+        services.AddScoped<IProjectServerCleanupRepository, ProjectServerCleanupRepository>();
+        services.AddScoped<IProjectServerCleanupGuardSource, ProjectServerCleanupGuardSource>();
+        services.AddScoped<IProjectServerCleanupService, ProjectServerCleanupService>();
         services.AddScoped<IProjectDataRetentionRepository, ProjectDataRetentionRepository>();
         services.AddScoped<IProjectDataRetentionService, ProjectDataRetentionService>();
         services.AddScoped<IProjectStorageRepository, ProjectStorageRepository>();

@@ -44,7 +44,7 @@ public sealed class DailyRecapServiceTests : IDisposable
         db.Roles.Add(new Role { Id = 1, Name = "Admin" });
         db.Users.AddRange(
             new User { Id = 1, Username = "alice", Email = "alice@example.org", IsActive = true },
-            new User { Id = 2, Username = "nomail", Email = null, IsActive = true });
+            new User { Id = 2, Username = "nonadmin", Email = "nonadmin@example.org", IsActive = true });
         db.UserRoles.Add(new UserRole { UserId = 1, RoleId = 1 });
         db.SaveChanges();
     }

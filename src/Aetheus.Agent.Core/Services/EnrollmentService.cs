@@ -153,6 +153,12 @@ public sealed class EnrollmentService(
         }
         if (dockerAvailable)
             capabilities.Add(AgentCapabilities.DockerExecution);
+        else
+            capabilities.Remove(AgentCapabilities.DockerManagement);
+        // R-119: these follow a grant the first heartbeat reports, like deployment.functions.
+        capabilities.Remove(AgentCapabilities.ApacheModules);
+        capabilities.Remove(AgentCapabilities.RkhunterSetup);
+        capabilities.Remove(AgentCapabilities.TeamspeakServiceControl);
         return capabilities.Order(StringComparer.Ordinal).ToList();
     }
 

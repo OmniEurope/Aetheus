@@ -196,8 +196,13 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IOperationExecutor, FirewallOperationExecutor>();
         services.AddSingleton<IOperationExecutor, PortsObserveOperationExecutor>();
         services.AddSingleton<IOperationExecutor, BackupOperationExecutor>();
-        services.AddSingleton<IOperationExecutor, ApacheOperationExecutor>();
-        services.AddSingleton<IOperationExecutor, CertbotOperationExecutor>();
+        // One instance each, also handed to the project resources executor (recette R-97), which removes a
+        // project's virtual hosts and certificates through them.
+        services.AddSingleton<ApacheOperationExecutor>();
+        services.AddSingleton<IOperationExecutor>(provider => provider.GetRequiredService<ApacheOperationExecutor>());
+        services.AddSingleton<CertbotOperationExecutor>();
+        services.AddSingleton<IOperationExecutor>(provider => provider.GetRequiredService<CertbotOperationExecutor>());
+        services.AddSingleton<IOperationExecutor, ProjectResourcesOperationExecutor>();
         services.AddSingleton<IOperationExecutor, RkhunterOperationExecutor>();
         services.AddSingleton<IOperationExecutor, AgentSelfUpdateOperationExecutor>();
         services.AddSingleton<IOperationExecutor, MailOperationExecutor>();
@@ -230,6 +235,7 @@ public static class AgentCoreServiceCollectionExtensions
         services.AddSingleton<IOperationExecutor, TeamspeakServerQueryOperationExecutor>();
         services.AddSingleton<IOperationExecutor, TeamspeakSetupOperationExecutor>();
         services.AddSingleton<IOperationExecutor, TeamspeakGracefulRestartOperationExecutor>();
+        services.AddSingleton<IOperationExecutor, TeamspeakServiceOperationExecutor>();
         services.AddSingleton<IOperationExecutor, DeployOperationExecutor>();
         services.AddSingleton<IOperationExecutor, SmokeOperationExecutor>();
         services.AddSingleton<IOperationExecutor, BlueGreenOperationExecutor>();

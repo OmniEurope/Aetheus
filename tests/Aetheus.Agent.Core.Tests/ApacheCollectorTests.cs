@@ -81,6 +81,64 @@ public class ApacheCollectorTests
     }
 
     [Fact]
+    public async Task CollectAsync_ListsDisabledModules_FromModsAvailable_WithoutDuplicatingLoadedOnes()
+    {
+        SetupInstalledApache();
+        _shellMock.RunExecAsync(Arg.Any<string>(), Arg.Is<IReadOnlyList<string>>(a => a.Contains("-M")), Arg.Any<CancellationToken>())
+            .Returns(Ok("""
+                Loaded Modules:
+                 core_module (static)
+                 rewrite_module (shared)
+                """));
+        var sut = new ApacheCollector(NullLogger<ApacheCollector>.Instance, _shellMock)
+        {
+            IsWindows = false,
+            DirectoryExists = path => path is "/etc/apache2" or "/etc/apache2/mods-available",
+            EnumerateModuleFiles = _ => ["/etc/apache2/mods-available/rewrite.load", "/etc/apache2/mods-available/proxy_http.load", "/etc/apache2/mods-available/headers.load"],
+            // Never the real /etc/apache2/mods-enabled: the CI agent runs Apache with headers and proxy_http enabled.
+            FileExists = _ => false
+        };
+
+        var result = await sut.CollectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["core_module", "rewrite_module", "headers_module", "proxy_http_module"], result.Modules.Select(m => m.Name));
+        Assert.Single(result.Modules, m => m.Name == "rewrite_module");
+        Assert.All(result.Modules.Where(m => m.Name is "headers_module" or "proxy_http_module"), m =>
+        {
+            Assert.False(m.IsEnabled);
+            Assert.Equal("shared", m.Type);
+        });
+        Assert.True(result.Modules.Single(m => m.Name == "rewrite_module").IsEnabled);
+    }
+
+    [Fact]
+    public async Task CollectAsync_EnabledModuleWhoseLoadFileNameDiffersFromItsId_IsNotListedDisabled()
+    {
+        SetupInstalledApache();
+        // php8.2.load (what a2enmod takes) loads php_module: the id derived from the file name never matches.
+        _shellMock.RunExecAsync(Arg.Any<string>(), Arg.Is<IReadOnlyList<string>>(a => a.Contains("-M")), Arg.Any<CancellationToken>())
+            .Returns(Ok("""
+                Loaded Modules:
+                 core_module (static)
+                 php_module (shared)
+                """));
+        var sut = new ApacheCollector(NullLogger<ApacheCollector>.Instance, _shellMock)
+        {
+            IsWindows = false,
+            DirectoryExists = path => path is "/etc/apache2" or "/etc/apache2/mods-available",
+            EnumerateModuleFiles = _ => ["/etc/apache2/mods-available/php8.2.load", "/etc/apache2/mods-available/headers.load"],
+            FileExists = path => path == "/etc/apache2/mods-enabled/php8.2.load"
+        };
+
+        var result = await sut.CollectAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["core_module", "php_module", "headers_module"], result.Modules.Select(m => m.Name));
+        Assert.DoesNotContain(result.Modules, m => m.Name == "php8.2_module");
+        Assert.True(result.Modules.Single(m => m.Name == "php_module").IsEnabled);
+        Assert.False(result.Modules.Single(m => m.Name == "headers_module").IsEnabled);
+    }
+
+    [Fact]
     public async Task CollectAsync_ParsesVirtualHosts()
     {
         SetupInstalledApache();

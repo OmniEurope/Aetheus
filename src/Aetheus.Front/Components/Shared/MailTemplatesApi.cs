@@ -3,29 +3,35 @@ using System.Net.Http;
 
 namespace Aetheus.Front.Components.Shared;
 
-/// <summary>The templates of the platform mails (recette R1-75), administrators only.</summary>
+/// <summary>The templates of the platform mails (recette R1-75), site administrators only; with an
+/// <c>organizationId</c>, that organization's own versions, edited by its administrators (owner decision 2026-10-28).</summary>
 public sealed class MailTemplatesApi(HttpClient http) : ApiClientBase(http)
 {
-    public async Task<List<MailTemplateSummaryDto>> ListAsync(CancellationToken ct = default) =>
-        await GetJsonAsync<List<MailTemplateSummaryDto>>("api/mail-templates", ct) ?? [];
+    public async Task<List<MailTemplateSummaryDto>> ListAsync(int? organizationId = null, CancellationToken ct = default) =>
+        await GetJsonAsync<List<MailTemplateSummaryDto>>(Scoped("api/mail-templates", organizationId), ct) ?? [];
 
-    public Task<MailTemplateDto?> GetAsync(MailTemplateKind kind, string language, CancellationToken ct = default) =>
-        GetJsonAsync<MailTemplateDto>(Url(kind, language), ct);
+    public Task<MailTemplateDto?> GetAsync(MailTemplateKind kind, string language, int? organizationId = null, CancellationToken ct = default) =>
+        GetJsonAsync<MailTemplateDto>(Url(kind, language, organizationId), ct);
 
     /// <summary>Saves the template; a 400 carries the server's reason (a variable the mail does not offer).</summary>
     public Task<ApiOutcome<MailTemplateDto, ApiError>> SaveAsync(
-        MailTemplateKind kind, string language, SaveMailTemplateRequest request, CancellationToken ct = default) =>
-        PutForOutcomeAsync<MailTemplateDto, ApiError>(Url(kind, language), request, ct);
+        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? organizationId = null, CancellationToken ct = default) =>
+        PutForOutcomeAsync<MailTemplateDto, ApiError>(Url(kind, language, organizationId), request, ct);
 
-    /// <summary>Restores the default template and returns it.</summary>
-    public Task<ApiOutcome<MailTemplateDto, ApiError>> ResetAsync(MailTemplateKind kind, string language, CancellationToken ct = default) =>
-        SendForOutcomeAsync<MailTemplateDto, ApiError>(HttpMethod.Delete, Url(kind, language), null, ct);
+    /// <summary>Restores the default template (for an organization, the platform's) and returns it.</summary>
+    public Task<ApiOutcome<MailTemplateDto, ApiError>> ResetAsync(
+        MailTemplateKind kind, string language, int? organizationId = null, CancellationToken ct = default) =>
+        SendForOutcomeAsync<MailTemplateDto, ApiError>(HttpMethod.Delete, Url(kind, language, organizationId), null, ct);
 
     /// <summary>Sends the draft, rendered with the samples, to the signed-in administrator's own address.</summary>
     public Task<ApiOutcome<MailTemplateTestResultDto, ApiError>> SendTestAsync(
-        MailTemplateKind kind, string language, SaveMailTemplateRequest request, CancellationToken ct = default) =>
-        PostForOutcomeAsync<MailTemplateTestResultDto, ApiError>(Url(kind, language) + "/test", request, ct);
+        MailTemplateKind kind, string language, SaveMailTemplateRequest request, int? organizationId = null, CancellationToken ct = default) =>
+        PostForOutcomeAsync<MailTemplateTestResultDto, ApiError>(
+            Scoped($"api/mail-templates/{kind}/{Uri.EscapeDataString(language)}/test", organizationId), request, ct);
 
-    private static string Url(MailTemplateKind kind, string language) =>
-        $"api/mail-templates/{kind}/{Uri.EscapeDataString(language)}";
+    private static string Url(MailTemplateKind kind, string language, int? organizationId) =>
+        Scoped($"api/mail-templates/{kind}/{Uri.EscapeDataString(language)}", organizationId);
+
+    private static string Scoped(string url, int? organizationId) =>
+        organizationId is { } organization ? $"{url}?organizationId={organization}" : url;
 }

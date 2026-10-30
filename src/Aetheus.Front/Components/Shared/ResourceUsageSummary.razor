@@ -1,34 +1,34 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Who reads a library or a vault (R-65, R-66): the readers as links, or an "Unused" badge when
+@* Who reads a library or a vault (R-65, R-66, R-103): the single reader as a link, or from two readers
+   a number badge with the total that opens the full list in a dialog, or an "Unused" badge when
    nothing the instance knows of reads it. Nothing is drawn until the usage is loaded, so a slow or
-   refused usage call never shows a false "Unused". The links stop the click so a grid row does not
+   refused usage call never shows a false "Unused". The controls stop the click so a grid row does not
    open under them. *@
 @if (Loaded)
 {
     @if (Readers.Count == 0)
     {
-        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["ResourceUnusedHint"]">@L["ResourceUnused"]</OmniBadge>
+        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" title="@L["ResourceUnusedHint"]">@L["ResourceUnused"]</OmniBadge>
+    }
+    else if (Readers.Count == 1)
+    {
+        var user = Readers[0];
+        <span class="resource-usage" title="@AllNames" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            @if (HrefOf(user) is { } href)
+            {
+                <OmniLink Href="@href">@NameOf(user)</OmniLink>
+            }
+            else
+            {
+                <span>@NameOf(user)</span>
+            }
+        </span>
     }
     else
     {
-        <span class="resource-usage" title="@AllNames" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-            @for (var index = 0; index < Readers.Count; index++)
-            {
-                var user = Readers[index];
-                @if (index > 0)
-                {
-                    <span class="resource-usage__separator">, </span>
-                }
-                @if (HrefOf(user) is { } href)
-                {
-                    <OmniLink Href="@href">@NameOf(user)</OmniLink>
-                }
-                else
-                {
-                    <span>@NameOf(user)</span>
-                }
-            }
+        <span class="resource-usage" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+            <NumberBadge Tone="OmniTone.Info" OnClick="@(_ => OpenListAsync())" Label="@CountLabel" title="@CountLabel" data-testid="resource-usage-count">@TotalCount</NumberBadge>
         </span>
     }
 }

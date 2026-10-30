@@ -63,14 +63,8 @@ public partial class AlertOccurrenceDetail
         ? type
         : null;
 
-    private static string OperatorSymbol(ComparisonOperator? comparison) => comparison switch
-    {
-        ComparisonOperator.GreaterThan => ">",
-        ComparisonOperator.LessThan => "<",
-        ComparisonOperator.GreaterThanOrEqual => "≥",
-        ComparisonOperator.LessThanOrEqual => "≤",
-        _ => string.Empty
-    };
+    private static string OperatorSymbol(ComparisonOperator? comparison) =>
+        comparison is { } known ? AlertThresholdUnit.Symbol(known) : string.Empty;
 
     private OmniTone RuleStateTone => _alert?.RuleIsEnabled switch
     {

@@ -18,6 +18,8 @@ public class DockerControllerTests
     {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>())
             .Returns(true);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new DockerController(_service, _authz);
         _sut.ControllerContext = new ControllerContext
         {
@@ -258,6 +260,19 @@ public class DockerControllerTests
         var result = await _sut.GetContainerEnvVars(1, "abc123def456", TestContext.Current.CancellationToken);
 
         Assert.IsType<OkResult>(result);
+    }
+
+    // R-11: Server Read no longer reads a container's environment; it is a permission of its own.
+    [Fact]
+    public async Task GetContainerEnvVars_WithServerReadButWithoutTheEnvPermission_IsForbidden()
+    {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ServerDockerContainerEnvView, 1, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.GetContainerEnvVars(1, "abc123def456", TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result);
+        await _service.DidNotReceiveWithAnyArgs().GetContainerEnvVarsAsync(default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]

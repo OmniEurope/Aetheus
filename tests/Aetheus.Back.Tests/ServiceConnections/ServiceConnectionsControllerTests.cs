@@ -16,6 +16,9 @@ public class ServiceConnectionsControllerTests
 
     public ServiceConnectionsControllerTests()
     {
+        // ADR-059: the caller's organization lets it give a connection to the project.
+        _authzMock.CanCreateInProjectAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new ServiceConnectionsController(_serviceMock, _authzMock);
         _sut.ControllerContext = new ControllerContext
         {

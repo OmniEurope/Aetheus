@@ -7,26 +7,29 @@
 
 <OmniPageHeader Title="@L["AiTasks"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("psychology")" /></Icon>
+    <ActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))" Disabled="@(!CanCreate)" title="@(!CanCreate ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    </ActionsContent>
 </OmniPageHeader>
 
+<OmniStack Class="page-fill-body">
 @* R-5: the consumption figures are OE stat tiles of one OmniTileGrid (same width, same height). *@
-<OmniTileGrid Columns="3" Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
+<OmniTileGrid Columns="3" Gap="OmniSpacing.Large">
     <OmniStatTile Value="@((_consumption?.RunCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture))" Title="@L["RunsLastSevenDays"]" />
     <OmniStatTile Value="@((_consumption?.FailedCount ?? 0).ToString(System.Globalization.CultureInfo.CurrentCulture))" Title="@L["FailedRuns"]" />
     <OmniStatTile Value="@FormatDuration(_consumption?.DurationMs ?? 0)" Title="@L["ExecutionTime"]" />
 </OmniTileGrid>
 
 <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center"
-             Justify="OmniJustification.Between" Class="omni-u-mb-md" Gap="OmniSpacing.Large">
+             Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
     <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_search" @bind-Value:after="OnSearchChangedAsync" />
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDialogAsync(null))" Disabled="@(!CanCreate)" title="@(!CanCreate ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
 </OmniStack>
 
 @* Keep the grid mounted while IsLoading indicates progress to avoid restarting its initial fetch
    on each render. Show failures with a Retry action. *@
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadFailed"]
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadPageAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
@@ -69,7 +72,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiTaskDefinitionDto" Property="Enabled" Title="@L["Status"]" Width="105px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EnabledText" >
                 <Template Context="task">
-                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(task.Enabled ? OmniTone.Success : OmniTone.Neutral)">@(task.Enabled ? L["Active"] : L["Disabled"])</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(task.Enabled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(task.Enabled ? OmniTone.Success : OmniTone.Neutral)">@(task.Enabled ? L["Active"] : L["Disabled"])</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AiTaskDefinitionDto" Title="@L["Actions"]" Width="190px"
@@ -87,3 +90,4 @@
             </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
+</OmniStack>

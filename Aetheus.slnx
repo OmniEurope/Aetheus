@@ -9,6 +9,7 @@
   <Project Path="src/Aetheus.Telemetry/Aetheus.Telemetry.csproj" />
   <Project Path="src/Aetheus.WebAnalytics/Aetheus.WebAnalytics.csproj" />
   <Project Path="deploy/tools/Aetheus.PackageNormalizer/Aetheus.PackageNormalizer.csproj" />
+  <Project Path="deploy/tools/Aetheus.PipelineYamlCheck/Aetheus.PipelineYamlCheck.csproj" />
   <Project Path="tests/Aetheus.Agent.Core.Tests/Aetheus.Agent.Core.Tests.csproj" />
   <Project Path="tests/Aetheus.Back.Tests/Aetheus.Back.Tests.csproj" />
   <Project Path="tests/Aetheus.Back.IntegrationTests/Aetheus.Back.IntegrationTests.csproj" />

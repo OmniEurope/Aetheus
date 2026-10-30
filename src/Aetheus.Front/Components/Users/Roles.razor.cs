@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Users;
 
 public partial class Roles : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -12,7 +13,10 @@ public partial class Roles : IAsyncDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
-    [Inject] private AdminIdentitySearch Search { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
+
+    private bool _entered;
 
     private List<RoleDto> _roles = [];
     private AetheusDataGrid<RoleDto>? _grid;
@@ -31,20 +35,24 @@ public partial class Roles : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        if (!AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Roles"))
+        if (!AdminPageEntry.TryEnter(Auth, Permissions, PermissionKeys.OrganizationRolesManage, Nav, Breadcrumb, L, "Roles"))
             return;
-
-        // The search shared with Users and Organizations, in the section bar.
-        Search.Changed += ResetSearchAsync;
+        _entered = true;
+        // The organization switcher's choice filters the list (owner decision 2026-10-28).
+        await Scope.EnsureLoadedAsync();
 
         // Realtime: refresh the roles list on any create/update/delete/clone/permission change. RT4M.
-        _adminRt = new AdminEntitySubscription(HubFactory);
-        await _adminRt.StartAsync(AdminEntities.Role, () => InvokeAsync(async () =>
+        // The admin hub is the site Admin's.
+        if (Auth.IsAdmin)
         {
-            // A pushed change refreshes the grid quietly (rows, page, filters kept).
-            try { await RefreshLiveAsync(); } catch (HttpRequestException) { } // hub-triggered refresh - silent on auth failure
-            StateHasChanged();
-        }));
+            _adminRt = new AdminEntitySubscription(HubFactory);
+            await _adminRt.StartAsync(AdminEntities.Role, () => InvokeAsync(async () =>
+            {
+                // A pushed change refreshes the grid quietly (rows, page, filters kept).
+                try { await RefreshLiveAsync(); } catch (HttpRequestException) { } // hub-triggered refresh - silent on auth failure
+                StateHasChanged();
+            }));
+        }
 
         // The grid does not consistently raise its first LoadData callback when this page is reached
         // through client-side navigation. Load explicitly so the grid cannot stay at a false "0 total"
@@ -73,20 +81,14 @@ public partial class Roles : IAsyncDisposable
         await LoadPageAsync();
     }
 
-    private Task ResetSearchAsync()
-    {
-        _page = 1;
-        return _grid is not null ? _grid.GoToPage(0, forceReload: true) : LoadPageAsync();
-    }
-
-    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// <summary>One page of the export, with the sort and column filters of the
     /// grid.</summary>
     private Task<PaginatedResult<RoleDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest(20);
         var (sortBy, sortDescending) = ResolveSort(args);
-        return Api.Auth.GetRoleDtosAsync(page, pageSize, Search.Search, sortBy: sortBy, sortDescending: sortDescending,
-            filters: args.ToApiFilters());
+        return Api.Auth.GetRoleDtosAsync(page, pageSize, null, sortBy: sortBy, sortDescending: sortDescending,
+            filters: args.ToApiFilters(), organizationId: Scope.SelectedFor(PermissionKeys.OrganizationRolesManage));
     }
 
     private async Task LoadPageAsync()
@@ -96,7 +98,8 @@ public partial class Roles : IAsyncDisposable
         try
         {
             var result = await Api.Auth.GetRoleDtosAsync(
-                _page, _pageSize, Search.Search, sortBy: _sortBy, sortDescending: _sortDescending, filters: _columnFilters);
+                _page, _pageSize, null, sortBy: _sortBy, sortDescending: _sortDescending, filters: _columnFilters,
+                organizationId: Scope.SelectedFor(PermissionKeys.OrganizationRolesManage));
             _roles = result.Items;
             _totalCount = result.TotalCount;
         }
@@ -144,10 +147,16 @@ public partial class Roles : IAsyncDisposable
 
     private void OnRowClick(RoleDto role) => Nav.NavigateTo($"/admin/roles/{role.Id}");
 
+    /// <summary>A site Admin changes every role; an organization's administrator, its organization's own.</summary>
+    internal bool CanManage(RoleDto role) => Auth.IsAdmin || role.OrganizationId is not null;
+
     private async Task OnCreate()
     {
+        // A site Admin makes a role of every organization, or of the organization chosen in the switcher; an
+        // organization's administrator, a role of its organization (the chosen one, else its first).
+        var organizationId = Auth.IsAdmin ? Scope.SelectedFor(PermissionKeys.OrganizationRolesManage) : Scope.SelectedOrFirstFor(PermissionKeys.OrganizationRolesManage);
         var created = await Dialog.OpenAsync<RoleCreateDialog>(L["NewRole"],
-            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { [nameof(RoleCreateDialog.OrganizationId)] = organizationId },
             new OmniDialogOptions { Width = "520px", CloseDialogOnOverlayClick = false, AutoFocusFirstElement = false });
 
         // Land straight on the new role's page so the admin can set its permission matrix.
@@ -164,16 +173,19 @@ public partial class Roles : IAsyncDisposable
 
         if (confirmed != true) return;
 
-        var success = await Api.Auth.DeleteRoleAsync(role.Id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            await RefreshSilentlyAsync();
-            Toast.Success("Deleted", "Deleted");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Auth.DeleteRoleAsync(role.Id);
+            if (success)
+            {
+                await RefreshSilentlyAsync();
+                Toast.Success("Deleted", "Deleted");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private async Task OnClone(RoleDto role)
@@ -190,21 +202,10 @@ public partial class Roles : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Localizes well-known seeded role descriptions (F-24). Falls back to the raw value
-    /// for user-created roles.
-    /// </summary>
-    private string LocalizeDescription(RoleDto role) => role.Name switch
-    {
-        "Admin" => L["RoleAdminDescription"],
-        "Reader" => L["RoleReaderDescription"],
-        "Contributor" => L["RoleContributorDescription"],
-        _ => role.Description ?? string.Empty
-    };
+    private string LocalizeDescription(RoleDto role) => RoleDescriptions.Localize(role, L);
 
     public async ValueTask DisposeAsync()
     {
-        Search.Changed -= ResetSearchAsync;
         if (_adminRt is not null) await _adminRt.DisposeAsync();
     }
 }

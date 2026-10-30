@@ -77,7 +77,8 @@ internal sealed class NpmRegistryService(
             Kind = PackageRegistryKind.Npm,
             Name = routePackageName,
             NormalizedName = routePackageName,
-            Description = description
+            Description = description,
+            AllowAnonymousDownload = PackageRegistryDefaults.IsPublicByDefault(PackageRegistryKind.Npm, routePackageName)
         };
         if (package.Id == 0)
             await repository.AddPackageAsync(package, ct).ConfigureAwait(false);

@@ -22,7 +22,7 @@ public class UserRepositoryProjectedTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private void SeedUser(int id, string username, string? email, params string[] roles)
+    private void SeedUser(int id, string username, string email, params string[] roles)
     {
         var user = new User { Id = id, Username = username, Email = email, IsActive = true };
         _db.Users.Add(user);

@@ -34,6 +34,10 @@ public sealed record PipelineRunPreparation
     /// manual launch once the platform setting allowed it, and passed on to the runs a trigger step
     /// starts from such a run.</summary>
     public bool RunToEnd { get; init; }
+
+    /// <summary>R-72: the user deploying despite the quality gate, set by the manual launch once it checked
+    /// the rights the override takes; null for every other launch. Never passed on to a child run.</summary>
+    public string? GateOverrideBy { get; init; }
     internal Pipeline Pipeline { get; init; } = default!;
     internal PipelineYamlDefinition Definition { get; init; } = default!;
     internal List<PipelineStageDefinition> EffectiveStages { get; init; } = [];

@@ -47,19 +47,34 @@ public class PortAllocationRepository(AppDbContext db) : IPortAllocationReposito
         ArgumentNullException.ThrowIfNull(scope);
 
         // A project-server library names its host outright; anything else offers the servers its scope
-        // reaches, and the operator chooses.
-        IQueryable<int> serverIds = scope.ProjectServerId is not null
-            ? db.ProjectServers
+        // reaches, and the operator chooses. A server attached to an environment of the project is a
+        // server of the project: the operator never attaches it twice (R-83).
+        IQueryable<int> serverIds;
+        if (scope.ProjectServerId is not null)
+        {
+            serverIds = db.ProjectServers
                 .Where(projectServer => projectServer.Id == scope.ProjectServerId && projectServer.ServerId != null)
+                .Select(projectServer => projectServer.ServerId!.Value);
+        }
+        else if (scope.EnvironmentId is not null)
+        {
+            serverIds = db.EnvironmentServers
+                .Where(link => link.EnvironmentId == scope.EnvironmentId)
+                .Select(link => link.ServerId);
+        }
+        else if (scope.ProjectId is { } projectId)
+        {
+            serverIds = db.ProjectServers
+                .Where(projectServer => projectServer.ProjectId == projectId && projectServer.ServerId != null)
                 .Select(projectServer => projectServer.ServerId!.Value)
-            : scope.EnvironmentId is not null
-                ? db.EnvironmentServers
-                    .Where(link => link.EnvironmentId == scope.EnvironmentId)
-                    .Select(link => link.ServerId)
-                : db.ProjectServers
-                    .Where(projectServer =>
-                        projectServer.ProjectId == scope.ProjectId && projectServer.ServerId != null)
-                    .Select(projectServer => projectServer.ServerId!.Value);
+                .Union(db.EnvironmentServers
+                    .Where(link => link.Environment.ProjectId == projectId)
+                    .Select(link => link.ServerId));
+        }
+        else
+        {
+            return [];
+        }
 
         var servers = await db.Servers
             .AsNoTracking()
@@ -94,6 +109,19 @@ public class PortAllocationRepository(AppDbContext db) : IPortAllocationReposito
                 .Distinct()
                 .Order()
         ];
+    }
+
+    public async Task<List<ExistingLibraryEntry>> FindEntriesByKeyAsync(
+        int libraryId, IReadOnlyCollection<string> keys, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+
+        return await db.VariableLibraryEntries
+            .AsNoTracking()
+            .Where(entry => entry.VariableLibraryId == libraryId && keys.Contains(entry.Key))
+            .Select(entry => new ExistingLibraryEntry(entry.Id, entry.Key, entry.Value))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
     }
 
     public async Task<bool> ServerExistsAsync(int serverId, CancellationToken ct = default) =>

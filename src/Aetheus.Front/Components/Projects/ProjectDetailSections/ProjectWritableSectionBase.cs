@@ -9,6 +9,7 @@ public abstract class ProjectWritableSectionBase : ComponentBase, IDisposable
     [Inject] protected OmniDialogService Dialog { get; set; } = default!;
     [Inject] protected PermissionService Permissions { get; set; } = default!;
     [Inject] protected NotifyHelper Toast { get; set; } = default!;
+    [Inject] protected BusyVeil Veil { get; set; } = default!;
 
     [Parameter] public int ProjectId { get; set; }
 

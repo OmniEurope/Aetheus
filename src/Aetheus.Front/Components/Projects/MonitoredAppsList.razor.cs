@@ -8,6 +8,7 @@ namespace Aetheus.Front.Components.Projects;
 /// </summary>
 public partial class MonitoredAppsList : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private UiActions Ui { get; set; } = default!;
@@ -133,12 +134,12 @@ public partial class MonitoredAppsList : IAsyncDisposable
         if (confirmed != true)
             return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteMonitoredAppAsync(app.Id),
             "MonitoredAppDeleted",
             async () => await LoadAppsAsync(),
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private async Task StartHubAsync()

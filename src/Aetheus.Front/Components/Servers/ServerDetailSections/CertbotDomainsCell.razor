@@ -1,0 +1,15 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Servers.ServerDetailSections
+@* The names a certificate covers, in one narrow cell (R-123): the name itself when it holds one, from two names a
+   number badge ("2 domaines") that opens the full list in a dialog, the same pattern as the readers of a library
+   (ResourceUsageSummary). The controls stop the click so a grid row does not act under them. *@
+@if (Domains.Count == 1)
+{
+    <span class="certbot-domains" title="@Domains[0]">@Domains[0]</span>
+}
+else if (Domains.Count > 1)
+{
+    <span class="certbot-domains" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+        <NumberBadge Tone="OmniTone.Info" OnClick="@(_ => OpenListAsync())" Label="@CountLabel" title="@CountLabel" data-testid="certbot-domains-count">@string.Format(L["CertbotDomainsBadge"], Domains.Count)</NumberBadge>
+    </span>
+}

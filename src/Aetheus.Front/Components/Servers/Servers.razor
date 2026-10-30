@@ -9,10 +9,10 @@
         <HelpLink PageKey="servers" />
         @* A healthy fleet shows nothing here: the up-to-date count is the normal case and reads as
            noise, and a zero counter is not information. Only what needs attention is displayed. *@
-        @* A status count, its icon in place of its name on a phone. *@
-        <StatusCountBadge Count="@_compatibilitySummary.UpdateRecommended" Label="@L["AgentCompatibility_UpdateRecommended"]" Icon="OmniIconName.Upgrade" Tone="OmniTone.Warning" />
-        <StatusCountBadge Count="@_compatibilitySummary.UpdateRequired" Label="@L["AgentCompatibility_UpdateRequired"]" Icon="OmniIconName.Warning" Tone="OmniTone.Danger" />
-        <StatusCountBadge Count="@_compatibilitySummary.Unknown" Label="@L["AgentCompatibility_Unknown"]" Icon="OmniIconName.Question" Tone="OmniTone.Neutral" />
+        @* A status count: a number badge, no icon (recette R-44). *@
+        <StatusCountBadge Count="@_compatibilitySummary.UpdateRecommended" Label="@L["AgentCompatibility_UpdateRecommended"]" Tone="OmniTone.Warning" />
+        <StatusCountBadge Count="@_compatibilitySummary.UpdateRequired" Label="@L["AgentCompatibility_UpdateRequired"]" Tone="OmniTone.Danger" />
+        <StatusCountBadge Count="@_compatibilitySummary.Unknown" Label="@L["AgentCompatibility_Unknown"]" Tone="OmniTone.Neutral" />
     </Badges>
     <ActionsContent>
         @* Open the column chooser from Tools. *@
@@ -46,9 +46,10 @@
     </ActionsContent>
 </OmniPageHeader>
 
+<OmniStack Class="page-fill-body">
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadFailed"]
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReloadGridAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
@@ -90,12 +91,12 @@
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                     @if (server.Status == ServerStatus.Online)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L.Localize(server.Status)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L.Localize(server.Status)</OmniBadge>
                     }
                     else
                     {
                         <span title="@OfflineReason(server)">
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@ServerHeartbeatHelper.Severity(server.LastHeartbeat)">@L.Localize(server.Status)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(ServerHeartbeatHelper.Severity(server.LastHeartbeat)))" Fill="OmniFill.Solid" Tone="@ServerHeartbeatHelper.Severity(server.LastHeartbeat)">@L.Localize(server.Status)</OmniBadge>
                         </span>
                         <ServerReachabilityBadge Server="server" />
                     }
@@ -103,7 +104,7 @@
                     {
                         @* Place connection state beside server status. The icon-only warning keeps
                            an accessible name through title and AriaLabel. *@
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Warning"
+                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning"
                             title="@L["InsecureTlsHint"]" aria-label="@L["InsecureTlsBadge"]"><Icon><OmniIcon Name="OmniIconName.ShieldWarning" /></Icon></OmniBadge>
                     }
                 </OmniStack>
@@ -183,4 +184,4 @@
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
-
+</OmniStack>

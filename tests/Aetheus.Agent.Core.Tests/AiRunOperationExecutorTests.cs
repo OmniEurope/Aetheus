@@ -349,7 +349,7 @@ public sealed class AiRunOperationExecutorTests : IDisposable
     }
 
     [Fact]
-    public async Task Placeholder_OnAnEmptyFindingsBlock_PublishesOneFakeNote()
+    public async Task AnEmptyFindingsBlock_PublishesNoFinding_EvenWithTheRetiredPlaceholderVariable()
     {
         _answer = "Nothing to report.\n\n```json\n{\"findings\":[]}\n```\n";
         var environment = Environment(findings: true, advisory: true);
@@ -358,28 +358,11 @@ public sealed class AiRunOperationExecutorTests : IDisposable
         var result = await RunAsync(environment);
 
         Assert.Equal(0, result.ExitCode);
-        await _api.Received(1).PublishAnalysisReportAsync(42,
-            Arg.Is<PublishAnalysisReportRequest>(request => request.ScannerKey == "ai-review"), Arg.Any<CancellationToken>());
-        Assert.Contains(_output, line => line.Message.Contains("AI findings published: 1 finding(s)", StringComparison.Ordinal));
-        var results = JsonDocument.Parse(AiFindingsPublisher.ToSarif(_answer, placeholder: true).Sarif!)
+        Assert.Contains(_output, line => line.Message.Contains("AI findings published: 0 finding(s)", StringComparison.Ordinal));
+        Assert.DoesNotContain(_output, line => line.Message.Contains("FAKE", StringComparison.Ordinal));
+        var results = JsonDocument.Parse(AiFindingsPublisher.ToSarif(_answer).Sarif!)
             .RootElement.GetProperty("runs")[0].GetProperty("results");
-        Assert.Equal(1, results.GetArrayLength());
-        Assert.Equal(AiFindingsPublisher.PlaceholderRule, results[0].GetProperty("ruleId").GetString());
-        Assert.Equal("note", results[0].GetProperty("level").GetString());
-        Assert.StartsWith("[FAKE]", results[0].GetProperty("message").GetProperty("text").GetString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Placeholder_NeverReplacesARealFinding_AndIsOffByDefault()
-    {
-        const string real = "```json\n{\"findings\":[{\"file\":\"src/A.cs\",\"line\":1,\"message\":\"Real.\"}]}\n```";
-        const string empty = "```json\n{\"findings\":[]}\n```";
-
-        var withReal = JsonDocument.Parse(AiFindingsPublisher.ToSarif(real, placeholder: true).Sarif!)
-            .RootElement.GetProperty("runs")[0].GetProperty("results");
-        Assert.Equal(1, withReal.GetArrayLength());
-        Assert.Equal("Real.", withReal[0].GetProperty("message").GetProperty("text").GetString());
-        Assert.Equal(0, AiFindingsPublisher.ToSarif(empty).Count);
+        Assert.Equal(0, results.GetArrayLength());
     }
 
     [Fact]

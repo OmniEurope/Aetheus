@@ -21,8 +21,8 @@ internal static class PipelineAiStepValidator
         {
             // advisory exists to keep an opinion from deciding anything; on a step that produces
             // evidence or deploys it would hide a real failure, so it stays an AI-only key.
-            if (step.Advisory || step.Findings || step.FindingsPlaceholder || step.GitRange is not null)
-                errors.Add($"Step '{step.Name}' in {context}: advisory, findings, findings_placeholder and git_range are only valid on an ai step.");
+            if (step.Advisory || step.Findings || step.GitRange is not null)
+                errors.Add($"Step '{step.Name}' in {context}: advisory, findings and git_range are only valid on an ai step.");
             return;
         }
         ValidateAiStep(errors, step, context);
@@ -40,8 +40,6 @@ internal static class PipelineAiStepValidator
             errors.Add($"AI step '{step.Name}' in {context} has invalid context_paths.");
         if (step.GitRange is not null && !AiRepositoryContextRules.IsValidGitRange(step.GitRange))
             errors.Add($"AI step '{step.Name}' in {context} has an empty or oversized git_range.");
-        if (step.FindingsPlaceholder && !step.Findings)
-            errors.Add($"AI step '{step.Name}' in {context}: findings_placeholder needs findings: true.");
         if (step.Advisory && step.Gate)
             errors.Add($"AI step '{step.Name}' in {context} cannot be both advisory and a gate: an advisory verdict blocks nothing.");
     }

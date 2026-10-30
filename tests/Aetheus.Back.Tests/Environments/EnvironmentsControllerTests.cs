@@ -16,6 +16,11 @@ public class EnvironmentsControllerTests
 
     public EnvironmentsControllerTests()
     {
+        // ADR-059: the caller's organization lets it give an environment to the project.
+        _authzMock.BelongsToProjectOrganizationAsync(Arg.Any<int?>(), Arg.Any<ResourceType>(), Arg.Any<IEnumerable<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authzMock.CanCreateInProjectAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new EnvironmentsController(_serviceMock, _authzMock);
         _sut.ControllerContext = new ControllerContext
         {

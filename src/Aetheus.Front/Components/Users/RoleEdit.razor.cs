@@ -7,6 +7,7 @@ public partial class RoleEdit
 {
     [Parameter] public int Id { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -14,9 +15,19 @@ public partial class RoleEdit
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private ConfirmHelper Confirm { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
 
     private bool _isNew;
     private bool _authorized;
+    // Owner decision 2026-10-28: an organization's administrator reads the built-in roles and changes its
+    // organization's own; the role's organization (null: every organization).
+    private bool _readOnly;
+    private int? _roleOrganizationId;
+    private bool Locked => _savingPermissions || _readOnly;
+    private string[] TabSlugs => _isNew ? ["general"]
+        : Auth.IsAdmin ? ["general", "access", "permissions", "users", "audit"]
+        : ["general", "access", "permissions", "users"];
     private (bool IsNew, int Id)? _loadedRoute;
     private bool _loading = true;
     private bool _saving;
@@ -27,6 +38,8 @@ public partial class RoleEdit
     // FRONT-023: the role's permissions on one resource (Server 42 Read...). The grid edits only the
     // global ones, but saving replaces the whole list, so these are sent back unchanged with it.
     private List<ResourcePermissionEntry> _scopedPermissions = [];
+    // R-11: the role-wide named permissions, for the access tab.
+    private List<string> _permissionKeys = [];
     private List<OmniOption<string>> _scopeOptions = [];
     private Permission? _bulkPermission;
     private List<OmniOption<Permission?>> _permissionLevels = [];
@@ -42,6 +55,11 @@ public partial class RoleEdit
     private bool _loadingAvailableUsers;
     private bool _addingUser;
     private int? _selectedUserId;
+    // R-47 (ADR-059): every role but Admin is given for one organization, chosen here when there are several.
+    private List<OrganizationDto> _organizations = [];
+    private int _organizationId;
+    private bool RoleIsOrganizationScoped => !string.Equals(_name, RoleNames.Admin, StringComparison.OrdinalIgnoreCase);
+    private bool CanAddUser => _selectedUserId is not null && (!RoleIsOrganizationScoped || _organizationId > 0);
     private string? _availableUsersSearch;
     private Func<string, string>? _activeText;
 
@@ -51,7 +69,7 @@ public partial class RoleEdit
 
     protected override void OnInitialized()
     {
-        if (!Auth.IsAdmin)
+        if (!Auth.IsAdmin && !Permissions.Can(PermissionKeys.OrganizationRolesManage))
         {
             Nav.NavigateTo("/");
             return;
@@ -106,8 +124,11 @@ public partial class RoleEdit
 
         _name = role.Name;
         _model = new RoleFormModel { Name = role.Name, Description = role.Description };
+        _roleOrganizationId = role.OrganizationId;
+        _readOnly = !Auth.IsAdmin && role.OrganizationId is null;
 
         BuildPermissionRows(role.Permissions);
+        _permissionKeys = role.PermissionKeys;
 
         Breadcrumb.Set(
             new BreadcrumbItem(L["Administration"], "/admin"),
@@ -135,6 +156,8 @@ public partial class RoleEdit
         _usersLoaded = false;
         _selectedUserId = null;
         _availableUsersSearch = null;
+        _readOnly = false;
+        _roleOrganizationId = null;
     }
 
     private string? CurrentTab()
@@ -143,15 +166,30 @@ public partial class RoleEdit
         return query.TryGetValue("tab", out var value) ? value.ToString() : null;
     }
 
-    // Slugs order: 0 general, 1 permissions, 2 users, 3 audit.
+    // Slugs order: 0 general, 1 access (R-11), 2 permissions, 3 users, 4 audit.
     private async Task OnTabChanged(int index)
     {
-        if (index == 2 && !_usersLoaded)
+        if (index == 3 && !_usersLoaded)
             await InitializeUsersTabAsync();
     }
 
     private async Task InitializeUsersTabAsync()
     {
+        // A role of one organization is given for that organization only.
+        if (_roleOrganizationId is { } owner)
+            _organizationId = owner;
+        else if (RoleIsOrganizationScoped && _organizations.Count == 0)
+        {
+            try
+            {
+                _organizations = (await Api.Servers.GetOrganizationsAsync(null, 1, 100, "Name"))?.Items ?? [];
+            }
+            catch (HttpRequestException)
+            {
+                _organizations = [];
+            }
+            _organizationId = _organizations.Count > 0 ? _organizations[0].Id : 0;
+        }
         _usersLoaded = true;
         await InvokeAsync(StateHasChanged);
     }
@@ -263,11 +301,12 @@ public partial class RoleEdit
 
     private async Task OnAddUser()
     {
-        if (_selectedUserId is null) return;
+        if (!CanAddUser) return;
         _addingUser = true;
         try
         {
-            var status = await Api.Auth.AddUserToRoleAsync(Id, _selectedUserId.Value);
+            var status = await Api.Auth.AddUserToRoleAsync(
+                Id, _selectedUserId!.Value, RoleIsOrganizationScoped ? _organizationId : null);
             if (status.Success)
             {
                 Toast.Success("Saved");
@@ -290,12 +329,22 @@ public partial class RoleEdit
         var confirmed = await Confirm.ConfirmDeleteAsync("ConfirmRemoveUserFromRole", "Confirm", user.Username);
         if (confirmed != true) return;
 
-        var status = await Api.Auth.RemoveUserFromRoleAsync(Id, user.UserId);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("Saved");
-            await RefreshUserCollectionsAsync();
-        }
+            // An organization's administrator takes back the role held for its organization.
+            var status = await Api.Auth.RemoveUserFromRoleAsync(Id, user.UserId, Auth.IsAdmin ? null : user.OrganizationId);
+            if (status.Success)
+            {
+                Toast.Success("Saved");
+                await RefreshUserCollectionsAsync();
+            }
+        });
+    }
+
+    /// <summary>The account page is the site Admin's.</summary>
+    private void OnRoleUserClick(RoleUserDto user)
+    {
+        if (Auth.IsAdmin) Nav.NavigateTo($"/users/{user.UserId}");
     }
 
     private void BuildPermissionRows(List<ResourcePermissionDto> permissions)
@@ -309,7 +358,10 @@ public partial class RoleEdit
                 Permission = p.Permission
             })
             .ToList();
-        _permissionRows = Enum.GetValues<ResourceType>().Select(rt =>
+        // An organization's role grants nothing on what belongs to no organization (agent pools, Docker).
+        _permissionRows = Enum.GetValues<ResourceType>()
+            .Where(rt => _roleOrganizationId is null || rt is not (ResourceType.AgentPool or ResourceType.Docker))
+            .Select(rt =>
         {
             var perms = permissions.Where(p => p.ResourceType == rt && p.ResourceId is null).ToList();
             var maxPerm = perms.Count > 0 ? perms.Max(p => (int)p.Permission) : -1;
@@ -357,10 +409,14 @@ public partial class RoleEdit
         {
             if (_isNew)
             {
+                // A site Admin makes a role of every organization, or of the one chosen in the switcher; an
+                // organization's administrator, a role of its organization.
+                await Scope.EnsureLoadedAsync();
                 var result = await Api.Auth.CreateRoleAsync(new CreateRoleRequest
                 {
                     Name = _model.Name,
-                    Description = _model.Description
+                    Description = _model.Description,
+                    OrganizationId = Auth.IsAdmin ? Scope.SelectedFor(PermissionKeys.OrganizationRolesManage) : Scope.SelectedOrFirstFor(PermissionKeys.OrganizationRolesManage)
                 });
                 if (result is not null)
                     Nav.NavigateTo($"/admin/roles/{result.Id}");
@@ -418,7 +474,11 @@ public partial class RoleEdit
             });
 
             if (success)
+            {
                 Toast.Success("PermissionsSaved");
+                // A role-wide level is also a level key of the access tab (R-11).
+                _permissionKeys = await Api.Auth.GetRolePermissionKeysAsync(Id);
+            }
             else
                 await RestorePermissionsAfterFailureAsync();
         }
@@ -450,6 +510,15 @@ public partial class RoleEdit
         }
 
         await OnSavePermissions();
+    }
+
+    /// <summary>R-11: a level key saved in the access tab is a role-wide level of the matrix: reload both.</summary>
+    private async Task OnPermissionKeysSavedAsync()
+    {
+        var role = await Api.Auth.GetRoleAsync(Id);
+        if (role is null) return;
+        BuildPermissionRows(role.Permissions);
+        _permissionKeys = role.PermissionKeys;
     }
 
     private async Task RestorePermissionsAfterFailureAsync()

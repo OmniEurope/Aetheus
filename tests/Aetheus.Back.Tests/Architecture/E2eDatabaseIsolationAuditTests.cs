@@ -108,13 +108,18 @@ public sealed class E2eDatabaseIsolationAuditTests
     {
         var root = RepoRoot();
         var entryPoint = File.ReadAllText(Path.Combine(root, "launch-windows.ps1"));
-        var core = File.ReadAllText(Path.Combine(root, "scripts", "launch-core.ps1"));
+        var core = File.ReadAllText(Path.Combine(root, "scripts", "launch-core.ps1")).ReplaceLineEndings("\n");
         var linuxLauncher = File.ReadAllText(Path.Combine(root, "launch-linux.sh"));
 
         Assert.Contains("$script:ylaunchExitCode = 0", entryPoint, StringComparison.Ordinal);
         Assert.Contains("exit $script:ylaunchExitCode", entryPoint, StringComparison.Ordinal);
         Assert.Contains("$script:ylaunchExitCode = 1", core, StringComparison.Ordinal);
-        Assert.Contains("INTEGRATION TESTS FAILED - aborting.\" -ForegroundColor Red; $script:ylaunchExitCode = 1; return", core, StringComparison.Ordinal);
+        // A failed suite is named (its Failure text), stops the stages that follow and fails the run through
+        // the combined summary below, never through a bare exit.
+        Assert.Contains("Failure = \"INTEGRATION TESTS FAILED\"", core, StringComparison.Ordinal);
+        Assert.Contains("if ($phase.Failed.Count -gt 0) { $testsAborted = $true }", core, StringComparison.Ordinal);
+        Assert.Contains("if ($TestE2e -and -not $testsAborted)", core, StringComparison.Ordinal);
+        Assert.Matches(@"SOME TESTS FAILED\.""\s+-ForegroundColor Red\s+\$script:ylaunchExitCode = 1\s+return", core);
         Assert.DoesNotContain("TESTS FAILED - aborting.\" -ForegroundColor Red; exit 1", core, StringComparison.Ordinal);
         Assert.Contains("$processFailures.Count -gt 0", core, StringComparison.Ordinal);
         Assert.Contains("throw [System.ArgumentException]::new(\"Unknown E2E category", core, StringComparison.Ordinal);

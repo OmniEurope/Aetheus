@@ -15,11 +15,15 @@ public interface IUserRepository
     Task<(List<UserDto> Items, int TotalCount)> GetUsersPagedProjectedAsync(
         string? search, int page, int pageSize, CancellationToken ct = default,
         string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<GridFilter>? filters = null);
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null);
 
     Task<User?> GetUserDetailAsync(int id, CancellationToken ct = default);
 
     Task<User?> FindByUsernameAsync(string username, CancellationToken ct = default);
+
+    /// <summary>True when an account other than <paramref name="exceptUserId"/> already signs in with
+    /// <paramref name="normalizedEmail"/> (PLAN-003 P3-2).</summary>
+    Task<bool> EmailInUseAsync(string normalizedEmail, int? exceptUserId, CancellationToken ct = default);
 
     Task<User?> FindUserAsync(int id, CancellationToken ct = default);
 

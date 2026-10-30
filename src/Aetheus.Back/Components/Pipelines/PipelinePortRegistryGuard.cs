@@ -43,8 +43,8 @@ public interface IPipelinePortRegistryGuard
 /// merging them would either block on a stale observation or hide a real declared conflict.
 /// </summary>
 public sealed record PortConflictReport(
-    IReadOnlyList<string> Blocking,
-    IReadOnlyList<string> Warnings)
+    IReadOnlyList<PipelineProblem> Blocking,
+    IReadOnlyList<PipelineProblem> Warnings)
 {
     public static PortConflictReport Empty { get; } = new([], []);
 }
@@ -78,8 +78,8 @@ public sealed class PipelinePortRegistryGuard(
         var claims = await ResolveClaimsAsync(
             definition, resolvedVariables, organizationId, projectId, ct).ConfigureAwait(false);
 
-        var blocking = new List<string>();
-        var warnings = new List<string>();
+        var blocking = new List<PipelineProblem>();
+        var warnings = new List<PipelineProblem>();
         foreach (var claim in claims)
         {
             var conflicts = await portRegistry
@@ -105,16 +105,23 @@ public sealed class PipelinePortRegistryGuard(
         return new PortConflictReport(blocking, warnings);
     }
 
-    private static string DescribeDeclared(PortConflictDto conflict, string serverName) =>
-        $"Port {conflict.Port} on server '{serverName}' is already registered to "
-        + $"'{conflict.OwnerLabel}' (declared {conflict.DeclaredAt:yyyy-MM-dd}). "
-        + "Choose another port or release that reservation before deploying.";
+    private static PipelineProblem DescribeDeclared(PortConflictDto conflict, string serverName) =>
+        PipelineProblem.Of(
+            PipelineProblemCodes.PortRegisteredToAnother,
+            $"Port {conflict.Port} on server '{serverName}' is already registered to "
+            + $"'{conflict.OwnerLabel}' (declared {conflict.DeclaredAt:yyyy-MM-dd}). "
+            + "Choose another port or release that reservation before deploying.",
+            ("port", conflict.Port), ("server", serverName), ("owner", conflict.OwnerLabel),
+            ("declaredAt", conflict.DeclaredAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
 
-    private static string DescribeObserved(PortConflictDto conflict, string serverName) =>
-        $"Port {conflict.Port} on server '{serverName}' was seen listening, held by "
-        + $"'{conflict.OwnerLabel}', and no project declared it. The deployment will fail to bind it "
-        + "unless that listener is stopped. Set 'observed_port_policy: error' to refuse the launch, "
-        + "or 'ignore' to stop reporting it.";
+    private static PipelineProblem DescribeObserved(PortConflictDto conflict, string serverName) =>
+        PipelineProblem.Of(
+            PipelineProblemCodes.PortSeenListening,
+            $"Port {conflict.Port} on server '{serverName}' was seen listening, held by "
+            + $"'{conflict.OwnerLabel}', and no project declared it. The deployment will fail to bind it "
+            + "unless that listener is stopped. Set 'observed_port_policy: error' to refuse the launch, "
+            + "or 'ignore' to stop reporting it.",
+            ("port", conflict.Port), ("server", serverName), ("owner", conflict.OwnerLabel));
 
     /// <summary>
     /// Reads the YAML <c>observed_port_policy:</c>. An unrecognised value falls back to the default

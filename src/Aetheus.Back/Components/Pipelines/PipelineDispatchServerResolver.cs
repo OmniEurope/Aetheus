@@ -61,18 +61,32 @@ public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader r
 {
     // Human-readable fail-closed reason. Explicit selectors never broaden to another runner.
     public string BuildNoServerReason(string stageName, PipelineStageDefinition stageDef)
+        => NoServerProblem(stageName, stageDef).English;
+
+    /// <summary><see cref="BuildNoServerReason"/> as a launch problem the front can translate.</summary>
+    internal static PipelineProblem NoServerProblem(string stageName, PipelineStageDefinition stageDef)
     {
         var target = DescribeTarget(stageDef);
         var osNote = !string.IsNullOrEmpty(stageDef.Os) ? $", os '{stageDef.Os}'" : string.Empty;
-        return $"Stage '{stageName}': no online pipeline runner available in the organization (requested {target}{osNote}).";
+        return PipelineProblem.Of(
+            PipelineProblemCodes.NoRunnerForStage,
+            $"Stage '{stageName}': no online pipeline runner available in the organization (requested {target}{osNote}).",
+            ("stage", stageName), ("selector", DescribeSelector(stageDef)));
     }
 
     public string BuildEmptyTargetParameterReason(string stageName, string parameterName)
         => $"Stage '{stageName}': parameter '{parameterName}' is empty, so no server is chosen for it.";
 
     public string BuildEmptyTargetParameterRefusal(string stageName, string parameterName)
-        => $"{BuildEmptyTargetParameterReason(stageName, parameterName)} "
-           + $"The launch is refused instead of running the stage on any available runner: choose a value for '{parameterName}'.";
+        => EmptyTargetParameterProblem(stageName, parameterName).English;
+
+    /// <summary><see cref="BuildEmptyTargetParameterRefusal"/> as a launch problem the front can translate.</summary>
+    internal static PipelineProblem EmptyTargetParameterProblem(string stageName, string parameterName)
+        => PipelineProblem.Of(
+            PipelineProblemCodes.EmptyTargetParameter,
+            $"Stage '{stageName}': parameter '{parameterName}' is empty, so no server is chosen for it. "
+            + $"The launch is refused instead of running the stage on any available runner: choose a value for '{parameterName}'.",
+            ("stage", stageName), ("parameter", parameterName));
 
     // Only the native cross-agent `type: deploy` operation requires the deployment module.
     // `execution_role: deploy` is a workload classification used by deployment-only runners; shell,
@@ -82,11 +96,18 @@ public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader r
         => stageDef.Steps.Any(s => string.Equals(s.Type, "deploy", StringComparison.OrdinalIgnoreCase));
 
     public string BuildNoDeployTargetReason(string stageName, PipelineStageDefinition stageDef)
+        => NoDeployTargetProblem(stageName, stageDef).English;
+
+    /// <summary><see cref="BuildNoDeployTargetReason"/> as a launch problem the front can translate.</summary>
+    internal static PipelineProblem NoDeployTargetProblem(string stageName, PipelineStageDefinition stageDef)
     {
         var target = DescribeTarget(stageDef);
         var osNote = !string.IsNullOrEmpty(stageDef.Os) ? $", os '{stageDef.Os}'" : string.Empty;
-        return $"Deploy stage '{stageName}': no online deployment-capable agent available (requested {target}{osNote}). "
-             + "Install an agent with --module deployment, or target a host that has the deployment capability.";
+        return PipelineProblem.Of(
+            PipelineProblemCodes.NoDeployTargetForStage,
+            $"Deploy stage '{stageName}': no online deployment-capable agent available (requested {target}{osNote}). "
+            + "Install an agent with --module deployment, or target a host that has the deployment capability.",
+            ("stage", stageName), ("selector", DescribeSelector(stageDef)));
     }
 
     // Fail-closed deploy policy (mirrors CheckIsolationPolicy): a deploy stage may only run on a
@@ -114,6 +135,17 @@ public sealed class PipelineDispatchServerResolver(IPipelineRunnerTargetReader r
             : !string.IsNullOrEmpty(stageDef.Environment) ? $"environment '{stageDef.Environment}'"
             : !string.IsNullOrEmpty(stageDef.Agent) ? $"agent '{stageDef.Agent}'"
             : "default";
+
+    // The same selector for a translated sentence: the YAML keys themselves (pool:, environment:, agent:,
+    // os:), which read the same in every language.
+    private static string DescribeSelector(PipelineStageDefinition stageDef)
+    {
+        var selector = !string.IsNullOrEmpty(stageDef.Pool) ? $"pool: {stageDef.Pool}"
+            : !string.IsNullOrEmpty(stageDef.Environment) ? $"environment: {stageDef.Environment}"
+            : !string.IsNullOrEmpty(stageDef.Agent) ? $"agent: {stageDef.Agent}"
+            : "agent: default";
+        return !string.IsNullOrEmpty(stageDef.Os) ? $"{selector}, os: {stageDef.Os}" : selector;
+    }
 
     // P-04 / P-01: Server resolution - pool > environment > agent name. Explicit selectors are
     // fail-closed; only stages with no selector may use an organization-scoped runner fallback.

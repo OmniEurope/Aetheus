@@ -112,15 +112,23 @@ public class RkhunterServiceTests
 
     // --- SetupAsync ---
 
+    // R-119: the install was an `apt-get install ... && rkhunter ... && sed -i` shell chain, run without root and
+    // carrying no kind, so the agent never collected its RKHunter inventory again. It is a typed operation now; the
+    // only variable, the warning address, travels in its environment, never in a command line.
     [Fact]
-    public async Task SetupAsync_CreatesShellTaskAndAudits()
+    public async Task SetupAsync_QueuesTheTypedOperation_WithTheAddressInItsEnvironment_AndAudits()
     {
         var request = new RkhunterSetupRequest { MailOnWarning = "admin@example.com" };
 
         await _sut.SetupAsync(1, request, ct: TestContext.Current.CancellationToken);
 
         await _repoMock.Received(1).AddTaskAsync(
-            Arg.Is<ServerTask>(t => t.ServerId == 1 && t.Executor == ExecutorType.Shell),
+            Arg.Is<ServerTask>(t => t.ServerId == 1
+                && t.Executor == ExecutorType.Operation
+                && t.Operation == OperationKind.RkhunterSetup
+                && t.Command == "-"
+                && t.Name.StartsWith("RKHunter", StringComparison.Ordinal)
+                && Environment(t)[RkhunterSetupEnv.MailOnWarning] == "admin@example.com"),
             Arg.Any<CancellationToken>());
         await _auditMock.Received(1).LogAsync(
             "RkhunterSetup", "Rkhunter", 1, "admin@example.com", Arg.Any<CancellationToken>());
@@ -136,7 +144,28 @@ public class RkhunterServiceTests
 
         await _auditMock.Received(1).LogAsync(
             "RkhunterSetup", "Rkhunter", 1, Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _repoMock.Received(1).AddTaskAsync(
+            Arg.Is<ServerTask>(t => t.Operation == OperationKind.RkhunterSetup
+                && !Environment(t).ContainsKey(RkhunterSetupEnv.MailOnWarning)),
+            Arg.Any<CancellationToken>());
     }
+
+    [Theory]
+    [InlineData("not-an-email")]
+    [InlineData("admin@example.com\"; rm -rf /; echo \"")]
+    [InlineData("admin@example.com\nMAIL-CMD=x")]
+    [InlineData("admin@example.com\n")]
+    public async Task SetupAsync_InvalidAddress_ThrowsBadRequest_AndQueuesNothing(string address)
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.SetupAsync(
+            1, new RkhunterSetupRequest { MailOnWarning = address }, ct: TestContext.Current.CancellationToken));
+        await _repoMock.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
+    }
+
+    private static Dictionary<string, string> Environment(ServerTask task) =>
+        string.IsNullOrEmpty(task.EnvironmentVariables)
+            ? []
+            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(task.EnvironmentVariables)!;
 
     // --- GetLogsAsync ---
 

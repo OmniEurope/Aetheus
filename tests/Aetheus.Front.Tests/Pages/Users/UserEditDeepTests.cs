@@ -15,6 +15,7 @@ public class UserEditDeepTests : BunitContext
     public UserEditDeepTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        _handler.SetOrganizations();
     }
 
     private void SetupRoles(params string[] roles) =>
@@ -45,11 +46,6 @@ public class UserEditDeepTests : BunitContext
         });
     }
 
-    private void SetupNewUser()
-    {
-        SetupRoles("Admin", "Contributor", "Reader");
-    }
-
     [Fact]
     public void Renders_EditForm_ForExistingUser()
     {
@@ -62,55 +58,6 @@ public class UserEditDeepTests : BunitContext
         var model = typeof(UserEdit).GetField("_model", Priv)!.GetValue(cut.Instance)!;
         var username = (string)model.GetType().GetProperty("Username")!.GetValue(model)!;
         Assert.Equal("tester", username);
-    }
-
-    [Fact]
-    public void Renders_CreateForm_ForNewUser()
-    {
-        SetupNewUser();
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-
-        // New-user mode pages through available roles but never fetches a user detail.
-        Assert.Contains(_handler.Requests, r => r.Url.Contains("api/roles"));
-        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("/effective-permissions"));
-    }
-
-    [Fact]
-    public async Task OnSubmit_NewUser_EmptyPassword_ShowsError()
-    {
-        SetupNewUser();
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-
-        // Leave password empty → guard fires before any create call
-        var method = typeof(UserEdit).GetMethod("OnSubmit", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
-
-        // The empty-password guard short-circuits: no create POST reaches api/users.
-        Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/users"));
-    }
-
-    [Fact]
-    public async Task OnSubmit_NewUser_ValidPassword_CreatesUser()
-    {
-        SetupNewUser();
-        _handler.SetJsonResponse("api/users", new UserDto { Id = 10, Username = "newuser", Email = null, IsActive = true, Roles = [] });
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, (int?)null));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-
-        // Set a valid password
-        var modelField = typeof(UserEdit).GetField("_model", Priv)!;
-        var model = modelField.GetValue(cut.Instance)!;
-        var modelType = model.GetType();
-        modelType.GetProperty("Username")!.SetValue(model, "newuser");
-        modelType.GetProperty("Password")!.SetValue(model, "secure-passphrase");
-
-        var method = typeof(UserEdit).GetMethod("OnSubmit", Priv)!;
-        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [])!);
-
-        // A valid password passes the guard, so a create POST is sent to the users collection.
-        Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/users"));
     }
 
     [Fact]
@@ -232,8 +179,6 @@ public class UserEditDeepTests : BunitContext
     [InlineData(Permission.Read, OmniTone.Accent)]
     public void GetPermissionBadgeStyle_ReturnsExpected(Permission permission, OmniTone expected)
     {
-        SetupNewUser();
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, (int?)null));
         var method = typeof(UserEdit).GetMethod("GetPermissionBadgeStyle", BindingFlags.NonPublic | BindingFlags.Static)!;
         var result = (OmniTone)method.Invoke(null, [permission])!;
         Assert.Equal(expected, result);

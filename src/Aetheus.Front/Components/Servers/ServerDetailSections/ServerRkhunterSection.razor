@@ -29,7 +29,7 @@
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(Rk.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Rk.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
+    <OmniBadge Icon="@(BadgeIcon.ForState(Rk.IsInstalled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Rk.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Rk.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
     @if (Rk.IsInstalled)
     {
         @if (!string.IsNullOrEmpty(Rk.Version))
@@ -37,10 +37,10 @@
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">v@(Rk.Version)</OmniText>
         }
         <OmniIcon Name="@MaterialIconMap.Resolve(GetScanStatusIcon(Rk.LastScanStatus))" Class="@GetScanStatusColor(Rk.LastScanStatus)" />
-        <OmniBadge Fill="OmniFill.Solid" Tone="@GetScanBadgeStyle(Rk.LastScanStatus)">@($"{L["LastScan"]}: {LocalizeScanStatus(Rk.LastScanStatus)}")</OmniBadge>
+        <OmniBadge Icon="@(BadgeIcon.ForState(GetScanBadgeStyle(Rk.LastScanStatus)))" Fill="OmniFill.Solid" Tone="@GetScanBadgeStyle(Rk.LastScanStatus)">@($"{L["LastScan"]}: {LocalizeScanStatus(Rk.LastScanStatus)}")</OmniBadge>
         @if (Rk.WarningCount > 0)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{Rk.WarningCount} {L["Warnings"]}")</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@($"{Rk.WarningCount} {L["Warnings"]}")</NumberBadge>
         }
         @if (Rk.LastScanTime.Year >= 2000)
         {
@@ -49,7 +49,7 @@
     }
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="RKHunter" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="RKHunter" SettleOnHeartbeat="true" OnSettled="ReloadFromPushAsync" />
 
 @if (Rk.IsInstalled)
 {
@@ -72,7 +72,7 @@
                         <OmniFieldset><Legend>@L["LastScanStatus"]</Legend><ChildContent>
                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                 <OmniIcon Name="@MaterialIconMap.Resolve(GetScanStatusIcon(Rk.LastScanStatus))" Class="@GetScanStatusColor(Rk.LastScanStatus)" />
-                                <OmniText Element="OmniTextElement.Paragraph">@LocalizeScanStatus(Rk.LastScanStatus) (@Rk.WarningCount @L["Warnings"])</OmniText>
+                                <OmniText Element="OmniTextElement.Paragraph">@LocalizeScanStatus(Rk.LastScanStatus)@if (!string.Equals(Rk.LastScanStatus, "none", StringComparison.OrdinalIgnoreCase)) { <text> (@Rk.WarningCount @L["Warnings"])</text> }</OmniText>
                             </OmniStack>
                         </ChildContent></OmniFieldset>
                     </OmniColumn>

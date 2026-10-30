@@ -94,6 +94,8 @@ public class CertbotDockerRkhunterArgvTests
     [InlineData(OperationKind.DockerStartContainer, "start")]
     [InlineData(OperationKind.DockerStopContainer, "stop")]
     [InlineData(OperationKind.DockerPullImage, "pull")]
+    [InlineData(OperationKind.DockerRemoveContainer, "rm")]
+    [InlineData(OperationKind.DockerRemoveImage, "rmi")]
     public void Docker_Argv_IsVerbThenTarget(OperationKind kind, string verb)
     {
         var argv = DockerOperationExecutor.BuildArgs(kind, "my-container");

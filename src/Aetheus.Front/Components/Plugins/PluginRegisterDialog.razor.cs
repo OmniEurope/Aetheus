@@ -15,8 +15,8 @@ public partial class PluginRegisterDialog
     private readonly RegisterPluginRequest _model = new();
     private bool _busy;
 
-    private static readonly List<OmniOption<PluginType>> _pluginTypes = Enum.GetValues<PluginType>()
-        .Select(t => new OmniOption<PluginType>(t, t.ToString()))
+    private List<OmniOption<PluginType>> TypeOptions => Enum.GetValues<PluginType>()
+        .Select(t => new OmniOption<PluginType>(t, L.Localize(t)))
         .ToList();
 
     private async Task SubmitAsync()

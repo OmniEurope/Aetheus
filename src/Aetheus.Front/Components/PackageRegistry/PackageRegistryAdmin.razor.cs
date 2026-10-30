@@ -11,6 +11,9 @@ public partial class PackageRegistryAdmin : Aetheus.Front.Components.Shared.Real
     private List<PackageRegistryPackageDto> _packages = [];
     private Func<string, string>? _kindText;
     private Func<string, string> KindText => _kindText ??= GridFilterText.ForEnum<PackageRegistryKind>(L);
+    private Func<string, string>? _accessText;
+    private Func<string, string> AccessText => _accessText ??= value =>
+        bool.TryParse(value, out var anonymous) ? L[anonymous ? "AnonymousDownloadAllowed" : "AnonymousDownloadOff"].Value : value;
 
     // Tab order: all, one per type, then the source addresses.
     private static readonly IReadOnlyList<string> TabSlugs = ["all", "nuget", "npm", "maven", "addresses"];

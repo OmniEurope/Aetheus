@@ -67,6 +67,12 @@ internal static class RateLimitingExtensions
             RateLimitPartition.GetFixedWindowLimiter(ResolveAuthTokenPartitionKey(context), _ => FixedWindow(60)));
         options.AddPolicy("webhook", context =>
             RateLimitPartition.GetFixedWindowLimiter(RemoteAddress(context), _ => FixedWindow(30)));
+        // R-14: forgotten-password requests per address of the caller; the per-account limit is in the service.
+        options.AddPolicy("password-reset", context =>
+            RateLimitPartition.GetFixedWindowLimiter("password-reset:" + RemoteAddress(context), _ => FixedWindow(5)));
+        // R-14: set-password links an administrator sends, per administrator.
+        options.AddPolicy("password-link", context =>
+            RateLimitPartition.GetFixedWindowLimiter("password-link:" + ResolveAuthTokenPartitionKey(context), _ => FixedWindow(10)));
     }
 
     private static void AddPublicEndpointPolicies(RateLimiterOptions options)
@@ -140,7 +146,7 @@ internal static class RateLimitingExtensions
         foreach (var name in new[]
                  {
                      "login", "enrollment", "auth-token", "webhook", "external-login", "otlp-ingest",
-                     "web-analytics-public", "csp-report"
+                     "web-analytics-public", "csp-report", "password-reset", "password-link"
                  })
             options.AddPolicy(name, _ => RateLimitPartition.GetNoLimiter("all"));
     }

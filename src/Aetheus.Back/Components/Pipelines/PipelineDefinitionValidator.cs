@@ -159,9 +159,70 @@ internal static class PipelineDefinitionValidator
             foreach (var step in stage.Steps)
                 ValidateArtifactsStep(errors, step, stage, $"stage '{stage.Name}'");
         ValidateArtifactNamesAreUnique(definition, errors);
+        ValidateStageDependencies(definition, errors);
         // A condition is one supported form on its whole text; a compound or trailing text is
         // refused here rather than half-evaluated at run time.
         errors.AddRange(PipelineConditionEvaluator.FindDefinitionProblems(definition));
+    }
+
+    /// <summary>
+    /// A stage waits for the stages named in <c>depends_on</c>; the dispatcher compares those names
+    /// (ordinal) with the stages of the run, so a name that matches none, a stage waiting for itself, or a
+    /// cycle leaves the stage pending forever. Checked on the flattened stages (a job is a stage of its own,
+    /// a stage naming a jobs-stage waits for all its jobs). A definition that still has an <c>extends</c>
+    /// is skipped: its base stages are merged in before the run, so the names are not all visible here.
+    /// </summary>
+    private static void ValidateStageDependencies(PipelineYamlDefinition definition, List<string> errors)
+    {
+        if (!string.IsNullOrWhiteSpace(definition.Extends)) return;
+        var stages = YamlParsingHelper.FlattenJobs(definition)
+            .Where(stage => !string.IsNullOrWhiteSpace(stage.Name))
+            .ToList();
+        var known = new HashSet<string>(stages.Select(stage => stage.Name), StringComparer.Ordinal)
+        {
+            PipelineRunHelpers.SystemPrepareStage, PipelineRunHelpers.SystemCleanupStage
+        };
+        var graph = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var stage in stages)
+        {
+            if (!graph.TryGetValue(stage.Name, out var edges))
+                graph[stage.Name] = edges = [];
+            foreach (var dependency in stage.DependsOn.Where(d => !string.IsNullOrWhiteSpace(d)
+                         && !d.Contains("${{", StringComparison.Ordinal)))
+            {
+                if (string.Equals(dependency, stage.Name, StringComparison.Ordinal))
+                    errors.Add($"Stage '{stage.Name}': depends_on '{dependency}' names the stage itself.");
+                else if (!known.Contains(dependency))
+                    errors.Add($"Stage '{stage.Name}': depends_on '{dependency}' names no stage of this pipeline.");
+                else
+                    edges.Add(dependency);
+            }
+        }
+        var cycle = FindDependencyCycle(graph);
+        if (cycle is not null)
+            errors.Add($"Stages form a depends_on cycle: {string.Join(" -> ", cycle)}.");
+    }
+
+    private static List<string>? FindDependencyCycle(Dictionary<string, List<string>> graph)
+    {
+        var done = new HashSet<string>(StringComparer.Ordinal);
+        var path = new List<string>();
+        foreach (var start in graph.Keys)
+            if (Visit(start) is { } cycle) return cycle;
+        return null;
+
+        List<string>? Visit(string node)
+        {
+            var at = path.IndexOf(node);
+            if (at >= 0) return [.. path.Skip(at), node];
+            if (done.Contains(node) || !graph.TryGetValue(node, out var next)) return null;
+            path.Add(node);
+            foreach (var dependency in next)
+                if (Visit(dependency) is { } found) return found;
+            path.RemoveAt(path.Count - 1);
+            done.Add(node);
+            return null;
+        }
     }
 
     /// <summary>

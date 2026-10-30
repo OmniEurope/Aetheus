@@ -14,6 +14,9 @@ public partial class PipelineReadinessCheckBody
     [Parameter, EditorRequired] public int ProjectId { get; set; }
     [Parameter] public string? ReturnUrl { get; set; }
 
+    /// <summary>R-61: where the creation of an environment returns, when it is not <see cref="ReturnUrl"/>.</summary>
+    [Parameter] public string? EnvironmentReturnUrl { get; set; }
+
     /// <summary>Raised after a fix made over the page (a repository created), so the host checks again.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
 

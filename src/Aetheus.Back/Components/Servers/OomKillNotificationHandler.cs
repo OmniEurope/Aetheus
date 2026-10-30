@@ -32,6 +32,18 @@ public sealed class OomKillNotificationHandler(
             Severity = "Critical",
             domainEvent.KillCount,
             domainEvent.Victims,
+            // Optional since the kinds: the mail words the cause (container limit or whole host) and the memory from it.
+            Kills = (domainEvent.Kills ?? []).Select(kill => new
+            {
+                kill.Process,
+                kill.Pid,
+                Kind = kill.Kind.ToString(),
+                kill.Container,
+                kill.Cgroup,
+                kill.AnonRssKb,
+                kill.FileRssKb,
+                kill.ShmemRssKb
+            }).ToList(),
             domainEvent.Message,
             TriggeredAt = domainEvent.DetectedAt
         };

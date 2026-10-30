@@ -5,32 +5,41 @@
 
 <OmniPageHeader Title="@L["NotificationRules"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("notifications_active")" /></Icon>
+    @* Recette R-109 (rule 1 of R-30): creating a channel, the first thing a rule needs, is the main action in
+       the page header; creating a rule (which needs a channel) is in the menu beside it. Pinned (R-129): in
+       ActionsContent a phone folded it behind "Show more". *@
+    <PinnedActionsContent>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(null))" title="@L["CreateChannel"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateChannel"]</span></ChildContent></OmniButton>
+    </PinnedActionsContent>
+    <MenuContent>
+        <OmniMenuItem OnClick="@(() => OpenRuleDialogAsync(null))" Disabled="@(_channelTotalCount == 0)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@L["AddRule"]</ChildContent></OmniMenuItem>
+    </MenuContent>
 </OmniPageHeader>
 
+<OmniStack Class="page-fill-body">
 @* Channels: the transports a rule can target. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["NotificationChannels"]</OmniHeading>
     <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_channelSearch" @bind-Value:after="ResetChannelSearchAsync" />
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(null))"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>
 
 <AetheusDataGrid @ref="_channelsGrid" RowClick="@(channel => OpenChannelDialogAsync(channel))" Data="@_channels" Count="@_channelTotalCount"
     TItem="NotificationChannelDto" IsLoading="@_channelsLoading" LoadData="@LoadChannelsAsync" ExportRead="@ReadChannelsExportAsync" ExportName="@L["NotificationChannels"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationChannelDto>(_channels, _channelTotalCount))"
-    PageSize="25" class="omni-u-mb-2xl">
+    PageSize="25">
     <EmptyTemplate>
         <EmptyState Icon="hub" Title="@L["NoNotificationChannels"]" Description="@L["NoNotificationChannelsDescription"]" />
     </EmptyTemplate>
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="NotificationChannelDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="Type" Title="@L["Type"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ChannelTypeText" >
-            <Template Context="c"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(c.Type)</OmniBadge></Template>
+            <Template Context="c"><OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(c.Type)</OmniBadge></Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="IsEnabled" Title="@L["Status"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EnabledText" >
             <Template Context="c">
-                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(c.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(c.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(c.IsEnabled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(c.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(c.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationChannelDto" Property="RuleCount" Title="@L["Rules"]" Width="90px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
@@ -41,7 +50,7 @@
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                     @if (_channelTest.TryGetValue(c.Id, out var r))
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@TestBadge(r.Status)" title="@r.Message">@L.Localize(r.Status)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(TestBadge(r.Status)))" Fill="OmniFill.Solid" Tone="@TestBadge(r.Status)" title="@r.Message">@L.Localize(r.Status)</OmniBadge>
                     }
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenChannelDialogAsync(c))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                     <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteChannelAsync(c))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
@@ -56,15 +65,14 @@
 </AetheusDataGrid>
 
 @* Rules: event type -> channel mappings. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
     <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["Rules"]</OmniHeading>
     <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
         <OmniTextBox aria-label="@L["Search"]" Placeholder="@L["Search"]" @bind-Value="_ruleSearch" @bind-Value:after="ResetRuleSearchAsync" />
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenRuleDialogAsync(null))" Disabled="@(_channelTotalCount == 0)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>
 
-<AetheusDataGrid @ref="_rulesGrid" RowClick="@(rule => OpenRuleDialogAsync(rule))" Data="@_rules" Count="@_ruleTotalCount"
+<AetheusDataGrid FullHeight="true" @ref="_rulesGrid" RowClick="@(rule => OpenRuleDialogAsync(rule))" Data="@_rules" Count="@_ruleTotalCount"
     TItem="NotificationRuleDto" IsLoading="@_rulesLoading" LoadData="@LoadRulesAsync" ExportRead="@ReadRulesExportAsync" ExportName="@L["NotificationRules"]"
     Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<NotificationRuleDto>(_rules, _ruleTotalCount))"
     PageSize="25">
@@ -78,7 +86,7 @@
         <OmniDataGridColumn TItem="NotificationRuleDto" Property="ChannelName" Title="@L["NotificationChannel"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_ruleFilterValues.Channels" FilterSearchable="true" />
         <OmniDataGridColumn TItem="NotificationRuleDto" Property="IsEnabled" Title="@L["Status"]" Width="110px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EnabledText" >
             <Template Context="r">
-                <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(r.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(r.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(r.IsEnabled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(r.IsEnabled ? OmniTone.Success : OmniTone.Neutral)">@(r.IsEnabled ? L["Active"] : L["Disabled"])</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="NotificationRuleDto" Title="@L["Actions"]" Width="120px" Sortable="false" TextAlign="OmniAlignment.Center" Filterable="false" >
@@ -91,3 +99,4 @@
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

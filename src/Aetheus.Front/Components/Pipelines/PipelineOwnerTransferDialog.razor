@@ -18,7 +18,9 @@
     }
     @if (_loadingPreview)
     {
-        <AetheusLoader />
+        @* Recette R-116: the preview is read under OE's busy veil over the zone it will fill (the previous
+           preview belongs to another owner and is dropped at once), no loader. *@
+        <div class="omni-busy action-veil-placeholder" aria-busy="true" data-testid="owner-transfer-preview-pending"></div>
     }
     else if (_preview is not null)
     {

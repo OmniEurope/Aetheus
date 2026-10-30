@@ -59,31 +59,52 @@ public static partial class PipelineConditionEvaluator
             : PipelineConditionVerdict.Invalid(DescribeUnsupported(condition));
     }
 
+    /// <summary>The variable a <c>eq</c>/<c>ne</c>/<c>contains</c> condition compares, or null for an
+    /// empty condition, a status function or an unsupported one. Lets a caller that evaluates a condition
+    /// before the run decide whether the value it reads could still change.</summary>
+    internal static string? FindComparedVariable(string? condition)
+    {
+        if (string.IsNullOrWhiteSpace(condition)) return null;
+        var match = VariableComparisonPattern().Match(condition);
+        return match.Success ? match.Groups[2].Value : null;
+    }
+
     /// <summary>Null when the condition is empty or supported, otherwise why it is refused.</summary>
     public static string? FindSyntaxError(string? condition) =>
         Evaluate(condition, new Dictionary<string, string>(), previousStageFailed: false).Error;
 
     /// <summary>Every unsupported condition of a definition: stages, jobs and steps, each named.</summary>
     public static IReadOnlyList<string> FindDefinitionProblems(PipelineYamlDefinition definition)
+        => [.. FindDefinitionLaunchProblems(definition).Select(problem => problem.English)];
+
+    /// <summary><see cref="FindDefinitionProblems"/> as launch problems the front can translate.</summary>
+    public static IReadOnlyList<PipelineProblem> FindDefinitionLaunchProblems(PipelineYamlDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        var problems = new List<string>();
+        var problems = new List<PipelineProblem>();
         foreach (var stage in definition.Stages)
         {
-            AddProblem(problems, $"Stage '{stage.Name}'", stage.Condition);
+            AddProblem(problems, $"Stage '{stage.Name}'", stage.Condition,
+                PipelineProblemCodes.UnsupportedStageCondition, ("stage", stage.Name));
             foreach (var job in stage.Jobs)
-                AddProblem(problems, $"Job '{job.Name}' in stage '{stage.Name}'", job.Condition);
+                AddProblem(problems, $"Job '{job.Name}' in stage '{stage.Name}'", job.Condition,
+                    PipelineProblemCodes.UnsupportedJobCondition, ("job", job.Name), ("stage", stage.Name));
         }
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
             foreach (var step in stage.Steps)
-                AddProblem(problems, $"Step '{step.Name}' in stage '{stage.Name}'", step.Condition);
+                AddProblem(problems, $"Step '{step.Name}' in stage '{stage.Name}'", step.Condition,
+                    PipelineProblemCodes.UnsupportedStepCondition, ("step", step.Name), ("stage", stage.Name));
         return problems;
     }
 
-    private static void AddProblem(List<string> problems, string owner, string? condition)
+    private static void AddProblem(
+        List<PipelineProblem> problems, string owner, string? condition, string code,
+        params (string Name, object? Value)[] parameters)
     {
-        if (FindSyntaxError(condition) is { } error)
-            problems.Add($"{owner}: {error}");
+        if (FindSyntaxError(condition) is not { } error) return;
+        problems.Add(PipelineProblem.Of(
+            code, $"{owner}: {error}",
+            [.. parameters, ("condition", PipelineConditionEvidence.CompactCondition(condition!.Trim()))]));
     }
 
     // Same semantics as before for every supported form: an absent variable never equals nor contains

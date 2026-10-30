@@ -3,6 +3,6 @@
 @* Warn when the pipeline owner is missing or inactive because chained runs cannot be authorized. *@
 @if (OwnerInactive)
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="pipeline-owner-inactive-badge"
+    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="pipeline-owner-inactive-badge"
                title="@string.Format(L["PipelineOwnerInactiveHint"].Value, OwnerUsername ?? L["PipelineOwnerMissing"].Value)">@(string.IsNullOrWhiteSpace(OwnerUsername) ? L["PipelineOwnerMissing"] : L["PipelineOwnerInactive"])</OmniBadge>
 }

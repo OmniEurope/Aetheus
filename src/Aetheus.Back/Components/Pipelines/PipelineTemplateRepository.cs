@@ -19,11 +19,20 @@ internal sealed class PipelineTemplateRepository(AppDbContext db) : IPipelineTem
             .ToListAsync(ct).ConfigureAwait(false);
 
     public async Task<List<PipelineTemplateSummaryDto>> GetTemplateSummariesAsync(
-        CancellationToken ct = default) =>
-        await db.PipelineTemplates.AsNoTracking()
+        CancellationToken ct = default)
+    {
+        var catalogNames = DeliveryTemplateCatalog.Definitions.Keys.ToList();
+        var platformOrganizationId = await db.Organizations.AsNoTracking()
+            .Where(organization => organization.Slug == DeliveryTemplateCatalog.PlatformOrganizationSlug)
+            .Select(organization => (int?)organization.Id)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return await db.PipelineTemplates.AsNoTracking()
             .OrderBy(template => template.Name)
             .Select(template => new PipelineTemplateSummaryDto
             {
+                // Same rule as FindSharedTemplateByNameAsync: a catalog name the platform organization holds.
+                IsShared = template.OrganizationId == platformOrganizationId
+                    && catalogNames.Contains(template.Name.ToLower()),
                 Id = template.Id,
                 Name = template.Name,
                 Description = template.Description,
@@ -54,6 +63,7 @@ internal sealed class PipelineTemplateRepository(AppDbContext db) : IPipelineTem
                     .Max(run => (DateTime?)run.StartedAt)
             })
             .ToListAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task<PipelineTemplate?> GetTemplateAsync(int id, CancellationToken ct = default) =>
         await db.PipelineTemplates.AsNoTracking()
@@ -147,24 +157,32 @@ internal sealed class PipelineTemplateRepository(AppDbContext db) : IPipelineTem
     }
 
     public async Task<List<string>> GetPipelineYamlDefinitionsByOrganizationAsync(
-        int organizationId, CancellationToken ct = default) =>
-        await db.Pipelines.AsNoTracking()
-            .Where(pipeline =>
-                pipeline.Project != null && pipeline.Project.OrganizationId == organizationId
+        int? organizationId, CancellationToken ct = default)
+    {
+        var pipelines = db.Pipelines.AsNoTracking();
+        if (organizationId is { } scoped)
+            pipelines = pipelines.Where(pipeline =>
+                pipeline.Project != null && pipeline.Project.OrganizationId == scoped
                 || pipeline.Environment != null && pipeline.Environment.Project != null
-                    && pipeline.Environment.Project.OrganizationId == organizationId
+                    && pipeline.Environment.Project.OrganizationId == scoped
                 || pipeline.ProjectServer != null
-                    && pipeline.ProjectServer.Project.OrganizationId == organizationId)
+                    && pipeline.ProjectServer.Project.OrganizationId == scoped);
+        return await pipelines
             .Select(pipeline => pipeline.YamlDefinition)
             .ToListAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task<List<string>> GetTemplateVersionYamlDefinitionsByOrganizationAsync(
-        int organizationId, int excludedTemplateId, CancellationToken ct = default) =>
-        await db.PipelineTemplateVersions.AsNoTracking()
-            .Where(version => version.Template.OrganizationId == organizationId
-                && version.TemplateId != excludedTemplateId)
+        int? organizationId, int excludedTemplateId, CancellationToken ct = default)
+    {
+        var versions = db.PipelineTemplateVersions.AsNoTracking()
+            .Where(version => version.TemplateId != excludedTemplateId);
+        if (organizationId is { } scoped)
+            versions = versions.Where(version => version.Template.OrganizationId == scoped);
+        return await versions
             .Select(version => version.YamlContent)
             .ToListAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {

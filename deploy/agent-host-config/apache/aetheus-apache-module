@@ -1,0 +1,50 @@
+#!/bin/sh
+# SPDX-License-Identifier: EUPL-1.2
+# Fixed-purpose root-owned helper (recette R-119), invoked via /etc/sudoers.d/aetheus-apache (NOPASSWD) as
+# "aetheus-apache-module enable" or "aetheus-apache-module disable": one word from a closed list, the module name
+# on stdin, never on the command line. It enables or disables the module (a2enmod / a2dismod), checks the
+# configuration and restarts Apache; a failed check or restart undoes the change and restarts Apache on the
+# previous configuration. a2enmod and apache2ctl must exec, so the grant omits noexec (ADR-019 exception).
+set -u
+[ "$#" -eq 1 ] || { echo "aetheus-apache-module takes exactly one argument: enable or disable" >&2; exit 2; }
+case "$1" in
+    enable)  apply=/usr/sbin/a2enmod;  undo=/usr/sbin/a2dismod ;;
+    disable) apply=/usr/sbin/a2dismod; undo=/usr/sbin/a2enmod ;;
+    *) echo "aetheus-apache-module: unknown action (expected enable or disable)" >&2; exit 2 ;;
+esac
+action="$1"
+
+module=''
+IFS= read -r module || true
+# The rule of OperationTargetValidator.ApacheModuleNameRegex: a letter or digit first (never a dash, so never an
+# option), then letters, digits, dot, dash or underscore; no slash, no space, at most 64 characters.
+case "$module" in
+    ''|[!A-Za-z0-9]*|*[!A-Za-z0-9_.-]*) echo "aetheus-apache-module: invalid module name" >&2; exit 2 ;;
+esac
+[ "${#module}" -le 64 ] || { echo "aetheus-apache-module: invalid module name" >&2; exit 2; }
+[ -f "/etc/apache2/mods-available/$module.load" ] \
+    || { echo "aetheus-apache-module: no module $module in /etc/apache2/mods-available" >&2; exit 1; }
+
+if [ -e "/etc/apache2/mods-enabled/$module.load" ]; then enabled=1; else enabled=0; fi
+if { [ "$action" = enable ] && [ "$enabled" -eq 1 ]; } || { [ "$action" = disable ] && [ "$enabled" -eq 0 ]; }; then
+    echo "Apache module $module is already ${action}d: nothing to do."
+    exit 0
+fi
+
+"$apply" -q "$module" || { echo "aetheus-apache-module: ${apply##*/} $module failed; nothing was restarted" >&2; exit 1; }
+
+# The modules a2enmod enabled as dependencies stay enabled when the change is undone: they were not asked for, but
+# Apache accepted them before.
+if ! /usr/sbin/apache2ctl configtest; then
+    "$undo" -q "$module"
+    echo "aetheus-apache-module: the configuration test failed with $module ${action}d; the change was undone, nothing was restarted" >&2
+    exit 1
+fi
+if ! /bin/systemctl restart apache2.service; then
+    "$undo" -q "$module"
+    echo "aetheus-apache-module: Apache did not restart with $module ${action}d; the change was undone" >&2
+    /bin/systemctl restart apache2.service \
+        || echo "aetheus-apache-module: Apache did not restart on the previous configuration either: check the Apache service" >&2
+    exit 1
+fi
+echo "Apache module $module ${action}d and Apache restarted."

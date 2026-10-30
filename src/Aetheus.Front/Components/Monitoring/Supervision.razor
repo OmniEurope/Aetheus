@@ -15,6 +15,7 @@
 </OmniPageHeader>
 
 
+<OmniStack Class="page-fill-body">
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Danger">
@@ -26,7 +27,7 @@ else
     @* Everything at a glance, all applications together, above their list. *@
     @if (_summary is not null)
     {
-        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="supervision-totals omni-u-mb-md">
+        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="supervision-totals">
             <OmniStatTile Value="@Number(_summary.TotalCount)" Title="@L["MonitoredApps"]" Detail="@AppsDetail" />
             @if (_summary.Audience is { } audience)
             {
@@ -40,7 +41,7 @@ else
         </OmniTileGrid>
         @if (_summary.Audience is { ApplicationCount: > 1 })
         {
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-mb-md supervision-totals-note">@L["SupervisionAudienceNote"]</OmniText>
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="supervision-totals-note">@L["SupervisionAudienceNote"]</OmniText>
         }
     }
     <SupervisionProjectsGrid Applications="@_summary?.Applications" Storage="@_storage" StorageFailed="@_storageFailed"
@@ -50,3 +51,4 @@ else
         <ReclaimSpaceView />
     }
 }
+</OmniStack>

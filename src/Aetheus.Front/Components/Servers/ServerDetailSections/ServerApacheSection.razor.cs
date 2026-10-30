@@ -8,9 +8,6 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
-    private string _moduleSearch = string.Empty;
-    private string _vhostSearch = string.Empty;
-
     // Logs
     private string _logType = "error";
     private int _logLines = 100;
@@ -27,6 +24,16 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
 
     private ApacheDataDto Apache => Server.Apache;
 
+    // R-119: modules Debian's a2dismod refuses to disable (the essential list of /usr/sbin/a2enmod, Ubuntu 24.04).
+    private static readonly HashSet<string> EssentialModules = new(StringComparer.Ordinal)
+    {
+        "alias", "auth_basic", "authn_file", "authz_host", "authz_user", "autoindex", "deflate", "dir", "env",
+        "filter", "logio", "mime", "negotiation", "setenvif", "unixd", "version", "watchdog"
+    };
+
+    private static bool IsEssentialModule(ApacheModuleDto module) =>
+        EssentialModules.Contains(module.Name.Replace("_module", ""));
+
     // Each heartbeat brings new Apache data; sites and modules that were not there read bold.
     private OmniDataGrid<ApacheVirtualHostGroup>? _enabledGrid;
     private OmniDataGrid<ApacheVirtualHostGroup>? _disabledGrid;
@@ -42,18 +49,8 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         await _moduleRows.ObserveAsync(_modulesGrid, Server.Apache, ServerId);
     }
 
-    private List<ApacheModuleDto> FilteredModules => string.IsNullOrWhiteSpace(_moduleSearch)
-        ? Apache.Modules
-        : Apache.Modules.Where(m => m.Name.Contains(_moduleSearch, StringComparison.OrdinalIgnoreCase)).ToList();
-
-    private List<ApacheVirtualHostDto> FilteredVirtualHosts => string.IsNullOrWhiteSpace(_vhostSearch)
-        ? Apache.VirtualHosts
-        : Apache.VirtualHosts.Where(v =>
-            v.ServerName.Contains(_vhostSearch, StringComparison.OrdinalIgnoreCase) ||
-            v.DocumentRoot.Contains(_vhostSearch, StringComparison.OrdinalIgnoreCase)).ToList();
-
-    private List<ApacheVirtualHostDto> EnabledVirtualHosts => FilteredVirtualHosts.Where(v => v.IsEnabled).ToList();
-    private List<ApacheVirtualHostDto> DisabledVirtualHosts => FilteredVirtualHosts.Where(v => !v.IsEnabled).ToList();
+    private List<ApacheVirtualHostDto> EnabledVirtualHosts => Apache.VirtualHosts.Where(v => v.IsEnabled).ToList();
+    private List<ApacheVirtualHostDto> DisabledVirtualHosts => Apache.VirtualHosts.Where(v => !v.IsEnabled).ToList();
 
     // Item #5.1: group vhosts by ServerName so a domain with separate :80 and :443 entries
     // surfaces as ONE row with two port chips, instead of two duplicate-looking rows. The
@@ -66,7 +63,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             .GroupBy(v => string.IsNullOrEmpty(v.ServerName) ? v.ConfigFile : v.ServerName,
                      StringComparer.OrdinalIgnoreCase)
             .Select(g => new ApacheVirtualHostGroup(
-                ServerName: g.First().ServerName,
+                ServerName: string.IsNullOrEmpty(g.First().ServerName) ? Path.GetFileName(g.First().ConfigFile) : g.First().ServerName,
                 Members: g.OrderBy(v => v.Port).ToList()))
             .OrderBy(g => g.ServerName, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -100,7 +97,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
             {
                 Action = action,
                 TargetName = targetName
-            }), FollowTitle(action, targetName));
+            }), FollowTitle(action, targetName), changesInventory: action != ApacheAction.TestConfig);
     }
 
     // Recette R3-37: what the follower calls the task this action queues.
@@ -130,7 +127,7 @@ public partial class ServerApacheSection : ServerActionSectionBase, IDisposable
         if (BlockedByOfflineAgent()) return;
         _logLoading = true;
         _logContent = null;
-        _follower?.Expect(L["ViewLogs"]);
+        _follower?.Expect(L["ViewLogs"], veil: !_logFollowing, settle: false);
         try
         {
             var success = await Api.ServerTools.GetApacheLogsAsync(ServerId, new ApacheLogRequest

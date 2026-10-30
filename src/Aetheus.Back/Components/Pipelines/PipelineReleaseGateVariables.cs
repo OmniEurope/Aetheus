@@ -35,11 +35,17 @@ internal static class PipelineReleaseGateVariables
     internal const string ApprovalRequired = "required";
     internal const string ApprovalNotRequired = "not-required";
 
-    /// <summary>Writes the three variables into <paramref name="resolved"/> when the run deploys a candidate
-    /// release; leaves it untouched otherwise.</summary>
+    /// <summary>R-72: <c>true</c> only for a run launched despite the quality gate (its
+    /// <c>PipelineRun.GateOverrideAt</c> is set), <c>false</c> for every other deployment run. Written here, last,
+    /// so no pipeline variable, library or launch variable can claim an override the launch did not grant. The
+    /// deployment template's <c>verify-assurance-contract</c> step reads it to warn instead of refusing.</summary>
+    internal const string GateOverrideVariable = PipelineRunRequestJsonConverter.GateOverrideVariable;
+
+    /// <summary>Writes the three verdict variables and <see cref="GateOverrideVariable"/> into
+    /// <paramref name="resolved"/> when the run deploys a candidate release; leaves it untouched otherwise.</summary>
     public static async Task InjectAsync(
         IDictionary<string, string> resolved, PipelineYamlDefinition definition, int? projectId,
-        IPipelineRepository repo, CancellationToken ct)
+        IPipelineRepository repo, CancellationToken ct, int? runId = null)
     {
         var parameterKey = PipelineCommandBuilder.ParameterKeyPrefix + CandidateVersionParameter;
         var declared = definition.Parameters.Any(parameter =>
@@ -54,6 +60,10 @@ internal static class PipelineReleaseGateVariables
             && !selector.Contains("${{", StringComparison.Ordinal))
             release = await repo.FindDeploymentGateReleaseAsync(id, selector, ct).ConfigureAwait(false);
         Write(resolved, release);
+
+        var overridden = runId is { } currentRunId
+            && (await repo.GetPipelineRunWithPipelineAsync(currentRunId, ct).ConfigureAwait(false))?.GateOverrideAt is not null;
+        resolved[GateOverrideVariable] = overridden ? "true" : "false";
     }
 
     internal static void Write(IDictionary<string, string> resolved, DeploymentGateRelease? release)

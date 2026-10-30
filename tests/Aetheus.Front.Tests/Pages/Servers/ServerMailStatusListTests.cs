@@ -395,7 +395,9 @@ public sealed class ServerMailStatusListTests : BunitContext
         Assert.Equal(1, _handler.Requests.Count(r => r.Method == "POST" && r.Url.EndsWith("mail/certificate", StringComparison.Ordinal)));
         // One banner at the top names the running task.
         Assert.Contains("MailTaskRunning", Host.Find(".mail-task-running").TextContent, StringComparison.Ordinal);
-        Assert.Single(Host.FindAll(".mail-task-running .mail-task-running__indicator"));
+        // Recette R-116: the banner wears the busy veil, no loader sits inside it.
+        Assert.Contains("omni-busy", Host.Find(".mail-task-running").ClassName, StringComparison.Ordinal);
+        Assert.Empty(Host.FindAll(".mail-task-running .aetheus-loader-logo"));
         Assert.DoesNotContain("MailWaitingForTask", Host.Markup, StringComparison.Ordinal);
 
         // Another task's completion changes nothing.

@@ -16,6 +16,7 @@ public static class PackageRegistryModuleExtensions
         services.AddSingleton<PackageRegistryPublishGate>();
         services.AddSingleton<PackageRegistryUploadGate>();
         services.AddHostedService<PackageRegistryStorageReconciler>();
+        services.AddPackageRegistryReadPolicy();
         return services;
     }
 }

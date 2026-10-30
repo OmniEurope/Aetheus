@@ -324,15 +324,6 @@ public sealed class PollingService(
         OperationKind.ServiceStart or OperationKind.ServiceStop or OperationKind.ServiceRestart or
         OperationKind.ServiceEnable or OperationKind.ServiceInstall or OperationKind.ServiceUninstall;
 
-    /// <summary>Every mail operation that can change what the mail inventory reports (services,
-    /// certificate, OpenDKIM, domains, accounts, aliases, queue, spam filter, setup, purge). The
-    /// read-only ones (queue view, logs, configuration check, quota report, outbound probe) leave
-    /// it as it is.</summary>
-    internal static bool ChangesMailInventory(OperationKind operation) =>
-        operation.ToString().StartsWith("Mail", StringComparison.Ordinal) && operation is not
-            (OperationKind.MailViewQueue or OperationKind.MailGetLogs or OperationKind.MailTestConfig
-            or OperationKind.MailQuotaReport or OperationKind.MailOutboundProbe or OperationKind.MailLeftoversCheck);
-
     private async Task ExecuteOperationAsync(PendingTaskDto task, CancellationToken ct)
     {
         // Transition the claimed task before resolving the local handler. Older agents may not know
@@ -378,18 +369,17 @@ public sealed class PollingService(
         var restartAfterSelfUpdate = task.Operation == OperationKind.AgentSelfUpdate
             && result.ExitCode == 0
             && !result.TimedOut;
+        // R-119: the inventories the operation changed are marked before the task is reported done, so any beat
+        // that follows the report collects them again.
+        var changedInventories = CachedInventoryOperations.ChangedBy(task.Operation);
+        runtimeHealth.InvalidateInventories(changedInventories);
         try
         {
             await CompleteTaskAsync(task.Id, result, CancellationToken.None).ConfigureAwait(false);
-            // Whatever the outcome, the host's services may have changed.
-            if (ChangesHostServices(task.Operation))
+            // Whatever the outcome, the host's services may have changed, and so may the cached inventories
+            // (Apache, mail...): the new state is sent now, not at the next tick.
+            if (ChangesHostServices(task.Operation) || changedInventories != CachedInventory.None)
                 runtimeHealth.RequestHeartbeat();
-            // The same for the mail stack, whose inventory the heartbeat also caches.
-            if (ChangesMailInventory(task.Operation))
-            {
-                runtimeHealth.InvalidateMailInventory();
-                runtimeHealth.RequestHeartbeat();
-            }
         }
         finally
         {

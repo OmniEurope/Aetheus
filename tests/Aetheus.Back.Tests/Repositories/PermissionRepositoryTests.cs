@@ -21,7 +21,7 @@ public class PermissionRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetRoleIdsForUserAsync_ReturnsRoleIds()
+    public async Task GetRoleIdsForUserAsync_ReturnsTheSiteWideAdminRoleOnly()
     {
         var role1 = new Role { Name = "Admin", Description = "d" };
         var role2 = new Role { Name = "User", Description = "d" };
@@ -39,7 +39,8 @@ public class PermissionRepositoryTests : IDisposable
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var result = await _repo.GetRoleIdsForUserAsync("testuser", ct: TestContext.Current.CancellationToken);
-        Assert.Equal(2, result.Count);
+        // ADR-059: a role other than Admin held without an organization grants nothing.
+        Assert.Equal([role1.Id], result);
     }
 
     [Fact]

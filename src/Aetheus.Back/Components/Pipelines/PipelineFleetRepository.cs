@@ -64,45 +64,61 @@ internal sealed class PipelineFleetRepository(AppDbContext db) : IPipelineFleetR
         return pipelines;
     }
 
+    /// <summary>One server-side query, with the resolution of <c>PipelineFleetService.FindTemplateAsync</c>
+    /// (R-78): the organization's own template of that name, otherwise the delivery template the platform
+    /// organization shares with every organization.</summary>
     private IQueryable<PipelineFleetItemDto> BuildFleetQuery(
-        IQueryable<Data.Entities.Pipeline> pipelines) =>
-            from ownership in ProjectOwnership(pipelines)
-            join template in db.PipelineTemplates.AsNoTracking()
-                on new
-                {
-                    ownership.OrganizationId,
-                    Name = ownership.TemplateReferenceName == null
-                        ? null
-                        : ownership.TemplateReferenceName.ToLower()
-                }
-                equals new
-                {
-                    template.OrganizationId,
-                    Name = (string?)template.Name.ToLower()
-                }
-                into templateMatches
-            from template in templateMatches.DefaultIfEmpty()
-            select new PipelineFleetItemDto
-            {
-                PipelineId = ownership.PipelineId,
-                PipelineName = ownership.PipelineName,
-                ProjectId = ownership.ProjectId,
-                OwnerName = ownership.OwnerName,
-                OwnerType = ownership.OwnerType,
-                OrganizationId = ownership.OrganizationId,
-                TemplateId = template == null ? null : template.Id,
-                TemplateName = ownership.TemplateReferenceName,
-                PinnedVersion = ownership.TemplateReferenceVersion,
-                LatestVersion = template == null ? null : template.LatestVersion,
-                UsesLegacyReference =
-                    ownership.TemplateReferenceName != null && ownership.TemplateReferenceVersion == null,
-                Freshness = ownership.TemplateReferenceName == null
-                    ? PipelineFleetFreshness.OffCatalog
-                    : template != null
-                        && (ownership.TemplateReferenceVersion ?? template.LatestVersion) == template.LatestVersion
-                            ? PipelineFleetFreshness.Current
-                            : PipelineFleetFreshness.Outdated
-            };
+        IQueryable<Data.Entities.Pipeline> pipelines)
+    {
+        var catalogNames = DeliveryTemplateCatalog.Definitions.Keys.ToList();
+        var sharedTemplates = db.PipelineTemplates.AsNoTracking()
+            .Where(template => template.Organization.Slug == DeliveryTemplateCatalog.PlatformOrganizationSlug
+                && catalogNames.Contains(template.Name.ToLower()));
+        return from ownership in ProjectOwnership(pipelines)
+               join own in db.PipelineTemplates.AsNoTracking()
+                   on new
+                   {
+                       ownership.OrganizationId,
+                       Name = ownership.TemplateReferenceName == null
+                           ? null
+                           : ownership.TemplateReferenceName.ToLower()
+                   }
+                   equals new
+                   {
+                       own.OrganizationId,
+                       Name = (string?)own.Name.ToLower()
+                   }
+                   into ownMatches
+               from own in ownMatches.DefaultIfEmpty()
+               join shared in sharedTemplates
+                   on (ownership.TemplateReferenceName == null ? null : ownership.TemplateReferenceName.ToLower())
+                   equals (string?)shared.Name.ToLower()
+                   into sharedMatches
+               from shared in sharedMatches.DefaultIfEmpty()
+               let templateId = own != null ? own.Id : shared != null ? shared.Id : (int?)null
+               let latestVersion = own != null ? own.LatestVersion : shared != null ? shared.LatestVersion : (int?)null
+               select new PipelineFleetItemDto
+               {
+                   PipelineId = ownership.PipelineId,
+                   PipelineName = ownership.PipelineName,
+                   ProjectId = ownership.ProjectId,
+                   OwnerName = ownership.OwnerName,
+                   OwnerType = ownership.OwnerType,
+                   OrganizationId = ownership.OrganizationId,
+                   TemplateId = templateId,
+                   TemplateName = ownership.TemplateReferenceName,
+                   PinnedVersion = ownership.TemplateReferenceVersion,
+                   LatestVersion = latestVersion,
+                   UsesLegacyReference =
+                       ownership.TemplateReferenceName != null && ownership.TemplateReferenceVersion == null,
+                   Freshness = ownership.TemplateReferenceName == null
+                       ? PipelineFleetFreshness.OffCatalog
+                       : latestVersion != null
+                           && (ownership.TemplateReferenceVersion ?? latestVersion) == latestVersion
+                               ? PipelineFleetFreshness.Current
+                               : PipelineFleetFreshness.Outdated
+               };
+    }
 
     private static IQueryable<PipelineFleetOwnershipRow> ProjectOwnership(
         IQueryable<Data.Entities.Pipeline> pipelines) =>

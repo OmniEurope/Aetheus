@@ -6,10 +6,11 @@ public partial class PackageFeedEditDialog : EntityEditDialogBase
 {
     private readonly EditModel _model = new();
 
-    private static readonly List<OmniOption<PackageFeedType>> _types = Enum.GetValues<PackageFeedType>()
-        .Where(IsCreationSupported)
-        .Select(t => new OmniOption<PackageFeedType>(t, t.ToString())).ToList();
-    internal static int SupportedCreationTypeCount => _types.Count;
+    private static readonly PackageFeedType[] _types = [.. Enum.GetValues<PackageFeedType>().Where(IsCreationSupported)];
+    internal static int SupportedCreationTypeCount => _types.Length;
+
+    private List<OmniOption<PackageFeedType>> TypeOptions =>
+        [.. _types.Select(t => new OmniOption<PackageFeedType>(t, L.Localize(t)))];
 
     private static bool IsCreationSupported(PackageFeedType type)
         => type is PackageFeedType.NuGet or PackageFeedType.Npm or PackageFeedType.PyPI or PackageFeedType.Maven;

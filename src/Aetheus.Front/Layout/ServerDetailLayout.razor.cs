@@ -4,6 +4,7 @@ namespace Aetheus.Front.Layout;
 
 public partial class ServerDetailLayout : IDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -98,7 +99,31 @@ public partial class ServerDetailLayout : IDisposable
         var items = BreadcrumbRouteResolver.Resolve(Nav.ToBaseRelativePath(Nav.Uri), key => L[key]).ToArray();
         if (items.Length > 1)
             items[1] = items[1] with { Text = Loader.Server.Name, IsLoading = false };
+        // The section's own version belongs to the title, the last item (R-120 Apache, R-121 Certbot).
+        if (items.Length > 2)
+            items[^1] = items[^1] with { Text = SectionTitle(Nav.ToBaseRelativePath(Nav.Uri), items[^1].Text, Loader.Server) };
         Breadcrumb.Set(items);
+    }
+
+    /// <summary>A section's title with the version of the software it manages ("Apache 2.4.58", "Certbot 5.8.0");
+    /// every other section, or one whose server did not report a version, keeps its plain name.</summary>
+    internal static string SectionTitle(string relativePath, string title, ServerDetailDto server) =>
+        SectionVersion(server, relativePath) is { } version ? $"{title} {version}" : title;
+
+    /// <summary>The version of the software a section manages (Apache, Certbot), or null when the section has none
+    /// or the server did not report it.</summary>
+    internal static string? SectionVersion(ServerDetailDto server, string relativePath)
+    {
+        var segments = relativePath.Split('?', '#')[0].Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var version = segments switch
+        {
+            ["servers", _, "certbot", ..] => server.Certbot?.Version,
+            ["servers", _, "apache"] => server.Apache?.Version,
+            // The package version ("1.2-14build1"): the title says the upstream release only.
+            ["servers", _, "portsentry", ..] => server.Portsentry?.Version?.Split('-')[0],
+            _ => null
+        };
+        return string.IsNullOrWhiteSpace(version) ? null : version.Trim();
     }
 
     private void OnPermissionsChanged()
@@ -162,7 +187,7 @@ public partial class ServerDetailLayout : IDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Retire"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
 
-        await RetireServerConfirmedAsync();
+        await Veil.RunAsync(RetireServerConfirmedAsync);
     }
 
     internal async Task RetireServerConfirmedAsync()

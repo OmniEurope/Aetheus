@@ -169,6 +169,35 @@ public class PipelineDeploymentGradeGateTests
             Arg.Any<int>(), Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>R-72: a run launched despite the gate starts, whatever the grade; its environment approval still applies.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(AnalysisGrade.F)]
+    public async Task ARunLaunchedDespiteTheGate_IsNotRefused_AndStillAsksItsApproval(AnalysisGrade? grade)
+    {
+        var h = new Harness(new DeploymentGateRelease(41, Candidate, grade), launchedDespiteGate: true);
+
+        await h.DispatchAsync(DeployVariables());
+
+        await h.Finalizer.DidNotReceive().FailRunWithUnmatchedStagesAsync(
+            Arg.Any<int>(), Arg.Any<List<string>>(), Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+        await h.Repo.Received(1).AddApprovalAsync(
+            Arg.Is<PipelineApproval>(a => a.EnvironmentId == ProdEnvironmentId), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>R-72: the override lifts the verdict on the release, not a threshold the pipeline cannot state.</summary>
+    [Fact]
+    public async Task ARunLaunchedDespiteTheGate_IsStillRefused_WhenTheThresholdIsNotAGrade()
+    {
+        var h = new Harness(new DeploymentGateRelease(41, Candidate, null), launchedDespiteGate: true);
+
+        await h.DispatchAsync(DeployVariables("G"));
+
+        await h.Finalizer.Received(1).FailRunWithUnmatchedStagesAsync(
+            RunId, Arg.Is<List<string>>(reasons => reasons.Single().Contains("'G'", StringComparison.Ordinal)),
+            Arg.Any<List<PipelineStepRun>>(), Arg.Any<CancellationToken>());
+    }
+
     private sealed class Harness
     {
         public IPipelineRepository Repo { get; } = Substitute.For<IPipelineRepository>();
@@ -178,7 +207,8 @@ public class PipelineDeploymentGradeGateTests
         private readonly PipelineYamlDefinition _definition;
         private readonly PipelineStageDispatchPlanner _planner;
 
-        public Harness(DeploymentGateRelease? release, bool withWorkspace = false, List<string>? completedStages = null)
+        public Harness(DeploymentGateRelease? release, bool withWorkspace = false, List<string>? completedStages = null,
+            bool launchedDespiteGate = false)
         {
             // The two stages that matter in aetheus-deploy-prod: the first one is already bound to the
             // production environment, the grade check came only in the second.
@@ -218,7 +248,15 @@ public class PipelineDeploymentGradeGateTests
                 Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns([]);
             var pipeline = new Pipeline { Id = 77, Name = "aetheus-deploy-prod", ProjectId = ProjectId };
             Repo.GetPipelineRunWithPipelineAsync(RunId, Arg.Any<CancellationToken>())
-                .Returns(new PipelineRun { Id = RunId, PipelineId = pipeline.Id, Pipeline = pipeline, Status = PipelineStatus.Running });
+                .Returns(new PipelineRun
+                {
+                    Id = RunId,
+                    PipelineId = pipeline.Id,
+                    Pipeline = pipeline,
+                    Status = PipelineStatus.Running,
+                    GateOverrideBy = launchedDespiteGate ? "deployer" : null,
+                    GateOverrideAt = launchedDespiteGate ? new DateTime(2026, 10, 28, 9, 0, 0, DateTimeKind.Utc) : null
+                });
             Repo.GetPipelineProjectIdAsync(Arg.Any<Pipeline>(), Arg.Any<CancellationToken>()).Returns(ProjectId);
             Repo.FindDeploymentGateReleaseAsync(ProjectId, Candidate, Arg.Any<CancellationToken>()).Returns(release);
             Repo.FindEnvironmentByNameAsync("prod", Arg.Any<int?>(), Arg.Any<CancellationToken>())

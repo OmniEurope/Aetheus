@@ -372,39 +372,36 @@ public class ProjectRepository(
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<List<ProjectServer>> GetProjectServersAsync(int projectId, CancellationToken ct = default)
+    // The servers of the project's environments count as the project's own (R-83): the lists below are
+    // ProjectServerRows, and an environment server's row has Id 0 (no ProjectServer to edit or detach).
+    public async Task<List<ProjectServerRow>> GetProjectServersAsync(int projectId, CancellationToken ct = default)
     {
-        return await db.ProjectServers
-            .Where(ps => ps.ProjectId == projectId)
-            .Include(ps => ps.Server)
-            .AsNoTracking()
-            .OrderBy(ps => ps.DisplayName)
+        return await ProjectServerRows.ForProject(db, projectId)
+            .OrderBy(row => row.DisplayName)
+            .ThenBy(row => row.Id)
+            .ThenBy(row => row.ServerId)
             .ToListAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<(List<ProjectServer> Items, int TotalCount)> GetProjectServersPageAsync(
+    public async Task<(List<ProjectServerRow> Items, int TotalCount)> GetProjectServersPageAsync(
         int projectId, string? search, string? sortBy, bool sortDescending,
         int page, int pageSize, CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null)
     {
-        var query = db.ProjectServers
-            .Where(projectServer => projectServer.ProjectId == projectId)
-            .AsNoTracking();
+        var query = ProjectServerRows.ForProject(db, projectId);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var normalized = search.Trim().ToLowerInvariant();
-            query = query.Where(projectServer =>
-                projectServer.DisplayName.ToLower().Contains(normalized)
-                || (projectServer.Host ?? string.Empty).ToLower().Contains(normalized)
-                || (projectServer.Server != null
-                    && projectServer.Server.Name.ToLower().Contains(normalized)));
+            query = query.Where(row =>
+                row.DisplayName.ToLower().Contains(normalized)
+                || row.Host.ToLower().Contains(normalized)
+                || (row.ServerName != null && row.ServerName.ToLower().Contains(normalized)));
         }
 
         // The header filters of the project's servers, before the count.
         query = ProjectServerListQuery.Columns.ApplyFilters(query, columnFilters);
 
-        query = query.Include(projectServer => projectServer.Server);
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
-        query = (sortBy, sortDescending) switch
+        var ordered = (sortBy, sortDescending) switch
         {
             ("Host", false) => query.OrderBy(item => item.Host),
             ("Host", true) => query.OrderByDescending(item => item.Host),
@@ -415,7 +412,9 @@ public class ProjectRepository(
             ("DisplayName", true) => query.OrderByDescending(item => item.DisplayName),
             _ => query.OrderBy(item => item.DisplayName)
         };
-        var items = await query.Skip((page - 1) * pageSize).Take(pageSize)
+        // Ties (two rows with the same name) break on the identity, so a page boundary never repeats a row.
+        var items = await ordered.ThenBy(item => item.Id).ThenBy(item => item.ServerId)
+            .Skip((page - 1) * pageSize).Take(pageSize)
             .ToListAsync(ct).ConfigureAwait(false);
         return (items, totalCount);
     }

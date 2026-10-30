@@ -12,7 +12,7 @@
 
 @if (_phase is not null && _phase != AgentUpdatePhase.Done || _showDoneUntil > DateTime.Now)
 {
-    <OmniCard Class="@($"omni-u-mb-lg agent-update-progress-card {(_fadingOut ? "is-fading-out" : "")}")">
+    <OmniCard Class="@($"agent-update-progress-card {(_fadingOut ? "is-fading-out" : "")}")">
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                 <OmniIcon Name="@MaterialIconMap.Resolve(PhaseIcon(_phase))" Class="@PhaseIconClass(_phase)" />
@@ -20,7 +20,7 @@
                     @(_phase == AgentUpdatePhase.Failed ? L["AgentUpdateFailed"] : L["AgentUpdateInProgress"])
                 </OmniText>
                 <div class="flex-spacer"></div>
-                <OmniBadge Fill="OmniFill.Solid" Tone="@PhaseBadge(_phase)">@L[PhaseLabel(_phase)]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(PhaseBadge(_phase)))" Fill="OmniFill.Solid" Tone="@PhaseBadge(_phase)">@L[PhaseLabel(_phase)]</OmniBadge>
             </OmniStack>
             @* R-46: the percentage froze between two reports, so the bar only moves along its track (the end
                is not known); a failed update shows no bar. *@

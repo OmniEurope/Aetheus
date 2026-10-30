@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// per-message deletion and flush.</summary>
 public partial class ServerMailQueueTab
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -65,16 +66,19 @@ public partial class ServerMailQueueTab
         var confirmed = await Dialog.Confirm(string.Format(L["MailConfirmDeleteQueued"], queueId), L["Delete"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
-        var status = await Api.Mail.DeleteQueuedMailAsync(ServerId, queueId);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            _items.RemoveAll(item => item.Id == queueId);
-            Toast.Success(L["TaskQueued"]);
-        }
-        else
-        {
-            Toast.Error(L["ActionFailed"]);
-        }
+            var status = await Api.Mail.DeleteQueuedMailAsync(ServerId, queueId);
+            if (status.Success)
+            {
+                _items.RemoveAll(item => item.Id == queueId);
+                Toast.Success(L["TaskQueued"]);
+            }
+            else
+            {
+                Toast.Error(L["ActionFailed"]);
+            }
+        });
     }
 
     /// <summary>Called by the mail section for every completed task of the server.</summary>

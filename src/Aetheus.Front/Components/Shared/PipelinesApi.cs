@@ -186,6 +186,19 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
     }
 
 
+    /// <summary>The pipeline page's first read: the pipeline, or null with <c>Forbidden</c> telling a refusal
+    /// (a pipeline of an organization the caller has no right in) apart from a missing pipeline (404). A
+    /// refusal is a state the page shows, not a failure; any other failure still throws.</summary>
+    public async Task<(PipelineDto? Pipeline, bool Forbidden)> LookUpPipelineAsync(int id, CancellationToken ct = default)
+    {
+        var response = await Http.GetAsync($"api/pipelines/{id}", ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return (null, false);
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden) return (null, true);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<PipelineDto>(JsonOptions.Web, ct), false);
+    }
+
+
     public async Task<PipelineSourceDto?> GetPipelineSourceAsync(int id, CancellationToken ct = default)
         => (await LookUpPipelineSourceAsync(id, ct)).Source;
 
@@ -198,6 +211,18 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return (true, null);
         if (!response.IsSuccessStatusCode) return (false, null);
         return (true, await response.Content.ReadFromJsonAsync<PipelineSourceDto>(JsonOptions.Web, ct));
+    }
+
+
+    /// <summary>The definition file the pipeline has in its repository on a branch, for the review before
+    /// a save; null when it could not be read (the review then says so rather than showing a guess).</summary>
+    public async Task<PipelineRepositoryDefinitionDto?> GetRepositoryDefinitionAsync(
+        int id, string? sourceBranch, string? name, CancellationToken ct = default)
+    {
+        var query = $"?sourceBranch={Uri.EscapeDataString(sourceBranch ?? string.Empty)}&name={Uri.EscapeDataString(name ?? string.Empty)}";
+        var response = await Http.GetAsync($"api/pipelines/{id}/repository-definition{query}", ct);
+        if (!response.IsSuccessStatusCode) return null;
+        return await response.Content.ReadFromJsonAsync<PipelineRepositoryDefinitionDto>(JsonOptions.Web, ct);
     }
 
 
@@ -295,7 +320,7 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
     // Optional queue-time parameters and a per-run source-branch override (validated server-side).
     public Task<ApiOutcome<PipelineRunDto, YamlValidationResultDto>> TriggerPipelineRunAsync(
         int id, Dictionary<string, string>? parameters = null, string? sourceBranch = null, CancellationToken ct = default,
-        bool runToEnd = false)
+        bool runToEnd = false, bool gateOverride = false)
     {
         // Expand-contract wire shape: old backends expect a top-level dictionary. New backends split the
         // reserved branch key back into PipelineRunRequest.SourceBranch, so both deployment colours work.
@@ -308,6 +333,9 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         // Sent only when chosen, and only offered when GetRunOptionsAsync said the backend accepts it.
         if (runToEnd)
             body["AETHEUS_RUN_TO_END"] = "true";
+        // R-72: sent only after the user confirmed what the quality gate holds against the release.
+        if (gateOverride)
+            body[PipelineRunRequestJsonConverter.GateOverrideVariable] = "true";
         return PostForOutcomeAsync<PipelineRunDto, YamlValidationResultDto>(
             $"api/pipelines/{id}/run", body, ct);
     }
@@ -318,12 +346,23 @@ public sealed class PipelinesApi(HttpClient http) : ApiClientBase(http)
         => GetJsonAsync<PipelineRunOptionsDto>("api/pipelines/run-options", ct);
 
 
-    // P: the queue-time parameters declared by the pipeline's authoritative (git-first) YAML.
-    public async Task<List<PipelineRunParameterDto>> GetPipelineRunParametersAsync(int id, string? sourceBranch = null, CancellationToken ct = default)
+    /// <summary>
+    /// The queue-time parameters declared by the pipeline's authoritative (git-first) YAML. A refusal keeps its
+    /// reason: a 400 (the pipeline YAML is invalid) carries the API's message in <c>ErrorMessage</c> instead of
+    /// becoming an anonymous <see cref="HttpRequestException"/>, so a launch can tell the user why it stopped.
+    /// The caller shows every failure itself, so the global notifier stays out and one failure is one toast.
+    /// </summary>
+    public async Task<ApiOutcome<List<PipelineRunParameterDto>, ApiError>> GetPipelineRunParametersOutcomeAsync(
+        int id, string? sourceBranch = null, CancellationToken ct = default)
     {
         var uri = $"api/pipelines/{id}/parameters";
         if (!string.IsNullOrWhiteSpace(sourceBranch)) uri += $"?sourceBranch={Uri.EscapeDataString(sourceBranch)}";
-        return await Http.GetFromJsonAsync<List<PipelineRunParameterDto>>(uri, JsonOptions.Web, ct) ?? [];
+        var outcome = await SendForOutcomeAsync<List<PipelineRunParameterDto>, ApiError>(HttpMethod.Get, uri, null, ct, callerHandlesEveryError: true)
+            .ConfigureAwait(false);
+        // A 2xx answering a JSON null is an empty declaration, as it was before this read kept its errors.
+        return outcome is { Value: null, Error: null, NotFound: false, StatusCode: null }
+            ? outcome with { Value = [] }
+            : outcome;
     }
 
 

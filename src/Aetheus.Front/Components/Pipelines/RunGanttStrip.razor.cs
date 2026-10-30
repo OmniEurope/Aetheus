@@ -10,6 +10,26 @@ public partial class RunGanttStrip
 {
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    /// <summary>R-40: id of the element a click on a stage band scrolls to (the page's detailed timeline).
+    /// Null leaves the bands inert.</summary>
+    [Parameter] public string? ScrollTargetId { get; set; }
+
+    private string TrackClass => ScrollTargetId is null ? "run-gantt-track" : "run-gantt-track run-gantt-track-link";
+
+    private string? TrackRole => ScrollTargetId is null ? null : "button";
+
+    private string? TrackTabIndex => ScrollTargetId is null ? null : "0";
+
+    private async Task ScrollToTimelineAsync()
+    {
+        if (ScrollTargetId is not null) await Js.InvokeVoidAsync("Aetheus.scrollToId", ScrollTargetId);
+    }
+
+    private Task OnTrackKeyDownAsync(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e) =>
+        e.Key is "Enter" or " " ? ScrollToTimelineAsync() : Task.CompletedTask;
+
     [Parameter, EditorRequired] public PipelineRunDto? Run { get; set; }
 
     /// <summary>Usual durations of this run's pipeline; null while unknown or unavailable, in which
@@ -219,7 +239,8 @@ public partial class RunGanttStrip
     /// "1min"); from ten minutes the quarters are at least 2.5 minutes apart and the whole-minute format
     /// already tells them apart. A label equal to the previous one (a run of a couple of seconds) is left empty,
     /// so two consecutive ticks never share a label. One axis reads in one precision: a 21-minute run never
-    /// mixes "5min19s" with "10min".</summary>
+    /// mixes "5min19s" with "10min". R-40: a label that would run into a kept neighbour (see
+    /// <see cref="DropOverlappingLabels"/>) is left empty too, the end label and the first one winning.</summary>
     internal static IReadOnlyList<Tick> Ticks(RunGanttLayout layout)
     {
         var ticks = new List<Tick>();
@@ -231,7 +252,41 @@ public partial class RunGanttStrip
             ticks.Add(new Tick(percent, label == previous ? string.Empty : label));
             previous = label;
         }
-        return ticks;
+        return DropOverlappingLabels(ticks);
+    }
+
+    /// <summary>The axis is modelled as this many characters wide (a narrow strip is about forty characters of the
+    /// muted 0.8125rem figures) and two labels keep one character between them.</summary>
+    private const double AxisCharacters = 40;
+
+    private const double LabelGap = 1;
+
+    /// <summary>R-40: the 0 % label is left-aligned, the 100 % one right-aligned, the others centred on their
+    /// quarter. Labels are kept in the order 100 %, 0 %, 50 %, 25 %, 75 %; one whose span touches a kept label's
+    /// span (seen: "1h20min" at 75 % over "1h47min" at 100 %) is emptied, so no two labels overlap.</summary>
+    internal static IReadOnlyList<Tick> DropOverlappingLabels(IReadOnlyList<Tick> ticks)
+    {
+        var kept = new List<(double Start, double End)>();
+        var result = ticks.ToList();
+        foreach (var percent in new[] { 100, 0, 50, 25, 75 })
+        {
+            var index = result.FindIndex(tick => tick.Percent == percent);
+            if (index < 0 || result[index].Label.Length == 0) continue;
+
+            var length = result[index].Label.Length;
+            var start = percent switch
+            {
+                0 => 0,
+                100 => AxisCharacters - length,
+                _ => AxisCharacters * percent / 100 - length / 2.0
+            };
+            var span = (Start: start, End: start + length);
+            if (kept.Any(other => span.Start < other.End + LabelGap && other.Start < span.End + LabelGap))
+                result[index] = result[index] with { Label = string.Empty };
+            else
+                kept.Add(span);
+        }
+        return result;
     }
 
     /// <summary>The run's own duration, measured like the Started tile (run start to run end, or to

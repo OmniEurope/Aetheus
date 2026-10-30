@@ -11,6 +11,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     [SupplyParameterFromQuery(Name = "ref")] public string? FileRef { get; set; }
     [SupplyParameterFromQuery(Name = "path")] public string? FilePath { get; set; }
     [SupplyParameterFromQuery(Name = "line")] public int? FileLine { get; set; }
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -34,7 +35,7 @@ public partial class GitRepositoryDetail : IAsyncDisposable
     private string? _loadedCommitSearch, _loadedBranchSearch, _loadedFileRef, _loadedFilePath;
     private int? _loadedFileLine;
     private int _dataGeneration;
-    private GitRepositoryDetailActions Actions => new(Api, Dialog, Toast, L);
+    private GitRepositoryDetailActions Actions => new(Api, Dialog, Toast, L, Veil);
     private GitLightRepoDto? _repo;
     private bool _loading = true;
     private int _selectedTab;

@@ -21,7 +21,7 @@ public interface IPipelineTriggerStepCoordinator
         IPipelineChildRunLauncher launcher, CancellationToken ct);
 
     /// <summary>Starts a downstream run declared by an upstream pipeline's <c>on_success:</c>.</summary>
-    Task<PipelineRunDto?> TriggerChainedRunAsync(
+    Task<PipelineChainedRunOutcome> TriggerChainedRunAsync(
         int childPipelineId, Dictionary<string, string>? upstreamVariables,
         IPipelineChildRunLauncher launcher, CancellationToken ct);
 }
@@ -129,7 +129,8 @@ public sealed class PipelineTriggerStepCoordinator(
     private async Task FailTriggerStepAsync(int runId, PipelineStepRun stepRun, string reason, DateTime now, CancellationToken ct)
     {
         MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
-        await repo.AppendRunWarningsAsync(runId, [$"Trigger step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+        await repo.AppendRunWarningsAsync(
+            runId, [PipelineStepFailureWarning.Trigger(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private sealed record TriggerTarget(PipelineRun Run, Pipeline Target, string Name);
@@ -394,6 +395,13 @@ public sealed class PipelineTriggerStepCoordinator(
 
     private async Task<bool> ChainedRunAuthorizedAsync(
         PipelineRunPreparation preparation, string childPipelineName, string? owner, CancellationToken ct)
+        => await ChainedRunRefusalAsync(preparation, childPipelineName, owner, ct).ConfigureAwait(false) is null;
+
+    /// <summary>Why the owner may not launch the chained run (audited), or <c>null</c> when authorized.
+    /// The two causes read differently so a reader knows whether to set an owner or to grant a
+    /// permission.</summary>
+    private async Task<PipelineProblem?> ChainedRunRefusalAsync(
+        PipelineRunPreparation preparation, string childPipelineName, string? owner, CancellationToken ct)
     {
         var childPipelineId = preparation.PipelineId;
         if (string.IsNullOrEmpty(owner))
@@ -401,7 +409,10 @@ public sealed class PipelineTriggerStepCoordinator(
             logger.LogWarning(
                 "Chained run of pipeline {PipelineId} blocked (F-EXEC-1b): pipeline has no owner.", childPipelineId);
             await audit.LogAsync("BlockedUnownedChainedRun", "Pipeline", childPipelineId, childPipelineName, ct).ConfigureAwait(false);
-            return false;
+            return PipelineProblem.Of(
+                PipelineProblemCodes.ChainedPipelineNoOwner,
+                $"pipeline '{childPipelineName}' has no owner, so an automated run cannot be authorized (re-save it as an authorized user)",
+                ("pipeline", childPipelineName));
         }
 
         var targetIds = preparation.TargetServerIds;
@@ -414,21 +425,38 @@ public sealed class PipelineTriggerStepCoordinator(
                     "Server.Admin on target server {ServerId}.", childPipelineId, owner, serverId);
                 await audit.LogAsync("BlockedUnauthorizedChainedRun", "Pipeline", childPipelineId,
                     $"{childPipelineName} | Servers: {string.Join(',', targetIds)}", ct).ConfigureAwait(false);
-                return false;
+                return PipelineProblem.Of(
+                    PipelineProblemCodes.ChainedOwnerLacksServerAdmin,
+                    $"owner '{owner}' of pipeline '{childPipelineName}' lacks Server.Admin on target server {serverId}",
+                    ("owner", owner), ("pipeline", childPipelineName), ("server", serverId));
             }
         }
-        return true;
+        return null;
     }
 
-    public async Task<PipelineRunDto?> TriggerChainedRunAsync(
+    public async Task<PipelineChainedRunOutcome> TriggerChainedRunAsync(
         int childPipelineId, Dictionary<string, string>? upstreamVariables,
         IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
         var child = await repo.FindPipelineAsync(childPipelineId, ct).ConfigureAwait(false);
-        if (child is null) return null;
-        var preparation = await preparations.PrepareRunAsync(child.Id, PipelineRunService.ResolveRunBranch(upstreamVariables),
-            yamlOverride: null, PipelineRunService.ResolveSourceCommit(upstreamVariables), ct).ConfigureAwait(false);
-        if (preparation is null) return null;
+        if (child is null) return PipelineChainedRunOutcome.Refused(ChainedPipelineGone(childPipelineId));
+        PipelineRunPreparation? preparation;
+        try
+        {
+            preparation = await preparations.PrepareRunAsync(child.Id, PipelineRunService.ResolveRunBranch(upstreamVariables),
+                yamlOverride: null, PipelineRunService.ResolveSourceCommit(upstreamVariables), ct).ConfigureAwait(false);
+        }
+        catch (BadRequestException refusal)
+        {
+            // Mandatory catch: a definition that cannot be prepared (invalid YAML, an illegal definition)
+            // is the reason this hop is refused, and the caller must be able to say so on the upstream run.
+            return PipelineChainedRunOutcome.Refused(
+                PipelineProblem.Of(
+                    PipelineProblemCodes.ChainedDefinitionNotPrepared,
+                    $"its definition cannot be prepared: {refusal.Message}", ("detail", refusal.Message)),
+                refusal.Problems);
+        }
+        if (preparation is null) return PipelineChainedRunOutcome.Refused(ChainedPipelineGone(childPipelineId));
         // F3: a chained target that declares a `candidateVersion` parameter (aetheus-deploy-prod, when
         // triggered by aetheus-candidate's on_success) receives it automatically from the upstream
         // release the trigger carried, so the queue-time manual entry stays optional rather than
@@ -444,8 +472,15 @@ public sealed class PipelineTriggerStepCoordinator(
         // BACK-021: authorize the targets of the definition the parameters produce, then launch exactly it.
         var runtimePreparation = await parameterResolver.ResolveRunParametersAsync(preparation, parameters, ct)
             .ConfigureAwait(false);
-        if (!await ChainedRunAuthorizedAsync(runtimePreparation, child.Name, child.CreatedByUsername, ct).ConfigureAwait(false))
-            return null;
-        return await launcher.TriggerPreparedRunAsync(runtimePreparation, upstreamVariables, parameters, ct).ConfigureAwait(false);
+        if (await ChainedRunRefusalAsync(runtimePreparation, child.Name, child.CreatedByUsername, ct).ConfigureAwait(false) is { } unauthorized)
+            return PipelineChainedRunOutcome.Refused(unauthorized);
+        var started = await launcher.TriggerPreparedRunAsync(runtimePreparation, upstreamVariables, parameters, ct).ConfigureAwait(false);
+        return started is null
+            ? PipelineChainedRunOutcome.Refused(
+                PipelineProblem.Of(PipelineProblemCodes.ChainedLaunchReturnedNoRun, "the launch returned no run"))
+            : PipelineChainedRunOutcome.Started(started);
     }
+
+    private static PipelineProblem ChainedPipelineGone(int pipelineId) => PipelineProblem.Of(
+        PipelineProblemCodes.ChainedPipelineGone, $"pipeline {pipelineId} no longer exists", ("pipeline", pipelineId));
 }

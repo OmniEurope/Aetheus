@@ -36,7 +36,9 @@ public class ReleasesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await service.GetServerReleasesAsync(serverId, request, ct));
+        var accessibleIds = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Release, Permission.Read, ct);
+        if (accessibleIds is { Count: 0 }) return Ok(new PaginatedResult<ReleaseDto>());
+        return Ok(await service.GetServerReleasesAsync(serverId, request, ct, accessibleIds));
     }
 
     /// <summary>The project and pipeline names a server's releases list filters offer.</summary>
@@ -46,7 +48,9 @@ public class ReleasesController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await service.GetReleaseFilterValuesAsync(null, null, serverId, ct));
+        var accessibleIds = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Release, Permission.Read, ct);
+        if (accessibleIds is { Count: 0 }) return Ok(new ReleaseFilterValuesDto());
+        return Ok(await service.GetReleaseFilterValuesAsync(null, accessibleIds, serverId, ct));
     }
 
     /// <summary>The project and pipeline names the releases list filters offer, across the releases
@@ -140,12 +144,12 @@ public class ReleasesController(
     [HttpPost("{id:int}/rollback")]
     public async Task<ActionResult<ReleaseRollbackDto>> Rollback(int id, [FromBody] RollbackReleaseRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Release, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ReleaseRollback, id, ct))
             return Forbid();
         var release = await service.GetReleaseAsync(id, ct);
         if (release is null) return NotFound();
         // A rollback can redeploy an application and, when explicitly requested, restore its data.
-        // Release.Write alone is therefore insufficient: the caller must also be allowed to operate
+        // The rollback permission alone is therefore insufficient: the caller must also be allowed to operate
         // on the owning project.
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, release.ProjectId, Permission.Write, ct))
             return Forbid();
@@ -157,11 +161,11 @@ public class ReleasesController(
 
     /// <summary>Recette R-13: puts a release whose recorded status is wrong back to a status its deployment
     /// history can end in (the release production still serves, left Failed, becomes Deployed again). A record
-    /// correction over the project's deployment history: Release.Write and Project.Admin, reason audited.</summary>
+    /// correction over the project's deployment history: release.status.restore (R-11) and Project.Admin, reason audited.</summary>
     [HttpPost("{id:int}/status")]
     public async Task<ActionResult<ReleaseDto>> RestoreStatus(int id, [FromBody] RestoreReleaseStatusRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Release, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ReleaseStatusRestore, id, ct))
             return Forbid();
         var release = await service.GetReleaseAsync(id, ct);
         if (release is null) return NotFound();
@@ -245,13 +249,13 @@ public class ReleasesController(
 
     /// <summary>
     /// BACK-023: a release build or rollback launches a pipeline, so it needs what the direct pipeline
-    /// route needs: Pipeline.Write, then Server.Admin on every server the prepared run can reach. The
+    /// route needs: pipeline.run, then Server.Admin on every server the prepared run can reach. The
     /// preparation authorized here is the one the service launches.
     /// </summary>
     private async Task<(ActionResult? Refusal, PipelineRunPreparation? Run)> AuthorizePipelineLaunchAsync(
         int pipelineId, CancellationToken ct, string? sourceBranch = null, string? commitHash = null)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, pipelineId, ct))
             return (Forbid(), null);
         var preparation = commitHash is null
             ? await pipelineRunService.PrepareRunAsync(pipelineId, ct: ct)

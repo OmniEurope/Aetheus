@@ -15,8 +15,10 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public async Task<(List<UserDto> Items, int TotalCount)> GetUsersPagedProjectedAsync(
         string? search, int page, int pageSize, CancellationToken ct = default,
         string? sortBy = null, bool sortDescending = false,
-        IReadOnlyList<GridFilter>? filters = null)
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null)
     {
+        // Limited to organizations (an organization's administrator, or the switcher's choice): their members
+        // only, each with the roles it holds there only.
         return await GetUsersPageAsync(
             search,
             page,
@@ -28,14 +30,25 @@ public class UserRepository(AppDbContext db) : IUserRepository
                 Email = u.Email,
                 IsActive = u.IsActive,
                 TotpEnabled = u.TotpEnabled,
-                Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
+                Roles = u.UserRoles.Where(ur => ur.Role.Name == RoleNames.Admin).Select(ur => ur.Role.Name).ToList(),
+                OrganizationRoles = u.OrganizationRoles
+                    .Where(assignment => organizationIds == null || organizationIds.Contains(assignment.OrganizationId))
+                    .OrderBy(assignment => assignment.Organization.Name).ThenBy(assignment => assignment.Role.Name)
+                    .Select(assignment => new OrganizationRoleAssignmentDto
+                    {
+                        OrganizationId = assignment.OrganizationId,
+                        OrganizationName = assignment.Organization.Name,
+                        Role = assignment.Role.Name
+                    }).ToList(),
                 CreatedAt = u.CreatedAt,
-                UpdatedAt = u.UpdatedAt
+                UpdatedAt = u.UpdatedAt,
+                LastActivityAt = u.LastActivityAt
             }),
             ct,
             sortBy,
             sortDescending,
-            filters).ConfigureAwait(false);
+            filters,
+            organizationIds).ConfigureAwait(false);
     }
 
     private async Task<(List<T> Items, int TotalCount)> GetUsersPageAsync<T>(
@@ -46,10 +59,15 @@ public class UserRepository(AppDbContext db) : IUserRepository
         CancellationToken ct,
         string? sortBy = null,
         bool sortDescending = false,
-        IReadOnlyList<GridFilter>? filters = null)
+        IReadOnlyList<GridFilter>? filters = null,
+        IReadOnlyList<int>? organizationIds = null)
     {
+        var scoped = BuildUserQuery(search);
+        if (organizationIds is not null)
+            scoped = scoped.Where(user => db.OrganizationMembers.Any(member =>
+                member.UserId == user.Id && organizationIds.Contains(member.OrganizationId)));
         // The header filters, before the count.
-        var query = UserListQuery.Columns.ApplyFilters(BuildUserQuery(search), filters);
+        var query = UserListQuery.Columns.ApplyFilters(scoped, filters);
         var totalCount = await query.CountAsync(ct).ConfigureAwait(false);
         var pageQuery = query
             .OrderByProperty(sortBy, sortDescending, user => user.Username, fallbackDescending: false)
@@ -65,15 +83,14 @@ public class UserRepository(AppDbContext db) : IUserRepository
         return string.IsNullOrWhiteSpace(search)
             ? query
             : query.Where(user => user.Username.Contains(search)
-                || (user.Email != null && user.Email.Contains(search)));
+                || user.Email.Contains(search));
     }
 
     public async Task<User?> GetUserDetailAsync(int id, CancellationToken ct = default)
     {
         return await db.Users
             .Where(u => u.Id == id)
-            .Include(u => u.UserRoles)
-                .ThenInclude(ur => ur.Role)
+            .IncludeRoles()
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);
     }
@@ -81,6 +98,11 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public async Task<User?> FindByUsernameAsync(string username, CancellationToken ct = default)
     {
         return await db.Users.FindByUsernameWithRolesAsync(username, ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> EmailInUseAsync(string normalizedEmail, int? exceptUserId, CancellationToken ct = default)
+    {
+        return await db.Users.AnyAsync(u => u.Email == normalizedEmail && u.Id != exceptUserId, ct).ConfigureAwait(false);
     }
 
     public async Task<User?> FindUserAsync(int id, CancellationToken ct = default)
@@ -110,8 +132,9 @@ public class UserRepository(AppDbContext db) : IUserRepository
 
     public async Task<List<Role>> GetRolesByNamesAsync(List<string> roleNames, CancellationToken ct = default)
     {
+        // Site roles only (R-2): an organization's own role may share a name with another organization's.
         return await db.Roles
-            .Where(r => roleNames.Contains(r.Name))
+            .Where(r => r.OrganizationId == null && roleNames.Contains(r.Name))
             .ToListAsync(ct)
             .ConfigureAwait(false);
     }
@@ -128,8 +151,10 @@ public class UserRepository(AppDbContext db) : IUserRepository
     {
         return await db.Roles
             .AsNoTracking()
-            .OrderBy(r => r.Name)
             .Select(r => r.Name)
+            // Two organizations may name a role alike (R-2): each name once.
+            .Distinct()
+            .OrderBy(name => name)
             .ToListAsync(ct)
             .ConfigureAwait(false);
     }

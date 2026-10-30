@@ -30,7 +30,7 @@ else
             <ValidationSummary />
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
                 <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@_saving" ButtonType="OmniButtonType.Submit"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo("/admin/organizations"))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo("/admin/organizations"))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             </OmniStack>
         </OmniStack>
     </OmniTemplateForm></div>

@@ -42,16 +42,18 @@ internal sealed partial class AssuranceTestOutcomes(Func<string, string?> variab
         var tests = new JsObject();
         tests.Set("unit", Declared("unit", () => Required(Outcome("UNIT_TEST_GATE_STATUS"))));
         tests.Set("analyzers", Declared("analyzers", () => Required(Outcome("ANALYZER_TEST_GATE_STATUS"))));
-        tests.Set("currentIntegration", Declared("currentIntegration", () => Required(Outcome("QA_CURRENT_INTEGRATION_GATE_STATUS"))));
-        tests.Set("currentE2E", Declared("currentE2E", () => Required(Outcome("QA_CURRENT_E2E_GATE_STATUS"))));
+        tests.Set("currentIntegration", Declared("currentIntegration", () => WithFlaky(
+            Required(Outcome("QA_CURRENT_INTEGRATION_GATE_STATUS")), "QA_CURRENT_INTEGRATION_FLAKY_TESTS")));
+        tests.Set("currentE2E", Declared("currentE2E", () => WithFlaky(
+            Required(Outcome("QA_CURRENT_E2E_GATE_STATUS")), "QA_CURRENT_E2E_FLAKY_TESTS")));
         tests.Set("previousSmoke", Declared("previousSmoke", () => Required(CompatibilityOutcome(
             "QA_PREVIOUS_SMOKE_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED"))));
         tests.Set("agentCompatibility", Declared("agentCompatibility", () => Profiled("agentCompatibility", () => Required(CompatibilityOutcome(
             "QA_AGENT_COMPATIBILITY_GATE_STATUS", "AgentCompatibilityMode", "PreviousAgentTested")))));
-        tests.Set("previousIntegration", Declared("previousIntegration", () => Profiled("previousIntegration", () => Required(CompatibilityOutcome(
-            "QA_PREVIOUS_INTEGRATION_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED")))));
-        tests.Set("previousE2E", Declared("previousE2E", () => Profiled("previousE2E", () => Required(CompatibilityOutcome(
-            "QA_PREVIOUS_E2E_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED")))));
+        tests.Set("previousIntegration", Declared("previousIntegration", () => Profiled("previousIntegration", () => WithFlaky(Required(CompatibilityOutcome(
+            "QA_PREVIOUS_INTEGRATION_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED")), "QA_PREVIOUS_INTEGRATION_FLAKY_TESTS"))));
+        tests.Set("previousE2E", Declared("previousE2E", () => Profiled("previousE2E", () => WithFlaky(Required(CompatibilityOutcome(
+            "QA_PREVIOUS_E2E_GATE_STATUS", "COMPATIBILITY_MODE", "PREVIOUS_VERSION_TESTED")), "QA_PREVIOUS_E2E_FLAKY_TESTS"))));
         tests.Set("performance", Performance());
         return tests;
     }
@@ -121,6 +123,19 @@ internal sealed partial class AssuranceTestOutcomes(Func<string, string?> variab
         result.Set("mode", mode);
         result.Set("tested", tested);
         return result;
+    }
+
+    /// <summary>The suite's flaky tests, the ones that failed on one attempt and passed on its rerun, sealed
+    /// by name as <c>flakyTests</c> (the one-line list the QA pipeline published), after the outcome's own
+    /// properties: they do not change the grade, and they are never hidden from it. Set only when the
+    /// variable is, so a run without flaky tests seals the very contract it sealed before the rerun
+    /// existed; the verifier reads no such property, so a contract with or without it verifies alike.
+    /// A difference from the script, which had no rerun to report.</summary>
+    private JsObject WithFlaky(JsObject test, string variableName)
+    {
+        if (variable(variableName) is { } flaky)
+            test.Set("flakyTests", flaky);
+        return test;
     }
 
     // Gates an adapting project genuinely cannot produce are recorded as an unrequired NotRun instead

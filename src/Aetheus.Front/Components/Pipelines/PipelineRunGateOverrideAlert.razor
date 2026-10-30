@@ -1,0 +1,9 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+
+@* R-72: a run launched despite the quality gate says so on its page, with who, when and the reasons the gate had. *@
+@if (Run.GateOverrideBy is not null)
+{
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["GateOverrideRunBadge"]" data-testid="run-gate-override">
+        <div>@Note</div>
+    </OmniAlert>
+}

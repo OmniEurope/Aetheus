@@ -14,7 +14,7 @@ const topLevelSegments = new Set([
 ]);
 
 const staticNestedSegments = new Set([
-  "accounts", "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "apps", "artifacts", "audit",
+  "accounts", "add-agent", "ai-profiles", "ai-tasks", "apache", "api-reference", "approvals", "apps", "artifacts", "audit",
   "backups", "board", "branches", "certbot", "change-password", "commits", "configuration",
   "cron", "dashboards", "docker", "edit", "environments", "external-repo", "extract",
   "findings", "firewall", "fleet", "libraries", "logs", "mail", "mail-templates", "mailbox", "modules", "monitoring",

@@ -31,7 +31,7 @@
     }
     <DialogFooter OnCancel="@(() => Dialog.Close())" CancelText="@L["Close"]">
         <SecondaryContent>
-            <OmniCopyButton Label="@L["CopyAsMarkdown"]" TextFactory="@MarkdownAsync" Class="app-error-detail-copy" />
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CopyMarkdownAsync" title="@L["CopyAsMarkdown"]" Label="@L["CopyAsMarkdown"]" Class="app-error-detail-copy"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
         </SecondaryContent>
     </DialogFooter>
 </OmniStack>

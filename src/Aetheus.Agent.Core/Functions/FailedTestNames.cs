@@ -115,8 +115,8 @@ internal static partial class FailedTestNames
         return string.Join(", ", shown);
     }
 
-    public static string LogLine(IReadOnlyList<string> names) =>
-        string.Create(CultureInfo.InvariantCulture, $"Failed tests ({names.Count}): {Format(names)}");
+    public static string LogLine(IReadOnlyList<string> names, string heading = "Failed tests") =>
+        string.Create(CultureInfo.InvariantCulture, $"{heading} ({names.Count}): {Format(names)}");
 
     /// <summary>The <c>record</c> mode the suite runners ran when their status was not 0: the names
     /// written one per line to <paramref name="listPath"/> and logged, or, when the TRX cannot be

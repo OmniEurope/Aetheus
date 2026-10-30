@@ -6,7 +6,7 @@
 
 @if (!string.IsNullOrEmpty(OwnerName))
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="inherited-badge"
+    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="inherited-badge"
         title="@string.Format(L["InheritedFrom"], OwnerLabel, OwnerName)">
         @($"{OwnerLabel}: {OwnerName}")
     </OmniBadge>

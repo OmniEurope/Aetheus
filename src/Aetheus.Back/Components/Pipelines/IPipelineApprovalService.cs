@@ -10,4 +10,7 @@ public interface IPipelineApprovalService
     /// with its reason: <see cref="BadRequestException"/> (not a decision), <see cref="NotFoundException"/>
     /// (no such approval) or <see cref="ConflictException"/> (already decided, run ended, run not moved).</summary>
     Task<PipelineApprovalDto> DecideApprovalAsync(int approvalId, ApprovalDecisionRequest request, CancellationToken ct = default);
+
+    /// <summary>What the approval gates, to authorize who decides it; null when it does not exist.</summary>
+    Task<PipelineApprovalScope?> GetApprovalScopeAsync(int approvalId, CancellationToken ct = default);
 }

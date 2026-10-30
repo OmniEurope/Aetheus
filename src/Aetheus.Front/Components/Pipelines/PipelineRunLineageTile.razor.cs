@@ -37,8 +37,16 @@ public partial class PipelineRunLineageTile
         ? "run-lineage-tile run-lineage-tile--wide"
         : "run-lineage-tile";
 
-    /// <summary>The account that launched the run; "automatic" when nobody did, or while it is read.</summary>
-    private string ActorText => _lineage?.TriggeredBy ?? L["RunLaunchedAutomatically"];
+    /// <summary>False while the lineage is read, and when it could not be: "automatic" is then unknown.</summary>
+    private bool _lineageRead;
+
+    /// <summary>The account that launched the run; "automatic" only once the lineage says nobody did.</summary>
+    private string ActorText => _lineage switch
+    {
+        { TriggeredBy: { } actor } => actor,
+        not null => L["RunLaunchedAutomatically"],
+        null => _lineageRead ? L["NotAvailableShort"] : L["Loading"]
+    };
 
     /// <summary>Read when the run is first shown and again when its status changes: a run starts the
     /// next one of its chain as it ends, so the list is only complete then.</summary>
@@ -57,6 +65,8 @@ public partial class PipelineRunLineageTile
             // and the runs it started are missing.
             _lineage = null;
         }
+
+        _lineageRead = true;
     }
 
     private Task ShowAllAsync() =>

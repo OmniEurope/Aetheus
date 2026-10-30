@@ -6,12 +6,38 @@
 # "Unable to determine if you are root" (recette R3-36). This helper is the ADR-019 exception: one
 # word chosen from a closed list, no other argument, no environment-controlled path, fixed rkhunter argv.
 set -u
-[ "$#" -eq 1 ] || { echo "aetheus-rkhunter takes exactly one argument: check, update or propupd" >&2; exit 2; }
+[ "$#" -eq 1 ] || { echo "aetheus-rkhunter takes exactly one argument: check, update, propupd or mail-on-warning" >&2; exit 2; }
+
+# mail-on-warning (recette R-119): set the recipient of rkhunter's warnings. The address is read from stdin,
+# one line, never from the command line, and re-validated with the rule of RkhunterSetupEnv.IsValidMailOnWarning.
+set_mail_on_warning() {
+    address=''
+    IFS= read -r address || true
+    printf '%s\n' "$address" | grep -Eqx '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' \
+        || { echo "aetheus-rkhunter: invalid e-mail address" >&2; exit 2; }
+    CONF=/etc/rkhunter.conf
+    [ -f "$CONF" ] || { echo "aetheus-rkhunter: $CONF not found (is rkhunter installed?)" >&2; exit 1; }
+    # The address holds no "/", "&" nor "\" (validated above), so it is safe in the sed replacement.
+    if grep -Eq '^[#[:space:]]*MAIL-ON-WARNING=' "$CONF"; then
+        sed -i -E "0,/^[#[:space:]]*MAIL-ON-WARNING=.*/s//MAIL-ON-WARNING=$address/" "$CONF" \
+            || { echo "aetheus-rkhunter: could not update MAIL-ON-WARNING in $CONF" >&2; exit 1; }
+    else
+        printf 'MAIL-ON-WARNING=%s\n' "$address" >> "$CONF" \
+            || { echo "aetheus-rkhunter: could not append MAIL-ON-WARNING to $CONF" >&2; exit 1; }
+    fi
+    echo "RKHunter warnings will be mailed to $address."
+    exit 0
+}
+
+case "$1" in
+    mail-on-warning) set_mail_on_warning ;;
+esac
+
 case "$1" in
     check)   /usr/bin/rkhunter --check --skip-keypress --nocolors --report-warnings-only ;;
     update)  /usr/bin/rkhunter --update --nocolors ;;
     propupd) /usr/bin/rkhunter --propupd --nocolors ;;
-    *) echo "aetheus-rkhunter: unknown action (expected check, update or propupd)" >&2; exit 2 ;;
+    *) echo "aetheus-rkhunter: unknown action (expected check, update, propupd or mail-on-warning)" >&2; exit 2 ;;
 esac
 rc=$?
 # rkhunter recreates its log mode 0600 on every run, so the unprivileged agent could read neither the

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using static Aetheus.Back.Components.Notifications.MailTemplates.DailyRecapMailVariables;
 using static Aetheus.Back.Components.Notifications.MailTemplates.NotificationMailVariables;
+using static Aetheus.Back.Components.Notifications.MailTemplates.UserWelcomeMailVariables;
 
 namespace Aetheus.Back.Components.Notifications.MailTemplates;
 
@@ -22,9 +23,12 @@ internal static class MailTemplateCatalog
         MailTemplateKind.NotificationEvent =>
         [
             Text(Event), Text(Summary), Text(Intro), Text(Context), Text(Project), Text(LinkLabel), Link(NotificationMailVariables.Link),
-            Link(InboxUrl), Text(SentAt), Block(StatusBanner), Block(ContextLink), Block(Details), Block(LinkNote)
+            Link(InboxUrl), Text(SentAt), Block(StatusBanner), Block(ApprovalActions), Block(ContextLink), Block(Details), Block(LinkNote)
         ],
         MailTemplateKind.DailyRecap => [Text(Date), Text(Period), Link(SettingsUrl), Block(Tiles), Block(Sections)],
+        MailTemplateKind.UserWelcome => [Text(UserName), Text(SignInEmail), Link(SetPasswordUrl), Text(ValidDays), Link(SignInUrl)],
+        MailTemplateKind.PasswordReset => [Text(UserName), Text(SignInEmail), Link(SetPasswordUrl), Text(ValidMinutes), Link(SignInUrl)],
+        MailTemplateKind.SiteAdminGranted => [Text(UserName), Text(SignInEmail), Link(SignInUrl)],
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown mail template kind.")
     };
 
@@ -48,6 +52,28 @@ internal static class MailTemplateCatalog
                 """{"PipelineRunId":4821,"PipelineId":41,"PipelineName":"release-candidate","BuildNumber":118,"ProjectId":3,"ProjectName":"Shop","Status":"Failed"}"""),
                 SampleOrigin, language),
             MailTemplateKind.DailyRecap => DailyRecapSamples.For(french, SampleOrigin),
+            MailTemplateKind.UserWelcome => MailTemplateData.Text(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [UserName] = "jdupont",
+                [SignInEmail] = "jean.dupont@example.org",
+                [SetPasswordUrl] = SampleOrigin + PasswordSetupLink.Path("sample-token-not-valid"),
+                [ValidDays] = "7",
+                [SignInUrl] = SampleOrigin + "/login"
+            }),
+            MailTemplateKind.PasswordReset => MailTemplateData.Text(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [UserName] = "jdupont",
+                [SignInEmail] = "jean.dupont@example.org",
+                [SetPasswordUrl] = SampleOrigin + PasswordSetupLink.Path("sample-token-not-valid"),
+                [ValidMinutes] = "60",
+                [SignInUrl] = SampleOrigin + "/login"
+            }),
+            MailTemplateKind.SiteAdminGranted => MailTemplateData.Text(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [UserName] = "jdupont",
+                [SignInEmail] = "jean.dupont@example.org",
+                [SignInUrl] = SampleOrigin + "/login"
+            }),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown mail template kind.")
         };
     }

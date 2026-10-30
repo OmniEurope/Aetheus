@@ -162,7 +162,7 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("AnalysisAiPrompt", StringComparison.Ordinal));
 
         var buttons = cut.FindAll("button");
-        await buttons.Single(button => button.TextContent.Contains("CopyAiPrompt", StringComparison.Ordinal)).ClickAsync(new());
+        await buttons.Single(button => button.GetAttribute("aria-label") == "CopyAiPrompt").ClickAsync(new());
         await buttons.Single(button => button.TextContent.Contains("AnalysisPromptPreview", StringComparison.Ordinal)).ClickAsync(new());
         // STD-BTN detection 11: the Markdown download is an entry of the prompt's "More actions" menu.
         await cut.FindMenuItem("DownloadMarkdown")!.ClickAsync(new());
@@ -323,7 +323,9 @@ public sealed class AnalysisFindingDetailTests : BunitContext
         var post = Assert.Single(_handler.RequestDetails, request => request.Method == "POST");
         Assert.EndsWith("api/work-items", post.Url, StringComparison.Ordinal);
         Assert.Contains("\"externalId\":\"analysis:7\"", post.Body, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("[High] Command injection", post.Body, StringComparison.Ordinal);
+        // R-113: the ticket title carries the localized severity (this test's localizer echoes the key).
+        Assert.Contains("[Enum_AnalysisSeverity_High] Command injection", post.Body, StringComparison.Ordinal);
+        Assert.Contains("AnalysisTicketHeading", post.Body, StringComparison.Ordinal);
         Assert.Contains("\"secrets\"", post.Body, StringComparison.Ordinal);
         // The ticket exists: the button is now disabled and a second click files nothing.
         var button = cut.FindAll("button").Single(b => b.TextContent.Contains("AnalysisTicket #314", StringComparison.Ordinal));

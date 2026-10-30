@@ -35,9 +35,15 @@ public sealed class MailboxControllerTests
         };
     }
 
-    private void Allow(Permission permission) =>
+    // R-11: reading a mailbox is server.mailbox.read and changing it server.mailbox.manage, the keys the
+    // Read and Write levels of the server gave before; the level itself still gates the client settings.
+    private void Allow(Permission permission)
+    {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 7, permission, Arg.Any<CancellationToken>())
             .Returns(true);
+        var key = permission == Permission.Read ? PermissionKeys.ServerMailboxRead : PermissionKeys.ServerMailboxManage;
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), key, 7, Arg.Any<CancellationToken>()).Returns(true);
+    }
 
     [Fact]
     public void The_controller_requires_authentication()

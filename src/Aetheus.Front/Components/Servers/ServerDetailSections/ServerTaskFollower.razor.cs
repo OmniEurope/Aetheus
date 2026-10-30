@@ -24,8 +24,32 @@ public partial class ServerTaskFollower
     [Inject] private TaskTrackerService Tracker { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private TimeProvider Clock { get; set; } = default!;
+
+    /// <summary>R-119: the server pages' loader, whose layout veils the section while a followed task runs.
+    /// Absent outside a server page: the follower then only reports, as before.</summary>
+    [CascadingParameter(Name = "ServerLoader")] public ServerDetailLoader? Loader { get; set; }
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
+
+    /// <summary>R-119: the page shows an inventory the agent collects and sends back (Apache sites, for
+    /// instance). When the followed task ends, the veil then stays until the server's next state has arrived,
+    /// or <see cref="SettleLimit"/> has passed and the state is read again, so a row that is gone or moved never
+    /// shows again as it was.</summary>
+    [Parameter] public bool SettleOnHeartbeat { get; set; }
+
+    /// <summary>R-119: raised once the wait of <see cref="SettleOnHeartbeat"/> is over (the server's next state has
+    /// arrived, or <see cref="SettleLimit"/> has passed), before the veil lifts. A page whose data is not the
+    /// server state itself (the firewall rules, the pending updates, a grid) reads it again here, so the veil
+    /// never lifts on what the task has just changed.</summary>
+    [Parameter] public EventCallback OnSettled { get; set; }
+
+    /// <summary>How long the veil waits for a launched task to show in the live feed before it gives up
+    /// (the follower line stays): a name that matches nothing must not veil the page for ever.</summary>
+    internal static readonly TimeSpan UnboundLimit = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long the veil waits, after the task ended, for the server's next state.</summary>
+    internal static readonly TimeSpan SettleLimit = TimeSpan.FromSeconds(15);
 
     /// <summary>The start of the task names this page launches (for instance "RKHunter"); an action may
     /// name a narrower one when it calls <see cref="Expect"/>.</summary>
@@ -49,8 +73,12 @@ public partial class ServerTaskFollower
         Tracker.OnTaskCompleted += OnTaskCompleted;
     }
 
-    /// <summary>Called by the page as it launches a task: <paramref name="title"/> names what it does.</summary>
-    public void Expect(string title, string? namePrefix = null)
+    /// <summary>Called by the page as it launches a task: <paramref name="title"/> names what it does.
+    /// R-119: the section is veiled until the task ends, unless <paramref name="veil"/> is false (a read the page
+    /// repeats on its own, such as following a log). A task that only reads (a log, a configuration test) passes
+    /// <paramref name="settle"/> false: it changed nothing, so on an inventory page the veil does not wait for a
+    /// new server state after it.</summary>
+    public void Expect(string title, string? namePrefix = null, bool veil = true, bool settle = true)
     {
         _title = title;
         _expectedPrefix = namePrefix ?? NamePrefix;
@@ -60,11 +88,11 @@ public partial class ServerTaskFollower
         _state = ServerTaskFollowState.Requested;
         // The tasks already in flight are not the one this click launches.
         _known = Tracker.Tasks.Select(task => task.Id).ToHashSet();
-        _ = InvokeAsync(StateHasChanged);
+        Launched(veil, settle: settle);
     }
 
     /// <summary>Follows the task the backend just returned, by its id: no name matching needed.</summary>
-    public void Follow(string title, int taskId)
+    public void Follow(string title, int taskId, bool veil = true, bool settle = true)
     {
         _title = title;
         _group = null;
@@ -73,7 +101,7 @@ public partial class ServerTaskFollower
         _known = [];
         var running = Tracker.Tasks.Any(task => task.Id == taskId && task.Status == TaskExecutionStatus.Running);
         _state = running ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
-        _ = InvokeAsync(StateHasChanged);
+        Launched(veil, settle, followUnseen: Tracker.Tasks.All(task => task.Id != taskId));
     }
 
     /// <summary>Called by the page as one click launches several tasks: one expected task name start
@@ -87,7 +115,7 @@ public partial class ServerTaskFollower
         _cause = null;
         _state = ServerTaskFollowState.Requested;
         _known = Tracker.Tasks.Select(task => task.Id).ToHashSet();
-        _ = InvokeAsync(StateHasChanged);
+        Launched(veil: true);
     }
 
     /// <summary>One task of the group could not be launched: it is not waited for; when none is left,
@@ -109,7 +137,128 @@ public partial class ServerTaskFollower
         _state = ServerTaskFollowState.Idle;
         _group = null;
         _taskId = null;
+        EndSettle();
+        _ = InvokeAsync(() =>
+        {
+            SyncVeil();
+            StateHasChanged();
+        });
+    }
+
+    // A new launch ends the wait of the previous one and decides, for itself, whether it veils the section.
+    private void Launched(bool veil, bool settle = true, bool followUnseen = false)
+    {
+        EndSettle();
+        _veil = veil;
+        _settleWanted = settle;
+        _unboundGaveUp = false;
+        _followUnseen = followUnseen;
+        SyncVeil();
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    // ---- R-119: the section veil -------------------------------------------------------------------------
+
+    private enum VeilTimer { None, Unbound, Settle }
+
+    private bool _veil = true;
+    private bool _settleWanted = true;
+    private bool _unboundGaveUp;
+    private bool _followUnseen;
+    private bool _settling;
+    private DateTime _settleAfter;
+    private IDisposable? _hold;
+    private ITimer? _timer;
+    private VeilTimer _timerKind;
+
+    internal bool Veiling => _hold is not null;
+
+    private bool InFlight => _state is ServerTaskFollowState.Requested or ServerTaskFollowState.Queued or ServerTaskFollowState.Running;
+
+    /// <summary>The veil is held from the launch until the task has ended and, when the page asked for it,
+    /// the server's next state has arrived.</summary>
+    private void SyncVeil()
+    {
+        if (Loader is null) return;
+        var wanted = _veil && !_unboundGaveUp && (_settling || InFlight);
+        if (wanted) _hold ??= Loader.HoldTaskVeil();
+        else
+        {
+            _hold?.Dispose();
+            _hold = null;
+        }
+
+        var kind = !wanted ? VeilTimer.None : _settling ? VeilTimer.Settle : _state == ServerTaskFollowState.Requested || _followUnseen ? VeilTimer.Unbound : VeilTimer.None;
+        if (kind == _timerKind) return;
+        _timer?.Dispose();
+        _timerKind = kind;
+        _timer = kind == VeilTimer.None
+            ? null
+            : Clock.CreateTimer(_ => _ = InvokeAsync(() => OnVeilTimer(kind)), null,
+                kind == VeilTimer.Settle ? SettleLimit : UnboundLimit, Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task OnVeilTimer(VeilTimer kind)
+    {
+        if (kind != _timerKind) return;
+        if (kind == VeilTimer.Unbound && (_state == ServerTaskFollowState.Requested || _followUnseen))
+        {
+            _unboundGaveUp = true;
+            SyncVeil();
+            StateHasChanged();
+        }
+        else if (kind == VeilTimer.Settle)
+        {
+            await EndSettleAsync(refresh: true);
+        }
+    }
+
+    private void BeginSettle()
+    {
+        if (!SettleOnHeartbeat || !_settleWanted || Loader is null || !_veil) return;
+        _settleAfter = Loader.LastUpdated ?? DateTime.MinValue;
+        if (!_settling) Loader.OnChanged += OnLoaderChanged;
+        _settling = true;
+    }
+
+    private void EndSettle()
+    {
+        if (!_settling) return;
+        _settling = false;
+        if (Loader is not null) Loader.OnChanged -= OnLoaderChanged;
+    }
+
+    private void OnLoaderChanged()
+    {
+        if (_settling && (Loader?.LastUpdated ?? DateTime.MinValue) > _settleAfter)
+            _ = InvokeAsync(() => EndSettleAsync(refresh: false));
+    }
+
+    private bool _settleEnding;
+
+    private async Task EndSettleAsync(bool refresh)
+    {
+        // One end per wait: a beat and the timer may both come while the page reads its data.
+        if (!_settling || _settleEnding) return;
+        _settleEnding = true;
+        try
+        {
+            if (refresh && Loader is not null)
+            {
+                // The heartbeat did not come in time: read the state the backend holds.
+                try { await Loader.RefreshAsync(ServerId); }
+                catch (HttpRequestException) { /* the next heartbeat brings it */ }
+            }
+            // The page reads its own data now, still under the veil.
+            await OnSettled.InvokeAsync();
+        }
+        finally
+        {
+            _settleEnding = false;
+            EndSettle();
+            SyncVeil();
+            StateHasChanged();
+        }
     }
 
     private bool Matches(int serverId, string taskName) =>
@@ -123,7 +272,7 @@ public partial class ServerTaskFollower
         {
             if (!group.Bind(Tracker.Tasks, ServerId, _known) && !group.AnyRunning(Tracker.Tasks)) return;
             _state = group.AnyRunning(Tracker.Tasks) ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
-            _ = InvokeAsync(StateHasChanged);
+            _ = InvokeAsync(RenderWithVeil);
             return;
         }
         var task = _taskId is { } id
@@ -132,8 +281,15 @@ public partial class ServerTaskFollower
                 !_known.Contains(candidate.Id) && Matches(candidate.ServerId, candidate.Name));
         if (task is null) return;
         _taskId = task.Id;
+        _followUnseen = false;
         _state = task.Status == TaskExecutionStatus.Running ? ServerTaskFollowState.Running : ServerTaskFollowState.Queued;
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(RenderWithVeil);
+    }
+
+    private void RenderWithVeil()
+    {
+        SyncVeil();
+        StateHasChanged();
     }
 
     private void OnTaskCompleted(TaskCompletedNotification notification)
@@ -160,10 +316,13 @@ public partial class ServerTaskFollower
         {
             _state = ServerTaskFollowState.Succeeded;
             _cause = null;
+            EndOfTask();
         }
         else
         {
             _state = ServerTaskFollowState.Failed;
+            // The task ended: the veil does not wait for the log to be read (a failure changes the server too).
+            EndOfTask();
             // Recette R3-44: the end of the log, not its last line alone: a service that refused to start
             // ends its task with its status and its configuration check.
             try { _cause = await ServerTaskOutputLoader.TailAsync(Api, notification.TaskId, CauseLines); }
@@ -173,17 +332,26 @@ public partial class ServerTaskFollower
         StateHasChanged();
     }
 
+    private void EndOfTask()
+    {
+        _followUnseen = false;
+        BeginSettle();
+        SyncVeil();
+    }
+
     private async Task CompleteGroupAsync()
     {
         if (_group?.FirstFailedTaskId is not { } failedId)
         {
             _state = ServerTaskFollowState.Succeeded;
             _cause = null;
+            EndOfTask();
         }
         else
         {
             _state = ServerTaskFollowState.Failed;
             _taskId = failedId;
+            EndOfTask();
             try { _cause = await ServerTaskOutputLoader.TailAsync(Api, failedId, CauseLines); }
             catch (HttpRequestException) { _cause = null; }
             _cause ??= L["NoLogsAvailable"];
@@ -221,5 +389,11 @@ public partial class ServerTaskFollower
     {
         Tracker.OnChanged -= OnTrackerChanged;
         Tracker.OnTaskCompleted -= OnTaskCompleted;
+        // R-119: leaving the page never leaves its section veiled.
+        EndSettle();
+        _timer?.Dispose();
+        _timer = null;
+        _hold?.Dispose();
+        _hold = null;
     }
 }

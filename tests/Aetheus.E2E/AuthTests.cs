@@ -40,7 +40,7 @@ public class AuthTests : E2ETestBase
         await page.GotoAsync($"{frontendUrl}/login");
         Assert.That(await page.EvaluateAsync<bool>("() => window.isSecureContext"), Is.True,
             "The offline recovery needs a secure context for its service worker.");
-        await page.WaitForSelectorAsync("#Username", new() { Timeout = 15000 });
+        await page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
         await page.WaitForFunctionAsync("() => Boolean(navigator.serviceWorker?.['controller'])", null,
             new() { Timeout = 10000 });
 
@@ -55,7 +55,7 @@ public class AuthTests : E2ETestBase
 
         await context.SetOfflineAsync(false);
         await page.GetByRole(Microsoft.Playwright.AriaRole.Button, new() { Name = "Retry" }).ClickAsync();
-        await Expect(page.Locator("#Username")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await Expect(page.Locator("#Email")).ToBeVisibleAsync(new() { Timeout = 15000 });
     }
 
     [TestCase("blazor")]
@@ -90,9 +90,9 @@ public class AuthTests : E2ETestBase
     public async Task Login_ValidCredentials_RedirectsToDashboard()
     {
         await Page.GotoAsync($"{FrontendUrl}/login");
-        await Page.WaitForSelectorAsync("#Username", new() { Timeout = 15000 });
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
 
-        await Page.FillAsync("#Username", AdminUser);
+        await Page.FillAsync("#Email", AdminEmail);
         await Page.FillAsync("#Password", AdminPassword);
         await Page.ClickAsync("button[type='submit']");
 
@@ -109,9 +109,9 @@ public class AuthTests : E2ETestBase
             @"status of 401",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase));
         await Page.GotoAsync($"{FrontendUrl}/login");
-        await Page.WaitForSelectorAsync("#Username", new() { Timeout = 15000 });
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
 
-        await Page.FillAsync("#Username", "wronguser");
+        await Page.FillAsync("#Email", "wronguser@example.com");
         await Page.FillAsync("#Password", "wrongpassword");
         await Page.ClickAsync("button[type='submit']");
 
@@ -123,9 +123,9 @@ public class AuthTests : E2ETestBase
     public async Task Login_EmptyFields_ShowsValidation()
     {
         await Page.GotoAsync($"{FrontendUrl}/login");
-        await Page.WaitForSelectorAsync("#Username", new() { Timeout = 15000 });
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
 
-        await Page.FillAsync("#Username", "");
+        await Page.FillAsync("#Email", "");
         await Page.FillAsync("#Password", "");
         await Page.ClickAsync("button[type='submit']");
 
@@ -167,10 +167,10 @@ public class AuthTests : E2ETestBase
         var response = await Page.GotoAsync($"{FrontendUrl}/login");
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Ok, Is.True);
-        await Page.WaitForSelectorAsync("#Username", new() { Timeout = 15000 });
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = 15000 });
 
         await Expect(Page).ToHaveTitleAsync(new System.Text.RegularExpressions.Regex("Login"));
-        await Expect(Page.Locator("#Username")).ToBeVisibleAsync();
+        await Expect(Page.Locator("#Email")).ToBeVisibleAsync();
         await Expect(Page.Locator("#Password")).ToBeVisibleAsync();
         await Expect(Page.Locator("button[type='submit']")).ToBeVisibleAsync();
     }

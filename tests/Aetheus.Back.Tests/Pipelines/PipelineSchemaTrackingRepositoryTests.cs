@@ -96,9 +96,11 @@ public sealed class PipelineSchemaTrackingRepositoryTests
         db.Servers.AddRange(new Server { Id = 10, Name = "prod-1" }, new Server { Id = 20, Name = "prod-2" });
         db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 1, ServerId = 10 });
         db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 2, ServerId = 20 });
-        AddMigrateStep(db, runId: 100, serverId: 10, at: T0);
-        AddMigrateStep(db, runId: 101, serverId: 10, at: T0.AddHours(2));
-        AddMigrateStep(db, runId: 102, serverId: 20, at: T0.AddHours(3));
+        AddProjectEnvironmentAndPipeline(db, environmentId: 1, projectId: 1, pipelineId: 1);
+        AddProjectEnvironmentAndPipeline(db, environmentId: 2, projectId: 2, pipelineId: 2);
+        AddMigrateStep(db, runId: 100, serverId: 10, at: T0, pipelineId: 1);
+        AddMigrateStep(db, runId: 101, serverId: 10, at: T0.AddHours(2), pipelineId: 1);
+        AddMigrateStep(db, runId: 102, serverId: 20, at: T0.AddHours(3), pipelineId: 2);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var repo = new PipelineMigrationGateRepository(db);
@@ -118,7 +120,8 @@ public sealed class PipelineSchemaTrackingRepositoryTests
         await using var db = CreateDb();
         db.Servers.Add(new Server { Id = 10, Name = "prod-1" });
         db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 1, ServerId = 10 });
-        db.PipelineRuns.Add(new PipelineRun { Id = 100 });
+        AddProjectEnvironmentAndPipeline(db, environmentId: 1, projectId: 1, pipelineId: 1);
+        db.PipelineRuns.Add(new PipelineRun { Id = 100, PipelineId = 1 });
         db.PipelineStepRuns.Add(new PipelineStepRun { PipelineRunId = 100, StageName = "Deploy", StepName = "Migrate", ServerId = 10 });
         // The verdict of another step of the run, on no server of the environment.
         db.PipelineMigrationGateVerdicts.Add(new PipelineMigrationGateVerdict
@@ -134,6 +137,43 @@ public sealed class PipelineSchemaTrackingRepositoryTests
             .FindLatestForEnvironmentAsync(1, TestContext.Current.CancellationToken));
     }
 
+    // Recette R-81: two projects whose production environments share one server (W6 deploys onto the host that runs
+    // Aetheus). The migrate step of an Aetheus deployment ran on that server, but the environment of the other
+    // project did not receive that deployment: its page must not show that verdict.
+    [Fact]
+    public async Task LatestForEnvironment_IgnoresAVerdictOfAnotherProjectsRunOnASharedServer()
+    {
+        await using var db = CreateDb();
+        db.Servers.Add(new Server { Id = 10, Name = "shared-vps" });
+        db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 1, ServerId = 10 });
+        db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 2, ServerId = 10 });
+        AddProjectEnvironmentAndPipeline(db, environmentId: 1, projectId: 1, pipelineId: 1);
+        AddProjectEnvironmentAndPipeline(db, environmentId: 2, projectId: 2, pipelineId: 2);
+        AddMigrateStep(db, runId: 2919, serverId: 10, at: T0, pipelineId: 1);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var repo = new PipelineMigrationGateRepository(db);
+
+        Assert.Equal(2919, (await repo.FindLatestForEnvironmentAsync(1, TestContext.Current.CancellationToken))!.PipelineRunId);
+        Assert.Null(await repo.FindLatestForEnvironmentAsync(2, TestContext.Current.CancellationToken));
+    }
+
+    // A pipeline owned by the environment itself (not by its project) is also the environment's own deployment.
+    [Fact]
+    public async Task LatestForEnvironment_KeepsAVerdictOfAPipelineOwnedByTheEnvironment()
+    {
+        await using var db = CreateDb();
+        db.Servers.Add(new Server { Id = 10, Name = "prod-1" });
+        db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 1, ServerId = 10 });
+        db.Environments.Add(new Aetheus.Back.Data.Entities.Environment { Id = 1, Name = "prod" });
+        db.Pipelines.Add(new Pipeline { Id = 1, Name = "deploy", EnvironmentId = 1 });
+        AddMigrateStep(db, runId: 100, serverId: 10, at: T0, pipelineId: 1);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(100, (await new PipelineMigrationGateRepository(db)
+            .FindLatestForEnvironmentAsync(1, TestContext.Current.CancellationToken))!.PipelineRunId);
+    }
+
     [Fact]
     public async Task EnvironmentExists_AnswersForTheEnvironmentsThatAreStored()
     {
@@ -147,9 +187,15 @@ public sealed class PipelineSchemaTrackingRepositoryTests
         Assert.False(await repo.EnvironmentExistsAsync(2, TestContext.Current.CancellationToken));
     }
 
-    private static void AddMigrateStep(AppDbContext db, int runId, int serverId, DateTime at)
+    private static void AddProjectEnvironmentAndPipeline(AppDbContext db, int environmentId, int projectId, int pipelineId)
     {
-        db.PipelineRuns.Add(new PipelineRun { Id = runId, StartedAt = at });
+        db.Environments.Add(new Aetheus.Back.Data.Entities.Environment { Id = environmentId, Name = $"prod-{environmentId}", ProjectId = projectId });
+        db.Pipelines.Add(new Pipeline { Id = pipelineId, Name = $"deploy-{pipelineId}", ProjectId = projectId });
+    }
+
+    private static void AddMigrateStep(AppDbContext db, int runId, int serverId, DateTime at, int pipelineId)
+    {
+        db.PipelineRuns.Add(new PipelineRun { Id = runId, PipelineId = pipelineId, StartedAt = at });
         db.PipelineStepRuns.Add(new PipelineStepRun { PipelineRunId = runId, StageName = "Deploy", StepName = "Migrate", ServerId = serverId });
         db.PipelineMigrationGateVerdicts.Add(new PipelineMigrationGateVerdict
         {

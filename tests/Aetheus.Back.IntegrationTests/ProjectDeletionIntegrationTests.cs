@@ -61,10 +61,30 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
             Assert.Equal(3, counts[ProjectDeletionItemKind.Vaults]);
             Assert.Equal(2, counts[ProjectDeletionItemKind.TelemetryRecords]);
             Assert.Equal(1, counts[ProjectDeletionItemKind.PortReservations]);
+            // R-97: the backup archives of the project's policy live on the shared server, which is offline.
+            var server = Assert.Single(preview.Servers);
+            Assert.Equal((serverId, ProjectDeletionServerState.Offline, 1), (server.ServerId, server.State, server.BackupPolicyCount));
         }
 
+        // R-51: nothing proves those archives removed (the server is offline). Nothing is half deleted: the project
+        // stays whole, marked deleted and waiting for its server cleanup.
         await using (var db = NewContext())
-            Assert.True(await BuildService(db).DeleteAsync(deleted.ProjectId, ct));
+            Assert.Equal(ProjectDeletionOutcome.PendingCleanup, await BuildService(db).DeleteAsync(deleted.ProjectId, [], ct));
+        await using (var verify = NewContext())
+        {
+            await AssertIntactAsync(verify, deleted, ct);
+            Assert.NotNull((await verify.Projects.SingleAsync(item => item.Id == deleted.ProjectId, ct)).DeletionRequestedAt);
+            Assert.Null((await verify.Projects.SingleAsync(item => item.Id == kept.ProjectId, ct)).DeletionRequestedAt);
+        }
+        Assert.True(File.Exists(Path.Combine(_storageRoot, deleted.ArtifactPath)));
+        await _audit.Received(1).LogAsync("DeletionPendingCleanup", "Project", deleted.ProjectId,
+            Arg.Is<string>(details => details.Contains("shared-node: not asked (Offline)", StringComparison.Ordinal)), Arg.Any<CancellationToken>());
+
+        // The server comes back with an agent that can read: the relaunched cleanup asks it, it finds nothing left,
+        // and the project goes.
+        var discoveryId = await RelaunchDiscoveryFindingNothingAsync(deleted.ProjectId, serverId, ct);
+        await using (var db = NewContext())
+            Assert.Equal(ProjectDeletionOutcome.Deleted, await BuildService(db).DeleteAsync(deleted.ProjectId, [discoveryId], ct));
 
         await using (var verify = NewContext())
         {
@@ -99,7 +119,7 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
         {
             var preview = await BuildService(db).GetPreviewAsync(project.ProjectId, ct);
             Assert.Equal(1, preview!.ActiveRunCount);
-            var refusal = await Assert.ThrowsAsync<ConflictException>(() => BuildService(db).DeleteAsync(project.ProjectId, ct));
+            var refusal = await Assert.ThrowsAsync<ConflictException>(() => BuildService(db).DeleteAsync(project.ProjectId, [], ct));
             Assert.Contains("in progress", refusal.Message, StringComparison.Ordinal);
         }
 
@@ -115,7 +135,7 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
     {
         await ResetAndMigrateAsync();
         await using var db = NewContext();
-        Assert.False(await BuildService(db).DeleteAsync(424242, TestContext.Current.CancellationToken));
+        Assert.Null(await BuildService(db).DeleteAsync(424242, [], TestContext.Current.CancellationToken));
         Assert.Null(await BuildService(db).GetPreviewAsync(424242, TestContext.Current.CancellationToken));
     }
 
@@ -127,8 +147,13 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
         var gitLight = Substitute.For<IGitLightService>();
         gitLight.ResolveDiskPath(Arg.Any<int>(), Arg.Any<string>())
             .Returns(call => RepositoryPath(call.ArgAt<int>(0), call.ArgAt<string>(1)));
+        var deletionRepository = new ProjectDeletionRepository(db);
+        var guards = Substitute.For<IProjectServerCleanupGuardSource>();
+        guards.GetAsync(Arg.Any<CancellationToken>()).Returns(new ProjectServerCleanupGuards(ServerWriteAccess.All, new HashSet<string>()));
         return new ProjectDeletionService(
-            new ProjectDeletionRepository(db),
+            deletionRepository,
+            new ProjectServerCleanupService(new ProjectServerCleanupRepository(db), deletionRepository,
+                Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>(), guards, _audit, TimeProvider.System),
             new DbTransactionScope(db),
             new ArtifactStorageService(configuration),
             gitLight,
@@ -137,7 +162,40 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
             _audit,
             Substitute.For<IEntityChangeNotifier>(),
             new MemoryCache(new MemoryCacheOptions()),
+            TimeProvider.System,
             NullLogger<ProjectDeletionService>.Instance);
+    }
+
+    /// <summary>Brings the server online with an agent able to read the project's resources, queues the discovery
+    /// through the real cleanup service, then writes what that agent prints when it finds nothing: its closing line,
+    /// and success.</summary>
+    private async Task<int> RelaunchDiscoveryFindingNothingAsync(int projectId, int serverId, CancellationToken ct)
+    {
+        await using (var db = NewContext())
+        {
+            var server = await db.Servers.SingleAsync(item => item.Id == serverId, ct);
+            server.Status = ServerStatus.Online;
+            server.AgentCapabilitiesJson = $"{{\"software\":[\"{AgentCapabilities.ProjectResources}\"]}}";
+            await db.SaveChangesAsync(ct);
+        }
+        int taskId;
+        await using (var db = NewContext())
+        {
+            var deletionRepository = new ProjectDeletionRepository(db);
+            var guards = Substitute.For<IProjectServerCleanupGuardSource>();
+            guards.GetAsync(Arg.Any<CancellationToken>()).Returns(new ProjectServerCleanupGuards(ServerWriteAccess.All, new HashSet<string>()));
+            var queued = await new ProjectServerCleanupService(new ProjectServerCleanupRepository(db), deletionRepository,
+                Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>(), guards, _audit, TimeProvider.System).QueueDiscoveryAsync(projectId, ct);
+            taskId = Assert.Single(queued).TaskId;
+        }
+        await using (var db = NewContext())
+        {
+            var task = await db.Tasks.SingleAsync(item => item.Id == taskId, ct);
+            task.Status = TaskExecutionStatus.Success;
+            db.TaskLogs.Add(new TaskLog { TaskId = taskId, Message = ProjectServerResourceOutput.CompleteLine });
+            await db.SaveChangesAsync(ct);
+        }
+        return taskId;
     }
 
     private string RepositoryPath(int projectId, string slug) => Path.Combine(_storageRoot, "git", $"{projectId}", slug + ".git");
@@ -148,7 +206,7 @@ public sealed class ProjectDeletionIntegrationTests(PostgresFixture fixture) : R
         db.Organizations.Add(organization);
         await db.SaveChangesAsync(ct);
         var server = new Server { Name = "shared-node", Hostname = "shared-node", OrganizationId = organization.Id };
-        var user = new User { Username = "deleter", PasswordHash = "x" };
+        var user = new User { Username = "deleter", Email = "deleter@example.test", PasswordHash = "x" };
         var role = new Role { Name = "deletion-role", Description = "d" };
         db.AddRange(server, user, role);
         await db.SaveChangesAsync(ct);

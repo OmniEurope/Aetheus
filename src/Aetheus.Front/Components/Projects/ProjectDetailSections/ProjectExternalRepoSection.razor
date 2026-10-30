@@ -1,5 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inherits ProjectWritableSectionBase
+@using Microsoft.AspNetCore.Components.Sections
 
 @* The breadcrumb leaf already reads "External Repo" - no need to repeat it as a section title. *@
 @if (_loading)
@@ -8,14 +9,24 @@
 }
 else if (_repo is not null)
 {
-    @* Attached: show mirror status + actions. *@
+    @* Attached: show mirror status; the actions sit in the project header (R-109, rule 1 of R-30): Sync now is the
+       main action (STD-BTN detection 11), the others are in the menu beside it. *@
+    @if (_canWrite)
+    {
+        <SectionContent SectionName="@PageHeaderActions.SectionName">
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncNowAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><span>@L["SyncNow"]</span></ChildContent></OmniButton>
+            <OmniOverflowMenu Label="@L["MoreActions"]">
+                <OmniMenuItem Tone="OmniTone.Danger" OnClick="@DetachAsync"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon><ChildContent>@L["Detach"]</ChildContent></OmniMenuItem>
+            </OmniOverflowMenu>
+        </SectionContent>
+    }
     <OmniCard>
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">
-                    @_repo.ProviderType / @_repo.OwnerOrGroup / @_repo.RepositoryName
+                    @L.Localize(_repo.ProviderType) / @_repo.OwnerOrGroup / @_repo.RepositoryName
                 </OmniText>
-                <OmniBadge Fill="OmniFill.Solid" Tone="@MirrorBadge(_repo.MirrorStatus)">@L.Localize(_repo.MirrorStatus)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(MirrorBadge(_repo.MirrorStatus)))" Fill="OmniFill.Solid" Tone="@MirrorBadge(_repo.MirrorStatus)">@L.Localize(_repo.MirrorStatus)</OmniBadge>
             </OmniStack>
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["LastFetched"]</OmniText>
@@ -46,16 +57,6 @@ else if (_repo is not null)
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["ExternalRepoAdditionalSourceHint"]</OmniText>
                 <OmniCodeBlock Code="@PipelineSourceYaml" Title="@L["ExternalRepoPipelineYaml"]" Language="yaml" />
             }
-            @if (_canWrite)
-            {
-                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-sm">
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SyncNowAsync" Class="@(_syncing ? "btn-busy" : null)" Busy="@(_syncing)"><Icon><OmniIcon Name="OmniIconName.Sync" /></Icon><ChildContent><span>@L["SyncNow"]</span></ChildContent></OmniButton>
-                    @* STD-BTN detection 11: Sync now visible, the other actions in the menu. *@
-                    <OmniOverflowMenu Label="@L["MoreActions"]">
-                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@DetachAsync"><Icon><OmniIcon Name="OmniIconName.LinkBreak" /></Icon><ChildContent>@L["Detach"]</ChildContent></OmniMenuItem>
-                    </OmniOverflowMenu>
-                </OmniStack>
-            }
         </OmniStack>
     </OmniCard>
 }
@@ -68,7 +69,7 @@ else if (_canWrite)
             <OmniRow Gap="OmniSpacing.Large">
                 <OmniColumn Span="12" MediumSpan="4">
                     <OmniFormField Label="@L["Provider"]" Class="omni-u-w-100" For="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-1">
-                        <OmniDropDown Id="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-1" @bind-Value="_model.ProviderType" Options="@_providers" />
+                        <OmniDropDown Id="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-1" @bind-Value="_model.ProviderType" Options="@ProviderOptions" />
                     </OmniFormField>
                 </OmniColumn>
                 <OmniColumn Span="12" MediumSpan="8">
@@ -95,7 +96,7 @@ else if (_canWrite)
                 </OmniColumn>
                 <OmniColumn Span="12" MediumSpan="4">
                     <OmniFormField Label="@L["AuthType"]" Class="omni-u-w-100" For="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-2">
-                        <OmniDropDown Id="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-2" @bind-Value="_model.AuthType" Options="@_authTypes" />
+                        <OmniDropDown Id="oe-formfield-pages-projects-projectdetailsections-projectexternalreposection-2" @bind-Value="_model.AuthType" Options="@AuthTypeOptions" />
                     </OmniFormField>
                 </OmniColumn>
                 @if (_model.AuthType == GitAuthType.HttpsToken)

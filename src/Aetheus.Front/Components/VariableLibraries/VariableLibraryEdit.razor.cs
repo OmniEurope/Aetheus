@@ -4,8 +4,10 @@ using System.Text.Json;
 using Aetheus.Front.Components.Pipelines;
 namespace Aetheus.Front.Components.VariableLibraries;
 
-public partial class VariableLibraryEdit
+public partial class VariableLibraryEdit : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
+    [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -78,21 +80,44 @@ public partial class VariableLibraryEdit
 
     private IReadOnlyList<ResourceUsageUserDto>? _usage;
     private bool _usageLoaded;
+    private int _usageRequest;
+    private PipelineChangeSubscription? _pipelineChanges;
 
-    /// <summary>Who reads this library (R-65), asked after the page is shown. A failed call leaves the line
-    /// empty rather than saying "Unused".</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // R-64: a pipeline created, changed or deleted while the page is open changes who reads the library.
+        _pipelineChanges = new PipelineChangeSubscription(HubFactory, () => InvokeAsync(async () =>
+        {
+            await RefreshUsageAsync();
+            StateHasChanged();
+        }));
+        await _pipelineChanges.StartAsync();
+    }
+
+    /// <summary>Who reads this library (R-65), asked after the page is shown and again when a pipeline
+    /// changes or the library is saved (R-64). A failed call keeps what the line showed (nothing, on the
+    /// first load) rather than saying "Unused"; only the latest answer is applied.</summary>
     private async Task LoadUsageAsync(int libraryId, int generation)
     {
-        _usage = null;
-        _usageLoaded = false;
+        var request = ++_usageRequest;
         try
         {
             var usage = await Api.Variables.GetResourceUsageAsync();
-            if (generation != _loadGeneration) return;
+            if (generation != _loadGeneration || request != _usageRequest) return;
             _usage = usage.Libraries.GetValueOrDefault(libraryId);
             _usageLoaded = true;
         }
         catch (HttpRequestException) { } // the page stays usable without the usage line
+    }
+
+    private Task RefreshUsageAsync() =>
+        _isNew || _detail is null ? Task.CompletedTask : LoadUsageAsync(Id!.Value, _loadGeneration);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pipelineChanges is not null)
+            await _pipelineChanges.DisposeAsync();
     }
 
     private void ReassertBreadcrumb(bool isNew)
@@ -118,6 +143,8 @@ public partial class VariableLibraryEdit
         _entrySortDescending = false;
         _loading = true;
         _loadFailed = false;
+        _usage = null;
+        _usageLoaded = false;
     }
 
     private async Task LoadLibraryAsync(
@@ -271,16 +298,19 @@ public partial class VariableLibraryEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Variables.DeleteVariableLibraryAsync(Id!.Value);
-        if (!status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Error("Error", "OperationFailed");
-            return;
-        }
-        Cache.InvalidatePrefix("variable-libraries:"); // S-TECH-SWIV
-        Toast.Success("Deleted", "Deleted");
-        // R-70: back to the list the user came from (a project's libraries, a server's), else the global list.
-        Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/variable-libraries");
+            var status = await Api.Variables.DeleteVariableLibraryAsync(Id!.Value);
+            if (!status.Success)
+            {
+                Toast.Error("Error", "OperationFailed");
+                return;
+            }
+            Cache.InvalidatePrefix("variable-libraries:"); // S-TECH-SWIV
+            Toast.Success("Deleted", "Deleted");
+            // R-70: back to the list the user came from (a project's libraries, a server's), else the global list.
+            Nav.NavigateTo(LocalReturnUrl.Validated(ReturnUrl) ?? "/variable-libraries");
+        });
     }
 
     private async Task AddEntry(NewEntryModel model)
@@ -303,8 +333,27 @@ public partial class VariableLibraryEdit
         {
             _newEntry = new NewEntryModel();
             Toast.Success("Added", "EntryAdded");
-            await ReloadEntriesAsync();
+            await ReloadEntriesWithoutFiltersAsync();
         }
+    }
+
+    /// <summary>The reload after an add (R-65): the grid's filters, a header filter or the page's own
+    /// <c>?key=</c> link, would hide the entry just added, so they go before the grid reads again.</summary>
+    private async Task ReloadEntriesWithoutFiltersAsync()
+    {
+        if (!string.IsNullOrEmpty(FilterKey))
+        {
+            FilterKey = null;
+            Nav.NavigateTo(Nav.GetUriWithQueryParameter("key", (string?)null), replace: true);
+        }
+        if (_entryFilters.Count == 0 || _entriesGrid?.Grid is not { } grid)
+        {
+            await ReloadEntriesAsync();
+            return;
+        }
+        await ReloadDetail();
+        // Clears every column filter and reads the first page again, once.
+        await grid.SetFiltersAsync(new Dictionary<string, string?>(), replace: true);
     }
 
     // The edit button asks the grid; a click or key in a cell does it by itself (EditTrigger Cell, R-75).
@@ -326,26 +375,41 @@ public partial class VariableLibraryEdit
             _entriesGrid?.CancelEditRow(entry);
     }
 
+    // The rows being saved, by id, with the key and value just validated (R-66). The grid takes the row out of
+    // edit mode the moment it is validated, before the server has answered: until the reload brings the
+    // saved row back, a row showing the entry as the last load read it would put the old value back for a moment.
+    private readonly Dictionary<int, VariableEntryDto> _savedRows = [];
+
+    private VariableEntryDto Shown(VariableEntryDto entry) => _savedRows.GetValueOrDefault(entry.Id, entry);
+
     private async Task OnEntryUpdate(VariableEntryDto entry)
     {
-        var outcome = await Api.Variables.UpdateVariableEntryAsync(Id!.Value, entry.Id, new UpdateVariableEntryRequest
+        _savedRows[entry.Id] = entry with { Key = _editEntryKey, Value = _editEntryValue };
+        try
         {
-            Key = _editEntryKey,
-            Value = _editEntryValue
-        });
-        if (outcome.StatusCode == System.Net.HttpStatusCode.BadRequest)
-        {
-            Toast.Error("Error", "LibraryEntryKeyExists", _editEntryKey);
-            return;
+            var outcome = await Api.Variables.UpdateVariableEntryAsync(Id!.Value, entry.Id, new UpdateVariableEntryRequest
+            {
+                Key = _editEntryKey,
+                Value = _editEntryValue
+            });
+            if (outcome.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                Toast.Error("Error", "LibraryEntryKeyExists", _editEntryKey);
+                return;
+            }
+            if (!outcome.IsSuccess)
+            {
+                Toast.Error("Error", "OperationFailed");
+                return;
+            }
+            _editingEntry = null;
+            Toast.Success("Saved", "EntryUpdated");
+            await ReloadEntriesAsync();
         }
-        if (!outcome.IsSuccess)
+        finally
         {
-            Toast.Error("Error", "OperationFailed");
-            return;
+            _savedRows.Remove(entry.Id);
         }
-        _editingEntry = null;
-        Toast.Success("Saved", "EntryUpdated");
-        await ReloadEntriesAsync();
     }
 
     private async Task DeleteEntry(VariableEntryDto deleted)
@@ -356,15 +420,16 @@ public partial class VariableLibraryEdit
 
         // Read the port flag from the clicked row because a virtualized grid may no longer hold
         // that row in its latest fetched block.
-        var status = await Api.Variables.DeleteVariableEntryAsync(Id!.Value, deleted.Id);
+        var status = await Veil.RunAsync(() => Api.Variables.DeleteVariableEntryAsync(Id!.Value, deleted.Id));
         if (!status.Success)
         {
             Toast.Error("Error", "OperationFailed");
             return;
         }
         Toast.Success("Deleted", "EntryDeleted");
+        // The offer asks its own question; the release it may run is veiled by itself.
         await OfferPortReleaseAsync(deleted);
-        await ReloadEntriesAsync();
+        await Veil.RunAsync(ReloadEntriesAsync);
     }
 
     /// <summary> A deleted <c>PORT_*</c> entry leaves its reservation behind, which would keep the
@@ -388,7 +453,7 @@ public partial class VariableLibraryEdit
 
         try
         {
-            var released = await Api.Variables.ReleaseLibraryPortAsync(Id!.Value, port);
+            var released = await Veil.RunAsync(() => Api.Variables.ReleaseLibraryPortAsync(Id!.Value, port));
             // Zero means the port is held by somebody else, which the library must not release; saying
             // so is more useful than a success toast for something that did not happen.
             if (released > 0) Toast.Success("PortReservationReleased");
@@ -444,6 +509,57 @@ public partial class VariableLibraryEdit
         if (created is true) await ReloadEntriesAsync();
     }
 
+    /// <summary>Only an empty <c>PORT_</c> key offers a port: one that holds a value is never overwritten
+    /// by an allocation.</summary>
+    private static bool CanAllocatePort(VariableEntryDto entry) =>
+        entry.Key.StartsWith(PortRegistryLimits.PortKeyPrefix, StringComparison.Ordinal)
+        && string.IsNullOrWhiteSpace(entry.Value);
+
+    /// <summary>The row menu of an empty <c>PORT_</c> key (R-87): allocates that key's port. With one
+    /// reachable server there is nothing to ask, so it allocates at once; with several servers, or a
+    /// library that cannot allocate, the allocation dialog opens on that key and says why or asks.</summary>
+    internal async Task AllocateEntryPortAsync(VariableEntryDto entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var targets = await LibraryPortTargets.TryLoadAsync(Api, Id!.Value);
+        if (targets is null)
+        {
+            Toast.Error("Error", "LoadFailed");
+            return;
+        }
+
+        if (targets.Blocker != PortAllocationBlocker.None || LibraryPortTargets.InitialServerId(targets) is not { } serverId)
+        {
+            var allocated = await Dialog.OpenAsync<LibraryPortAllocateDialog>(
+                L["PortAllocate"].Value,
+                new Dictionary<string, object?> { ["LibraryId"] = Id.Value, ["InitialKeys"] = new[] { entry.Key } },
+                new OmniDialogOptions { Width = "560px", AutoFocusFirstElement = false });
+            if (allocated is true) await ReloadEntriesAsync();
+            return;
+        }
+
+        try
+        {
+            var outcome = await Api.Variables.AllocateLibraryPortsAsync(
+                Id.Value, new AllocateLibraryPortsRequest { ServerId = serverId, Keys = [entry.Key] });
+            if (outcome.Value is not { Count: > 0 } written)
+            {
+                Toast.ErrorRaw(
+                    L["PortAllocate"].Value,
+                    string.IsNullOrWhiteSpace(outcome.Error?.Message) ? L["PortAllocateFailed"].Value : outcome.Error.Message);
+                return;
+            }
+
+            Toast.Success("PortAllocated", "PortAllocatedKey", written[0].Key, written[0].Value);
+            await ReloadEntriesAsync();
+        }
+        catch (HttpRequestException)
+        {
+            Toast.Error("PortAllocate", "PortAllocateFailed");
+        }
+    }
+
     /// <summary>
     /// Checks the library's own PORT_* values against a server, crossing the registry with what the
     /// agent last saw listening. Pre-filled from the library, so the operator does not retype ports
@@ -487,6 +603,8 @@ public partial class VariableLibraryEdit
     private async Task ReloadDetail()
     {
         _detail = await Api.Variables.GetVariableLibraryDetailAsync(Id!.Value);
+        // R-64: the page's own save (a rename, an entry) can change who reads the library.
+        await RefreshUsageAsync();
     }
 
     private async Task LoadEntriesAsync(GridLoadArgs args)

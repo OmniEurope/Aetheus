@@ -31,7 +31,8 @@ internal static class PipelineReleaseNumbers
     {
         ArgumentNullException.ThrowIfNull(definition);
         if (definition.ReleaseNumber is not null && !Allocates(definition))
-            throw new BadRequestException(InvalidModeMessage);
+            throw new PipelineProblem(
+                PipelineProblemCodes.ReleaseNumberModeInvalid, new Dictionary<string, string>(), InvalidModeMessage).ToRefusal();
     }
 
     /// <summary>

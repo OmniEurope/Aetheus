@@ -62,8 +62,11 @@ public interface IProjectRepository
     Task<List<Server>> GetServersForProjectAsync(int projectId, CancellationToken ct = default);
 
     // ProjectServer CRUD
-    Task<List<ProjectServer>> GetProjectServersAsync(int projectId, CancellationToken ct = default);
-    Task<(List<ProjectServer> Items, int TotalCount)> GetProjectServersPageAsync(
+    /// <summary>The project's servers: its own links and the servers of its environments (R-83). Read-only
+    /// rows: an environment server has no <c>ProjectServer</c> (its row Id is 0), so nothing here feeds an
+    /// update or a delete; those go through <see cref="GetProjectServerAsync"/>.</summary>
+    Task<List<ProjectServerRow>> GetProjectServersAsync(int projectId, CancellationToken ct = default);
+    Task<(List<ProjectServerRow> Items, int TotalCount)> GetProjectServersPageAsync(
         int projectId, string? search, string? sortBy, bool sortDescending,
         int page, int pageSize, CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null);
     Task<ProjectServer?> GetProjectServerAsync(int projectId, int projectServerId, CancellationToken ct = default);

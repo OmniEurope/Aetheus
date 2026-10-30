@@ -41,26 +41,25 @@ public class TotpTests : E2ETestBase
 
         var adminLogin = await http.PostAsJsonAsync($"{BackendUrl}/api/auth/login", new
         {
-            Username = AdminUser,
+            Email = AdminEmail,
             Password = AdminPassword
         });
         adminLogin.EnsureSuccessStatusCode();
         var adminBody = await adminLogin.Content.ReadFromJsonAsync<JsonElement>();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", adminBody.GetProperty("token").GetString());
-        var createUser = await http.PostAsJsonAsync($"{BackendUrl}/api/users", new
+        await CreateUserWithPasswordAsync(http, new
         {
             Username = username,
-            Password = password,
-            MustChangePassword = false,
-            Roles = new[] { "Reader" }
-        });
-        createUser.EnsureSuccessStatusCode();
+            Email = $"{username}@example.com",
+            // R-45 (PLAN-003 P3-1): only Admin is held site-wide; Reader is held in the default organization.
+            OrganizationRoles = new[] { new { OrganizationId = await DefaultOrganizationIdAsync(http), Role = "Reader" } }
+        }, $"{username}@example.com", password);
 
         http.DefaultRequestHeaders.Authorization = null;
         var userLogin = await http.PostAsJsonAsync($"{BackendUrl}/api/auth/login", new
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password
         });
         userLogin.EnsureSuccessStatusCode();
@@ -80,7 +79,7 @@ public class TotpTests : E2ETestBase
 
         await Page.AddInitScriptAsync("localStorage.clear()");
         await Page.GotoAsync($"{FrontendUrl}/login", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await Page.FillAsync("#Username", username);
+        await Page.FillAsync("#Email", $"{username}@example.com");
         await Page.FillAsync("#Password", password);
         await Page.ClickAsync("button[type='submit']");
         await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Use a recovery code" }))

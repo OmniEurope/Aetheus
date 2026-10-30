@@ -455,9 +455,10 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
     public async Task<PaginatedResult<OrganizationDto>?> GetOrganizationsAsync(
         string? search, int page, int pageSize, string? sortBy = null,
         bool sortDescending = false, CancellationToken ct = default,
-        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null)
+        IReadOnlyList<Aetheus.Shared.Components.Shared.GridFilter>? filters = null, int? organizationId = null)
     {
         var qs = $"?page={page}&pageSize={pageSize}";
+        if (organizationId is { } organization) qs += $"&organizationId={organization}";
         if (!string.IsNullOrWhiteSpace(search)) qs += $"&search={Uri.EscapeDataString(search)}";
         if (!string.IsNullOrWhiteSpace(sortBy)) qs += $"&sortBy={Uri.EscapeDataString(sortBy)}&sortDescending={sortDescending.ToString().ToLowerInvariant()}";
         // The list's column header filters.
@@ -505,4 +506,9 @@ public sealed class ServersApi(HttpClient http) : ApiClientBase(http)
     /// <summary>Returns the organizations the current user is a member of (header picker).</summary>
     public async Task<List<MyOrganizationDto>?> GetMyOrganizationsAsync(CancellationToken ct = default)
         => await Http.GetFromJsonAsync<List<MyOrganizationDto>>("api/organizations/me", JsonOptions.Web, ct);
+
+    /// <summary>The organizations the caller administers (every one for a site Admin), for the Administration
+    /// section's organization switcher.</summary>
+    public async Task<List<AdministeredOrganizationDto>> GetAdministeredOrganizationsAsync(CancellationToken ct = default)
+        => await Http.GetFromJsonAsync<List<AdministeredOrganizationDto>>("api/organizations/administered", JsonOptions.Web, ct) ?? [];
 }

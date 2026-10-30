@@ -48,8 +48,8 @@ public class TaskDetailTests : BunitContext
         Assert.Contains("InfrastructureMismatch", cut.Markup);
         Assert.Contains("Linux integration posture upgrade supervisor is missing or obsolete.", cut.Markup);
         Assert.Contains("Self-update refused", cut.Markup);
-        Assert.Contains("Operation", cut.Markup);
-        Assert.DoesNotContain("Enum_ExecutorType_Operation", cut.Markup);
+        // R-113: the executor goes through the localizer (this test's localizer echoes the key), not the enum name.
+        Assert.Contains("Enum_ExecutorType_Operation", cut.Markup);
         Assert.Contains("href=\"/servers/9/overview\"", cut.Markup);
         Assert.DoesNotContain("CancelTask", cut.Markup);
         // A finished task has nothing to follow.

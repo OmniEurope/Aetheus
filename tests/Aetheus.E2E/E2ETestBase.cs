@@ -21,7 +21,45 @@ public abstract class E2ETestBase : BrowserTest
     protected static string FrontendUrl => PlaywrightConfig.FrontendUrl;
     protected static string BackendUrl => PlaywrightConfig.BackendUrl;
     protected static string AdminUser => PlaywrightConfig.AdminUser;
+    protected static string AdminEmail => PlaywrightConfig.AdminEmail;
+
+    /// <summary>The seeded default organization (slug "aetheus"), read with an admin client. Since R-45
+    /// (PLAN-003 P3-1) only Admin is held site-wide: a test user's other roles are held there.</summary>
+    protected static async Task<int> DefaultOrganizationIdAsync(HttpClient admin)
+    {
+        var page = await System.Net.Http.Json.HttpClientJsonExtensions.GetFromJsonAsync<JsonElement>(
+            admin, $"{BackendUrl}/api/organizations?page=1&pageSize=100");
+        return page.GetProperty("items").EnumerateArray()
+            .Single(organization => organization.GetProperty("slug").GetString() == "aetheus")
+            .GetProperty("id").GetInt32();
+    }
     protected static string AdminPassword => PlaywrightConfig.AdminPassword;
+
+    /// <summary>
+    /// R-14 (owner decision 2026-10-28): <c>POST /api/users</c> takes no password; the account is closed until its
+    /// welcome link is used. A test that signs in as a new account gives it <paramref name="password"/> over the
+    /// API: the administrator's reset (which arms the forced change), then, unless
+    /// <paramref name="mustChangePassword"/>, the user's own change, which clears it.
+    /// </summary>
+    protected static async Task CreateUserWithPasswordAsync(HttpClient admin, object createBody, string email, string password, bool mustChangePassword = false)
+    {
+        var create = await System.Net.Http.Json.HttpClientJsonExtensions.PostAsJsonAsync(admin, $"{BackendUrl}/api/users", createBody);
+        create.EnsureSuccessStatusCode();
+        var userId = (await System.Net.Http.Json.HttpContentJsonExtensions.ReadFromJsonAsync<JsonElement>(create.Content)).GetProperty("id").GetInt32();
+        var adminSet = mustChangePassword ? password : password + "-first";
+        (await System.Net.Http.Json.HttpClientJsonExtensions.PostAsJsonAsync(admin, $"{BackendUrl}/api/users/{userId}/change-password",
+            new { NewPassword = adminSet })).EnsureSuccessStatusCode();
+        if (mustChangePassword) return;
+
+        using var user = new HttpClient(new HttpClientHandler { ServerCertificateCustomValidationCallback = (_, _, _, _) => true });
+        var login = await System.Net.Http.Json.HttpClientJsonExtensions.PostAsJsonAsync(user, $"{BackendUrl}/api/auth/login",
+            new { Email = email, Password = adminSet });
+        login.EnsureSuccessStatusCode();
+        var token = (await System.Net.Http.Json.HttpContentJsonExtensions.ReadFromJsonAsync<JsonElement>(login.Content)).GetProperty("token").GetString();
+        user.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        (await System.Net.Http.Json.HttpClientJsonExtensions.PostAsJsonAsync(user, $"{BackendUrl}/api/users/me/change-password",
+            new { CurrentPassword = adminSet, NewPassword = password })).EnsureSuccessStatusCode();
+    }
 
     private static int AppReadyTimeoutMs => PlaywrightConfig.AppReadyTimeoutMs;
 
@@ -145,9 +183,9 @@ public abstract class E2ETestBase : BrowserTest
             try
             {
                 await Page.GotoAsync($"{FrontendUrl}/login", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-                await Page.WaitForSelectorAsync("#Username", new() { Timeout = AppReadyTimeoutMs });
+                await Page.WaitForSelectorAsync("#Email", new() { Timeout = AppReadyTimeoutMs });
 
-                await Page.FillAsync("#Username", AdminUser);
+                await Page.FillAsync("#Email", AdminEmail);
                 await Page.FillAsync("#Password", AdminPassword);
                 await Page.ClickAsync("button[type='submit']");
 
@@ -219,7 +257,7 @@ public abstract class E2ETestBase : BrowserTest
                     return failure && !failure.hidden ? 'start-failed' : null;
                 }
                 """,
-                $"[data-testid='{PlaywrightConfig.BlazorReadyTestId}'], .omni-panel-menu, #Username",
+                $"[data-testid='{PlaywrightConfig.BlazorReadyTestId}'], .omni-panel-menu, #Email",
                 new() { Timeout = AppReadyTimeoutMs });
             var state = await stateHandle.JsonValueAsync<string>();
             var networkChanged = _browserDiagnostics
@@ -284,7 +322,7 @@ public abstract class E2ETestBase : BrowserTest
         // deterministic "chrome is up" signal. The login page renders no chrome, so fall
         // back to the menu / username-field selector for that route.
         await Page.WaitForSelectorAsync(
-            $"[data-testid='{PlaywrightConfig.BlazorReadyTestId}'], .omni-panel-menu, #Username",
+            $"[data-testid='{PlaywrightConfig.BlazorReadyTestId}'], .omni-panel-menu, #Email",
             new() { State = WaitForSelectorState.Attached, Timeout = AppReadyTimeoutMs });
 
         // Wait for every page-level loading indicator to clear rather than sleeping a fixed delay.

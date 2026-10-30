@@ -21,7 +21,7 @@ public static class RouteAccessPolicy
         // navigating home. Denying it during that short window flashes the global "Access denied"
         // state even though authentication succeeded. An already-authenticated direct visit is still
         // redirected home by Login.OnInitializedAsync.
-        if (path.Equals("login", StringComparison.OrdinalIgnoreCase))
+        if (path.Equals("login", StringComparison.OrdinalIgnoreCase) || IsSetPasswordPath(relativeUri))
             return true;
 
         if (!isAuthenticated)
@@ -38,7 +38,9 @@ public static class RouteAccessPolicy
             return false;
 
         if (IsAdminPath(path))
-            return false;
+            // An organization's administrator opens its pages of the Administration section (owner decision
+            // 2026-10-28); every other administration route stays the site Admin's.
+            return OrganizationAdministration.CanOpen(path, permissions);
 
         if (Matches(path, "servers", out var serverTail))
             return CanAccessResourcePath(serverTail, ResourceType.Server, permissions, "add-agent");
@@ -51,6 +53,11 @@ public static class RouteAccessPolicy
 
         return CanAccessOtherPath(path, permissions);
     }
+
+    /// <summary>The page of the welcome mail's link (<c>/login/set-password</c>): public like the login page,
+    /// whether or not the visitor already holds a session, and shown without the application's chrome.</summary>
+    public static bool IsSetPasswordPath(string relativeUri) =>
+        relativeUri.Split('?', '#')[0].Trim('/').Equals("login/set-password", StringComparison.OrdinalIgnoreCase);
 
     private static bool CanAccessPipelinePath(string tail, PermissionService permissions)
     {
@@ -65,6 +72,13 @@ public static class RouteAccessPolicy
     {
         if (path.Equals("templates", StringComparison.OrdinalIgnoreCase))
             return permissions.CanReadAny(ResourceType.PipelineTemplate);
+
+        // R-78: a template's page and its versions open for any template reader, since the shared delivery
+        // templates are read without a right on them by id; the API decides, read only. Creating needs Write.
+        if (Matches(path, "templates", out var templateTail))
+            return templateTail.Equals("new", StringComparison.OrdinalIgnoreCase)
+                ? permissions.CanWrite(ResourceType.PipelineTemplate)
+                : permissions.CanReadAny(ResourceType.PipelineTemplate);
 
         if (Matches(path, "releases", out var releaseTail))
             return CanAccessResourcePath(releaseTail, ResourceType.Release, permissions);

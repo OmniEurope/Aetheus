@@ -185,8 +185,6 @@ public sealed class AppErrorsViewTests : BunitContext
     public void R39_DetailDialog_CopyAsMarkdown_PutsEveryFieldOnTheClipboard_AndOnlyThere()
     {
         BunitTestHelper.RegisterServices(this);
-        var clipboard = JSInterop.SetupModule("./_content/OmniEurope.Blazor/omniInterop.js");
-        clipboard.Setup<bool>("copyText", _ => true).SetResult(true);
         var cut = Render<AppErrorDetailDialog>(parameters => parameters.Add(component => component.Error, new AppErrorEventDto
         {
             Id = 4,
@@ -201,12 +199,12 @@ public sealed class AppErrorsViewTests : BunitContext
 
         // A secondary action of the footer, named by the localized label (the keys are echoed in tests).
         var copy = cut.Find(".dialog-footer .app-error-detail-copy");
-        Assert.Contains("CopyAsMarkdown", copy.TextContent, StringComparison.Ordinal);
+        Assert.Equal("CopyAsMarkdown", copy.GetAttribute("aria-label"));
         Assert.Contains("omni-button--secondary", copy.ClassList);
 
         copy.Click();
 
-        var markdown = (string)Assert.Single(clipboard.Invocations["copyText"]).Arguments[0]!;
+        var markdown = (string)Assert.Single(JSInterop.Invocations["navigator.clipboard.writeText"]).Arguments[0]!;
         Assert.Contains("InvalidOperationException", markdown, StringComparison.Ordinal);
         Assert.Contains("**Occurrences**: `3`", markdown, StringComparison.Ordinal);
         Assert.Contains("2026-09-20T08:00:00.000Z", markdown, StringComparison.Ordinal);

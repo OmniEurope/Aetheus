@@ -106,7 +106,7 @@ public class RunGanttStripTests : BunitContext
         var component = Render(Step(1, "Compile", 0, 100), Step(2, "Test", 100, 200));
 
         Assert.Equal(
-            ["0s", "50s", "1min40s", "2min30s", "3min20s"],
+            ["0s", "50s", "1min40s", "", "3min20s"], // R-40: "2min30s" would run into "3min20s"
             component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent));
         Assert.All(component.FindAll(".run-gantt-svg"), svg =>
             Assert.Equal(["25", "50", "75"], svg.QuerySelectorAll(".run-gantt-gridline").Select(line => line.GetAttribute("x1"))));
@@ -131,12 +131,59 @@ public class RunGanttStripTests : BunitContext
     /// reads in one precision, whole minutes from ten minutes, seconds below.</summary>
     [Theory]
     [InlineData(1_276, "0s|5min|10min|15min|21min")]
-    [InlineData(200, "0s|50s|1min40s|2min30s|3min20s")]
+    [InlineData(200, "0s|50s|1min40s||3min20s")]
     public void TheAxisReadsInOnePrecision(int seconds, string expected)
     {
         var component = Render(Step(1, "Compile", 0, seconds));
 
         Assert.Equal(expected, string.Join('|', component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent.Trim())));
+    }
+
+    /// <summary>R-40, seen on a 1h47 run: "1h20min" (75 %, centred) and "1h47min" (100 %, right-aligned) overlapped.
+    /// The end label wins and the 75 % one is left empty; short labels all stay.</summary>
+    [Theory]
+    [InlineData(6_420, "0s|26min|53min||1h47min")]
+    [InlineData(1_276, "0s|5min|10min|15min|21min")]
+    public void NoTwoAxisLabelsOverlap(int seconds, string expected)
+    {
+        var component = Render(Step(1, "Compile", 0, seconds));
+
+        Assert.Equal(expected, string.Join('|', component.FindAll(".run-gantt-tick").Select(tick => tick.TextContent.Trim())));
+    }
+
+    [Fact]
+    public void AnOverlappingLabelIsEmptiedAndTheEndLabelIsKept()
+    {
+        var ticks = RunGanttStrip.DropOverlappingLabels(
+            [new(0, "0s"), new(25, "26min"), new(50, "53min"), new(75, "1h20min"), new(100, "1h47min")]);
+
+        Assert.Equal(["0s", "26min", "53min", "", "1h47min"], ticks.Select(tick => tick.Label));
+    }
+
+    [Fact]
+    public void AClickOnAStageBandScrollsToTheDetailedTimeline()
+    {
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        var component = Render<RunGanttStrip>(parameters => parameters
+            .Add(p => p.Run, new PipelineRunDto { Id = 1, Steps = [Step(1, "Compile", 0, 100)] })
+            .Add(p => p.Clock, new FakeTimeProvider(Origin.AddSeconds(1000)))
+            .Add(p => p.ScrollTargetId, "run-timeline-zone"));
+
+        component.Find(".run-gantt-track").Click();
+
+        var call = Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "Aetheus.scrollToId");
+        Assert.Equal("run-timeline-zone", call.Arguments[0]);
+    }
+
+    [Fact]
+    public void WithoutAScrollTargetTheBandsStayInert()
+    {
+        var component = Render(Step(1, "Compile", 0, 100));
+
+        component.Find(".run-gantt-track").Click();
+
+        Assert.DoesNotContain(JSInterop.Invocations, invocation => invocation.Identifier == "Aetheus.scrollToId");
+        Assert.Null(component.Find(".run-gantt-track").GetAttribute("role"));
     }
 
     [Fact]

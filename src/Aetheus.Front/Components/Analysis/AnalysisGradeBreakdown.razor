@@ -15,6 +15,12 @@
                     @* Mockup R1-37: the cause reads under the label, not in the value column. *@
                     <small class="analysis-grade-measure-hint" data-testid="grade-row-gate-cause">@L["GateGradeSetBy"] @cause</small>
                 }
+                @* A letter on part of its measures does not qualify the release (sealed candidate contract, owner
+                   decision of 2026-10-25): its deployment then asks for the extra approval. *@
+                @if (IsPartialGrade(Grade))
+                {
+                    <small class="analysis-grade-measure-hint" data-testid="grade-row-gate-partial">@L["GateGradePartialNotQualifying"]</small>
+                }
             </Hints>
             <Details>
                 <p>@L["AnalysisCriterionGate"]</p>
@@ -31,11 +37,12 @@
         @foreach (var domain in BlockDomains)
         {
             <AnalysisGradeRow Kind="domain" TestId="grade-row-domain" Label="@domain.Label" Tooltip="@L[domain.CriterionKey]"
-                              Value="@(domain.Completeness == AnalysisGradeCompleteness.Incomplete ? L["Incomplete"].Value : null)"
+                              Value="@NoGradeText(domain)"
                               Grade="@domain.Grade" Limiting="@IsLimiting(domain)">
                 <Hints>
                     @* Recette R-17: a domain the gate does not require is shown but does not set the Gate grade
-                       (a coverage graded E beside a Gate grade A). *@
+                       (a coverage graded E beside a Gate grade A). The generic templates require every domain
+                       (R-73, R-74): this stays for a pipeline that chose otherwise. *@
                     @if (!domain.Required)
                     {
                         <small class="analysis-grade-measure-hint" data-testid="grade-row-domain-not-required">@L["GateDomainNotRequired"]</small>
@@ -52,7 +59,7 @@
             @foreach (var measure in ShownMeasures(domain.Measures))
             {
                 <AnalysisGradeRow Kind="measure" TestId="grade-row-measure" Label="@MeasureLabel(measure.Key)" Tooltip="@MeasureCriterion(measure.Key)"
-                                  Value="@MeasureText(measure)" Grade="@measure.Grade">
+                                  Value="@MeasureValue(measure)" Grade="@measure.Grade">
                     <Hints>
                         @if (ShowDistance(measure))
                         {
@@ -62,14 +69,34 @@
                         {
                             <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
                         }
+                        @* Recette R-73, R-74: a required measure nobody observed says so and names the step that
+                           should have published its evidence; the grade is the one of the measures observed. *@
+                        @if (IsMissing(measure) && MissingHint(measure) is { } missing)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-missing">@missing</small>
+                        }
+                        @* Run #2958: a rule the grading validator rejected is an F; its line says why. *@
+                        @if (measure.Rejection is { } rejection)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-rejected">@rejection</small>
+                        }
+                        @* A rule the pipeline itself marks as not required does not set the grade; an A beside a B line is that. *@
+                        @if (!measure.Required)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-not-counted">@L["GradeMeasureNotCounted"]</small>
+                        }
                     </Hints>
                     <Details>
                         <p>@MeasureCriterion(measure.Key)</p>
+                        @if (IsMissing(measure))
+                        {
+                            <p data-testid="grade-row-measure-missing-detail">@L["GradeMeasureMissingDetail"]</p>
+                        }
                         @if (ThresholdText(measure) is { } thresholds)
                         {
                             <p>@string.Format(L[measure.Direction == AnalysisMetricDirection.LowerIsBetter ? "AnalysisGradeThresholdsLower" : "AnalysisGradeThresholdsHigher"], thresholds)</p>
                         }
-                        <p>@string.Format(L["AnalysisGradeMeasuredValue"], MeasureText(measure))</p>
+                        <p>@string.Format(L["AnalysisGradeMeasuredValue"], MeasureValue(measure))</p>
                     </Details>
                 </AnalysisGradeRow>
             }
@@ -96,15 +123,15 @@ else if (Grade is not null)
                     <span class="@(IsLimiting(domain) ? "analysis-grade-domain-limiting" : null)">@domain.Label</span>
                     <GradeBadge Value="@domain.Grade" />
                 </div>
-                @if (domain.Completeness == AnalysisGradeCompleteness.Incomplete)
+                @if (NoGradeText(domain) is { } state)
                 {
-                    <div class="analysis-grade-domain-state">@L["Incomplete"]</div>
+                    <div class="analysis-grade-domain-state">@state</div>
                 }
                 @foreach (var measure in ShownMeasures(domain.Measures))
                 {
                     <div class="analysis-grade-measure">
                         <span class="analysis-grade-measure-label" title="@MeasureLabel(measure.Key)">@MeasureLabel(measure.Key)</span>
-                        <span class="analysis-grade-value">@MeasureText(measure)</span>
+                        <span class="analysis-grade-value">@MeasureValue(measure)</span>
                         <GradeBadge Value="@measure.Grade" />
                         @if (ShowDistance(measure))
                         {
@@ -113,6 +140,19 @@ else if (Grade is not null)
                         @if (measure.FindingCounts is { Critical: > 0 })
                         {
                             <small class="analysis-grade-measure-hint">@L["AnalysisCriticalFindingNotDeliverable"]</small>
+                        }
+                        @if (IsMissing(measure) && MissingHint(measure) is { } missing)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-missing">@missing</small>
+                        }
+                        @* Run #2958: a rule the grading validator rejected is an F; its line says why. *@
+                        @if (measure.Rejection is { } rejection)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-rejected">@rejection</small>
+                        }
+                        @if (!measure.Required)
+                        {
+                            <small class="analysis-grade-measure-hint" data-testid="grade-row-measure-not-counted">@L["GradeMeasureNotCounted"]</small>
                         }
                     </div>
                 }
@@ -131,7 +171,7 @@ else if (Grade is not null)
     {
         <div class="analysis-grade-domain-empty">
             <span class="analysis-grade-measure-label @(IsLimiting(domain) ? "analysis-grade-domain-limiting" : null)">@domain.Label</span>
-            <span class="analysis-grade-domain-state">@(domain.Completeness == AnalysisGradeCompleteness.Incomplete ? L["Incomplete"].Value : string.Empty)</span>
+            <span class="analysis-grade-domain-state">@NoGradeText(domain)</span>
             <GradeBadge Value="@domain.Grade" />
         </div>
     }

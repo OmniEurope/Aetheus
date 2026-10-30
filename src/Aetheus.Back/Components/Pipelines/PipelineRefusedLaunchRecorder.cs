@@ -29,12 +29,13 @@ public sealed class PipelineRefusedLaunchRecorder(
         string triggerSource,
         string reason,
         IReadOnlyDictionary<string, string>? additionalVariables,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<ProblemDto>? reasonProblems = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         if (transaction?.InTransaction == true) return;
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var refusal = BuildReason(triggerSource, reason);
+        var refusal = BuildReason(triggerSource, reason, reasonProblems);
         if (await repo.GetLatestRunTrackedAsync(pipeline.Id, ct).ConfigureAwait(false) is { } latest
             && RepeatsRefusal(latest, refusal))
         {
@@ -105,7 +106,7 @@ public sealed class PipelineRefusedLaunchRecorder(
             var warnings = JsonSerializer.Deserialize<string[]>(run.WarningsJson);
             return warnings is { Length: >= 1 and <= 2 }
                 && string.Equals(warnings[0], refusal, StringComparison.Ordinal)
-                && (warnings.Length == 1 || warnings[1].StartsWith(RepeatPrefix, StringComparison.Ordinal));
+                && (warnings.Length == 1 || IsRepeat(warnings[1]));
         }
         catch (JsonException)
         {
@@ -113,11 +114,19 @@ public sealed class PipelineRefusedLaunchRecorder(
         }
     }
 
+    // The repeat line: the stored problem, or the English sentence earlier builds wrote.
+    private static bool IsRepeat(string warning)
+        => StoredProblem.CodeOf(warning) == PipelineProblemCodes.LaunchRefusedRepeated
+            || warning.StartsWith(RepeatPrefix, StringComparison.Ordinal);
+
     private static int RepeatCount(PipelineRun run)
     {
         var warnings = JsonSerializer.Deserialize<string[]>(run.WarningsJson!)!;
         if (warnings.Length < 2) return 1;
-        var digits = warnings[1][RepeatPrefix.Length..].TakeWhile(char.IsAsciiDigit).ToArray();
+        var stored = StoredProblem.ParameterOf(warnings[1], "count");
+        var digits = stored is not null
+            ? stored.TakeWhile(char.IsAsciiDigit).ToArray()
+            : warnings[1][RepeatPrefix.Length..].TakeWhile(char.IsAsciiDigit).ToArray();
         return int.TryParse(digits, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count)
             ? count
             : 1;
@@ -125,11 +134,21 @@ public sealed class PipelineRefusedLaunchRecorder(
 
     private const string RepeatPrefix = "Refused ";
 
-    /// <summary>The second warning of a repeated refusal: "Refused 3 times, last at 2026-10-09T05:00:00Z".</summary>
+    /// <summary>The second warning of a repeated refusal, as a stored problem the front says in the user's
+    /// language; its English reads "Refused 3 times, last at 2026-10-09T05:00:00Z".</summary>
     internal static string BuildRepeat(int count, DateTime last)
-        => $"{RepeatPrefix}{count.ToString(System.Globalization.CultureInfo.InvariantCulture)} times, last at {last.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)}";
+    {
+        var number = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var at = last.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+        return PipelineProblem.Of(
+            PipelineProblemCodes.LaunchRefusedRepeated, $"{RepeatPrefix}{number} times, last at {at}",
+            ("count", number), ("last", at)).ToStored();
+    }
 
-    /// <summary>The reason a refused run carries, as the run page shows it.</summary>
-    internal static string BuildReason(string triggerSource, string reason)
-        => $"The automated launch ({triggerSource}) was refused: {reason}";
+    /// <summary>The reason a refused run carries, as the run page shows it: a stored problem naming the trigger
+    /// and the reason, with the problems that explain it when the refusal stated them.</summary>
+    internal static string BuildReason(string triggerSource, string reason, IReadOnlyList<ProblemDto>? reasonProblems = null)
+        => PipelineProblem.Of(
+            PipelineProblemCodes.LaunchRefused, $"The automated launch ({triggerSource}) was refused: {reason}",
+            ("source", triggerSource), ("detail", reason)).ToStored(reasonProblems);
 }

@@ -14,9 +14,20 @@ public partial class PipelineProductionPanel
     // The drop-down validates the expression it is given; the bound state lives in the setup object.
     private string? ComposeFileValue => Setup.ComposeFile;
     private string? ServerValue => Setup.Server;
+    private string StrategyValue => Setup.Strategy;
 
     private IReadOnlyList<OmniOption<string>> ComposeOptions => Analysis.ComposeFiles.ToOptions(item => item, item => item);
     private IReadOnlyList<OmniOption<string>> ServerOptions => Analysis.Servers.ToOptions(item => item.Name, item => item.Name);
+
+    /// <summary>Recette R-77: servers offered to a project that has none are attached when the pipelines are created.</summary>
+    private string ServerHelp => Analysis.Servers.Exists(server => server.Candidate)
+        ? L["PipelineSetupProdServerCandidateHelp"].Value
+        : L["PipelineSetupProdServerHelp"].Value;
+
+    /// <summary>Recette R-89: blue-green first, the strategy proposed by default.</summary>
+    private IReadOnlyList<OmniOption<string>> StrategyOptions =>
+        new[] { ProductionStrategy.BlueGreen, ProductionStrategy.Replace }
+            .ToOptions(item => item, item => item == ProductionStrategy.BlueGreen ? L["PipelineSetupProdBlueGreen"].Value : L["PipelineSetupProdReplace"].Value);
 
     /// <summary>What is shown: a variable the deployment already provides, or one with a default the Compose file
     /// names, is not the user's concern and is left out.</summary>
@@ -46,6 +57,8 @@ public partial class PipelineProductionPanel
     private Task ChooseComposeFileAsync(string? composeFile) => Setup.ChooseComposeFileAsync(composeFile);
 
     private void ChooseServer(string? server) => Setup.ChooseServer(server);
+
+    private void ChooseStrategy(string? strategy) => Setup.ChooseStrategy(strategy);
 
     private static OmniTone Tone(ProductionVariableDto variable) => variable.Kind switch
     {

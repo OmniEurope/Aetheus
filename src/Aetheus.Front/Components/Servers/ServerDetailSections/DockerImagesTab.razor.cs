@@ -14,6 +14,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// </summary>
 public partial class DockerImagesTab
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -97,7 +98,7 @@ public partial class DockerImagesTab
             L["Delete"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed == true)
-            await RemoveImageAsync(image.ImageId);
+            await Veil.RunAsync(() => RemoveImageAsync(image.ImageId));
     }
 
     private async Task RemoveImageAsync(string imageId)

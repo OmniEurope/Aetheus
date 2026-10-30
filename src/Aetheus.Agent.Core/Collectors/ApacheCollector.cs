@@ -22,6 +22,11 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
     internal string SitesEnabledDirectory { get; init; } = "/etc/apache2/sites-enabled";
     internal string SitesAvailableDirectory { get; init; } = "/etc/apache2/sites-available";
     internal Func<string, string?> ReadLinkTarget { get; init; } = static path => new FileInfo(path).LinkTarget;
+    internal string ModsAvailableDirectory { get; init; } = "/etc/apache2/mods-available";
+    internal string ModsEnabledDirectory { get; init; } = "/etc/apache2/mods-enabled";
+    internal Func<string, bool> FileExists { get; init; } = File.Exists;
+    internal Func<string, IEnumerable<string>> EnumerateModuleFiles { get; init; } =
+        static directory => Directory.EnumerateFiles(directory, "*.load");
 
     /// <summary>
     /// Recette R-12: <c>apache2ctl -S</c> lists only the loaded sites, so a site disabled from the page vanished
@@ -214,12 +219,41 @@ public sealed partial class ApacheCollector(ILogger<ApacheCollector> logger, ISh
                     IsEnabled = true
                 });
             }
+            result.AddRange(DisabledModules(result));
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             Logger.LogDebug(ex, "Failed to collect Apache modules");
         }
         return result;
+    }
+
+    /// <summary>R-119: <c>apache2ctl -M</c> lists only loaded modules, so a disabled module vanished and could not be
+    /// enabled again. The mods-available <c>*.load</c> files whose module is not loaded are reported disabled.</summary>
+    private List<ApacheModuleDto> DisabledModules(IReadOnlyList<ApacheModuleDto> loaded)
+    {
+        if (IsWindows || !DirectoryExists(ModsAvailableDirectory))
+            return [];
+        try
+        {
+            // The .load file base name is what a2enmod takes, not the module id apache2ctl -M prints (php8.2.load
+            // loads php_module), so a module is enabled when mods-enabled/<name>.load exists; the id comparison
+            // only covers installs without a mods-enabled directory entry for a loaded module.
+            var known = loaded.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+            return EnumerateModuleFiles(ModsAvailableDirectory)
+                .Where(path => !FileExists($"{ModsEnabledDirectory}/{Path.GetFileName(path)}"))
+                .Select(path => Path.GetFileNameWithoutExtension(path) + "_module")
+                .Where(name => !known.Contains(name))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .Select(name => new ApacheModuleDto { Name = name, Type = "shared", IsEnabled = false })
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Logger.LogDebug(ex, "Failed to read the disabled Apache modules");
+            return [];
+        }
     }
 
     private async Task<(List<ApacheVirtualHostDto> Vhosts, bool Degraded, string Diagnostics)> CollectVirtualHostsAsync(string ctl, CancellationToken ct)

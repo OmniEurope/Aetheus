@@ -138,9 +138,11 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         await PipelineSetupWizardTests.ChooseArchitectureAsync(cut, "application", sameProject: false);
         await cut.InvokeAsync(wizard.Instance.NextStep);
 
+        // The pipelines' options (12), the three languages of the quality pipeline (R-105) and the deployment after the
+        // candidate (R-72, offered by default since the candidate and the deployment are both ticked), all of the same kind.
         var options = cut.FindAll("[data-testid^='setup-option-']");
 
-        Assert.Equal(12, options.Count);
+        Assert.Equal(16, options.Count);
         Assert.All(options, option =>
         {
             Assert.Contains("omni-selectable-card", option.ClassName, StringComparison.Ordinal);
@@ -425,7 +427,7 @@ public sealed class PipelineSetupArchitectureTests : BunitContext
         cut.Find($"[data-testid='setup-option-{key}']").ClickAsync(new MouseEventArgs());
 
     private static string[] OptionTitles(IRenderedComponent<PipelineSetupWizard> cut) =>
-        cut.FindAll("[data-testid^='setup-option-'] .omni-selectable-card__title")
+        cut.FindAll("[data-testid^='setup-option-']:not([data-testid^='setup-option-lang-']) .omni-selectable-card__title")
             .Select(title => title.TextContent).ToArray();
 
     private async Task<CreatePipelineRequest[]> FinishAsync(

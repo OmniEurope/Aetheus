@@ -75,16 +75,24 @@ public class ProjectsTests : E2ETestBase
 
             var createdDialog = Page.Locator(".omni-dialog").Filter(new() { HasText = "Project created" });
             await Expect(createdDialog).ToBeVisibleAsync(new() { Timeout = 10000 });
-            await createdDialog.GetByRole(AriaRole.Button, new()
+            // R-30: the secondary choice opens the new project's overview. The deployed baseline (V-1 gate, payload
+            // only) still offers "Stay here", which keeps the list; this test proves the write path on both.
+            var openProject = createdDialog.GetByRole(AriaRole.Button, new() { Name = "Open project", Exact = true });
+            System.Text.RegularExpressions.Match idMatch;
+            if (NewSinceDeployedBaselineAttribute.TargetIsPayloadOnlyPrevious && await openProject.CountAsync() == 0)
             {
-                NameRegex = new System.Text.RegularExpressions.Regex("Stay", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            }).ClickAsync();
-
-            var projectCard = Page.Locator("a.project-card-name").Filter(new() { HasText = projectName });
-            await Expect(projectCard).ToBeVisibleAsync(new() { Timeout = 10000 });
-            var href = await projectCard.GetAttributeAsync("href");
-            var idMatch = System.Text.RegularExpressions.Regex.Match(href ?? string.Empty, @"/projects/(\d+)");
-            Assert.That(idMatch.Success, Is.True, "The persisted project card must expose its id.");
+                await createdDialog.GetByRole(AriaRole.Button, new() { Name = "Stay here", Exact = true }).ClickAsync();
+                var projectCard = Page.Locator("a.project-card-name").Filter(new() { HasText = projectName });
+                await Expect(projectCard).ToBeVisibleAsync(new() { Timeout = 10000 });
+                idMatch = System.Text.RegularExpressions.Regex.Match(await projectCard.GetAttributeAsync("href") ?? string.Empty, @"/projects/(\d+)");
+            }
+            else
+            {
+                await openProject.ClickAsync();
+                await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex(@"/projects/\d+(/overview)?/?$"), new() { Timeout = 10000 });
+                idMatch = System.Text.RegularExpressions.Regex.Match(Page.Url, @"/projects/(\d+)");
+            }
+            Assert.That(idMatch.Success, Is.True, "The new project's id must be readable from its page or its card.");
             var projectId = int.Parse(idMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
 
             await NavigateToAsync($"projects/{projectId}/edit");
@@ -102,6 +110,12 @@ public class ProjectsTests : E2ETestBase
             await deleteDialog.Locator("#project-delete-confirm").FillAsync(projectName);
             await Expect(submit).ToBeEnabledAsync(new() { Timeout = 5000 });
             await submit.ClickAsync();
+
+            // R-50 (1e03cc0c2): the deletion ends in its dialog, on what was deleted and what was not; its single
+            // Close button is the way back to the projects list.
+            var closeReport = deleteDialog.Locator(".dialog-footer").GetByRole(AriaRole.Button, new() { Name = "Close", Exact = true });
+            await Expect(closeReport).ToBeVisibleAsync(new() { Timeout = 30000 });
+            await closeReport.ClickAsync();
 
             await Expect(Page).ToHaveURLAsync(
                 new System.Text.RegularExpressions.Regex(@"/projects/?$"),

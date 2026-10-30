@@ -47,7 +47,9 @@ function setUp(helper, { stubs = {}, rewrite = text => text } = {}) {
   const text = rewrite(source)
     .replace(/#\{ACME_WEBROOT\}#/g, `${root}/var/www/acme`)
     .replace(/(?<=^|[\s"'=(])\/usr\/sbin\/(ufw|sshd)\b/gm, `${bin}/$1`)
-    .replace(/(?<=^|[\s"'=(])\/(etc|var|opt)\//gm, `${root}/$1/`);
+    .replace(/(?<=^|[\s"'=(])\/(etc|var|opt)\//gm, `${root}/$1/`)
+    // A path the helper itself checks character by character is given in the shell's form (no drive colon on Windows).
+    .replace(/@SHROOT@/g, shellPath(root));
   const script = `${root}/${helper.split("/").pop()}`;
   writeFileSync(script, text);
   const run = (args, { env = {}, input = "" } = {}) => spawnSync("sh", ["-c", wrapper], {
@@ -277,8 +279,12 @@ case "$1" in
   -D) [ ${deleteStatus} -eq 0 ] || exit ${deleteStatus}; echo $((n - 1)) > "$state"; exit 0 ;;
 esac`;
 
+// unblock-ip refuses a blocked-file base outside PORTSENTRY_BLOCKED_DIR or with any character but [A-Za-z0-9._/-];
+// the rebased directory is therefore given without the Windows drive colon.
+const shellBlockedDir = text => text.replace("PORTSENTRY_BLOCKED_DIR=/var/lib/portsentry", "PORTSENTRY_BLOCKED_DIR=@SHROOT@/var/lib/portsentry");
+
 test("unblock-ip removes every DROP rule and the hosts.deny line, then reports it", () => {
-  const env = setUp("portsentry/unblock-ip", { stubs: { iptables: iptablesStub(2) } });
+  const env = setUp("portsentry/unblock-ip", { stubs: { iptables: iptablesStub(2) }, rewrite: shellBlockedDir });
   try {
     env.write("/etc/hosts.deny", "ALL: 10.0.0.1\nALL: 10.0.0.10\n");
     const result = env.run(["10.0.0.1"]);
@@ -290,7 +296,7 @@ test("unblock-ip removes every DROP rule and the hosts.deny line, then reports i
 });
 
 test("unblock-ip treats an absent rule as nothing to remove", () => {
-  const env = setUp("portsentry/unblock-ip", { stubs: { ip6tables: iptablesStub(0) } });
+  const env = setUp("portsentry/unblock-ip", { stubs: { ip6tables: iptablesStub(0) }, rewrite: shellBlockedDir });
   try {
     const result = env.run(["2001:db8::1"]);
     assert.equal(result.status, 0, result.stderr);
@@ -455,11 +461,39 @@ test("aetheus-certbot-manage announces its helper version, marker and verb agree
   try {
     const result = env.run(["version"]);
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout.trim(), "aetheus-certbot-helper-version: 6");
+    assert.equal(result.stdout.trim(), "aetheus-certbot-helper-version: 9");
     const script = readFileSync(join(helpersRoot, "certbot/aetheus-certbot-manage"), "utf8");
-    assert.match(script, /^# aetheus-certbot-helper-version: 6$/m);
+    assert.match(script, /^# aetheus-certbot-helper-version: 9$/m);
   } finally { env.cleanup(); }
 });
+
+// --- aetheus-certbot-manage delete: the self-signed pair of the local certificate mode (recette R-97) ---
+const opensslStub = issuer => `case "$*" in *-subject*) echo "subject=CN = app.w9.test" ;; *-issuer*) echo "issuer=${issuer}" ;; esac`;
+const deleteCases = [
+  ["a local self-signed pair with no renewal file is removed without certbot", "CN = app.w9.test", false, true],
+  ["a CA-issued pair with no renewal file still goes through certbot", "C = US, O = Let's Encrypt, CN = R11", false, false],
+  ["a lineage certbot manages goes through certbot even when self-signed", "CN = app.w9.test", true, false]
+];
+for (const [label, issuer, renewal, removedLocally] of deleteCases) {
+  test(label, () => {
+    const env = setUp("certbot/aetheus-certbot-manage", { stubs: { openssl: opensslStub(issuer) } });
+    try {
+      env.write("/etc/letsencrypt/live/app.w9.test/fullchain.pem", "pem\n");
+      if (renewal) env.write("/etc/letsencrypt/renewal/app.w9.test.conf", "authenticator = webroot\n");
+      const result = env.run(["delete", "app.w9.test"]);
+      assert.equal(result.status, 0, result.stderr);
+      const certbotDelete = env.calls().filter(call => call.startsWith("certbot delete"));
+      if (removedLocally) {
+        assert.ok(!existsSync(env.file("/etc/letsencrypt/live/app.w9.test")));
+        assert.match(result.stdout, /local self-signed certificate app\.w9\.test removed/);
+        assert.deepEqual(certbotDelete, []);
+      } else {
+        assert.ok(existsSync(env.file("/etc/letsencrypt/live/app.w9.test/fullchain.pem")));
+        assert.deepEqual(certbotDelete, ["certbot delete --cert-name app.w9.test --non-interactive"]);
+      }
+    } finally { env.cleanup(); }
+  });
+}
 
 // --- aetheus-certbot-manage normalize: the server-wide ACME alias ---------------------------------
 // Lets Encrypt follows the HTTP to HTTPS redirect of a vhost Aetheus does not own, and the HTTPS vhost
@@ -786,8 +820,9 @@ test("renewal-check does not report the websocket rule of the Aetheus API vhost 
 // The helper reissues a lineage with every name it covers but one, through the ACME web root, and never
 // deletes it. certbot is a stand-in: `certbot certificates` lists the names below, any other call is recorded.
 const listedNames = "aetheus.sonytumen.com app.aetheus.sonytumen.com aetheus-api.sonytumen.com";
-function removeNameSetUp({ names = listedNames, alias = true, certonly = "exit 0" } = {}) {
-  const certbot = `case "$1" in certificates) printf 'Found the following certs:\\n  Certificate Name: aetheus.sonytumen.com\\n    Domains: %s\\n' "${names}" ;; certonly) ${certonly} ;; esac`;
+function removeNameSetUp({ names = listedNames, alias = true, certonly = "exit 0", certificates = null } = {}) {
+  const listing = certificates ?? `printf 'Found the following certs:\\n  Certificate Name: aetheus.sonytumen.com\\n    Domains: %s\\n' "${names}"`;
+  const certbot = `case "$1" in certificates) ${listing} ;; certonly) ${certonly} ;; esac`;
   const env = setUp("certbot/aetheus-certbot-manage", { stubs: { certbot } });
   if (alias) env.write(acmeEnabledPath, "Alias /.well-known/acme-challenge/ /var/www/acme/.well-known/acme-challenge/\n");
   const certonlyCalls = () => env.calls().filter(call => call.startsWith("certbot certonly"));
@@ -829,6 +864,66 @@ for (const [label, args, options, error] of [
     } finally { env.cleanup(); }
   });
 }
+
+// Recette R-124 (production task 30790): a certbot that fails while listing the certificate (another certbot
+// run holds the lock, an unreadable renewal file) used to be reported as "certificate X not found" because
+// its stderr was discarded. The real error and a non-zero exit must come through; "not found" is only for a
+// certbot that succeeded and listed nothing.
+for (const [label, certificates, error] of [
+  ["a lock held by another certbot run", `echo "Another instance of Certbot is already running." >&2; exit 1`, /Another instance of Certbot is already running\./],
+  ["an unreadable renewal configuration", `echo "Renewal configuration file /etc/letsencrypt/renewal/aetheus.sonytumen.com.conf is broken." >&2; exit 2`, /renewal\/aetheus\.sonytumen\.com\.conf is broken\./]
+]) {
+  test(`remove-name shows certbot's own error when listing fails on ${label}, never "not found"`, () => {
+    const env = removeNameSetUp({ certificates });
+    try {
+      const result = env.run(["remove-name", "aetheus.sonytumen.com", "aetheus-api.sonytumen.com"]);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, error);
+      assert.doesNotMatch(result.stderr, /not found/);
+      assert.equal(env.certonlyCalls().length, 0, env.calls().join("\n"));
+    } finally { env.cleanup(); }
+  });
+}
+
+// Recette R-54 (production task 31450): remove-name failed with only "certificate aetheus.sonytumen.com not
+// found" although the lineage exists and certbot exited 0. The Certbot page does not call certbot: the agent
+// reads /etc/letsencrypt/live. certbot 5.2 and newer label the names line "Identifiers:" instead of "Domains:"
+// (cert_manager.py, human_readable_cert_info; checked on the v5.1.0, v5.2.0 and v5.3.0 sources). This listing is
+// rebuilt from that source, it is NOT a capture from the failing server.
+const certbotIdentifiersListing = names => `printf 'Found the following certs:\n  Certificate Name: aetheus.sonytumen.com\n    Serial Number: 4a1b\n    Key Type: ECDSA\n    Identifiers: %s\n    Expiry Date: 2026-12-13 08:00:00+00:00 (VALID: 45 days)\n    Certificate Path: /etc/letsencrypt/live/aetheus.sonytumen.com/fullchain.pem\n' "${names}"`;
+
+test("remove-name reads the names of a certbot that labels them Identifiers (certbot 5.2 and newer)", () => {
+  const env = removeNameSetUp({ certificates: certbotIdentifiersListing(listedNames) });
+  try {
+    const result = env.run(["remove-name", "aetheus.sonytumen.com", "aetheus-api.sonytumen.com"]);
+    assert.equal(result.status, 0, result.stderr);
+    const calls = env.certonlyCalls();
+    assert.equal(calls.length, 1, env.calls().join("\n"));
+    assert.ok(calls[0].endsWith("-d aetheus.sonytumen.com -d app.aetheus.sonytumen.com"), calls[0]);
+    assert.doesNotMatch(result.stderr, /not found/);
+  } finally { env.cleanup(); }
+});
+
+// When certbot exits 0 but names nothing, the task log must carry what certbot printed (last 20 non-blank
+// lines of stdout and stderr), then the honest "not found"; certonly is never run.
+test("remove-name shows certbot's own output when it exits 0 without naming the certificate, then says not found", () => {
+  const noise = Array.from({ length: 30 }, (_, i) => `echo "noise line ${i + 1}"; echo; `).join("");
+  const certificates = `${noise}echo "No certificates found."; echo "A warning from certbot" >&2; exit 0`;
+  const env = removeNameSetUp({ certificates });
+  try {
+    const result = env.run(["remove-name", "aetheus.sonytumen.com", "aetheus-api.sonytumen.com"]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /certbot exited 0 for certificate aetheus.sonytumen.com but its output names no Domains or Identifiers line/);
+    assert.match(result.stderr, /^stdout: No certificates found.$/m);
+    assert.match(result.stderr, /^stderr: A warning from certbot$/m);
+    assert.match(result.stderr, /^stdout: noise line 30$/m);
+    assert.doesNotMatch(result.stderr, /noise line 10$/m, "only the last 20 lines are shown");
+    assert.doesNotMatch(result.stderr, /^std(out|err): *$/m, "blank lines are dropped");
+    assert.ok(result.stderr.indexOf("No certificates found.") < result.stderr.indexOf("certificate aetheus.sonytumen.com not found"));
+    assert.match(result.stderr, /certificate aetheus.sonytumen.com not found/);
+    assert.equal(env.certonlyCalls().length, 0, env.calls().join("\n"));
+  } finally { env.cleanup(); }
+});
 
 test("remove-name fails honestly when certbot cannot reissue, and deletes nothing", () => {
   const env = removeNameSetUp({ certonly: "exit 1" });
@@ -1155,3 +1250,195 @@ test("aetheus-agent-read-grant --list-ssh-dirs prints the .ssh directories and c
     assert.deepEqual(grantCalls(env), []);
   } finally { env.cleanup(); }
 });
+
+// R-119: the Apache module switch. The module name comes on stdin; the helper re-validates it, checks the
+// configuration and restarts Apache, and undoes the change when the test or the restart fails.
+const apacheModuleTools = text => text
+  .replace(/\/usr\/sbin\/(a2enmod|a2dismod|apache2ctl)\b/g, "$1")
+  .replace(/\/bin\/systemctl\b/g, "systemctl");
+
+function setUpApacheModule(stubs = {}) {
+  const env = setUp("apache/aetheus-apache-module", { stubs: { a2enmod: "exit 0", a2dismod: "exit 0", ...stubs }, rewrite: apacheModuleTools });
+  assert.ok(env.text.includes(`${env.root}/etc/apache2/mods-available/`), "the Apache module directory was rebased");
+  env.write("/etc/apache2/mods-available/headers.load", "LoadModule headers_module x\n");
+  env.directory("/etc/apache2/mods-enabled");
+  return env;
+}
+
+test("aetheus-apache-module enables a module, checks the configuration and restarts Apache", () => {
+  const env = setUpApacheModule();
+  try {
+    const result = env.run(["enable"], { input: "headers\n" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(env.calls(), ["a2enmod -q headers", "apache2ctl configtest", "systemctl restart apache2.service"]);
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-apache-module undoes the change when the configuration test fails", () => {
+  const env = setUpApacheModule({ apache2ctl: "exit 1" });
+  try {
+    const result = env.run(["enable"], { input: "headers\n" });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /change was undone/);
+    assert.deepEqual(env.calls(), ["a2enmod -q headers", "apache2ctl configtest", "a2dismod -q headers"]);
+  } finally { env.cleanup(); }
+});
+
+for (const [label, args, input] of [
+  ["a path", ["enable"], "../../x\n"],
+  ["an option", ["enable"], "-f\n"],
+  ["a shell word", ["disable"], "headers;id\n"],
+  ["an empty name", ["enable"], ""],
+  ["an unknown action", ["purge"], "headers\n"],
+  ["a module name on the command line", ["enable", "headers"], ""]
+]) {
+  test(`aetheus-apache-module refuses ${label} and runs nothing`, () => {
+    const env = setUpApacheModule();
+    try {
+      const result = env.run(args, { input });
+      assert.equal(result.status, 2);
+      assert.deepEqual(env.calls(), []);
+    } finally { env.cleanup(); }
+  });
+}
+
+// Project deletion (2026-10-27): the read-only helper that prints one Apache site file the agent account cannot open
+// (certbot writes <site>-le-ssl.conf as root, 0600). It accepts a plain file name of sites-enabled or sites-available
+// only, follows a link only while it ends directly in one of those two directories, and changes nothing.
+// A Windows host cannot create the symbolic links the link cases need (ln -s copies or is refused): those two cases then
+// say so and are reported skipped, and run on any Linux host (the container run of this suite included).
+const symbolicLinks = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "aetheus-link-")).replace(/\\/g, "/");
+  try {
+    writeFileSync(`${dir}/a`, "x");
+    spawnSync("ln", ["-s", `${shellPath(dir)}/a`, `${shellPath(dir)}/b`]);
+    return spawnSync("test", ["-L", `${shellPath(dir)}/b`]).status === 0;
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+})();
+// The skip reason starts like posixTest's so ylaunch replays this file in its Linux container instead of counting a skip.
+const needsSymbolicLinks = symbolicLinks ? false : "needs POSIX file modes, symbolic links and FIFOs (this host cannot create symbolic links; ylaunch runs it in a Linux container)";
+
+function setUpApacheReadSite() {
+  // The helper compares the real path of the open file, which the shell prints in its own form (no drive colon on Windows).
+  const env = setUp("apache/aetheus-apache-read-site", {
+    rewrite: text => text.replace(/^(SITES_(?:AVAILABLE|ENABLED))=\//gm, "$1=@SHROOT@/")
+  });
+  assert.ok(env.text.includes(`SITES_ENABLED=${env.shRoot}/etc/apache2/sites-enabled`), "the Apache site directories were rebased");
+  env.directory("/etc/apache2/sites-available");
+  env.directory("/etc/apache2/sites-enabled");
+  return env;
+}
+
+test("aetheus-apache-read-site prints a site file of sites-enabled and of sites-available", () => {
+  const env = setUpApacheReadSite();
+  try {
+    env.write("/etc/apache2/sites-enabled/prometheus-le-ssl.conf", "SSLCertificateFile /etc/letsencrypt/live/prometheus.example.com/fullchain.pem\n");
+    env.write("/etc/apache2/sites-available/up.conf", "Define X 1\n");
+    const enabled = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-enabled/prometheus-le-ssl.conf\n` });
+    assert.equal(enabled.status, 0, enabled.stderr);
+    assert.equal(enabled.stdout, "SSLCertificateFile /etc/letsencrypt/live/prometheus.example.com/fullchain.pem\n");
+    const available = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-available/up.conf\n` });
+    assert.equal(available.status, 0, available.stderr);
+    assert.equal(available.stdout, "Define X 1\n");
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-apache-read-site follows a sites-enabled link to a file of sites-available", { skip: needsSymbolicLinks }, () => {
+  const env = setUpApacheReadSite();
+  try {
+    env.write("/etc/apache2/sites-available/real.conf", "linked\n");
+    const link = spawnSync("ln", ["-s", `${env.shRoot}/etc/apache2/sites-available/real.conf`, `${env.shRoot}/etc/apache2/sites-enabled/real.conf`], { encoding: "utf8" });
+    assert.equal(link.status, 0, link.stderr);
+    assert.ok(spawnSync("test", ["-L", `${env.shRoot}/etc/apache2/sites-enabled/real.conf`]).status === 0, "the stand-in link is a real symbolic link");
+    const result = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-enabled/real.conf\n` });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "linked\n");
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-apache-read-site refuses a link that leaves the Apache site directories", { skip: needsSymbolicLinks }, () => {
+  const env = setUpApacheReadSite();
+  try {
+    env.write("/etc/secret.txt", "root only\n");
+    const link = spawnSync("ln", ["-s", `${env.shRoot}/etc/secret.txt`, `${env.shRoot}/etc/apache2/sites-enabled/evil.conf`], { encoding: "utf8" });
+    assert.equal(link.status, 0, link.stderr);
+    assert.ok(spawnSync("test", ["-L", `${env.shRoot}/etc/apache2/sites-enabled/evil.conf`]).status === 0, "the stand-in link is a real symbolic link");
+    const result = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-enabled/evil.conf\n` });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /outside the Apache site directories/);
+    assert.equal(result.stdout, "");
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-apache-read-site refuses a file larger than 1 MiB and a directory", () => {
+  const env = setUpApacheReadSite();
+  try {
+    env.write("/etc/apache2/sites-enabled/big.conf", "x".repeat(1048577));
+    const big = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-enabled/big.conf\n` });
+    assert.equal(big.status, 1);
+    assert.match(big.stderr, /larger than/);
+    assert.equal(big.stdout, "");
+    env.directory("/etc/apache2/sites-enabled/dir.conf");
+    const directory = env.run(["read"], { input: `${env.shRoot}/etc/apache2/sites-enabled/dir.conf\n` });
+    assert.equal(directory.status, 1);
+    assert.equal(directory.stdout, "");
+  } finally { env.cleanup(); }
+});
+
+for (const [label, args, suffix] of [
+  ["a path traversal", ["read"], "/etc/apache2/sites-enabled/../../secret.txt\n"],
+  ["a path of another directory", ["read"], "/etc/shadow\n"],
+  ["a sub-directory", ["read"], "/etc/apache2/sites-enabled/sub/x.conf\n"],
+  ["an option-like name", ["read"], "/etc/apache2/sites-enabled/-x.conf\n"],
+  ["two paths", ["read"], "/etc/apache2/sites-enabled/a.conf\n/etc/apache2/sites-enabled/b.conf\n"],
+  ["an empty path", ["read"], ""],
+  ["an unknown action", ["write"], "/etc/apache2/sites-enabled/a.conf\n"],
+  ["the internal open flag", ["--open", "/etc/shadow"], ""],
+  ["a path on the command line", ["read", "/etc/apache2/sites-enabled/a.conf"], ""]
+]) {
+  test(`aetheus-apache-read-site refuses ${label} and prints nothing`, () => {
+    const env = setUpApacheReadSite();
+    try {
+      env.write("/etc/apache2/sites-enabled/a.conf", "must not be printed\n");
+      env.write("/etc/secret.txt", "root only\n");
+      // The refused paths are rooted at the stand-in directory, as the helper sees its own.
+      const input = suffix.replace(/^\/etc\//m, `${env.shRoot}/etc/`).replace(/\n\/etc\//g, `\n${env.shRoot}/etc/`);
+      const result = env.run(args, { input });
+      assert.notEqual(result.status, 0);
+      assert.equal(result.stdout, "");
+    } finally { env.cleanup(); }
+  });
+}
+
+// R-119: the RKHunter warning recipient, read from stdin and re-validated before /etc/rkhunter.conf changes.
+test("aetheus-rkhunter mail-on-warning sets the recipient in place of the commented default", () => {
+  const env = setUp("rkhunter/aetheus-rkhunter");
+  try {
+    env.write("/etc/rkhunter.conf", "#MAIL-ON-WARNING=root\nUPDATE_MIRRORS=1\n");
+    const result = env.run(["mail-on-warning"], { input: "admin@example.com\n" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(env.file("/etc/rkhunter.conf"), "utf8"), "MAIL-ON-WARNING=admin@example.com\nUPDATE_MIRRORS=1\n");
+  } finally { env.cleanup(); }
+});
+
+test("aetheus-rkhunter mail-on-warning appends the setting when the file has none", () => {
+  const env = setUp("rkhunter/aetheus-rkhunter");
+  try {
+    env.write("/etc/rkhunter.conf", "UPDATE_MIRRORS=1\n");
+    const result = env.run(["mail-on-warning"], { input: "admin@example.com\n" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(env.file("/etc/rkhunter.conf"), "utf8"), "UPDATE_MIRRORS=1\nMAIL-ON-WARNING=admin@example.com\n");
+  } finally { env.cleanup(); }
+});
+
+for (const address of ["admin@example.com;id", "admin/x@example.com", "not-an-address", ""]) {
+  test(`aetheus-rkhunter mail-on-warning refuses "${address}" and leaves the configuration as it was`, () => {
+    const env = setUp("rkhunter/aetheus-rkhunter");
+    try {
+      env.write("/etc/rkhunter.conf", "#MAIL-ON-WARNING=root\n");
+      const result = env.run(["mail-on-warning"], { input: `${address}\n` });
+      assert.equal(result.status, 2);
+      assert.equal(readFileSync(env.file("/etc/rkhunter.conf"), "utf8"), "#MAIL-ON-WARNING=root\n");
+    } finally { env.cleanup(); }
+  });
+}

@@ -21,10 +21,9 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidContainerId(request.ContainerId))
             throw new BadRequestException("Invalid container ID.");
 
-        var dockerCommand = MapActionToCommand(request.Action);
-        var command = $"docker {dockerCommand} {request.ContainerId}";
-
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker {request.Action} - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 30), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, $"Docker {request.Action} - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}",
+            MapActionToOperation(request.Action), request.ContainerId, 30), ct).ConfigureAwait(false);
         await audit.LogAsync($"Docker{request.Action}", "Container", serverId, request.ContainerId, ct).ConfigureAwait(false);
     }
 
@@ -57,7 +56,8 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidImageName(request.Image))
             throw new BadRequestException("Invalid image name.");
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker pull - {request.Image}", $"docker pull {request.Image}", 300), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, $"Docker pull - {request.Image}", OperationKind.DockerPullImage, request.Image, 300), ct).ConfigureAwait(false);
     }
 
     public async Task RemoveImageAsync(int serverId, string imageId, CancellationToken ct = default)
@@ -65,7 +65,8 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidImageId(imageId))
             throw new BadRequestException("Invalid image ID.");
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker rmi - {imageId[..Math.Min(12, imageId.Length)]}", $"docker rmi {imageId}", 30), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, $"Docker rmi - {imageId[..Math.Min(12, imageId.Length)]}", OperationKind.DockerRemoveImage, imageId, 30), ct).ConfigureAwait(false);
     }
 
     public async Task<List<DockerComposeStackDto>> GetComposeStacksAsync(int serverId, CancellationToken ct = default)
@@ -86,15 +87,16 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidName(request.StackName))
             throw new BadRequestException("Invalid stack name.");
 
-        var composeCommand = request.Action switch
+        var operation = request.Action switch
         {
-            DockerComposeAction.Up => "up -d",
-            DockerComposeAction.Down => "down",
-            DockerComposeAction.Restart => "restart",
+            DockerComposeAction.Up => OperationKind.DockerComposeProjectUp,
+            DockerComposeAction.Down => OperationKind.DockerComposeProjectDown,
+            DockerComposeAction.Restart => OperationKind.DockerComposeProjectRestart,
             _ => throw new ArgumentOutOfRangeException(nameof(request))
         };
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Compose {request.Action} - {request.StackName}", $"docker compose -p {request.StackName} {composeCommand}", 120), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, $"Compose {request.Action} - {request.StackName}", operation, request.StackName, 120), ct).ConfigureAwait(false);
     }
 
     public async Task<List<DockerNetworkDto>> GetNetworksAsync(int serverId, CancellationToken ct = default)
@@ -122,15 +124,16 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
 
     public async Task PruneAsync(int serverId, DockerPruneRequest request, CancellationToken ct = default)
     {
-        var parts = new List<string>();
-        if (request.Containers) parts.Add("docker container prune -f");
-        if (request.Images) parts.Add("docker image prune -af");
-        if (request.Volumes) parts.Add("docker volume prune -f");
-        if (parts.Count == 0)
+        // The agent runs one fixed prune command per target, in this order, stopping at the first failure.
+        var targets = new List<string>();
+        if (request.Containers) targets.Add("containers");
+        if (request.Images) targets.Add("images");
+        if (request.Volumes) targets.Add("volumes");
+        if (targets.Count == 0)
             throw new BadRequestException("No prune targets specified.");
 
-        var command = string.Join(" && ", parts);
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, "Docker prune", command, 120), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, "Docker prune", OperationKind.DockerPrune, string.Join(',', targets), 120), ct).ConfigureAwait(false);
     }
 
     public async Task UpdateResourceLimitsAsync(int serverId, DockerResourceLimitsRequest request, CancellationToken ct = default)
@@ -138,24 +141,40 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
         if (!DockerIdValidator.IsValidContainerId(request.ContainerId))
             throw new BadRequestException("Invalid container ID.");
 
-        var parts = new List<string>();
-        if (request.CpuLimit > 0) parts.Add($"--cpus={request.CpuLimit.ToString("F2", CultureInfo.InvariantCulture)}");
-        if (request.MemoryLimitMb > 0) parts.Add($"--memory={request.MemoryLimitMb}m");
-        if (parts.Count == 0)
+        var limits = new Dictionary<string, string>();
+        if (request.CpuLimit > 0) limits["AETHEUS_DOCKER_CPUS"] = request.CpuLimit.ToString("F2", CultureInfo.InvariantCulture);
+        if (request.MemoryLimitMb > 0) limits["AETHEUS_DOCKER_MEMORY_MB"] = request.MemoryLimitMb.ToString(CultureInfo.InvariantCulture);
+        if (limits.Count == 0)
             throw new BadRequestException("No resource limits specified.");
 
-        var command = $"docker update {string.Join(' ', parts)} {request.ContainerId}";
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"Docker update limits - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}", command, 15), ct).ConfigureAwait(false);
+        await QueueTaskAsync(TypedOperation(
+            serverId, $"Docker update limits - {request.ContainerId[..Math.Min(12, request.ContainerId.Length)]}",
+            OperationKind.DockerUpdateResources, request.ContainerId, 15, limits), ct).ConfigureAwait(false);
     }
 
-    private static string MapActionToCommand(DockerContainerAction action) => action switch
+    private static OperationKind MapActionToOperation(DockerContainerAction action) => action switch
     {
-        DockerContainerAction.Start => "start",
-        DockerContainerAction.Stop => "stop",
-        DockerContainerAction.Restart => "restart",
-        DockerContainerAction.Remove => "rm",
+        DockerContainerAction.Start => OperationKind.DockerStartContainer,
+        DockerContainerAction.Stop => OperationKind.DockerStopContainer,
+        DockerContainerAction.Restart => OperationKind.DockerRestartContainer,
+        DockerContainerAction.Remove => OperationKind.DockerRemoveContainer,
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
+
+    // R-119: a change the server's Docker page asks for is a typed operation, never a docker command line built from
+    // the request. Its kind tells the agent that its cached Docker inventory is outdated, so the agent collects it
+    // again and sends a heartbeat at once, and the page's task veil lifts on the new state (task 11784: a container
+    // stopped by a shell task was still shown running). The target is validated by the agent with the same rule.
+    private static ServerTask TypedOperation(
+        int serverId, string name, OperationKind operation, string target, int timeoutSeconds,
+        IReadOnlyDictionary<string, string>? environmentVariables = null)
+    {
+        if (!OperationTargetValidator.IsValid(operation, target))
+            throw new BadRequestException("Invalid docker target.");
+        return environmentVariables is null
+            ? ServerTaskFactory.Operation(serverId, name, operation, target, timeoutSeconds)
+            : ServerTaskFactory.Operation(serverId, name, operation, target, environmentVariables, timeoutSeconds);
+    }
 
     public async Task InspectContainerAsync(int serverId, string containerId, CancellationToken ct = default)
     {
@@ -239,15 +258,10 @@ public class DockerService(IDockerRepository repo, IAuditService audit, ITaskSer
     private static ServerTask PayloadOperation(
         int serverId, string name, OperationKind operation, string target,
         string payloadVariable, string payload, int timeoutSeconds)
-    {
-        if (!OperationTargetValidator.IsValid(operation, target))
-            throw new BadRequestException("Invalid docker target.");
-        return ServerTaskFactory.Operation(
-            serverId, name, operation, target,
+        => TypedOperation(
+            serverId, name, operation, target, timeoutSeconds,
             new Dictionary<string, string>
             {
                 [payloadVariable] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(payload))
-            },
-            timeoutSeconds);
-    }
+            });
 }

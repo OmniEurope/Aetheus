@@ -37,7 +37,7 @@ public partial class Edit
     // Recette R2-122: the dialog counts what goes with the project, asks for its name and deletes it.
     private async Task DeleteAsync()
     {
-        if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Id)) return;
-        Nav.NavigateTo("/projects");
+        // The dialog ends on what was deleted and goes back to the projects list itself (recette R-50).
+        await ProjectDeleteDialog.OpenAsync(Dialog, L, Id);
     }
 }

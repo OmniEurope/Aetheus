@@ -55,7 +55,7 @@ internal static class AiFindingsPublisher
         Func<string, TaskLogLevel, Task> onOutput,
         CancellationToken ct)
     {
-        var conversion = ToSarif(answer, configuration.FindingsPlaceholder);
+        var conversion = ToSarif(answer);
         if (conversion.Error is not null) return conversion.Error;
         var path = Path.Combine(temporaryDirectory, SarifFileName);
         await File.WriteAllTextAsync(path, conversion.Sarif, ct).ConfigureAwait(false);
@@ -84,15 +84,8 @@ internal static class AiFindingsPublisher
 
     internal sealed record Conversion(string? Sarif, int Count, int Skipped, string? Error);
 
-    internal const string PlaceholderRule = "ai-review-placeholder";
-
-    internal const string PlaceholderMessage =
-        "[FAKE] Synthetic placeholder: the model reported no finding on this range. It only shows that the AI "
-        + "review reached the provider and published to the Gate tab; it is not a real issue.";
-
-    /// <summary>The SARIF of the last <c>```json</c> block of the answer, or why there is none. With
-    /// <paramref name="placeholder"/>, an empty block yields one synthetic [FAKE] note instead of nothing.</summary>
-    internal static Conversion ToSarif(string answer, bool placeholder = false)
+    /// <summary>The SARIF of the last <c>```json</c> block of the answer, or why there is none. An empty block yields no finding: nothing is ever synthesized.</summary>
+    internal static Conversion ToSarif(string answer)
     {
         var block = LastJsonBlock(answer);
         if (block is null) return new Conversion(null, 0, 0, "the answer has no ```json findings block.");
@@ -132,16 +125,6 @@ internal static class AiFindingsPublisher
             };
             if (Location(finding) is { } location) result["locations"] = new JsonArray(location);
             results.Add(result);
-        }
-        if (placeholder && results.Count == 0)
-        {
-            rules.Add(PlaceholderRule);
-            results.Add(new JsonObject
-            {
-                ["ruleId"] = PlaceholderRule,
-                ["level"] = "note",
-                ["message"] = new JsonObject { ["text"] = PlaceholderMessage }
-            });
         }
         var sarif = new JsonObject
         {

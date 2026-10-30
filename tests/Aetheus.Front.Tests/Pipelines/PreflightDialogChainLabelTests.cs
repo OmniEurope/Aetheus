@@ -36,10 +36,10 @@ public sealed class PreflightDialogChainLabelTests : BunitContext
         Assert.Contains("aetheus-deploy-prod / Deploy", markup, StringComparison.Ordinal);
     }
 
-    /// <summary>R-20: stages blocked because the production server parameter is empty are ONE message that
-    /// names the parameter and says what to do; the stages sit folded under it and no template text shows.</summary>
+    /// <summary>R-63: stages blocked because the production server parameter is empty are ONE short sentence and
+    /// one "choose the server" button: no hint, no thirteen badges, and never the "no agent matches" summary.</summary>
     [Fact]
-    public void StagesBlockedByAnEmptyServerParameter_AreOneMessage_WithWhatToDo_AndTheStagesFolded()
+    public void StagesBlockedByAnEmptyServerParameter_AreOneSentenceAndOneButton_WithoutTheStages()
     {
         PreflightStageDto Empty(string stage) => new()
         {
@@ -56,17 +56,36 @@ public sealed class PreflightDialogChainLabelTests : BunitContext
         var causes = cut.FindAll("[data-testid='preflight-cause']");
         Assert.Single(causes);
         Assert.Contains("PreflightEmptyParameterCause", causes[0].TextContent, StringComparison.Ordinal);
-        Assert.Single(cut.FindAll("[data-testid='preflight-hint']"));
-        Assert.Contains("PreflightEmptyParameterHint", cut.Find("[data-testid='preflight-hint']").TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("[data-testid='preflight-hint']"));
         Assert.DoesNotContain("${{", cut.Markup, StringComparison.Ordinal);
-        // The three stages are listed, but inside a folded disclosure.
-        var folded = cut.Find("[data-testid='preflight-stages']");
-        var details = folded.TagName.Equals("DETAILS", StringComparison.OrdinalIgnoreCase) ? folded : folded.QuerySelector("details")!;
-        Assert.False(details.HasAttribute("open"));
-        Assert.Equal(3, folded.QuerySelectorAll(".omni-badge").Length);
-        Assert.Contains("PreflightAffectedStages", folded.TextContent, StringComparison.Ordinal);
-        // No page opens the parameter, so no action button is offered for it.
-        Assert.DoesNotContain(cut.FindAll(".preflight-cause button"), button => button.TextContent.Contains("PreflightFix", StringComparison.Ordinal));
+        // The stages are not listed, folded or not, and no "no agent matches" summary is shown.
+        Assert.Empty(cut.FindAll("[data-testid='preflight-stages']"));
+        Assert.Empty(cut.FindAll(".omni-badge"));
+        Assert.DoesNotContain("PreflightBlockedSummary", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("PreflightFix", cut.Markup, StringComparison.Ordinal);
+        // The one action chooses the server.
+        Assert.Single(cut.FindAll(".preflight-cause button"));
+        Assert.Contains("PreflightChooseServer", cut.Find(".preflight-cause button").TextContent, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-63: a mix keeps the "no agent matches" summary for the stages it is true of only.</summary>
+    [Fact]
+    public void TheNoAgentSummary_CountsOnlyTheStagesNoAgentServes()
+    {
+        var empty = new PreflightStageDto
+        {
+            StageName = "Deploy",
+            Resolved = false,
+            Target = "deployServer",
+            TargetKind = PreflightTargetKind.Agent,
+            Reason = "x",
+            EmptyTargetParameter = new PreflightEmptyParameterDto("deployServer", "Deploy server", "Serveur de production")
+        };
+
+        var cut = Render(empty, Blocked("Migrate", null, 0));
+
+        Assert.Contains("PreflightBlockedSummary", cut.Markup, StringComparison.Ordinal);
+        Assert.Equal(2, cut.FindAll("[data-testid='preflight-cause']").Count);
     }
 
     /// <summary>R-20: a target nobody serves is said once, in French, from what the stage targets, not by the
@@ -89,5 +108,26 @@ public sealed class PreflightDialogChainLabelTests : BunitContext
 
         Assert.Contains(cut.FindComponents<OmniBadge>(), badge => badge.Find("span").TextContent.Trim() == "Deploy");
         Assert.DoesNotContain(" / Deploy", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-113: a stage that names no agent is said in French as "no agent online", once for all such
+    /// stages, never with the backend's raw placeholder (it used to read « (unspecified) »).</summary>
+    [Fact]
+    public void StagesNamingNoAgent_ShareOneFrenchCause_WithoutARawPlaceholder()
+    {
+        PreflightStageDto NoAgent(string stage) => new()
+        {
+            StageName = stage,
+            Resolved = false,
+            Target = string.Empty,
+            TargetKind = PreflightTargetKind.Agent,
+            Reason = $"Stage '{stage}': no online agent matches."
+        };
+
+        var cut = Render(NoAgent("Build"), NoAgent("Test"));
+
+        Assert.Single(cut.FindAll("[data-testid='preflight-cause']"));
+        Assert.Contains("PreflightCauseAnyAgent", cut.Find("[data-testid='preflight-cause']").TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("unspecified", cut.Markup, StringComparison.Ordinal);
     }
 }

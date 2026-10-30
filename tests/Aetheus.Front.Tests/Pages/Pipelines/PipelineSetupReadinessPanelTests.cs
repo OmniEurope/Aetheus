@@ -294,7 +294,8 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
             }));
 
         var hrefs = cut.FindAll("[data-testid='setup-readiness-check'] a").Select(link => link.GetAttribute("href")).ToList();
-        Assert.Contains($"/environments/new?projectId=4&returnUrl={Uri.EscapeDataString(summary)}", hrefs);
+        // R-61: the environment comes back to the project overview, whatever the wizard progress.
+        Assert.Contains($"/environments/new?projectId=4&returnUrl={Uri.EscapeDataString("/projects/4")}", hrefs);
         Assert.Contains($"/servers/add-agent?returnUrl={Uri.EscapeDataString(summary)}", hrefs);
     }
 
@@ -397,6 +398,70 @@ public sealed class PipelineSetupReadinessPanelTests : BunitContext
         // API_PORT is listed, but nothing says where it lives: no link.
         Assert.Contains("API_PORT", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain(links, link => link.TextContent == "API_PORT");
+    }
+
+    /// <summary>R-59: a click on an empty value opens the dialog that fills it over the wizard; no link leaves the page,
+    /// and once it was filled the host is asked to read the readiness again.</summary>
+    [Fact]
+    public void AnEmptyValue_OpensTheFillDialog_AndRechecksAfterIt()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        var dialog = (ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.OpenResult = true;
+        var rechecked = 0;
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 4)
+            .Add(panel => panel.OnChanged, () => rechecked++)
+            .Add(panel => panel.Readiness, new PipelineSetupReadinessDto
+            {
+                RepositoryInspected = true,
+                Checks =
+                [
+                    new PipelineSetupReadinessCheckDto
+                    {
+                        Kind = PipelineSetupReadinessKind.EmptyVaultSecrets, Severity = PipelineSetupReadinessSeverity.Blocking,
+                        Items = ["DB_PASSWORD"],
+                        EmptyValues = [new() { OwnerId = 9, OwnerName = "aetheus-deploy", Key = "DB_PASSWORD", PipelineId = 21, PipelineName = "deploy-prod" }]
+                    }
+                ]
+            }));
+
+        Assert.Empty(cut.FindAll("[data-testid='setup-readiness-empty-key']"));
+        cut.Find("[data-testid='setup-readiness-empty-fill']").Click();
+
+        Assert.Equal(typeof(PipelineEmptyValueDialog), dialog.LastComponent);
+        Assert.Equal(9, dialog.LastParameters![nameof(PipelineEmptyValueDialog.OwnerId)]);
+        Assert.Equal("DB_PASSWORD", dialog.LastParameters[nameof(PipelineEmptyValueDialog.EntryKey)]);
+        Assert.Equal(true, dialog.LastParameters[nameof(PipelineEmptyValueDialog.IsVault)]);
+        Assert.Equal(1, rechecked);
+    }
+
+    /// <summary>A dialog closed without filling the value changes nothing: no new reading.</summary>
+    [Fact]
+    public void ACancelledFillDialog_DoesNotRecheck()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        var rechecked = 0;
+        var cut = Render<PipelineSetupReadinessPanel>(parameters => parameters
+            .Add(panel => panel.ProjectId, 4)
+            .Add(panel => panel.OnChanged, () => rechecked++)
+            .Add(panel => panel.Readiness, new PipelineSetupReadinessDto
+            {
+                RepositoryInspected = true,
+                Checks =
+                [
+                    new PipelineSetupReadinessCheckDto
+                    {
+                        Kind = PipelineSetupReadinessKind.EmptyLibraryValues, Severity = PipelineSetupReadinessSeverity.Blocking,
+                        Items = ["API_HOST"],
+                        EmptyValues = [new() { OwnerId = 12, OwnerName = "aetheus.prod", Key = "API_HOST", PipelineId = 22, PipelineName = "release" }]
+                    }
+                ]
+            }));
+
+        cut.Find("[data-testid='setup-readiness-empty-fill']").Click();
+
+        Assert.Equal(0, rechecked);
     }
 
     /// <summary>An external repository is never announced as missing files.</summary>

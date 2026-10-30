@@ -38,7 +38,7 @@ else
                         <OmniHeading Level="OmniHeadingLevel.H5">@dashboard.Name</OmniHeading>
                         @if (dashboard.IsDefault)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["IsDefault"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Star))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["IsDefault"]</OmniBadge>
                         }
                     </OmniStack>
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-mt-sm">

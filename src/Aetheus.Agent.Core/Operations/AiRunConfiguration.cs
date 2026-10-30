@@ -38,9 +38,6 @@ internal sealed record AiRunConfiguration(
     /// <summary>The model is asked for a JSON findings block, published as SARIF under the run.</summary>
     public bool PublishFindings { get; init; }
 
-    /// <summary>An empty findings block publishes one synthetic, [FAKE]-marked note instead.</summary>
-    public bool FindingsPlaceholder { get; init; }
-
     /// <summary>A commit range whose log and diff are added to the prompt, as the run substituted it.</summary>
     public string? GitRange { get; init; }
 
@@ -104,7 +101,6 @@ internal sealed record AiRunConfiguration(
         {
             Advisory = IsTrue(env, "AETHEUS_AI_ADVISORY"),
             PublishFindings = publishFindings,
-            FindingsPlaceholder = publishFindings && IsTrue(env, "AETHEUS_AI_FINDINGS_PLACEHOLDER"),
             GitRange = string.IsNullOrWhiteSpace(gitRange) ? null : gitRange.Trim(),
             PipelineRunId = runId,
             StageName = env.GetValueOrDefault("AETHEUS_STAGE_NAME"),

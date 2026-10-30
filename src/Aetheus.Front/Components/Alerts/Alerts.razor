@@ -13,9 +13,11 @@
     </ActionsContent>
 </OmniPageHeader>
 
+<OmniStack Class="page-fill-body">
 @if (_recent.Count > 0)
 {
-    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm" Gap="OmniSpacing.Large">
+    <OmniStack>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Gap="OmniSpacing.Large">
         <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["RecentAlerts"] (@_recent.Count)</OmniHeading>
         @* The section's action sits in its action menu, named after what it does: it empties this
            session's list of recent alerts (and the unread count), it does not mark them read. *@
@@ -30,15 +32,18 @@
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="AlertTriggeredDto" Property="TriggeredAt" Title="@L["TriggeredAt"]" Width="170px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Severity" Title="@L["Severity"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
-                <Template Context="a"><OmniBadge Fill="OmniFill.Solid" Tone="@RecentSeverityBadge(a.Severity)">@a.Severity</OmniBadge></Template>
+                <Template Context="a"><OmniBadge Icon="@(BadgeIcon.ForState(RecentSeverityBadge(a.Severity)))" Fill="OmniFill.Solid" Tone="@RecentSeverityBadge(a.Severity)">@a.Severity</OmniBadge></Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="AlertTriggeredDto" Property="ServerName" Title="@L["Server"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >
+                <Template Context="a"><EntityNameLink Kind="EntityNameKind.Server" Id="a.ServerId" Name="@a.ServerName" /></Template>
+            </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertTriggeredDto" Property="Message" Truncate="true" Title="@L["AlertMessage"]" Filterable="true" />
         </Columns>
     </AetheusDataGrid>
+    </OmniStack>
 }
 
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["AlertRules"]</OmniHeading>
+<OmniHeading Level="OmniHeadingLevel.H5">@L["AlertRules"]</OmniHeading>
 @* Recette R-198 (rule R-049): the rules scroll in a virtualized full-height grid, no pager. *@
 <AetheusDataGrid @ref="_rulesGrid" RowClick="@(alert => OpenEditDialogAsync(alert))" ExportName="@L["AlertRules"]" FullHeight="true" Virtualize="true" Data="@_alerts" TItem="AlertRuleDto" IsLoading="@_loading" class="aetheus-grid-fullheight">
         <EmptyTemplate>
@@ -48,17 +53,17 @@
             <OmniDataGridColumn Frozen="true" TItem="AlertRuleDto" Property="Name" Title="@L["AlertName"]" Filterable="true" />
             <OmniDataGridColumn TItem="AlertRuleDto" Property="Severity" Title="@L["Severity"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" >
                 <Template Context="alert">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetSeverityBadgeStyle(alert.Severity)">@L.Localize(alert.Severity)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetSeverityBadgeStyle(alert.Severity)))" Fill="OmniFill.Solid" Tone="@GetSeverityBadgeStyle(alert.Severity)">@L.Localize(alert.Severity)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Property="Metric" Title="@L["Metric"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@MetricText" >
                 <Template Context="alert">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetMetricBadgeStyle(alert.Metric)">@L.Localize(alert.Metric)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(GetMetricBadgeStyle(alert.Metric)))" Fill="OmniFill.Solid" Tone="@GetMetricBadgeStyle(alert.Metric)">@L.Localize(alert.Metric)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Title="@L["Threshold"]" ExportValue="@ThresholdExport" Width="140px" Filterable="false" >
                 <Template Context="alert">
-                    @alert.Operator @AlertThresholdUnit.Format(alert.Metric, alert.Threshold)
+                    @AlertThresholdUnit.Symbol(alert.Operator) @AlertThresholdUnit.Format(alert.Metric, alert.Threshold)
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AlertRuleDto" Property="SustainedSeconds" Title="@L["SustainedSeconds"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
@@ -66,11 +71,11 @@
                 <Template Context="alert">
                     @if (alert.IsEnabled)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["Disabled"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["Disabled"]</OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>
@@ -78,7 +83,7 @@
                 <Template Context="alert">
                     @if (alert.LastTriggeredAt.HasValue)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@alert.LastTriggeredAt.Value.ToString("g")</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@alert.LastTriggeredAt.Value.ToString("g")</NumberBadge>
                     }
                     else
                     {
@@ -98,3 +103,4 @@
             </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
+</OmniStack>

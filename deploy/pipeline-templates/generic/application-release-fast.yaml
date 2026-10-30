@@ -12,6 +12,21 @@
 # The server is the `deployServer` parameter, the name of a server of the project (the setup wizard writes the
 # server of the project's production environment, among the project's servers). The checkout and the release
 # share the workspace, so both run on it.
+#
+# R-28: a blue-green project releases fast without downtime, on the path of the production deployment
+# (application-deploy-prod) without its candidate gates (no payload restored, no release ancestry check, no approval
+# of a risky release). The signal is the same: DEPLOY_STRATEGY `bluegreen` (`replace`, the default, runs the
+# commands above, unchanged). The colours are built from the checked-out revision of this run, copied into
+# .release-source; then the native steps of the production deployment start and health-gate the idle colour, move
+# the Apache upstream to it, probe the application and close the transaction, and a failure rolls back to the live
+# colour or retires a failed first deployment. Like the production deployment it reads from the libraries
+# COMPOSE_FILE, COMPOSE_PROJECT, STATE_DIR, UPSTREAM_DEFINE, UPSTREAM_CONF, UPSTREAM_LINK, APACHE_RELOAD_HELPER, the
+# four PORT_FRONT/BACK_BLUE/GREEN ports, DOMAIN, APP_SUBDOMAIN, API_SUBDOMAIN and HOST_PREFIX, and renders the
+# environment file from the versioned sample DEPLOY_ENV_SAMPLE. This template reads no vault, so the replacement
+# asks for none: a pipeline whose sample needs secrets declares the vault `<project>.prod` under `vaults:` itself.
+# The Apache virtual hosts and the certificates stay the production deployment's: a fast release does not apply
+# them. Every name only the blue-green path reads is written `$(NAME:-)`, so a replacement project is asked for
+# none of them; the host preparation refuses an empty one instead.
 name: application-release-fast-template
 trigger: manual
 parameters:
@@ -74,7 +89,7 @@ variables:
     # so changing the cap means removing the builder first (docker buildx rm <builder>).
     case "${BUILDX_MAX_PARALLELISM:-}" in
       '') ;;
-      0|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
+      0*|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
     esac
     if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
       case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) echo "Unsafe Buildx builder name: $BUILDX_BUILDER" >&2; exit 2 ;; esac
@@ -96,6 +111,28 @@ variables:
       exit 1
     fi
     docker compose -p "$PROJECT" "$@" -f "$COMPOSE_FILE_NAME" ps
+  # R-28: how the release is brought up, the production deployment's own switch: `replace` runs the commands
+  # above, `bluegreen` the zero-downtime cutover below.
+  DEPLOY_STRATEGY: "replace"
+  # Blue-green only: the versioned environment sample the host preparation renders (a file of the project's
+  # configuration repository), and the identity of the environment the native steps act on, as the production
+  # deployment names them. The source the colours are built from is this run's checkout, copied by the host
+  # preparation; the journal records the commit the run was launched on.
+  DEPLOY_ENV_SAMPLE: ".pipeline/configs/env/production.env"
+  BG_PROJECT: "$(COMPOSE_PROJECT:-)"
+  BG_STATE_DIR: "$(STATE_DIR:-)"
+  BG_ENV_FILE: "$(STATE_DIR:-)/deploy.env"
+  BG_COMPOSE_FILES: "$(WORKSPACE)/.release-source/$(COMPOSE_FILE:-)"
+  BG_PORTS: "$(PORT_FRONT_BLUE:-),$(PORT_BACK_BLUE:-),$(PORT_FRONT_GREEN:-),$(PORT_BACK_GREEN:-)"
+  BG_UPSTREAM_TEMPLATE: "$(WORKSPACE)/.bluegreen-upstream.conf"
+  BG_UPSTREAM_CONF: "$(UPSTREAM_CONF:-)"
+  BG_RELOAD_HELPER: "$(APACHE_RELOAD_HELPER:-)"
+  BG_PUBLIC_ORIGIN: "https://$(HOST_PREFIX:-)$(APP_SUBDOMAIN:suffix=.)$(DOMAIN:-)"
+  BG_PUBLIC_API_ORIGIN: "https://$(HOST_PREFIX:-)$(API_SUBDOMAIN:-).$(DOMAIN:-)"
+  BG_REVISION: "$(BUILD_SOURCEVERSION)"
+  # APP_VERSION, SOURCE_COMMIT, DOTNET_SDK_VERSION and the three public URLs are published by the host preparation,
+  # so the replacement never receives them.
+  BG_COMPOSE_ENV: "APP_VERSION,SOURCE_COMMIT,DOTNET_SDK_VERSION,FRONT_URL,API_BASE_URL,API_URL,PORT_FRONT_BLUE,PORT_BACK_BLUE,PORT_FRONT_GREEN,PORT_BACK_GREEN"
 
 # Recette R3-67: the libraries a production deployment reads, named like the platform's own
 # (`<project>.share`, `<project>.prod`): `${{ project.slug }}` is the project's slug, so the setup wizard creates
@@ -116,12 +153,138 @@ stages:
       - name: Check out the exact revision
         checkout: true
 
-  - name: FastRelease
+  # Blue-green only (R-28). Copies the checked-out revision the colours are built from, writes the environment file
+  # the native steps read (erased by the last stage), creates the Apache upstream (the Defines the virtual hosts
+  # read) on the live ports the first time, and builds both colour images: the Up stage starts the idle colour with
+  # --no-build. The upstream is live state the cutover owns: it is never overwritten.
+  - name: Prepare host
     group: Deploy
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
     os: linux
     depends_on: [Checkout]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      - name: Copy the checkout, render the environment file and build the colours
+        working_directory: "$(WORKSPACE)"
+        env_template: "$(DEPLOY_ENV_SAMPLE)"
+        shell: |
+          set -eu
+          fail() { echo "FATAL: $*" >&2; exit 1; }
+          for name in STATE_DIR COMPOSE_PROJECT COMPOSE_FILE UPSTREAM_DEFINE UPSTREAM_CONF UPSTREAM_LINK \
+            PORT_FRONT_BLUE PORT_BACK_BLUE PORT_FRONT_GREEN PORT_BACK_GREEN DOMAIN API_SUBDOMAIN; do
+            eval "value=\${$name:-}"
+            [ -n "$value" ] || fail "$name is empty: fill it in the library prod (the setup wizard creates it), a blue-green release cannot start without it."
+          done
+          if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+            fail "Docker Compose is not available on this server."
+          fi
+          case "$COMPOSE_FILE" in /*|*..*) fail "COMPOSE_FILE must be a path inside the repository: $COMPOSE_FILE" ;; esac
+          case "$STATE_DIR" in /*) ;; *) fail "STATE_DIR must be an absolute path: $STATE_DIR" ;; esac
+          case "$STATE_DIR" in *..*) fail "STATE_DIR must not contain a traversal: $STATE_DIR" ;; esac
+          SOURCE_SHA="$(git rev-parse HEAD 2>/dev/null || true)"
+          test -n "$SOURCE_SHA" || fail "The workspace holds no checked-out revision."
+          rm -rf .release-source
+          mkdir .release-source
+          # Readable by the non-root user of the containers the colours build: not the runner's restrictive umask.
+          tar --exclude=./.git --exclude=./.release-source --mode=a+rX -cf - . | (umask 022 && tar -xf - -C .release-source)
+          [ -f ".release-source/$COMPOSE_FILE" ] || fail "The Compose file $COMPOSE_FILE is not in the checked-out revision $SOURCE_SHA."
+          if ! test -d "$STATE_DIR"; then
+            install -d -m 700 "$STATE_DIR" 2>/dev/null \
+              || fail "The state directory $STATE_DIR cannot be created by this agent: create it once, owned by the agent's user (the blue-green journal lives there), or set STATE_DIR in the library prod to a directory it owns."
+          fi
+          test ! -L "$STATE_DIR" || fail "The state directory must not be a symbolic link: $STATE_DIR"
+          # The environment file: rendered from the versioned sample, readable by its owner only, erased by the last
+          # stage of the run.
+          (
+            umask 077
+            printf '%s' "$AETHEUS_ENV_FILE_B64" | base64 -d > "$STATE_DIR/deploy.env.tmp"
+            mv "$STATE_DIR/deploy.env.tmp" "$STATE_DIR/deploy.env"
+          )
+          # The upstream template the switch renders: only the Define name is resolved here.
+          case "$UPSTREAM_DEFINE" in [A-Z]*) ;; *) fail "UPSTREAM_DEFINE must start with an upper-case letter: $UPSTREAM_DEFINE" ;; esac
+          case "$UPSTREAM_DEFINE" in *[!A-Z0-9_]*) fail "UPSTREAM_DEFINE must be upper case, digits and underscores: $UPSTREAM_DEFINE" ;; esac
+          case "$UPSTREAM_CONF" in */sites-available/?*) ;; *) fail "UPSTREAM_CONF must be a file in a sites-available directory: $UPSTREAM_CONF" ;; esac
+          case "$UPSTREAM_LINK" in */sites-enabled/?*) ;; *) fail "UPSTREAM_LINK must be a link in a sites-enabled directory: $UPSTREAM_LINK" ;; esac
+          cat > .bluegreen-upstream.conf.in <<'UPSTREAM_TEMPLATE'
+          # Managed by the deployment pipeline: the blue-green cutover of this project owns this live state; apache-config never overwrites it.
+          Define #{UPSTREAM_DEFINE}#_FRONT_PORT #{FRONT_PORT}#
+          Define #{UPSTREAM_DEFINE}#_BACK_PORT #{BACK_PORT}#
+          # Active colour: #{ACTIVE_COLOR}#
+          UPSTREAM_TEMPLATE
+          sed -e "s/#{UPSTREAM_DEFINE}#/$UPSTREAM_DEFINE/g" .bluegreen-upstream.conf.in > .bluegreen-upstream.conf
+          rm -f .bluegreen-upstream.conf.in
+          if [ ! -f "$UPSTREAM_CONF" ]; then
+            LIVE_COLOR="$(cat "$STATE_DIR/live-color" 2>/dev/null || echo blue)"
+            case "$LIVE_COLOR" in
+              green) FRONT_PORT="$PORT_FRONT_GREEN"; BACK_PORT="$PORT_BACK_GREEN" ;;
+              *) LIVE_COLOR=blue; FRONT_PORT="$PORT_FRONT_BLUE"; BACK_PORT="$PORT_BACK_BLUE" ;;
+            esac
+            echo ">>> Creating the Apache upstream on the $LIVE_COLOR ports"
+            sed -e "s/#{FRONT_PORT}#/$FRONT_PORT/g" -e "s/#{BACK_PORT}#/$BACK_PORT/g" -e "s/#{ACTIVE_COLOR}#/$LIVE_COLOR/g" \
+              .bluegreen-upstream.conf > "$UPSTREAM_CONF.tmp"
+            mv "$UPSTREAM_CONF.tmp" "$UPSTREAM_CONF"
+          fi
+          test ! -L "$UPSTREAM_CONF" || fail "The upstream file must not be a symbolic link: $UPSTREAM_CONF"
+          [ -L "$UPSTREAM_LINK" ] || ln -s "$UPSTREAM_CONF" "$UPSTREAM_LINK"
+          SDK_VERSION="none"
+          if [ -f .release-source/global.json ]; then
+            SDK_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .release-source/global.json | head -n 1)"
+            SDK_VERSION="${SDK_VERSION:-none}"
+          fi
+          # No candidate names this release: the version is the pipeline's APP_VERSION when it sets one, otherwise
+          # the short commit.
+          RELEASE_VERSION="${APP_VERSION:-}"
+          RELEASE_VERSION="${RELEASE_VERSION:-$(printf '%s' "$SOURCE_SHA" | cut -c1-12)}"
+          # The agent names the Buildx builder of a build step (BUILDX_BUILDER) without creating it when its Docker
+          # maintenance is off: an absent or unhealthy builder is (re)created here, with the host's optional cap on
+          # parallel build steps (BUILDX_MAX_PARALLELISM), as the replacement does.
+          case "${BUILDX_MAX_PARALLELISM:-}" in
+            '') ;;
+            0|*[!0-9]*) fail "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" ;;
+          esac
+          if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
+            case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) fail "Unsafe Buildx builder name: $BUILDX_BUILDER" ;; esac
+            BUILDKIT_CONFIG=""
+            if test -n "${BUILDX_MAX_PARALLELISM:-}"; then
+              mkdir -p "${HOME:-/tmp}/.buildx-config"
+              BUILDKIT_CONFIG="${HOME:-/tmp}/.buildx-config/buildkitd-$BUILDX_BUILDER.toml"
+              printf '[worker.oci]\n  max-parallelism = %s\n' "$BUILDX_MAX_PARALLELISM" > "$BUILDKIT_CONFIG"
+              echo "BuildKit will run at most $BUILDX_MAX_PARALLELISM step(s) at a time on this host."
+            fi
+            if docker buildx rm --force "$BUILDX_BUILDER" >/dev/null 2>&1; then echo "Removed the stale Buildx builder $BUILDX_BUILDER."; fi
+            docker buildx create --name "$BUILDX_BUILDER" --driver docker-container ${BUILDKIT_CONFIG:+--config "$BUILDKIT_CONFIG"} --bootstrap >/dev/null
+            echo "Buildx builder $BUILDX_BUILDER created."
+          fi
+          # Both colours are built from the checkout, under the Compose project and with the inputs the native steps
+          # use (BG_COMPOSE_ENV). Docker Compose reads COMPOSE_FILE itself: the subshell drops it so -f is the only file.
+          echo ">>> Building the blue and green images from revision $SOURCE_SHA"
+          (
+            export SOURCE_COMMIT="$SOURCE_SHA" DOTNET_SDK_VERSION="$SDK_VERSION" APP_VERSION="$RELEASE_VERSION" \
+              FRONT_URL="$BG_PUBLIC_ORIGIN" API_BASE_URL="$BG_PUBLIC_API_ORIGIN" API_URL="$BG_PUBLIC_API_ORIGIN"
+            BG_FILE=".release-source/$COMPOSE_FILE"
+            unset COMPOSE_FILE
+            docker compose -p "$COMPOSE_PROJECT" --env-file "$STATE_DIR/deploy.env" -f "$BG_FILE" \
+              --profile blue --profile green build
+          ) || fail "The colour images could not be built from revision $SOURCE_SHA."
+          echo "##aetheus[setvariable name=SOURCE_COMMIT]$SOURCE_SHA"
+          echo "##aetheus[setvariable name=DOTNET_SDK_VERSION]$SDK_VERSION"
+          echo "##aetheus[setvariable name=APP_VERSION]$RELEASE_VERSION"
+          echo "##aetheus[setvariable name=FRONT_URL]$BG_PUBLIC_ORIGIN"
+          echo "##aetheus[setvariable name=API_BASE_URL]$BG_PUBLIC_API_ORIGIN"
+          echo "##aetheus[setvariable name=API_URL]$BG_PUBLIC_API_ORIGIN"
+          echo ">>> Host prepared for revision $SOURCE_SHA (version $RELEASE_VERSION)."
+        outputs: [SOURCE_COMMIT, DOTNET_SDK_VERSION, APP_VERSION, FRONT_URL, API_BASE_URL, API_URL]
+        timeout_seconds: 3600
+
+  # The replacement (the default strategy): the project's fast release commands, unchanged.
+  - name: FastRelease
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Prepare host]
+    condition: "ne(variables['DEPLOY_STRATEGY'], 'bluegreen')"
     steps:
       - name: Run project fast release commands
         working_directory: "$(WORKSPACE)"
@@ -137,3 +300,169 @@ stages:
           APPLICATION_ROLLBACK_ENABLED="$(APPLICATION_ROLLBACK_ENABLED)" \
             sh -eu -c "$APPLICATION_RELEASE_FAST_COMMANDS"
         timeout_seconds: 7200
+
+  # The blue-green cutover (DEPLOY_STRATEGY=bluegreen, R-28), with the production deployment's native steps: the idle
+  # colour is started and health-gated on its own ports, the Apache upstream is moved to it, the released application
+  # is probed, then the previous colour is kept in reserve. The migration of a database is the project's own
+  # business: its Compose file runs it.
+  - name: Up
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [FastRelease]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      - name: Start and health-gate the idle colour
+        type: bluegreen-up
+        # The colour serving before this release, `none` for the project's first deployment.
+        outputs: [BLUEGREEN_LIVE_COLOR]
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        # A transaction an earlier, ended run left open is undone before the colour is rebuilt, which puts the
+        # recorded upstream back: the step needs the same targets as the rollback.
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
+        timeout_seconds: 3600
+
+  # How a failure after this point is undone, decided from the colour Up found live: rolled back to it, or, on the
+  # project's first deployment (`none`), retired. The steps of the failure handler read this one value: a stage
+  # condition reads a single variable, and the replacement path, where it is never published, must run neither.
+  - name: Arm rollback
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Up]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      - name: Record how a failure is undone
+        shell: |
+          set -eu
+          case "$(BLUEGREEN_LIVE_COLOR)" in
+            blue|green) echo "##aetheus[setvariable name=BLUEGREEN_UNDO]rollback"; echo "A failure from here returns traffic to the $(BLUEGREEN_LIVE_COLOR) colour." ;;
+            none) echo "##aetheus[setvariable name=BLUEGREEN_UNDO]retire"; echo "First deployment: a failure from here retires it." ;;
+            *) echo "Up published no live colour ('$(BLUEGREEN_LIVE_COLOR)'): the cutover cannot be undone safely, it does not start." >&2; exit 1 ;;
+          esac
+        outputs: [BLUEGREEN_UNDO]
+        timeout_seconds: 60
+
+  - name: Switch
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Arm rollback]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      - name: Point traffic at the idle colour
+        type: bluegreen-switch
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        upstream_template: "$(BG_UPSTREAM_TEMPLATE)"
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
+        revision: "$(BG_REVISION)"
+        timeout_seconds: 600
+
+  - name: Evidence
+    group: Smoke
+    execution_role: deploy
+    os: linux
+    depends_on: [Switch]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      # A release that does not answer fails this stage, which hands control to the rollback.
+      - name: Probe the released application
+        type: smoke
+        origin: "$(BG_PUBLIC_ORIGIN)"
+        api_origin: "$(BG_PUBLIC_API_ORIGIN)"
+        samples: "3"
+        max_seconds: "5"
+        evidence_gate: blocking
+        timeout_seconds: 1800
+
+  - name: Commit
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Evidence]
+    condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+    steps:
+      - name: Close the deployment transaction
+        type: bluegreen-commit
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        timeout_seconds: 600
+
+  - name: Rollback
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    condition: "failed()"
+    depends_on: [Commit]
+    # At most one of the two steps runs, chosen by Arm rollback. A release that replaced a live colour is rolled
+    # back to it. The project's first deployment has no colour to return to: it is retired, which puts back the
+    # recorded upstream, stops the colour and closes the transaction; left open, it would refuse every later
+    # deployment. Neither runs when Up never ran or failed (Up stops the colour it could not start, and no
+    # transaction is open before the switch), nor on the replacement path.
+    steps:
+      - name: Restore the previous colour
+        type: bluegreen-rollback
+        condition: "eq(variables['BLUEGREEN_UNDO'], 'rollback')"
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
+        timeout_seconds: 1800
+      - name: Retire the failed first deployment
+        type: bluegreen-retire
+        condition: "eq(variables['BLUEGREEN_UNDO'], 'retire')"
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
+        timeout_seconds: 1800
+
+  # Blue-green only: the environment file written for the native steps and the copied source are erased, the run's
+  # outcome notwithstanding.
+  - name: Erase environment file
+    group: Deploy
+    execution_role: deploy
+    agent: "${{ parameters.deployServer }}"
+    os: linux
+    depends_on: [Rollback]
+    condition: "always()"
+    steps:
+      - name: Erase the rendered environment file and the copied source
+        condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
+        working_directory: "$(WORKSPACE)"
+        shell: |
+          set -eu
+          STATE="$(BG_STATE_DIR)"
+          case "$STATE" in /*) rm -f "$STATE/deploy.env" "$STATE/deploy.env.tmp" ;; esac
+          rm -rf .release-source
+          echo ">>> The environment file is erased."
+        timeout_seconds: 300

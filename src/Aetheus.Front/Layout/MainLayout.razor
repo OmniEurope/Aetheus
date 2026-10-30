@@ -44,20 +44,20 @@
                            Gap="OmniSpacing.Small" Class="dev-env-banner">
                     <span class="dev-env-chip dev-env-chip-env" title="@L["DevBannerEnvTooltip"]">
                         <OmniIcon Name="OmniIconName.Database" Class="dev-env-chip-icon" />
-                        <span class="dev-env-chip-text">@_envName</span>
+                        <span class="dev-env-chip-text" title="@_envName">@_envName</span>
                     </span>
                     @if (!string.IsNullOrWhiteSpace(_devLabel))
                     {
                         <span class="dev-env-chip dev-env-chip-label" title="@L["DevBannerLabelTooltip"]">
                             <OmniIcon Name="OmniIconName.Tag" Class="dev-env-chip-icon" />
-                            <span class="dev-env-chip-text">@_devLabel</span>
+                            <span class="dev-env-chip-text" title="@_devLabel">@_devLabel</span>
                         </span>
                     }
                     @if (!string.IsNullOrWhiteSpace(_devBranch))
                     {
                         <span class="dev-env-chip dev-env-chip-branch" title="@L["DevBannerBranchTooltip"]">
                             <OmniIcon Name="OmniIconName.Graph" Class="dev-env-chip-icon" />
-                            <span class="dev-env-chip-text">@_devBranch</span>
+                            <span class="dev-env-chip-text" title="@_devBranch">@_devBranch</span>
                         </span>
                     }
                 </OmniStack>
@@ -91,6 +91,7 @@
                        language, appearance, settings, version and sign-out actions. *@
                     <OmniAppMenu Class="header-app-menu" Open="@_userMenuOpen" OpenChanged="@(open => _userMenuOpen = open)"
                                  UserName="@Auth.Username" Role="@(Auth.IsAdmin ? L["Admin"] : L["User"])"
+                                 Label="@L["AppMenuOfUser", Auth.Username ?? string.Empty]"
                                  Languages="@Languages" Language="@CurrentLanguage" LanguageChanged="@OnLanguageChanged"
                                  OnThemeOpen="@OnThemeMenuClick" OnSettingsOpen="@OnSettingsMenuClick"
                                  Version="@($"Aetheus v{_version}")" OnSignOut="@OnLogout">
@@ -113,13 +114,13 @@
                                     <OmniIcon Name="OmniIconName.Buildings" />
                                     <OmniText>@L["ActiveOrganization"]</OmniText>
                                 </OmniStack>
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AllOrganizations"]</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Buildings))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AllOrganizations"]</OmniBadge>
                             </OmniStack>
                         }
                     </OmniAppMenu>
                 </OmniStack>
             }
-            else if (!Auth.IsAuthenticated)
+            else if (!Auth.IsAuthenticated || OnSetPasswordPage)
             {
                 @* Signed out (the login page): the same menu without an account, its trigger an
                    icon; the mode, the theme and the language stay at the right of the bar. *@
@@ -165,7 +166,8 @@
     @* The centred column the user can choose in the Theme window (R1-25); full width, the default, makes
        OmniMain ignore ContentWidth. *@
     <OmniMain Id="main-content" Scrollable="true" ContentWidth="OmniLayoutWidth.Wide">
-        <div class="omni-u-px-md omni-u-py-md app-body-wrapper">
+        @* R-99: OE's veil lies over the page body while an action started from a confirmation runs; the page stays mounted under it. *@
+        <div class="omni-u-py-md app-body-wrapper @BusyClass" aria-busy="@(Veil.IsBusy ? "true" : "false")" data-testid="app-body-wrapper">
             @if (_newVersionAvailable)
             {
                 <OmniAlert Severity="OmniSeverity.Success" Class="version-alert-bar">
@@ -178,7 +180,9 @@
                     </ChildContent>
                 </OmniAlert>
             }
-            @if (Auth.IsAuthenticated && !AuthenticatedChromeReady)
+            @* R-38: a forced password change never starts the session (SITE-SEC-001), so it never waits for it:
+               the change page shows at once, without the chrome. *@
+            @if (Auth.IsAuthenticated && !Auth.MustChangePassword && !AuthenticatedChromeReady && !OnSetPasswordPage)
             {
                 <AetheusLoader Size="OmniControlSize.Large" Class="session-bootstrap-loader" />
             }
@@ -193,6 +197,7 @@
                             @Body
                         </ChildContent>
                         <ErrorContent Context="exception">
+                            <div class="error-card-host">
                             <OmniCard Class="error-card">
                                 <OmniStack Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                                     <OmniIcon Name="OmniIconName.Error" Class="error-icon" />
@@ -207,6 +212,7 @@
                                     </OmniButton>
                                 </OmniStack>
                             </OmniCard>
+                            </div>
                         </ErrorContent>
                     </LoggedErrorBoundary>
                 }

@@ -82,7 +82,8 @@ public static class DbInitializer
 
         var adminUser = new User
         {
-            Username = "admin",
+            Username = SeededAdminEmail.SeededUsername,
+            Email = SeededAdminEmail.Resolve(config),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
             IsActive = true
         };
@@ -115,50 +116,50 @@ public static class DbInitializer
                 Permission = Permission.Admin
             });
         }
+        db.RolePermissionGrants.AddRange(BuiltInRoleGrants.For(adminRole.Id, adminRole.Name));
         await db.SaveChangesAsync();
 
         await SeedDefaultRolesAsync(db);
+
+        // R-45: the seeded admin is the default organization's Owner, so it also holds the role that
+        // membership level gives (ADR-059), like any member added later.
+        var organizationAdmin = await db.Roles.SingleAsync(r => r.OrganizationId == null && r.Name == RoleNames.OrganizationAdmin);
+        db.UserOrganizationRoles.Add(new UserOrganizationRole
+        {
+            UserId = adminUser.Id,
+            OrganizationId = defaultOrg.Id,
+            RoleId = organizationAdmin.Id
+        });
+        await db.SaveChangesAsync();
     }
+
+    // The roles held for one organization (ADR-059), each with the same permission on every resource type.
+    private static readonly (string Name, string Description, Permission Permission)[] OrganizationRoles =
+    [
+        (RoleNames.Reader, "Read access to the resources of its organization", Permission.Read),
+        (RoleNames.Contributor, "Read and write access to the resources of its organization", Permission.Write),
+        (RoleNames.OrganizationAdmin, "Full access to the resources of its organization, and management of its members", Permission.Admin)
+    ];
 
     private static async Task SeedDefaultRolesAsync(AppDbContext db)
     {
-        var resourceTypes = Enum.GetValues<ResourceType>();
-
-        if (!await db.Roles.AnyAsync(r => r.Name == "Reader"))
+        foreach (var (name, description, permission) in OrganizationRoles)
         {
-            var reader = new Role { Name = "Reader", Description = "Read access to all resources" };
-            db.Roles.Add(reader);
+            if (await db.Roles.AnyAsync(r => r.OrganizationId == null && r.Name == name)) continue;
+
+            var role = new Role { Name = name, Description = description };
+            db.Roles.Add(role);
             await db.SaveChangesAsync();
 
-            foreach (var rt in resourceTypes)
-            {
+            foreach (var rt in Enum.GetValues<ResourceType>())
                 db.ResourcePermissions.Add(new ResourcePermission
                 {
-                    RoleId = reader.Id,
+                    RoleId = role.Id,
                     ResourceType = rt,
                     ResourceId = null,
-                    Permission = Permission.Read
+                    Permission = permission
                 });
-            }
-            await db.SaveChangesAsync();
-        }
-
-        if (!await db.Roles.AnyAsync(r => r.Name == "Contributor"))
-        {
-            var contributor = new Role { Name = "Contributor", Description = "Read and write access to all resources" };
-            db.Roles.Add(contributor);
-            await db.SaveChangesAsync();
-
-            foreach (var rt in resourceTypes)
-            {
-                db.ResourcePermissions.Add(new ResourcePermission
-                {
-                    RoleId = contributor.Id,
-                    ResourceType = rt,
-                    ResourceId = null,
-                    Permission = Permission.Write
-                });
-            }
+            db.RolePermissionGrants.AddRange(BuiltInRoleGrants.For(role.Id, name));
             await db.SaveChangesAsync();
         }
     }

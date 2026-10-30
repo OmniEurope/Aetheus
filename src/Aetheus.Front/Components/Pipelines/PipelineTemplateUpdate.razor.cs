@@ -40,6 +40,4 @@ public partial class PipelineTemplateUpdate : PipelineFleetUpdateBase
         catch (HttpRequestException) { Toast.Error("Error", "SaveFailed"); }
     }
 
-    private void Cancel() => Nav.NavigateTo($"/pipelines/{PipelineId}");
-
 }

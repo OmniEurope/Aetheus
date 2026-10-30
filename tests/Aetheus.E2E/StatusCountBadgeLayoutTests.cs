@@ -3,8 +3,8 @@ using System.Text.Json.Nodes;
 
 namespace Aetheus.E2E;
 
-/// <summary> On a phone a status count badge shows the status icon and the number, its name kept as
-/// accessible text and tooltip; wider, the full badge. Measured on the dashboard's Monitored
+/// <summary> A status count badge is a number badge (recette R-44, rule of 2026-10-25): the number and
+/// the status name, no icon, the name visible on a phone too. Measured on the dashboard's Monitored
 /// applications tile, whose counts are fixed here (the rest of the summary is the real response).
 /// </summary>
 [Category("E2E")]
@@ -30,24 +30,23 @@ public sealed class StatusCountBadgeLayoutTests : E2ETestBase
         });
     }
 
-    [TestCase(375, true)]
-    [TestCase(1280, false)]
-    public async Task StatusCountBadge_ShowsTheIconInPlaceOfTheNameOnlyOnAPhone(int width, bool phone)
+    [TestCase(375)]
+    [TestCase(1280)]
+    public async Task StatusCountBadge_ShowsTheNumberAndTheName_WithoutIcon_AtEveryWidth(int width)
     {
         await Page.SetViewportSizeAsync(width, 812);
         await NavigateToAsync("");
 
         var tile = Page.Locator(".dashboard-tile").Filter(new() { Has = Page.GetByRole(Microsoft.Playwright.AriaRole.Heading, new() { Name = "Monitored applications" }) });
-        var badges = tile.Locator(".status-count-badge");
+        var badges = tile.Locator("[data-testid=status-count-badge]");
         await Expect(badges).ToHaveCountAsync(2, new() { Timeout = 15000 });
         var json = await badges.EvaluateAllAsync<string>("""
             badges => JSON.stringify(badges.map(badge => {
-                const icon = badge.querySelector('.status-count-badge__icon').getBoundingClientRect();
                 const label = badge.querySelector('.status-count-badge__label').getBoundingClientRect();
                 return {
                     text: badge.textContent.trim().replace(/\s+/g, ' '),
                     title: badge.getAttribute('title'),
-                    iconWidth: icon.width,
+                    iconCount: badge.querySelectorAll('.omni-icon').length,
                     labelWidth: label.width,
                     top: badge.getBoundingClientRect().top
                 };
@@ -61,17 +60,9 @@ public sealed class StatusCountBadgeLayoutTests : E2ETestBase
             foreach (var badge in measured)
             {
                 Assert.That(badge.Title, Is.Not.Empty, "The status name is the tooltip.");
-                Assert.That(badge.Text, Does.EndWith(badge.Title!), "The status name stays the accessible text.");
-                if (phone)
-                {
-                    Assert.That(badge.IconWidth, Is.GreaterThan(0), "The status icon shows on a phone.");
-                    Assert.That(badge.LabelWidth, Is.LessThanOrEqualTo(1), "The status name is visually hidden on a phone.");
-                }
-                else
-                {
-                    Assert.That(badge.IconWidth, Is.EqualTo(0), "Wide, the badge is the number and the name.");
-                    Assert.That(badge.LabelWidth, Is.GreaterThan(1));
-                }
+                Assert.That(badge.Text, Does.EndWith(badge.Title!), "The status name is the visible text.");
+                Assert.That(badge.IconCount, Is.EqualTo(0), "A badge that carries a number has no icon.");
+                Assert.That(badge.LabelWidth, Is.GreaterThan(1), "The status name stays visible, on a phone too.");
             }
             Assert.That(measured.Select(b => b.Text), Is.EquivalentTo(new[] { "20 Up", "5 Down" }));
             // The two badges share one line instead of wrapping under the title.
@@ -79,5 +70,5 @@ public sealed class StatusCountBadgeLayoutTests : E2ETestBase
         });
     }
 
-    private sealed record BadgeLayout(string Text, string? Title, double IconWidth, double LabelWidth, double Top);
+    private sealed record BadgeLayout(string Text, string? Title, int IconCount, double LabelWidth, double Top);
 }

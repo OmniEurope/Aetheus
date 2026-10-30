@@ -30,7 +30,7 @@ internal sealed class OomKillMonitor(
         var newKills = NewKills(server, report);
         var changed = Store(server, report.BootId, report.KillCount);
         if (newKills > 0)
-            await RaiseAsync(server, report, newKills, ct).ConfigureAwait(false);
+            await RaiseAsync(server, report, newKills, heartbeat.Docker.Containers, ct).ConfigureAwait(false);
         return changed;
     }
 
@@ -52,8 +52,45 @@ internal sealed class OomKillMonitor(
             .ToList();
     }
 
-    internal static string BuildMessage(string serverName, OomKillReportDto report, long newKills, IReadOnlyList<string> victims)
+    /// <summary>
+    /// What the agent read about the newest <paramref name="newKills"/> victims: kind, container (named from
+    /// the containers of the same heartbeat, else its short id) and memory. Empty when none of them carries
+    /// anything beyond process and pid, i.e. for an older agent.
+    /// </summary>
+    internal static List<OomKillDetail> DescribeKills(
+        OomKillReportDto report, long newKills, IReadOnlyList<DockerContainerDto> containers)
     {
+        var named = (int)Math.Min(newKills, report.RecentVictims.Count);
+        var kills = report.RecentVictims
+            .Skip(report.RecentVictims.Count - named)
+            .Select(victim => new OomKillDetail(
+                victim.Process, victim.Pid, victim.Kind, ContainerName(victim.ContainerId, containers), victim.Cgroup,
+                victim.AnonRssKb, victim.FileRssKb, victim.ShmemRssKb))
+            .ToList();
+        return kills.Exists(kill => kill.HasDetail) ? kills : [];
+    }
+
+    private static string? ContainerName(string? shortId, IReadOnlyList<DockerContainerDto> containers)
+    {
+        if (string.IsNullOrEmpty(shortId)) return null;
+        var match = containers.FirstOrDefault(container => container.ContainerId.Length > 0
+            && (container.ContainerId.StartsWith(shortId, StringComparison.Ordinal)
+                || shortId.StartsWith(container.ContainerId, StringComparison.Ordinal)));
+        return string.IsNullOrWhiteSpace(match?.Name) ? shortId : match.Name;
+    }
+
+    internal static string BuildMessage(
+        string serverName, OomKillReportDto report, long newKills, IReadOnlyList<string> victims,
+        IReadOnlyList<OomKillDetail>? kills = null)
+    {
+        if (kills is { Count: > 0 })
+        {
+            var text = string.Join("; ", kills.Select(Describe));
+            var more = newKills - kills.Count;
+            return more > 0
+                ? $"OOM kill on {serverName}: {text} and {more} more not named."
+                : $"OOM kill on {serverName}: {text}.";
+        }
         if (victims.Count == 0)
         {
             var reason = report.VictimsReadable
@@ -69,11 +106,41 @@ internal sealed class OomKillMonitor(
             : $"OOM kill on {serverName}: {string.Join(", ", victims)}.";
     }
 
-    private async Task RaiseAsync(Server server, OomKillReportDto report, long newKills, CancellationToken ct)
+    private static string Describe(OomKillDetail kill)
+    {
+        var who = $"{kill.Process} (pid {kill.Pid})";
+        var memory = MemorySuffix(kill);
+        var cause = kill.Kind switch
+        {
+            OomKillKind.Cgroup when kill.Container is not null => $"container memory limit reached ({kill.Container})",
+            OomKillKind.Cgroup when kill.Cgroup is not null => $"cgroup memory limit reached ({kill.Cgroup})",
+            OomKillKind.Cgroup => "cgroup memory limit reached",
+            OomKillKind.Global => "server out of memory",
+            OomKillKind.Cpuset or OomKillKind.MemoryPolicy => "out of memory in a restricted zone (cpuset or memory policy)",
+            _ => null
+        };
+        return cause is null ? $"{who}{memory}" : $"{cause}: {who}{memory}";
+    }
+
+    private static string MemorySuffix(OomKillDetail kill)
+    {
+        if (kill.ResidentKb is not { } resident) return string.Empty;
+        var parts = new List<string>(3);
+        if (kill.AnonRssKb is { } anon) parts.Add($"anon {Mb(anon)} MB");
+        if (kill.FileRssKb is { } file) parts.Add($"file {Mb(file)} MB");
+        if (kill.ShmemRssKb is { } shmem) parts.Add($"shmem {Mb(shmem)} MB");
+        return $", {Mb(resident)} MB resident ({string.Join(", ", parts)})";
+
+        static string Mb(long kb) => OomKillDetail.Megabytes(kb).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private async Task RaiseAsync(
+        Server server, OomKillReportDto report, long newKills, IReadOnlyList<DockerContainerDto> containers, CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var victims = NameVictims(report, newKills);
-        var message = BuildMessage(server.Name, report, newKills, victims);
+        var kills = DescribeKills(report, newKills, containers);
+        var message = BuildMessage(server.Name, report, newKills, victims, kills);
         logger.LogWarning("OOM kill on server {ServerId}: {Message}", server.Id, message);
         await alertHub.Clients.Group(HubGroups.Alerts).SendAsync("AlertTriggered", new AlertTriggeredDto
         {
@@ -90,7 +157,7 @@ internal sealed class OomKillMonitor(
         if (domainEvents is not null)
         {
             await domainEvents.DispatchAsync(
-                new OomKillDetectedEvent(server.Id, server.Name, newKills, victims, message, now), ct)
+                new OomKillDetectedEvent(server.Id, server.Name, newKills, victims, message, now, kills), ct)
                 .ConfigureAwait(false);
         }
     }

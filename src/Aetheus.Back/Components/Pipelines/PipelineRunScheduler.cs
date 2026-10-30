@@ -265,7 +265,10 @@ public sealed class PipelineRunScheduler(
         if (collectionStatus != TaskExecutionStatus.Success)
         {
             await StopRunIfRefusedAsync(pipelineRunId, () => FailForMissingArtifactAsync(pipelineRunId,
-                $"Artifact collection ended with status {collectionStatus}; the run cannot publish its declared artifact.",
+                PipelineProblem.Of(
+                    PipelineProblemCodes.ArtifactCollectionFailed,
+                    $"Artifact collection ended with status {collectionStatus}; the run cannot publish its declared artifact.",
+                    ("status", collectionStatus)),
                 launcher, ct), ct).ConfigureAwait(false);
             return;
         }
@@ -280,9 +283,9 @@ public sealed class PipelineRunScheduler(
     /// (<see cref="IPipelineRepository.HasFailedArtifactCollectionAsync"/>).
     /// </summary>
     private async Task FailForMissingArtifactAsync(
-        int pipelineRunId, string warning, IPipelineChildRunLauncher launcher, CancellationToken ct)
+        int pipelineRunId, PipelineProblem warning, IPipelineChildRunLauncher launcher, CancellationToken ct)
     {
-        await repo.AppendRunWarningsAsync(pipelineRunId, [warning], ct).ConfigureAwait(false);
+        await repo.AppendRunWarningsAsync(pipelineRunId, [warning.ToStored()], ct).ConfigureAwait(false);
         // "Run to end": the missing artifact fails the run (HasFailedArtifactCollectionAsync keeps it
         // from ending Success) but stops nothing else; a step that needs the artifact fails by itself.
         if ((await repo.GetPipelineRunWithPipelineAsync(pipelineRunId, ct).ConfigureAwait(false))?.RunToEnd == true)
@@ -475,14 +478,14 @@ public sealed class PipelineRunScheduler(
         // run below, once we know a stage is still waiting to be dispatched. This is a sanctioned catch:
         // nobody is in front of a scheduling pass to read the refusal, a failed run has to carry it.
         (Dictionary<string, string> Resolved, HashSet<string> SecretKeys)? variables = null;
-        string? refusal = null;
+        BadRequestException? refusal = null;
         try
         {
             variables = await ResolveFullVariablesWithSecretsForRunAsync(run, definition, ct).ConfigureAwait(false);
         }
         catch (BadRequestException exception)
         {
-            refusal = exception.Message;
+            refusal = exception;
         }
 
         // A360-15: the run was loaded WITH its pipeline three lines above, so asking the database which
@@ -509,7 +512,7 @@ public sealed class PipelineRunScheduler(
             if (variables is not { } resolution)
             {
                 await StopRunRefusedByItsConfigurationAsync(
-                    pipelineRunId, pendingSteps, refusal ?? string.Empty, ct).ConfigureAwait(false);
+                    pipelineRunId, pendingSteps, refusal?.Message ?? string.Empty, refusal?.Problems, ct).ConfigureAwait(false);
                 return;
             }
 
@@ -565,7 +568,8 @@ public sealed class PipelineRunScheduler(
                 pipelineRunId, nameof(BadRequestException), exception.Message);
             if (!await finalizer.IsRunActiveAsync(pipelineRunId, ct).ConfigureAwait(false)) return;
             var pendingSteps = await repo.GetPendingStepRunsAsync(pipelineRunId, ct).ConfigureAwait(false);
-            await StopRunRefusedByItsConfigurationAsync(pipelineRunId, pendingSteps, exception.Message, ct).ConfigureAwait(false);
+            await StopRunRefusedByItsConfigurationAsync(
+                pipelineRunId, pendingSteps, exception.Message, exception.Problems, ct).ConfigureAwait(false);
         }
     }
 
@@ -577,7 +581,8 @@ public sealed class PipelineRunScheduler(
     /// A step of another stage still running ends first: its completion re-enters the scheduler and lands here.
     /// </summary>
     private async Task StopRunRefusedByItsConfigurationAsync(
-        int pipelineRunId, List<PipelineStepRun> pendingSteps, string refusal, CancellationToken ct)
+        int pipelineRunId, List<PipelineStepRun> pendingSteps, string refusal,
+        IReadOnlyList<ProblemDto>? refusalProblems, CancellationToken ct)
     {
         if (await repo.HasAnyRunningStepInRunAsync(pipelineRunId, ct).ConfigureAwait(false))
             return;
@@ -612,10 +617,14 @@ public sealed class PipelineRunScheduler(
             }
         }
 
-        await repo.AppendRunWarningsAsync(
-            pipelineRunId,
-            [cleanupRefused ? $"{reason} The workspace cleanup was not run: it needs the same variables." : reason],
-            ct).ConfigureAwait(false);
+        // A stored problem: the run page says it in the user's language, with the refusal's own problems
+        // (a library or vault gone) written where the sentence names {detail}.
+        var stopped = cleanupRefused
+            ? PipelineProblem.Of(
+                PipelineProblemCodes.RunStoppedStageNotDispatchedCleanupRefused,
+                $"{reason} The workspace cleanup was not run: it needs the same variables.", ("detail", refusal))
+            : PipelineProblem.Of(PipelineProblemCodes.RunStoppedStageNotDispatched, reason, ("detail", refusal));
+        await repo.AppendRunWarningsAsync(pipelineRunId, [stopped.ToStored(refusalProblems)], ct).ConfigureAwait(false);
         logger.LogWarning("Run {RunId} stopped: its next stage could not be dispatched. {Refusal}", pipelineRunId, refusal);
         // A cleanup now running or queued reports back and finalizes the run from its failed steps.
         if (!cleanupDispatched)
@@ -724,7 +733,12 @@ public sealed class PipelineRunScheduler(
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         logger.LogWarning("Run {RunId}: artifacts of stage {Stage} cannot be collected, producer {ServerId} unavailable",
             runId, stageDef.Name, producerServerId);
-        await FailForMissingArtifactAsync(runId, reason, launcher, ct).ConfigureAwait(false);
+        await FailForMissingArtifactAsync(
+            runId,
+            PipelineProblem.Of(
+                PipelineProblemCodes.ArtifactProducerUnavailable, reason,
+                ("stage", stageDef.Name), ("server", producerServerId)),
+            launcher, ct).ConfigureAwait(false);
     }
 
     // --- Variable resolution (delegated to the injected IPipelineVariableResolver) ---

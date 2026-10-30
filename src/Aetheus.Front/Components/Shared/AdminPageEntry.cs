@@ -14,9 +14,28 @@ internal static class AdminPageEntry
         NavigationManager navigation,
         BreadcrumbService breadcrumb,
         IStringLocalizer<AppStrings> text,
-        string titleKey)
+        string titleKey) =>
+        Enter(auth.IsAdmin, navigation, breadcrumb, text, titleKey);
+
+    /// <summary>
+    /// A page of the Administration section an organization's administrator also opens (owner decision
+    /// 2026-10-28): the site Admin, or a holder of <paramref name="organizationKey"/> on one of its
+    /// organizations. False when the caller was sent away.
+    /// </summary>
+    public static bool TryEnter(
+        AuthStateProvider auth,
+        PermissionService permissions,
+        string organizationKey,
+        NavigationManager navigation,
+        BreadcrumbService breadcrumb,
+        IStringLocalizer<AppStrings> text,
+        string titleKey) =>
+        Enter(auth.IsAdmin || permissions.Can(organizationKey), navigation, breadcrumb, text, titleKey);
+
+    private static bool Enter(
+        bool allowed, NavigationManager navigation, BreadcrumbService breadcrumb, IStringLocalizer<AppStrings> text, string titleKey)
     {
-        if (!auth.IsAdmin)
+        if (!allowed)
         {
             navigation.NavigateTo("/");
             return false;

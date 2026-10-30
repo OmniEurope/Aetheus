@@ -8,6 +8,7 @@ namespace Aetheus.Front.Components.Pipelines;
 /// the server accepted either.</summary>
 public partial class PipelineRunResumePanel
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -68,14 +69,18 @@ public partial class PipelineRunResumePanel
         _cancelling = true;
         try
         {
-            var status = await Api.Pipelines.CancelPipelineRunAsync(Run.Id);
-            if (status.Success)
-                Toast.Info("RunCancelled", "RunCancelledDetail");
-            else if (status.Forbidden)
-                Toast.Error("PipelineRunFailed", "PipelineRunForbidden");
-            else
-                Toast.Error("PipelineRunFailed", "Error");
-            await Changed.InvokeAsync();
+            var run = Run;
+            await Veil.RunAsync(async () =>
+            {
+                var status = await Api.Pipelines.CancelPipelineRunAsync(run.Id);
+                if (status.Success)
+                    Toast.Info("RunCancelled", "RunCancelledDetail");
+                else if (status.Forbidden)
+                    Toast.Error("PipelineRunFailed", "PipelineRunForbidden");
+                else
+                    Toast.Error("PipelineRunFailed", "Error");
+                await Changed.InvokeAsync();
+            });
         }
         finally
         {

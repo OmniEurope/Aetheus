@@ -22,6 +22,9 @@ public partial class ServerPatchSection
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
     private ServerSecurityUpdatesDto? _status;
+
+    // R-119: the task an upgrade check or apply queues is followed, and the section is veiled until it ends.
+    private ServerTaskFollower? _follower;
     private bool _loading = true;
     private bool _busy;
 
@@ -87,8 +90,11 @@ public partial class ServerPatchSection
         try
         {
             var taskId = await Api.Security.UpgradeSystemAsync(ServerId, dryRun);
-            if (taskId is not null)
+            if (taskId is { } queued)
+            {
+                _follower?.Follow(L[dryRun ? "PatchCheck" : "PatchApply"], queued);
                 Toast.Success(successKey, successKey);
+            }
             else
                 Toast.Error("PatchActionFailed", "PatchActionFailed");
         }
@@ -104,6 +110,9 @@ public partial class ServerPatchSection
 
     // Only the agent with the apt patch-manage grant can apply; unknown (null) is treated as not-yet-capable.
     private bool CanApply => PatchManagementAvailable == true;
+
+    // R-11: upgrading the system is a named permission (server.system.upgrade), an Organization Admin's by default.
+    private bool CanUpgrade => Permissions.Can(PermissionKeys.ServerSystemUpgrade, ServerId);
 
     // The dialog's request needs Server.Admin and a Linux host (the installer flags exist there only).
     private bool CanEnableComponent =>

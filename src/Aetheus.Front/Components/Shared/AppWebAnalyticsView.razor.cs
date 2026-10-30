@@ -44,19 +44,35 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
                 new(L["BrowserErrorsLast30Days"], _summary.BrowserErrorsLast30Days.ToString("N0"))
             ];
 
+    /// <summary>R-30: days shown at first; the user drags the chart range handles to choose another range.</summary>
+    internal const int DailyWindowDays = 7;
+
+    // Bound to the OE range navigator under the chart; null until the series is known.
+    private int? _rangeStart;
+    private int? _rangeEnd;
+
+    /// <summary>Index of the first day shown at first: the last <see cref="DailyWindowDays"/> days.</summary>
+    internal static int DefaultRangeStart(int count) => Math.Max(0, count - DailyWindowDays);
+
+    private void EnsureDefaultRange()
+    {
+        if (_rangeStart is null && _summary is { Daily.Count: > 0 } summary)
+            _rangeStart = DefaultRangeStart(summary.Daily.Count);
+    }
+
     protected IReadOnlyList<DailyPoint> DailyPoints =>
-        _summary?.Daily.Select(point =>
+        (_summary?.Daily ?? []).Select(point =>
             new DailyPoint(
                 DateDisplay.DayMonth(point.DayUtc),
                 point.UniqueVisitors,
-                point.PageViews)).ToList() ?? [];
+                point.PageViews)).ToList();
     protected IReadOnlyList<OmniChartPoint> DailyVisitorPoints => OmniChartData.Indexed(DailyPoints, point => point.UniqueVisitors, point => point.Label);
     protected IReadOnlyList<OmniChartPoint> DailyPageViewPoints => OmniChartData.Indexed(DailyPoints, point => point.PageViews, point => point.Label);
 
     /// <summary>A rounded top for the shared value axis (1, 2 or 5 times a power of ten, at least
     /// 5), so its ticks read as round counts instead of the raw daily maximum.</summary>
     protected double AudienceAxisMaximum => RoundedAxisMaximum(
-        DailyPoints.Select(point => (double)Math.Max(point.UniqueVisitors, point.PageViews)).DefaultIfEmpty(0).Max());
+        (_summary?.Daily ?? []).Select(point => (double)Math.Max(point.UniqueVisitors, point.PageViews)).DefaultIfEmpty(0).Max());
 
     internal static double RoundedAxisMaximum(double peak)
     {
@@ -81,6 +97,7 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
                 () => InvokeAsync(RefreshFromPushAsync));
         }
         await base.OnParametersSetAsync();
+        EnsureDefaultRange();
     }
 
     /// <summary>A push re-reads the summary in place: no loader, and a failed read keeps the figures on
@@ -94,6 +111,7 @@ public partial class AppWebAnalyticsView : AppWebAnalyticsSummaryViewBase, IAsyn
             if (AppId != appId || summary is null) return;
             _summary = summary;
             _loadFailed = false;
+            EnsureDefaultRange();
             StateHasChanged();
         }
         catch (HttpRequestException)

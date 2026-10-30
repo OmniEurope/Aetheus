@@ -108,6 +108,14 @@ public sealed class SettingsApi(HttpClient http) : ApiClientBase(http)
     public Task<ApiOutcome<DailyRecapSendResultDto, ApiError>> SendDailyRecapNowAsync(CancellationToken ct = default) =>
         PostForOutcomeAsync<DailyRecapSendResultDto, ApiError>("api/settings/daily-recap/send-now", null, ct);
 
+    /// <summary>Recette R-69: the lead times of the certificate expiry alerts.</summary>
+    public Task<CertificateAlertSettingsDto?> GetCertificateAlertsAsync(CancellationToken ct = default) =>
+        GetJsonAsync<CertificateAlertSettingsDto>("api/settings/certificate-alerts", ct);
+
+    public Task<ApiOutcome<CertificateAlertSettingsDto, ApiError>> UpdateCertificateAlertsAsync(
+        UpdateCertificateAlertSettingsRequest request, CancellationToken ct = default) =>
+        PutForOutcomeAsync<CertificateAlertSettingsDto, ApiError>("api/settings/certificate-alerts", request, ct);
+
     public async Task<List<SecretDto>> GetSecretsAsync()
     {
         return await Http.GetFromJsonAsync<List<SecretDto>>("api/settings/secrets", JsonOptions.Web) ?? [];

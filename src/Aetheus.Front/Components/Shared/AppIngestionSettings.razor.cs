@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Shared;
 
 public partial class AppIngestionSettings
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -155,17 +156,20 @@ public partial class AppIngestionSettings
         _busy = true;
         try
         {
-            var resp = await Api.Monitoring.GenerateIngestKeyAsync(AppId);
-            if (resp is not null)
+            await Veil.RunAsync(async () =>
             {
-                _generatedKey = resp.Key;
-                Toast.Success("Created", "IngestKeyGenerated");
-                await OnChanged.InvokeAsync();
-            }
-            else
-            {
-                Toast.Error("Error", "OperationFailed");
-            }
+                var resp = await Api.Monitoring.GenerateIngestKeyAsync(AppId);
+                if (resp is not null)
+                {
+                    _generatedKey = resp.Key;
+                    Toast.Success("Created", "IngestKeyGenerated");
+                    await OnChanged.InvokeAsync();
+                }
+                else
+                {
+                    Toast.Error("Error", "OperationFailed");
+                }
+            });
         }
         finally { _busy = false; }
     }
@@ -176,13 +180,16 @@ public partial class AppIngestionSettings
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Revoke"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Monitoring.RevokeIngestKeyAsync(AppId);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            _generatedKey = null;
-            Toast.Success("Deleted", "IngestKeyRevoked");
-            await OnChanged.InvokeAsync();
-        }
+            var status = await Api.Monitoring.RevokeIngestKeyAsync(AppId);
+            if (status.Success)
+            {
+                _generatedKey = null;
+                Toast.Success("Deleted", "IngestKeyRevoked");
+                await OnChanged.InvokeAsync();
+            }
+        });
     }
 
     private async Task CopyKeyAsync()

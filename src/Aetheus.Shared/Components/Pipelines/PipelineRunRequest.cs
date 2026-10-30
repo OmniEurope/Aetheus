@@ -29,4 +29,12 @@ public sealed record PipelineRunRequest
     /// allows it; a run launched this way that had a failure ends Failed and publishes no release.
     /// </summary>
     public bool RunToEnd { get; init; }
+
+    /// <summary>
+    /// R-72: deploy the release named by <c>candidateVersion</c> despite what the quality gate holds
+    /// against it (no grade, a grade below the threshold, a rejection). Never skips the artifact check:
+    /// a release without a kept artifact is still refused. Requires Write on the project, on top of the
+    /// rights of a launch, and is recorded on the run and in the audit log. Approval stages still apply.
+    /// </summary>
+    public bool GateOverride { get; init; }
 }

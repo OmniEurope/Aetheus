@@ -37,7 +37,7 @@ public class ServerPortsentryRkhunterTests : BunitContext
     }
 
     [Fact]
-    public void Portsentry_Installed_RendersStatusAndBlockedCount()
+    public void Portsentry_Installed_ShowsTheModeInWords_NotTheNormalState()
     {
         _handler.SetJsonResponse("api/servers/7/portsentry/whitelist",
             new PaginatedResult<PortsentryWhitelistIpDto>
@@ -60,8 +60,10 @@ public class ServerPortsentryRkhunterTests : BunitContext
             .Add(x => x.Ps, ps));
 
         Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
-        Assert.Contains("Installed", cut.Markup);
-        Assert.Contains("v1.2", cut.Markup);
+        // Installed, running and the version are not repeated in the header (R-120 rule; the version is in the title).
+        Assert.DoesNotContain("Installed", cut.FindAll(".omni-badge").Select(b => b.TextContent.Trim()));
+        Assert.DoesNotContain("v1.2", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("PortsentryMode_atcp", cut.Markup, StringComparison.Ordinal);
     }
 
     // SITE-FUNC-PORTSENTRY-001: the agent sends DateTime.MinValue when the blocked file has no date; the row

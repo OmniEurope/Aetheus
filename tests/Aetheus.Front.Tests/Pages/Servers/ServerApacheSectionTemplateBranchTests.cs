@@ -79,10 +79,11 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
     // ── TEST 1: Apache running → shows version and PID (lines 8-15) ──────────
 
     [Fact]
-    public void Template_ApacheRunning_ShowsVersionAndPid()
+    public void Template_ApacheRunning_ShowsPidButNoVersion()
     {
         var cut = RenderApache(BuildServer(isRunning: true, version: "2.4.57", pid: 1337));
-        Assert.Contains("2.4.57", cut.Markup);
+        // R-120: the version is in the page title, not in the status line; the PID stays.
+        Assert.DoesNotContain("2.4.57", cut.Markup);
         Assert.Contains("1337", cut.Markup);
     }
 
@@ -131,7 +132,7 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
 
     // ── TEST 6: Module type "static" → Light badge (line 176-178) ────────────
     // The Modules tab is not the active tab in bUnit, so module markup is not rendered.
-    // We verify via FilteredModules that the data is wired correctly.
+    // We verify via the Apache data that the data is wired correctly.
 
     [Fact]
     public void Template_StaticModule_LightBadge()
@@ -141,9 +142,9 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
             new() { Name = "core_module", Type = "static", IsEnabled = true }
         };
         var cut = RenderApache(BuildServer(modules: modules));
-        // Verify FilteredModules contains the expected module (covers the template data path)
-        var filteredProp = typeof(ServerApacheSection).GetProperty("FilteredModules", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var filtered = (List<ApacheModuleDto>)filteredProp.GetValue(cut.Instance)!;
+        // Verify the Apache modules contain the expected module (covers the template data path)
+        var filteredProp = typeof(ServerApacheSection).GetProperty("Apache", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var filtered = ((ApacheDataDto)filteredProp.GetValue(cut.Instance)!).Modules;
         Assert.Single(filtered);
         Assert.Equal("core_module", filtered[0].Name);
         Assert.Equal("static", filtered[0].Type);
@@ -160,8 +161,8 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
             new() { Name = "ssl_module", Type = "shared", IsEnabled = true }
         };
         var cut = RenderApache(BuildServer(modules: modules));
-        var filteredProp = typeof(ServerApacheSection).GetProperty("FilteredModules", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var filtered = (List<ApacheModuleDto>)filteredProp.GetValue(cut.Instance)!;
+        var filteredProp = typeof(ServerApacheSection).GetProperty("Apache", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var filtered = ((ApacheDataDto)filteredProp.GetValue(cut.Instance)!).Modules;
         Assert.Single(filtered);
         Assert.Equal("ssl_module", filtered[0].Name);
         Assert.True(filtered[0].IsEnabled);
@@ -178,8 +179,8 @@ public class ServerApacheSectionTemplateBranchTests : BunitContext
             new() { Name = "rewrite_module", Type = "shared", IsEnabled = false }
         };
         var cut = RenderApache(BuildServer(modules: modules));
-        var filteredProp = typeof(ServerApacheSection).GetProperty("FilteredModules", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var filtered = (List<ApacheModuleDto>)filteredProp.GetValue(cut.Instance)!;
+        var filteredProp = typeof(ServerApacheSection).GetProperty("Apache", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var filtered = ((ApacheDataDto)filteredProp.GetValue(cut.Instance)!).Modules;
         Assert.Single(filtered);
         Assert.Equal("rewrite_module", filtered[0].Name);
         Assert.False(filtered[0].IsEnabled);

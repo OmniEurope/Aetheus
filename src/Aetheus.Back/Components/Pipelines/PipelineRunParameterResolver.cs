@@ -42,9 +42,9 @@ public sealed class PipelineRunParameterResolver(
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(preparation);
-        if (!PipelineParameterResolver.TryResolve(
+        if (!PipelineParameterResolver.TryResolveProblems(
                 preparation.Definition.Parameters, parameters, out var effectiveParameters, out var errors))
-            throw new BadRequestException(string.Join(" ", errors));
+            throw PipelineProblem.Refusal(errors);
 
         var organizationId = await repo.GetPipelineOrganizationIdAsync(preparation.PipelineId, ct)
             .ConfigureAwait(false) ?? 0;

@@ -12,6 +12,11 @@ public sealed record ProjectDto
     public int? InternalRepositoryId { get; init; }
     public string? DefaultBranch { get; init; }
     public ProjectStatus Status { get; init; }
+
+    /// <summary>Recette R-51 (ADR-058): set while the project is deleted but something it deployed is still on a
+    /// server (« Suppression à terminer »): unusable until its cleanup is relaunched to the end.</summary>
+    public DateTime? DeletionRequestedAt { get; init; }
+
     public List<string> Tags { get; init; } = [];
     public int PipelineCount { get; init; }
     public int OrganizationId { get; init; }
@@ -65,6 +70,11 @@ public sealed record ProjectDetailDto
     public string? RepositoryUrl { get; init; }
     public string? DefaultBranch { get; init; }
     public ProjectStatus Status { get; init; }
+
+    /// <summary>Recette R-51 (ADR-058): set while the project is deleted but something it deployed is still on a
+    /// server (« Suppression à terminer »): unusable until its cleanup is relaunched to the end.</summary>
+    public DateTime? DeletionRequestedAt { get; init; }
+
     public List<string> Tags { get; init; } = [];
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }

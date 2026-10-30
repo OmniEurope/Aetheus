@@ -54,7 +54,7 @@ public sealed class ProductionEnvSampleRepairTests
         var git = Substitute.For<IGitLightService>();
         git.GetRepositoriesAsync(ProjectId, Arg.Any<CancellationToken>()).Returns([]);
         _sut = new PipelineProductionSetupService(
-            _pipelines, git, _libraries, vaults, ports, _configuration, _audit,
+            _pipelines, git, _libraries, vaults, ports, _configuration, _audit, Substitute.For<IPipelineSetupServerRepository>(),
             NullLogger<PipelineProductionSetupService>.Instance);
         _pipelines.GetProjectNameAsync(ProjectId, Arg.Any<CancellationToken>()).Returns("Wordmorrow");
         _libraries.GetLibrariesAsync(Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())

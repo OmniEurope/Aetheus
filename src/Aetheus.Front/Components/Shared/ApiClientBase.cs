@@ -134,7 +134,7 @@ public abstract class ApiClientBase(HttpClient http)
 
 
     protected async Task<ApiOutcome<TValue, TError>> SendForOutcomeAsync<TValue, TError>(
-        HttpMethod method, string url, object? body, CancellationToken ct)
+        HttpMethod method, string url, object? body, CancellationToken ct, bool callerHandlesEveryError = false)
         where TValue : class
         where TError : class
     {
@@ -142,6 +142,7 @@ public abstract class ApiClientBase(HttpClient http)
         if (body is not null) request.Content = JsonContent.Create(body, body.GetType());
         // The caller shows a 400 itself from ErrorMessage: the global notifier must not add a second toast.
         request.Options.Set(ErrorNotificationHandler.CallerHandlesBadRequest, true);
+        if (callerHandlesEveryError) request.Options.Set(ErrorNotificationHandler.CallerHandlesErrors, true);
         using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
 
         if (response.IsSuccessStatusCode)
@@ -155,6 +156,8 @@ public abstract class ApiClientBase(HttpClient http)
             // The reason is read from the body itself, so a refusal written by the error middleware
             // ({ message }), a ProblemDetails or plain text reads as well as the typed DTO.
             var message = ApiErrorText.Read(payload);
+            // A refused launch also states its reason as codes, which the caller says in the user's language.
+            var problems = ApiErrorText.ReadProblems(payload);
             try
             {
                 return new(
@@ -162,13 +165,14 @@ public abstract class ApiClientBase(HttpClient http)
                     JsonSerializer.Deserialize<TError>(payload, JsonOptions.Web),
                     false,
                     response.StatusCode,
-                    message);
+                    message)
+                { ErrorProblems = problems };
             }
             catch (JsonException)
             {
                 // Some legacy endpoints return a JSON string or plain text while the success path
                 // expects a domain validation DTO: no typed error, but the reason is still carried.
-                return new(null, null, false, response.StatusCode, message);
+                return new(null, null, false, response.StatusCode, message) { ErrorProblems = problems };
             }
         }
 
@@ -235,6 +239,14 @@ public abstract class ApiClientBase(HttpClient http)
             ["sortDescending"] = sortDescending.ToString().ToLowerInvariant()
         };
 
+
+    /// <summary>The Administration section's organization switcher choice (owner decision 2026-10-28); no
+    /// choice leaves the query as it was.</summary>
+    protected static void AddOrganization(Dictionary<string, string?> query, int? organizationId)
+    {
+        if (organizationId is { } organization)
+            query["organizationId"] = organization.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     protected static Dictionary<string, string?> PageQuery(int page, int pageSize, string? search = null)
     {

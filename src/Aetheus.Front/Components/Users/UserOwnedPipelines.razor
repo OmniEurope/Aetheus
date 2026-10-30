@@ -8,7 +8,9 @@
     }
     else
     {
-        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+        @* R-14: the hint row and the grid are separated by this stack's gap, not by margins. *@
+        <OmniStack>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 omni-u-text-muted">@L["OwnedPipelinesHint"]</OmniText>
             @if (_owned.Count > 0)
             {
@@ -30,9 +32,12 @@
                             <PipelineOwnerBadge OwnerUsername="@p.OwnerUsername" OwnerInactive="@p.OwnerInactive" />
                         </Template>
                     </OmniDataGridColumn>
-                    <OmniDataGridColumn TItem="PipelineOwnershipDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+                    <OmniDataGridColumn TItem="PipelineOwnershipDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >
+                        <Template Context="p"><EntityNameLink Kind="EntityNameKind.Project" Id="p.ProjectId" Name="@p.ProjectName" /></Template>
+                    </OmniDataGridColumn>
                 </Columns>
             </OmniDataGrid>
         }
+        </OmniStack>
     }
 </OmniCard>

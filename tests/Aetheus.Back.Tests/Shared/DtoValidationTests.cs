@@ -68,11 +68,22 @@ public class DtoValidationTests
     [Theory]
     [InlineData("elevenchars", false)]
     [InlineData("twelve-chars", true)]
-    public void CreateUserRequest_EnforcesSharedPasswordMinimum(string password, bool valid)
+    public void CompletePasswordSetupRequest_EnforcesSharedPasswordMinimum(string password, bool valid)
     {
-        var errors = Validate(new CreateUserRequest { Username = "operator", Password = password });
+        var errors = Validate(new CompletePasswordSetupRequest { Token = "token", NewPassword = password });
 
-        Assert.Equal(valid, !errors.Any(e => e.MemberNames.Contains(nameof(CreateUserRequest.Password))));
+        Assert.Equal(valid, !errors.Any(e => e.MemberNames.Contains(nameof(CompletePasswordSetupRequest.NewPassword))));
+    }
+
+    [Theory]
+    [InlineData("someone@example.com", true)]
+    [InlineData("not-an-address", false)]
+    [InlineData("", false)]
+    public void RequestPasswordResetRequest_RequiresAnAddress(string email, bool valid)
+    {
+        var errors = Validate(new RequestPasswordResetRequest { Email = email });
+
+        Assert.Equal(valid, errors.Count == 0);
     }
 
     [Theory]

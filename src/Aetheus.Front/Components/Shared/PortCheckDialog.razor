@@ -7,18 +7,16 @@
 
     @if (ServerId is null)
     {
-        <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="port-check-server">@L["Server"]</OmniLabel>
+        <OmniFormField Label="@L["Server"]" For="port-check-server" Required="true" Class="omni-u-w-100">
             <OmniDropDown Id="port-check-server" name="port-check-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.Id, item => item.Name))" @bind-Value="_selectedServerId" Filterable="true"
                 Placeholder="@L["Server"]" Class="w-100" />
-        </OmniStack>
+        </OmniFormField>
     }
 
-    <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="port-check-ports">@L["PortsToCheck"]</OmniLabel>
+    <OmniFormField Label="@L["PortsToCheck"]" For="port-check-ports" Required="true" Class="omni-u-w-100">
         <OmniTextBox Id="port-check-ports" @bind-Value="_portsInput" maxlength="300" Class="w-100"
             Placeholder="10041, 10042" />
-    </OmniStack>
+    </OmniFormField>
 
     @if (_error is not null)
     {

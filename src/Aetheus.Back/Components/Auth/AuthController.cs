@@ -45,6 +45,51 @@ public class AuthController(
         return Ok(result);
     }
 
+    /// <summary>R-14: the person who received a welcome mail chooses their password with its single-use token.
+    /// One refusal for an unknown, spent or expired token alike, so the answer reveals nothing.</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("login")]
+    [HttpPost("password-setup")]
+    public async Task<IActionResult> CompletePasswordSetup(
+        [FromBody] CompletePasswordSetupRequest request, [FromServices] IPasswordSetupService passwordSetup, CancellationToken ct)
+    {
+        if (await passwordSetup.CompleteAsync(request, ct))
+            return NoContent();
+        return BadRequest(new ApiError
+        {
+            Code = PasswordSetupErrorCodes.InvalidOrExpired,
+            Message = "This link is not valid: it was already used, it expired, or the account is no longer active."
+        });
+    }
+
+    /// <summary>R-14 "forgotten password": always the same 202, whether an active account holds the address
+    /// or not; the mail, if any, is sent in the background (rate-limited per address and per IP).</summary>
+    [AllowAnonymous]
+    [EnableRateLimiting("password-reset")]
+    [HttpPost("password-reset")]
+    public IActionResult RequestPasswordReset(
+        [FromBody] RequestPasswordResetRequest request, [FromServices] IPasswordSetupService passwordSetup)
+    {
+        passwordSetup.RequestReset(request.Email);
+        return Accepted();
+    }
+
+    /// <summary>R-14: an administrator sends the account a new set-password link (previous unused links voided).</summary>
+    [Authorize(Roles = "Admin")]
+    [EnableRateLimiting("password-link")]
+    [HttpPost("users/{id:int}/password-link")]
+    public async Task<ActionResult<WelcomeMailResultDto>> SendPasswordLink(
+        int id, [FromServices] IPasswordSetupService passwordSetup, CancellationToken ct)
+    {
+        var result = await passwordSetup.SendAdminLinkAsync(id, ct);
+        if (result is null)
+            return StatusCode(StatusCodes.Status429TooManyRequests, new ApiError
+            {
+                Message = $"This account was already sent {PasswordSetupService.MaxAdminLinksPerHour} links within the hour; nothing was sent."
+            });
+        return Ok(result);
+    }
+
     [Authorize(Roles = "Admin")]
     [HttpPost("registration-tokens")]
     public async Task<ActionResult<RegistrationTokenDto>> CreateRegistrationToken(

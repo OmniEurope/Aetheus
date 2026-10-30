@@ -15,6 +15,7 @@ public class UserEditTests : BunitContext
     public UserEditTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        _handler.SetOrganizations();
     }
 
     private void SetupRoles(params string[] roles) =>
@@ -45,18 +46,6 @@ public class UserEditTests : BunitContext
             ]
         });
         _handler.SetJsonResponse("api/users", new UserDto { Id = id, Username = "testuser" });
-    }
-
-    [Fact]
-    public void NewUser_RendersEmptyForm()
-    {
-        SetupRoles("Admin", "Viewer");
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, null));
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-
-        // New-user mode pages through available roles but never fetches a user detail.
-        Assert.Contains(_handler.Requests, r => r.Url.Contains("api/roles"));
-        Assert.DoesNotContain(_handler.Requests, r => r.Url.Contains("/effective-permissions"));
     }
 
     [Fact]
@@ -162,7 +151,12 @@ public class UserEditTests : BunitContext
         var request = Assert.Single(_handler.RequestDetails, request =>
             request.Method == "PUT" && request.Url.Contains("api/users/1"));
         Assert.Contains("\"Admin\"", request.Body);
-        cut.WaitForAssertion(() => Assert.Contains("Saved", roleCard.TextContent));
+        // R-41: no "Saving" or "Saved" text in the card; the success toast confirms, the veil class is gone once saved.
+        cut.WaitForAssertion(() => Assert.Contains(Services.Toasts(),
+            message => message.Severity == OmniSeverity.Success && message.Detail == "UserSaved"));
+        Assert.DoesNotContain("Saving", roleCard.TextContent);
+        Assert.DoesNotContain("Saved", roleCard.TextContent);
+        Assert.DoesNotContain("iam-autosave-busy", cut.Find(".iam-role-assignment-card").ClassName);
     }
 
     [Fact]
@@ -202,8 +196,6 @@ public class UserEditTests : BunitContext
             .GetValue(cut.Instance)!;
         var roles = (List<string>)model.GetType().GetProperty("Roles")!.GetValue(model)!;
         Assert.Equal(["Viewer", "Admin"], roles);
-        Assert.True((bool)typeof(UserEdit).GetField("_rolesSaved", BindingFlags.NonPublic | BindingFlags.Instance)!
-            .GetValue(cut.Instance)!);
         Assert.Contains(Services.Toasts(),
             message => message.Severity == OmniSeverity.Warning
                        && message.Detail == "UserRolesSavedPermissionRefreshUnauthorized");
@@ -244,22 +236,6 @@ public class UserEditTests : BunitContext
     }
 
     // --- OnSubmit ---
-
-    [Fact]
-    public async Task OnSubmit_NewUser_ShortPassword_ShowsError()
-    {
-        SetupRoles("Viewer");
-        var cut = Render<UserEdit>(p => p.Add(x => x.Id, null));
-
-        var model = typeof(UserEdit).GetField("_model", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        model.GetType().GetProperty("Password")!.SetValue(model, "ab");
-
-        var method = typeof(UserEdit).GetMethod("OnSubmit", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        await (Task)method.Invoke(cut.Instance, [])!;
-
-        // A < 6 char password fails the length guard: the create POST is never sent.
-        Assert.DoesNotContain(_handler.Requests, r => r.Method == "POST" && r.Url.Contains("api/users"));
-    }
 
     [Fact]
     public async Task OnSubmit_ExistingUser_UpdatesUser()
@@ -525,6 +501,59 @@ public class UserEditTests : BunitContext
         await delete;
 
         Assert.DoesNotContain(_handler.Requests, r => r.Method == "DELETE");
+    }
+
+    // --- R-14: send a new set-password link ---
+
+    private async Task<IRenderedComponent<UserEdit>> SendLinkAsync()
+    {
+        SetupMocks();
+        var cut = Render<UserEdit>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => DisplayedUser(cut) is not null);
+        await cut.InvokeAsync(() => (Task)typeof(UserEdit).GetMethod("OnSendPasswordLink", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(cut.Instance, [])!);
+        return cut;
+    }
+
+    private static T? Field<T>(IRenderedComponent<UserEdit> cut, string name) =>
+        (T?)typeof(UserEdit).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance);
+
+    [Fact]
+    public async Task SendPasswordLink_ASentMail_PostsForTheUser_AndToastsSuccess()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/auth/users/1/password-link",
+            new WelcomeMailResultDto { Status = WelcomeMailStatus.Sent, To = "test@example.com" });
+
+        var cut = await SendLinkAsync();
+
+        Assert.Contains(_handler.Requests, r => r.Method == "POST" && r.Url.EndsWith("api/auth/users/1/password-link", StringComparison.Ordinal));
+        Assert.Equal(WelcomeMailStatus.Sent, Field<WelcomeMailResultDto>(cut, "_linkResult")!.Status);
+        Assert.Contains(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success && toast.Detail == "PasswordLinkMailSent");
+    }
+
+    [Fact]
+    public async Task SendPasswordLink_AMailThatDidNotLeave_IsKept_AndNeverToastedAsSuccess()
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/auth/users/1/password-link",
+            new WelcomeMailResultDto { Status = WelcomeMailStatus.Failed, To = "test@example.com", Message = "554 relay refused" });
+
+        var cut = await SendLinkAsync();
+
+        Assert.Equal(WelcomeMailStatus.Failed, Field<WelcomeMailResultDto>(cut, "_linkResult")!.Status);
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success);
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.TooManyRequests, "SendPasswordLinkTooMany")]
+    [InlineData(System.Net.HttpStatusCode.Conflict, "SendPasswordLinkRefused")]
+    public async Task SendPasswordLink_ARefusal_SaysWhy(System.Net.HttpStatusCode status, string message)
+    {
+        _handler.SetJsonResponse(HttpMethod.Post, "api/auth/users/1/password-link", new ApiError { Message = "refused" }, status);
+
+        var cut = await SendLinkAsync();
+
+        Assert.Null(Field<WelcomeMailResultDto>(cut, "_linkResult"));
+        Assert.Equal(message, Field<string>(cut, "_linkError"));
+        Assert.DoesNotContain(Services.Toasts(), toast => toast.Severity == OmniSeverity.Success);
     }
 
     // --- OnChangePassword ---

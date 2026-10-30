@@ -41,6 +41,29 @@ public sealed class PipelineRunLauncherTests : BunitContext
         Assert.DoesNotContain(handler.Requests, request => request.Url.Contains("api/pipelines/5/runs", StringComparison.Ordinal));
     }
 
+    /// <summary>R-35: the click is acknowledged at once ("Lancement en cours"), before the slow repository reads of
+    /// the parameters, the preflight and the trigger; the confirmation follows when the run exists.</summary>
+    [Fact]
+    public async Task LaunchAsync_AcknowledgesTheClickBeforeTheConfirmation()
+    {
+        handler.SetJsonResponse("api/pipelines/5/preflight", new PipelinePreflightDto());
+        handler.SetJsonResponse("api/pipelines/5/parameters", new List<PipelineRunParameterDto>());
+        handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/5/run", new PipelineRunDto { Id = 9, PipelineId = 5 });
+        var launcher = new PipelineRunLauncher(
+            Services.GetRequiredService<ApiClient>(),
+            Services.GetRequiredService<PipelineRunGate>(),
+            Services.GetRequiredService<PipelineRunDialogCoordinator>(),
+            Services.GetRequiredService<NavigationManager>(),
+            Services.GetRequiredService<NotifyHelper>(),
+            Services.GetRequiredService<IStringLocalizer<AppStrings>>())
+        { OpenLaunchedRun = false };
+
+        await launcher.LaunchAsync(5, sourceBranch: null);
+
+        var details = Services.Toasts().Select(message => message.Detail).ToList();
+        Assert.Equal(["PipelineLaunching", "PipelineTriggered"], details);
+    }
+
     [Fact]
     public async Task LaunchAsync_TriggerRefusal_SurfacesServerReasonInsteadOfGenericMessage()
     {
@@ -114,6 +137,45 @@ public sealed class PipelineRunLauncherTests : BunitContext
         var notification = Assert.Single(Services.Toasts());
         Assert.Equal(OmniSeverity.Danger, notification.Severity);
         Assert.Contains("Port 8080 is taken.", notification.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-47, the production incident of 2026-10-25: clicking Run on a pipeline whose YAML the API
+    /// refuses to read (400 on the parameters) did nothing, in silence. Through the real notifier chain the
+    /// user now gets exactly one danger notification with the API's reason, and nothing is previewed or run.</summary>
+    [Fact]
+    public async Task LaunchAsync_ParametersRefusedWithAReason_ShowsExactlyOneToastAndRunsNothing()
+    {
+        handler.SetRawResponse(
+            HttpMethod.Get,
+            "api/pipelines/5/parameters",
+            """{"message":"The pipeline YAML is invalid: While scanning a plain scalar value, found invalid mapping.","correlationId":"0HN7:00000001"}""",
+            "application/json",
+            HttpStatusCode.BadRequest);
+        var toast = Services.GetRequiredService<NotifyHelper>();
+        var localizer = Services.GetRequiredService<IStringLocalizer<AppStrings>>();
+        using var notifier = new ErrorNotificationHandler(toast, localizer) { InnerHandler = handler };
+        using var http = new HttpClient(notifier, disposeHandler: false) { BaseAddress = new Uri("http://test/") };
+        var api = new ApiClient(http);
+        var launcher = new PipelineRunLauncher(
+            api,
+            Services.GetRequiredService<PipelineRunGate>(),
+            new PipelineRunDialogCoordinator(
+                api, Services.GetRequiredService<OmniDialogService>(), toast, localizer),
+            Services.GetRequiredService<NavigationManager>(),
+            toast,
+            localizer);
+
+        var result = await launcher.LaunchAsync(5, sourceBranch: null);
+
+        Assert.Null(result);
+        // The click is acknowledged (R-35), then exactly one danger notification carries the reason.
+        var toasts = Services.Toasts().ToList();
+        Assert.Equal(2, toasts.Count);
+        Assert.Contains(toasts, message => message.Severity == OmniSeverity.Info);
+        var notification = Assert.Single(toasts, message => message.Severity == OmniSeverity.Danger);
+        Assert.Contains("The pipeline YAML is invalid: While scanning", notification.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(handler.Requests, request => request.Method == "POST" && request.Url.EndsWith("/run", StringComparison.Ordinal));
+        Assert.DoesNotContain(handler.Requests, request => request.Url.Contains("preflight", StringComparison.Ordinal));
     }
 
     [Theory]

@@ -23,7 +23,12 @@ public static class GitModuleExtensions
         services.AddScoped<IGitLightCliService, GitLightCliService>();
         services.AddScoped<GitBranchProtectionService>();
         services.AddScoped<IGitLightService, GitLightService>();
+        services.AddScoped<IGitDevelopBranchProvisioner, GitDevelopBranchProvisioner>();
         services.AddScoped<IGitCommitRecorder, GitCommitRecorder>();
+        // The push that creates a repository's default branch is its first commit (R-76).
+        services.AddScoped<
+            Services.DomainEvents.IDomainEventHandler<Events.GitPushProcessedEvent>,
+            GitDevelopBranchPushHandler>();
         services.AddScoped<GitFilterValuesService>();
         services.AddScoped<GitArchiveService>();
         services.AddScoped<IGitSmartHttpService, GitSmartHttpService>();

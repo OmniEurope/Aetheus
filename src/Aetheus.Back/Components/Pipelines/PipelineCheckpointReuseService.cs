@@ -321,7 +321,10 @@ public sealed class PipelineCheckpointReuseService(
         stepRun.TriggeredRunId = checkpointRunId;
         stepRun.OutputVariablesJson = outputs.Count == 0 ? null : JsonSerializer.Serialize(outputs);
         await repo.AppendRunWarningsAsync(currentParent.Id,
-            [$"Checkpoint reused: pipeline '{targetName}', run #{checkpointRunId}, {artifactCount} verified artifact(s), source run #{sourceParentRunId}."], ct)
+            [PipelineProblem.Of(
+                PipelineProblemCodes.CheckpointReused,
+                $"Checkpoint reused: pipeline '{targetName}', run #{checkpointRunId}, {artifactCount} verified artifact(s), source run #{sourceParentRunId}.",
+                ("pipeline", targetName), ("run", checkpointRunId), ("artifacts", artifactCount), ("source", sourceParentRunId)).ToStored()], ct)
             .ConfigureAwait(false);
         await audit.LogAsync("PipelineCheckpointReused", "PipelineRun", currentParent.Id,
             $"{targetName} | checkpoint={checkpointRunId} | source={sourceParentRunId} | artifacts={artifactCount}", ct)

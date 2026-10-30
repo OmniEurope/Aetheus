@@ -13,6 +13,24 @@ public sealed record PipelineRunsSummary(
     int? LatestGradeRunId = null,
     int? LastSuccessRunId = null)
 {
+    /// <summary>The runs the pipeline page and the run page both summarise (the first page of the pipeline's runs), so the
+    /// two pages show the same figures (R-43).</summary>
+    public const int SummaryPageSize = 25;
+
+    /// <summary>The summary of the pipeline's first page of runs, null when it cannot be read.</summary>
+    public static async Task<PipelineRunsSummary?> LoadAsync(ApiClient api, int pipelineId)
+    {
+        try
+        {
+            var page = await api.Pipelines.GetPipelineRunsPagedAsync(pipelineId, 1, SummaryPageSize);
+            return Create(page.Items);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
     public static PipelineRunsSummary Create(IReadOnlyList<PipelineRunDto> runs)
     {
         var finished = runs.Where(run => run.CompletedAt is not null).ToList();

@@ -13,11 +13,7 @@
     {
         <OmniAlert Severity="OmniSeverity.Danger" Title="@L["Error"]">@_error</OmniAlert>
     }
-    @if (_loading)
-    {
-        <AetheusLoader />
-    }
-    else if (_owned.Count > 0)
+    @if (!_loading && _owned.Count > 0)
     {
         <OmniAlert Severity="OmniSeverity.Warning" Title="@string.Format(L["UserOwnsPipelinesTitle"].Value, Username, _owned.Count)">
             <OmniStack Gap="OmniSpacing.XSmall">

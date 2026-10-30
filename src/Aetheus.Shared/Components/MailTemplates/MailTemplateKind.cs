@@ -16,5 +16,16 @@ public enum MailTemplateKind
     NotificationEvent = 2,
 
     /// <summary>The daily recap sent to its recipients.</summary>
-    DailyRecap = 3
+    DailyRecap = 3,
+
+    /// <summary>The welcome mail of an account an administrator created, or a new link an administrator sent:
+    /// a link to choose its password (R-14).</summary>
+    UserWelcome = 4,
+
+    /// <summary>The "forgotten password" mail: a one-hour link to choose a new password (R-14).</summary>
+    PasswordReset = 5,
+
+    /// <summary>The mail telling a person they newly hold the site Admin role: given through the user or role
+    /// administration, or by the bootstrap of the configured administrator address.</summary>
+    SiteAdminGranted = 6
 }

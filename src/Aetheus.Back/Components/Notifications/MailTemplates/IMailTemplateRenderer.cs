@@ -23,4 +23,12 @@ public interface IMailTemplateRenderer
     /// </summary>
     Task<OmniMailRenderResult> RenderAsync(
         MailTemplateKind kind, MailTemplateData data, MailRecipientStyle style, CancellationToken ct = default);
+
+    /// <summary>
+    /// As above, for a mail about a resource of <paramref name="organizationId"/>: the organization's own
+    /// version of the kind comes first, then the platform's, then the default. A null organization is the
+    /// form above.
+    /// </summary>
+    Task<OmniMailRenderResult> RenderAsync(
+        MailTemplateKind kind, MailTemplateData data, MailRecipientStyle style, int? organizationId, CancellationToken ct = default);
 }

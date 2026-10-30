@@ -86,7 +86,9 @@ public sealed class StepStatusBadgeTests : BunitContext
         var badge = RenderFor(new PipelineStepRunDto { Status = TaskExecutionStatus.Cancelled }).Find(".omni-badge");
 
         Assert.Equal("Enum_TaskExecutionStatus_Cancelled", badge.TextContent.Trim());
-        Assert.Null(badge.QuerySelector(".omni-icon"));
+        // A text badge always carries an icon (badge rule of 2026-10-25): the cancellation one, not the skipped one.
+        Assert.Equal(OmniIconName.Prohibit, PipelineRunFormatting.StepBadgeIcon(new PipelineStepRunDto { Status = TaskExecutionStatus.Cancelled }));
+        Assert.NotNull(badge.QuerySelector(".omni-icon"));
         Assert.Null(badge.GetAttribute("title"));
     }
 
@@ -133,6 +135,8 @@ public sealed class StepStatusBadgeTests : BunitContext
         var badge = RenderFor(new PipelineStepRunDto { Status = TaskExecutionStatus.Success }).Find(".omni-badge");
 
         Assert.Contains("omni-badge--success", badge.ClassName, StringComparison.Ordinal);
+        // Seen on the local instance: the step list showed « SUCCÈS » without an icon after the badge rule.
+        Assert.NotNull(badge.QuerySelector(".omni-icon"));
         Assert.Null(badge.GetAttribute("title"));
     }
 

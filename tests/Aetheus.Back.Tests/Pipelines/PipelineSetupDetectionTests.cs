@@ -50,13 +50,14 @@ public sealed class PipelineSetupDetectionTests
     }
 
     private PipelineSetupReadinessService BuildSut() => new(
-        _templates, _repo, _git, _gitRepositories, _resolver, _requirements,
+        _templates, _repo, _git, _gitRepositories, _resolver, _requirements, Substitute.For<IProjectConfigRepositoryService>(),
         Substitute.For<ILogger<PipelineSetupReadinessService>>());
 
     private void Templates(params (int Id, string Name, string Variable)[] templates)
     {
-        _templates.GetTemplatesAsync(Arg.Any<CancellationToken>()).Returns(
-            templates.Select(item => new PipelineTemplateSummaryDto { Id = item.Id, Name = item.Name, Version = 1 }).ToList());
+        foreach (var item in templates)
+            _repo.FindSharedTemplateByNameAsync(item.Name, Arg.Any<CancellationToken>())
+                .Returns(new Aetheus.Back.Data.Entities.PipelineTemplate { Id = item.Id, Name = item.Name });
         foreach (var item in templates)
             _templates.GetTemplateAsync(item.Id, Arg.Any<CancellationToken>())
                 .Returns(new PipelineTemplateDto { Id = item.Id, Name = item.Name, YamlContent = TemplateYaml(item.Name, item.Variable) });

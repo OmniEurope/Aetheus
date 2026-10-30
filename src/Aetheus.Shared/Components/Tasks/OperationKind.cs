@@ -41,6 +41,36 @@ public enum OperationKind
     /// </summary>
     DockerBuildImage = 106,
 
+    // R-119: the rest of the Docker page's changes, once plain shell strings that carried no kind, so the agent
+    // did not know they changed its cached Docker inventory. They need the docker.manage software
+    // capability (<c>AgentCapabilities.DockerManagement</c>): an agent that predates them never claims them.
+
+    /// <summary><c>docker rm &lt;container&gt;</c>.</summary>
+    DockerRemoveContainer = 107,
+
+    /// <summary><c>docker rmi &lt;image&gt;</c>; the target is an image ID or a <c>sha256:</c> digest.</summary>
+    DockerRemoveImage = 108,
+
+    /// <summary><c>docker update --cpus=.. --memory=..m &lt;container&gt;</c>. The limits travel in
+    /// <c>AETHEUS_DOCKER_CPUS</c> (decimal, invariant culture) and <c>AETHEUS_DOCKER_MEMORY_MB</c> (integer), at
+    /// least one of them; the agent validates both before building the argv.</summary>
+    DockerUpdateResources = 109,
+
+    /// <summary><c>docker compose -p &lt;stack&gt; up -d</c> on a stack already known to Docker (no file sent,
+    /// unlike <see cref="DockerComposeUp"/>).</summary>
+    DockerComposeProjectUp = 110,
+
+    /// <summary><c>docker compose -p &lt;stack&gt; down</c>.</summary>
+    DockerComposeProjectDown = 111,
+
+    /// <summary><c>docker compose -p &lt;stack&gt; restart</c>.</summary>
+    DockerComposeProjectRestart = 112,
+
+    /// <summary>Prunes what the target lists, comma-separated, in this order: <c>containers</c>
+    /// (<c>docker container prune -f</c>), <c>images</c> (<c>docker image prune -af</c>), <c>volumes</c>
+    /// (<c>docker volume prune -f</c>); the first failure stops the rest.</summary>
+    DockerPrune = 113,
+
     // systemd / service
     ServiceStart = 200,
     ServiceStop = 201,
@@ -173,6 +203,20 @@ public enum OperationKind
     /// the result. Target is the site filename.</summary>
     ApacheDeleteSite = 314,
 
+    // R-119: the Apache modules grid, once an `a2enmod ... && systemctl restart apache2` shell string the agent ran
+    // without root. They need the apache.modules software capability (<c>AgentCapabilities.ApacheModules</c>),
+    // published only with the aetheus-apache grant: an agent that predates them never claims them.
+
+    /// <summary><c>sudo -n aetheus-apache-module enable</c>, the module name on stdin: the root-owned helper
+    /// re-validates it, runs <c>a2enmod</c>, the configuration test and <c>systemctl restart apache2.service</c>, and
+    /// disables the module again when either fails. Target is the module name
+    /// (<c>OperationTargetValidator.ApacheModuleNameRegex</c>).</summary>
+    ApacheEnableModule = 315,
+
+    /// <summary>Same as <see cref="ApacheEnableModule"/> with <c>a2dismod</c>; the module is enabled again when the
+    /// configuration test or the restart fails.</summary>
+    ApacheDisableModule = 316,
+
     /// <summary>type: certbot - obtain/install an HTTPS certificate for one or more domains via a
     /// root-owned controlled-sudo helper (<c>sudo -n /usr/local/lib/aetheus/aetheus-certbot-issue</c>,
     /// which re-validates the domains then runs <c>certbot certonly --apache</c>). When ACME validation
@@ -215,6 +259,13 @@ public enum OperationKind
     RkhunterScan = 350,        // sudo aetheus-rkhunter check (helper runs rkhunter --check --skip-keypress --nocolors --report-warnings-only)
     RkhunterUpdate = 351,      // sudo aetheus-rkhunter update (rkhunter --update --nocolors)
     RkhunterPropupd = 352,     // sudo aetheus-rkhunter propupd (rkhunter --propupd --nocolors)
+
+    /// <summary>R-119: installs RKHunter (<c>sudo -n apt-get install -y rkhunter</c> through the aetheus-package grant),
+    /// updates its data and builds the file baseline (<c>aetheus-rkhunter update</c>, <c>propupd</c>), then, when
+    /// <c>AETHEUS_RKHUNTER_MAIL_ON_WARNING</c> holds an address, writes it as MAIL-ON-WARNING
+    /// (<c>aetheus-rkhunter mail-on-warning</c>, the address on stdin). Target <c>"-"</c>. Needs the rkhunter.setup
+    /// software capability, published only with both grants.</summary>
+    RkhunterSetup = 353,
 
     // Agent self-management
     /// <summary>
@@ -416,6 +467,22 @@ public enum OperationKind
     /// <summary>Scan the host's listening TCP ports on demand and report them as <c>Observed</c>
     /// reservations. Target is empty. Requires the <c>ports.observe</c> capability.</summary>
     PortsObserve = 570,
+
+    // Recette R-97 (ADR-058): what a project deployed on a server, found and removed when the project is
+    // deleted. Target is the project id; the identity (Compose projects, hosts, state directories, backup
+    // policies) travels base64-encoded in AETHEUS_PROJECT_RESOURCES_B64 (ProjectServerResourceSpec).
+    /// <summary>Lists, without changing anything, the containers, volumes and networks labelled with the
+    /// project's Compose projects, the virtual host files and certificates of its hosts, its state directories
+    /// and backup archive directories, one <c>RESOURCE</c> line each (ProjectServerResourceOutput).</summary>
+    ProjectResourcesDiscover = 590,
+
+    /// <summary>Removes exactly the resources the user confirmed (the spec's <c>Remove</c> list), each checked
+    /// again against the identity, and prints <c>REMOVED</c>, <c>ABSENT</c>, <c>FAILED</c> or <c>NOTLISTED</c> per
+    /// resource: containers by <c>docker rm -f</c>, volumes and networks by <c>docker volume rm</c> and
+    /// <c>docker network rm</c> (argv), virtual hosts through the site operations (disable, delete, configtest,
+    /// reload), certificates through the certbot manage helper (<c>delete</c>), state and backup directories by
+    /// a confined recursive delete.</summary>
+    ProjectResourcesRemove = 591,
 
     // Pipeline artifacts & releases
     /// <summary>
@@ -669,5 +736,19 @@ public enum OperationKind
     /// newest file under <c>{installPath}/logs/</c> directly (read access via the teamspeak group) -
     /// replaces the dead <c>tail ... | sort | tail</c> shell builder. Handled by
     /// <c>TeamspeakGracefulRestartOperationExecutor</c>.</summary>
-    TeamspeakGetLogs = 703
+    TeamspeakGetLogs = 703,
+
+    // R-119: the TeamSpeak start/stop/restart buttons, once `systemctl ... teamspeak3` shell strings run without root.
+    // The agent finds the installed unit (teamspeak3.service, the one teamspeak-setup writes, else teamspeak.service)
+    // and runs <c>sudo -n /bin/systemctl &lt;verb&gt; &lt;unit&gt;</c> through the argv-exact aetheus-teamspeak grant.
+    // Target <c>"-"</c>. They need the teamspeak.control software capability, published only with that grant.
+
+    /// <summary><c>systemctl start</c> of the TeamSpeak unit.</summary>
+    TeamspeakStart = 704,
+
+    /// <summary><c>systemctl stop</c> of the TeamSpeak unit.</summary>
+    TeamspeakStop = 705,
+
+    /// <summary><c>systemctl restart</c> of the TeamSpeak unit.</summary>
+    TeamspeakRestart = 706
 }

@@ -6,10 +6,16 @@ public class User
     public int Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public string? Email { get; set; }
+    /// <summary>The sign-in identifier (PLAN-003): required, stored normalized (<c>UserEmail.Normalize</c>) and
+    /// unique. The database refuses a missing or blank one (NOT NULL and <c>CK_Users_Email_NotBlank</c>).</summary>
+    public string Email { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Last time the account authenticated (a login or a token refresh); null until the first one
+    /// after this column was added. Not bumped by an administrator editing the account (that is UpdatedAt).</summary>
+    public DateTime? LastActivityAt { get; set; }
 
     /// <summary>
     /// When true, the user is forced onto a mandatory password-change screen at login and cannot
@@ -37,6 +43,7 @@ public class User
 
     // Navigation
     public List<UserRole> UserRoles { get; set; } = [];
+    public List<UserOrganizationRole> OrganizationRoles { get; set; } = [];
     public List<ExternalLogin> ExternalLogins { get; set; } = [];
     public List<RefreshToken> RefreshTokens { get; set; } = [];
 }

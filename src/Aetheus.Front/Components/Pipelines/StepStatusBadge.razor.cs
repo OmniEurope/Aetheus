@@ -23,13 +23,6 @@ public partial class StepStatusBadge
     /// says it did not block); only the advisory badge beside it stays an outline.</summary>
     private static OmniFill BadgeFill => OmniFill.Solid;
 
-    /// <summary>The badge's icon fragment, null when the status has no icon (OE's Icon is a fragment).</summary>
-    private RenderFragment? StatusIcon => PipelineRunFormatting.StepStatusIcon(Step) is { } icon
-        ? builder =>
-        {
-            builder.OpenComponent<OmniIcon>(0);
-            builder.AddComponentParameter(1, nameof(OmniIcon.Name), icon);
-            builder.CloseComponent();
-        }
-    : null;
+    /// <summary>The badge's icon fragment: every status has one (OE's Icon is a fragment).</summary>
+    private RenderFragment StatusIcon => BadgeIcon.Of(PipelineRunFormatting.StepBadgeIcon(Step));
 }

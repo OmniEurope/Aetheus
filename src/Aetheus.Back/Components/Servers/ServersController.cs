@@ -298,7 +298,9 @@ public class ServersController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await lifecycle.GetServerProjectsAsync(id, request, ct));
+        // R-46: a server can carry projects of another organization; list only the readable ones.
+        var readable = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Project, Permission.Read, ct);
+        return Ok(await lifecycle.GetServerProjectsAsync(id, request, ct, readable));
     }
 
     [HttpGet("{id:int}/pipelines")]
@@ -307,7 +309,7 @@ public class ServersController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await lifecycle.GetServerPipelinesAsync(id, ct));
+        return Ok(await ReadableAsync(await lifecycle.GetServerPipelinesAsync(id, ct), ResourceType.Pipeline, item => item.Id, ct));
     }
 
     [HttpGet("{id:int}/variable-libraries")]
@@ -316,7 +318,7 @@ public class ServersController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await lifecycle.GetServerVariableLibrariesAsync(id, ct));
+        return Ok(await ReadableAsync(await lifecycle.GetServerVariableLibrariesAsync(id, ct), ResourceType.VariableLibrary, item => item.Id, ct));
     }
 
     [HttpGet("{id:int}/vaults")]
@@ -325,13 +327,13 @@ public class ServersController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Read, ct))
             return Forbid();
 
-        return Ok(await lifecycle.GetServerVaultsAsync(id, ct));
+        return Ok(await ReadableAsync(await lifecycle.GetServerVaultsAsync(id, ct), ResourceType.Vault, item => item.Id, ct));
     }
 
     [HttpPost("{id:int}/services/action")]
     public async Task<IActionResult> ExecuteServiceAction(int id, [FromBody] ServiceActionRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerServicesControl, id, ct))
             return Forbid();
 
         var taskId = await services.ExecuteServiceActionAsync(id, request, ct);
@@ -341,7 +343,7 @@ public class ServersController(
     [HttpPost("{id:int}/services/install")]
     public async Task<IActionResult> InstallService(int id, [FromBody] ServiceInstallRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerServicesControl, id, ct))
             return Forbid();
 
         var taskId = await services.InstallServiceAsync(id, request.ServiceName, ct);
@@ -351,7 +353,7 @@ public class ServersController(
     [HttpPost("{id:int}/services/uninstall")]
     public async Task<IActionResult> UninstallService(int id, [FromBody] ServiceInstallRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerServicesControl, id, ct))
             return Forbid();
 
         var taskId = await services.UninstallServiceAsync(id, request.ServiceName, ct);
@@ -384,7 +386,7 @@ public class ServersController(
     [HttpPost("{id:int}/system/upgrade")]
     public async Task<IActionResult> UpgradeSystem(int id, [FromBody] SystemUpgradeRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerSystemUpgrade, id, ct))
             return Forbid();
 
         var taskId = await services.UpgradeSystemAsync(id, request.DryRun, ct);
@@ -404,7 +406,7 @@ public class ServersController(
     [HttpPost("{id:int}/firewall/allow")]
     public async Task<IActionResult> FirewallAllow(int id, [FromBody] FirewallRuleRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerFirewallManage, id, ct))
             return Forbid();
         return Ok(new ServiceTaskResponse { TaskId = await services.FirewallAllowAsync(id, request, ct) });
     }
@@ -412,7 +414,7 @@ public class ServersController(
     [HttpPost("{id:int}/firewall/deny")]
     public async Task<IActionResult> FirewallDeny(int id, [FromBody] FirewallRuleRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerFirewallManage, id, ct))
             return Forbid();
         return Ok(new ServiceTaskResponse { TaskId = await services.FirewallDenyAsync(id, request, ct) });
     }
@@ -420,7 +422,7 @@ public class ServersController(
     [HttpPost("{id:int}/firewall/delete")]
     public async Task<IActionResult> FirewallDeleteRule(int id, [FromBody] FirewallRuleRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerFirewallManage, id, ct))
             return Forbid();
         return Ok(new ServiceTaskResponse { TaskId = await services.FirewallDeleteRuleAsync(id, request, ct) });
     }
@@ -428,7 +430,7 @@ public class ServersController(
     [HttpPost("{id:int}/firewall/toggle")]
     public async Task<IActionResult> FirewallToggle(int id, [FromBody] FirewallToggleRequest request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerFirewallManage, id, ct))
             return Forbid();
         return Ok(new ServiceTaskResponse { TaskId = await services.FirewallToggleAsync(id, request.Enabled, ct) });
     }
@@ -459,5 +461,16 @@ public class ServersController(
             return Forbid();
 
         return Ok(await lifecycle.GetServerLogsAsync(id, request, ct));
+    }
+
+    /// <summary>R-46: what a server is linked to may belong to another organization; keep only the
+    /// rows the caller can read.</summary>
+    private async Task<List<T>> ReadableAsync<T>(List<T> items, ResourceType type, Func<T, int> idOf, CancellationToken ct)
+    {
+        var readable = await authz.GetAccessibleResourceIdsAsync(User, type, Permission.Read, ct);
+        if (readable is null) return items;
+        // In memory, over rows already loaded: a set, not an EF query.
+        var readableIds = readable.ToHashSet();
+        return items.Where(item => readableIds.Contains(idOf(item))).ToList();
     }
 }

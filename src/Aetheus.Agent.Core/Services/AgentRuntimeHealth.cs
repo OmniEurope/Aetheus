@@ -42,16 +42,18 @@ public sealed class AgentRuntimeHealth(TimeProvider timeProvider)
     /// <summary>Completes when a beat has been asked for; consumes the request.</summary>
     internal Task WaitForHeartbeatRequestAsync(CancellationToken ct) => _heartbeatRequested.WaitAsync(ct);
 
-    // A mail operation has just changed the mail stack (certificate, OpenDKIM, domains,
-    // accounts...). The heartbeat drops its cached mail inventory before the next beat, instead of
-    // reporting the old one for up to SlowInventoryTtl.
-    private int _mailInventoryStale;
+    // Recette R-119: an operation (a mail change, an Apache site enabled or deleted...) has just changed what a
+    // cached inventory reports. The heartbeat drops that cached inventory before the next beat, so the page, and a
+    // reload, read the real state instead of the one collected up to SlowInventoryTtl ago.
+    private int _staleInventories;
 
-    /// <summary>Marks the cached mail inventory as outdated; the next beat collects it again.</summary>
-    public void InvalidateMailInventory() => Interlocked.Exchange(ref _mailInventoryStale, 1);
+    /// <summary>Marks the cached <paramref name="inventories"/> as outdated; the next beat collects them again.</summary>
+    public void InvalidateInventories(CachedInventory inventories) =>
+        Interlocked.Or(ref _staleInventories, (int)inventories);
 
-    /// <summary>True once per <see cref="InvalidateMailInventory"/>; consumes the mark.</summary>
-    internal bool ConsumeMailInventoryInvalidation() => Interlocked.Exchange(ref _mailInventoryStale, 0) == 1;
+    /// <summary>The inventories marked since the last call; consumes the marks.</summary>
+    internal CachedInventory ConsumeInventoryInvalidations() =>
+        (CachedInventory)Interlocked.Exchange(ref _staleInventories, 0);
 
     public void BeginTask() => Interlocked.Increment(ref _activeTaskCount);
 

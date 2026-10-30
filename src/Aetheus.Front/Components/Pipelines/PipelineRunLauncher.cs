@@ -14,18 +14,28 @@ internal sealed class PipelineRunLauncher(
     /// instead.</summary>
     public bool OpenLaunchedRun { get; init; } = true;
 
+    /// <summary>R-72: a launch that may deploy a release despite the quality gate, after the user confirms
+    /// every reason the gate has ("Redéployer cette version"). Off for any other launch.</summary>
+    public bool OfferGateOverride { get; init; }
+
     /// <summary>
     /// A plain launch: the declared parameters are taken at their defaults and no dialog opens, unless
     /// a required parameter has no default and the run genuinely cannot be built without an answer.
     /// </summary>
-    public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, string? sourceBranch)
+    public async Task<PipelineRunLaunchResult?> LaunchAsync(
+        int pipelineId, string? sourceBranch, IReadOnlyDictionary<string, string>? prefill = null)
     {
+        // R-35: reading the parameters, the preflight and the trigger each read the repository and take seconds;
+        // the click is acknowledged before any of them.
+        toast.Info("Running", "PipelineLaunching");
         // The parameters come first: the preview resolves the targets they name (the production server)
         // from them, and a required one nobody answered yet is not a warning to show beforehand.
-        var (proceed, parameters) = await dialogs.ResolveDefaultParametersAsync(pipelineId, sourceBranch);
+        var (proceed, parameters) = await dialogs.ResolveDefaultParametersAsync(pipelineId, sourceBranch, prefill);
         if (!proceed) return null;
-        if (!await runGate.ConfirmPreflightAsync(pipelineId, sourceBranch, parameters)) return null;
-        return await TriggerAsync(pipelineId, sourceBranch, parameters);
+        var consent = await runGate.ConfirmLaunchAsync(pipelineId, sourceBranch, parameters, OfferGateOverride);
+        if (consent == PipelineLaunchConsent.Refused) return null;
+        return await TriggerAsync(pipelineId, sourceBranch, parameters,
+            gateOverride: consent == PipelineLaunchConsent.ProceedDespiteGate);
     }
 
     /// <summary>
@@ -34,6 +44,7 @@ internal sealed class PipelineRunLauncher(
     /// </summary>
     public async Task<PipelineRunLaunchResult?> LaunchAsync(int pipelineId, PipelineLaunchChoice choice)
     {
+        toast.Info("Running", "PipelineLaunching");
         if (!await runGate.ConfirmPreflightAsync(pipelineId, choice.SourceBranch, choice.Parameters)) return null;
         return await TriggerAsync(pipelineId, choice.SourceBranch, choice.Parameters, choice.RunToEnd);
     }
@@ -43,9 +54,11 @@ internal sealed class PipelineRunLauncher(
     /// fixed its parameters), then opens the new run or reports why it was refused.
     /// </summary>
     public async Task<PipelineRunLaunchResult?> TriggerAsync(
-        int pipelineId, string? sourceBranch, Dictionary<string, string>? parameters, bool runToEnd = false)
+        int pipelineId, string? sourceBranch, Dictionary<string, string>? parameters, bool runToEnd = false,
+        bool gateOverride = false)
     {
-        var outcome = await api.Pipelines.TriggerPipelineRunAsync(pipelineId, parameters, sourceBranch, runToEnd: runToEnd);
+        var outcome = await api.Pipelines.TriggerPipelineRunAsync(
+            pipelineId, parameters, sourceBranch, runToEnd: runToEnd, gateOverride: gateOverride);
         if (outcome.Value is not null)
         {
             // Straight to the new run, in the SPA, unless the caller shows it where the user already is.
@@ -55,8 +68,8 @@ internal sealed class PipelineRunLauncher(
         }
 
         // Error payloads may omit or null the errors array; extract the refusal reason without
-        // assuming its shape.
-        var reason = outcome.ErrorMessage is { } refusal ? refusal
+        // assuming its shape. A refusal stated as problem codes is said in the user's language.
+        var reason = outcome.LocalizedErrorMessage(localizer) is { } refusal ? refusal
             : outcome.NotFound ? localizer["RunNotFound"].Value
             : outcome.StatusCode == System.Net.HttpStatusCode.Forbidden ? localizer["PipelineRunForbidden"].Value
             : localizer["PipelineRunFailedNoReason"].Value;

@@ -1102,7 +1102,7 @@
         },
         "error": {
           "kind": "Error",
-          "message": "dynamic-security summary belongs to another commit."
+          "message": "dynamic-security summary has a grade but names no commit."
         }
       }
     },

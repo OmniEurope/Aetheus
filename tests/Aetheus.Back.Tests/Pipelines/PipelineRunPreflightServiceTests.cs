@@ -64,7 +64,8 @@ public sealed class PipelineRunPreflightServiceTests
 
     private async Task<IReadOnlyList<string>> RunAsync(PipelineYamlDefinition definition, int? projectId = 7)
         => (await BuildSut().FindBlockingProblemsAsync(
-            definition, new Dictionary<string, string>(), organizationId: 3, projectId, CancellationToken.None)).Problems;
+            definition, new Dictionary<string, string>(), organizationId: 3, projectId, CancellationToken.None)).Problems
+            .Select(problem => problem.English).ToList();
 
     /// <summary>A registry with nothing to say: these tests are about the OTHER preflight checks, and an
     /// unconfigured substitute would return a null report instead of an empty one.</summary>
@@ -150,7 +151,9 @@ public sealed class PipelineRunPreflightServiceTests
             Definition(Stage("QA", agent: "linux-01", environment: "qa")),
             new Dictionary<string, string>(), organizationId: 3, projectId: 7, CancellationToken.None);
 
-        var problem = Assert.Single(outcome.Problems);
+        var found = Assert.Single(outcome.Problems);
+        Assert.Equal(PipelineProblemCodes.EnvironmentCheckRefuses, found.Code);
+        var problem = found.English;
         Assert.Contains("qa", problem, StringComparison.Ordinal);
     }
 
@@ -188,7 +191,7 @@ public sealed class PipelineRunPreflightServiceTests
         Assert.Empty(problems);
     }
 
-    private Task<PipelinePreflightOutcomeDto> RunWithVariablesAsync(
+    private Task<PipelinePreflightOutcome> RunWithVariablesAsync(
         PipelineYamlDefinition definition, params (string Key, string Value)[] variables)
         => BuildSut().FindBlockingProblemsAsync(
             definition,
@@ -237,7 +240,10 @@ public sealed class PipelineRunPreflightServiceTests
             Definition(CandidateStage("$(APPLICATION_CI_PIPELINE)")),
             ("APPLICATION_CI_PIPELINE", "aetheus-cii"));
 
-        var problem = Assert.Single(outcome.Problems);
+        var found = Assert.Single(outcome.Problems);
+        Assert.Equal(PipelineProblemCodes.ArtifactSourcePipelineMissing, found.Code);
+        Assert.Equal("aetheus-cii", found.Parameters["pipeline"]);
+        var problem = found.English;
         Assert.Contains("names pipeline 'aetheus-cii', which does not exist", problem, StringComparison.Ordinal);
         Assert.DoesNotContain("$(", problem, StringComparison.Ordinal);
     }
@@ -255,7 +261,7 @@ public sealed class PipelineRunPreflightServiceTests
             Definition(CandidateStage("aetheus-cii")),
             ("APPLICATION_CI_PIPELINE", "aetheus-ci"));
 
-        var problem = Assert.Single(outcome.Problems);
+        var problem = Assert.Single(outcome.Problems).English;
         Assert.Contains("names pipeline 'aetheus-cii', which does not exist", problem, StringComparison.Ordinal);
     }
 
@@ -297,7 +303,9 @@ public sealed class PipelineRunPreflightServiceTests
         var outcome = await RunWithVariablesAsync(definition);
 
         Assert.Empty(outcome.Problems);
-        var warning = Assert.Single(outcome.Warnings);
+        var warningProblem = Assert.Single(outcome.Warnings);
+        Assert.Equal(PipelineProblemCodes.ArtifactSourcePipelineKnownLater, warningProblem.Code);
+        var warning = warningProblem.English;
         Assert.Contains("$(SOURCE_PIPELINE)", warning, StringComparison.Ordinal);
         Assert.DoesNotContain(outcome.Checks, check => check.Kind == "pipeline-reference");
         await _repo.DidNotReceive().FindPipelineByNameAndProjectAsync(
@@ -322,7 +330,7 @@ public sealed class PipelineRunPreflightServiceTests
 
         Assert.Empty(waiting.Problems);
         Assert.Single(waiting.Warnings);
-        var problem = Assert.Single(defaulted.Problems);
+        var problem = Assert.Single(defaulted.Problems).English;
         Assert.Contains("names pipeline 'aetheus-cii'", problem, StringComparison.Ordinal);
     }
 

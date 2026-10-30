@@ -1,47 +1,52 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
 
-<div class="dry-run-dialog">
+@* R-14: the blocks of the dialog are separated only by this stack's gap; each title shares a tighter stack with its grid. *@
+<OmniStack Class="dry-run-dialog">
     @if (Result is not null)
     {
         @if (Result.Warnings.Count > 0)
         {
-            <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-lg">
+            <OmniAlert Severity="OmniSeverity.Warning">
                 @foreach (var warning in Result.Warnings)
                 {
-                    <div>@warning</div>
+                    <div>@LaunchProblemText.DescribeStored(warning, L)</div>
                 }
             </OmniAlert>
         }
 
-        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-sm">
-            @L["ResolvedVariables"] (@Result.ResolvedVariables.Count)
-        </OmniText>
+        <OmniStack Gap="OmniSpacing.Small">
+            <OmniText Element="OmniTextElement.Strong">
+                @L["ResolvedVariables"] (@Result.ResolvedVariables.Count)
+            </OmniText>
 
-        @if (Result.ResolvedVariables.Count > 0)
-        {
-            <OmniDataGrid Items="@Result.ResolvedVariables.ToList()" ExportTitle="@ExportContext.Title(L["ResolvedVariables"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>"
- Class="omni-u-mb-lg" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="12rem">
-                <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Key"]" Width="12.5rem" Filterable="true" />
-                    <OmniDataGridColumn TItem="KeyValuePair<string, string>" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true" />
-                </Columns>
-            </OmniDataGrid>
-        }
+            @if (Result.ResolvedVariables.Count > 0)
+            {
+                <OmniDataGrid Items="@Result.ResolvedVariables.ToList()" ExportTitle="@ExportContext.Title(L["ResolvedVariables"])" ExportFields="@ExportContext.Fields()" TItem="KeyValuePair<string, string>"
+ ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="12rem">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="KeyValuePair<string, string>" Property="Key" Title="@L["Key"]" Width="12.5rem" Filterable="true" />
+                        <OmniDataGridColumn TItem="KeyValuePair<string, string>" Property="Value" Truncate="true" Title="@L["Value"]" Filterable="true" />
+                    </Columns>
+                </OmniDataGrid>
+            }
+        </OmniStack>
 
         @foreach (var stage in Result.Stages)
         {
-            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-sm omni-u-mb-xs">@stage.StageName (@stage.Agent)</OmniHeading>
-            <OmniDataGrid Items="@stage.Steps" ExportTitle="@ExportContext.Title(stage.StageName)" ExportFields="@ExportContext.Fields()" TItem="DryRunStepDto" Class="omni-u-mb-sm" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
-                <Columns>
-                    <OmniDataGridColumn Frozen="true" TItem="DryRunStepDto" Property="StepName" Title="@L["Step"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="DryRunStepDto" Property="OriginalCommand" Truncate="true" Title="@L["OriginalCommand"]" Filterable="true" />
-                    <OmniDataGridColumn TItem="DryRunStepDto" Property="ResolvedCommand" Truncate="true" Title="@L["ResolvedCommand"]" Filterable="true" />
-                </Columns>
-            </OmniDataGrid>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@stage.StageName (@stage.Agent)</OmniHeading>
+                <OmniDataGrid Items="@stage.Steps" ExportTitle="@ExportContext.Title(stage.StageName)" ExportFields="@ExportContext.Fields()" TItem="DryRunStepDto" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+                    <Columns>
+                        <OmniDataGridColumn Frozen="true" TItem="DryRunStepDto" Property="StepName" Title="@L["Step"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="DryRunStepDto" Property="OriginalCommand" Truncate="true" Title="@L["OriginalCommand"]" Filterable="true" />
+                        <OmniDataGridColumn TItem="DryRunStepDto" Property="ResolvedCommand" Truncate="true" Title="@L["ResolvedCommand"]" Filterable="true" />
+                    </Columns>
+                </OmniDataGrid>
+            </OmniStack>
         }
     }
-    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Class="omni-u-mt-md" Gap="OmniSpacing.Large">
+    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Large">
         <Aetheus.Front.Components.Servers.DialogCloseButton />
     </OmniStack>
-</div>
+</OmniStack>

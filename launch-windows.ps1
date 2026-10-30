@@ -26,6 +26,9 @@
     Run backend unit tests only.
 .PARAMETER TestFront
     Run frontend unit tests only.
+.PARAMETER TestAgent
+    Run the agent-core unit tests only, in a Linux container of the pinned .NET SDK image (as the CI runs them),
+    never on the Windows host. Fails when Docker cannot run it; there is no host fallback.
 .PARAMETER TestIntegration
     Run integration tests only (Aetheus.Back.IntegrationTests on Testcontainers
     PostgreSQL - its own throwaway containers; the dev DB is never touched).
@@ -116,6 +119,7 @@
     .\launch-windows.ps1 -r          Reset DB + build + start servers
     .\launch-windows.ps1 -tb         Build + run backend tests + exit
     .\launch-windows.ps1 -tf         Build + run frontend tests + exit
+    .\launch-windows.ps1 -tg         Run the agent-core unit tests in a Linux container (as CI) + exit
     .\launch-windows.ps1 -ti         Build + run integration tests (Testcontainers) + exit
     .\launch-windows.ps1 -te         Build + run ALL E2E tests on an isolated dedicated DB (dev DB untouched) + exit
     .\launch-windows.ps1 -tec ?      Build + show E2E category picker, run selected + exit
@@ -123,7 +127,7 @@
     .\launch-windows.ps1 -tec 1,2,3  Build + run categories 1 + 2 + 3
     .\launch-windows.ps1 -tb -tf     Build + back + front tests + exit
     .\launch-windows.ps1 -t          Build + ALL unit tests (including observability packages) + exit
-    .\launch-windows.ps1 -ta         Build + EVERYTHING (unit + integration + E2E) + exit
+    .\launch-windows.ps1 -ta         Build + EVERYTHING (unit + integration + E2E, dev instance left running) + exit
     .\launch-windows.ps1 -c          Build + back + front tests + coverage report + exit
     .\launch-windows.ps1 -hr         Start servers with hot reload (dotnet watch)
     .\launch-windows.ps1 -mf         Start Backend + Frontend (default)
@@ -148,6 +152,7 @@ param(
     [Alias("ta")] [switch]$TestAll,
     [Alias("tb")] [switch]$TestBack,
     [Alias("tf")] [switch]$TestFront,
+    [Alias("tg")] [switch]$TestAgent,
     [Alias("ti")] [switch]$TestIntegration,
     [Alias("te")] [switch]$TestE2e,
     [Alias("tec")] [string[]]$TestE2eFilter,

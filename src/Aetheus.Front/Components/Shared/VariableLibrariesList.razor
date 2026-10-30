@@ -41,7 +41,9 @@
         @* Give the owning project a dedicated column so its name remains readable and sortable. *@
         @if (!IsProjectScope)
         {
-            <OmniDataGridColumn TItem="VariableLibraryDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="VariableLibraryDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" >
+                <Template Context="lib"><EntityNameLink Kind="EntityNameKind.Project" Id="lib.ProjectId" Name="@lib.ProjectName" /></Template>
+            </OmniDataGridColumn>
         }
         <OmniDataGridColumn TItem="VariableLibraryDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
         <OmniDataGridColumn TItem="VariableLibraryDto" Title="@L["UsedBy"]" Sortable="false" Filterable="false" ExportValue="@(lib => string.Join(", ", UsersOf(lib.Id)?.Select(user => user.Name) ?? []))">
@@ -50,7 +52,7 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="VariableLibraryDto" Property="EntryCount" Title="@L["Entries"]" Width="100px" TextAlign="OmniAlignment.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-        <OmniDataGridColumn TItem="VariableLibraryDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-        <OmniDataGridColumn TItem="VariableLibraryDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+        <OmniDataGridColumn TItem="VariableLibraryDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" />
+        <OmniDataGridColumn TItem="VariableLibraryDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" />
     </Columns>
 </AetheusDataGrid>

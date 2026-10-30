@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Text;
+using Aetheus.Shared.Components.Pipelines;
 
 namespace Aetheus.Front.Components.Pipelines;
 
 /// <summary>What the YAML of a generated pipeline is built from: the wizard's choices, already resolved
 /// (an option counts only when the type proposes it).</summary>
+/// <param name="SourceBranch">R-94: the branch every pipeline reads, written as <c>source_branch:</c>; null writes none, and
+/// the project's default branch then applies.</param>
+/// <param name="Languages">R-105: the languages the quality pipeline analyses, written as the stages left out for the ones
+/// not used; null writes none (the template's stages as they are).</param>
+/// <param name="LintSourceStage">The "Lint source" stage of the pinned quality template without its unused step
+/// (<see cref="PipelineSetupLanguages.RestatedLintSource"/>), needed when exactly one of Python and Java is used.</param>
+/// <param name="RunDeployAfterCandidate">R-72: the candidate starts the deployment pipeline created in the same pass
+/// (<c>on_success:</c>) only when this is true, which is the wizard's default.</param>
 internal sealed record PipelineSetupYamlInput(
     string Prefix,
     (bool Frontend, bool Backend, bool Database) Parts,
@@ -15,7 +24,11 @@ internal sealed record PipelineSetupYamlInput(
     bool Qa,
     bool QaExtended,
     bool SecurityHistory,
-    IReadOnlyCollection<string> CreatedSuffixes);
+    IReadOnlyCollection<string> CreatedSuffixes,
+    string? SourceBranch = null,
+    PipelineSetupLanguages? Languages = null,
+    string? LintSourceStage = null,
+    bool RunDeployAfterCandidate = true);
 
 /// <summary>
 /// Writes the YAML of a pipeline the setup wizard creates: <c>extends: template@version</c> and the
@@ -40,19 +53,42 @@ internal static class PipelineSetupYamlBuilder
         yaml.Append("name: ").Append(pipelineName).Append('\n');
         yaml.Append("extends: ").Append(templateName).Append('@').Append(templateVersion).Append('\n');
         yaml.Append("trigger: manual\n");
+        if (!string.IsNullOrWhiteSpace(input.SourceBranch))
+            yaml.Append("source_branch: \"").Append(Escape(input.SourceBranch)).Append("\"\n");
         var deployment = templateName is PipelineSetupRoles.DeployProdTemplate or PipelineSetupRoles.ReleaseFastTemplate
             ? production : null;
         AppendDeployServer(yaml, deployment);
+        AppendDeploymentChain(yaml, templateName, input);
         yaml.Append("variables:\n");
         foreach (var (key, value) in Variables(input).Concat(ProductionVariables(templateName, production)))
             yaml.Append("  ").Append(key).Append(": \"").Append(Escape(value)).Append("\"\n");
-        yaml.Append("stages: []");
+        yaml.Append(DeliveryTemplateNames.Is(templateName, DeliveryTemplateNames.Quality) && input.Languages is { } languages
+            ? languages.QualityStages(input.LintSourceStage)
+            : "stages: []");
         return yaml.ToString();
     }
 
+    /// <summary>R-72: a candidate that succeeds hands the release it published to the deployment pipeline the wizard
+    /// creates in the same pass, as <c>aetheus-candidate</c> does by hand. Only the candidate template carries it, and only
+    /// when that pipeline exists (a name written for a pipeline that does not exist would fail at the first success). The
+    /// deployment keeps its own approvals, so production still waits for them. The user decides it (user decision
+    /// 2026-10-25): the wizard's "Run the deployment after the candidate" option, ticked by default, writes nothing when
+    /// it is not.</summary>
+    private static void AppendDeploymentChain(StringBuilder yaml, string templateName, PipelineSetupYamlInput input)
+    {
+        if (!input.RunDeployAfterCandidate
+            || !DeliveryTemplateNames.Is(templateName, DeliveryTemplateNames.Candidate)
+            || !input.CreatedSuffixes.Contains(PipelineSetupRoles.DeployProd)) return;
+        yaml.Append("on_success:\n");
+        yaml.Append("  - pipeline: ").Append(input.Prefix).Append('-').Append(PipelineSetupRoles.DeployProd).Append('\n');
+        yaml.Append("    release: latest\n");
+    }
+
     /// <summary>R-21: the server the deployment runs on is the template's own parameter, written again here as a choice
-    /// among the project's servers, with the server of its production environment as default. With no server known
-    /// nothing is written: the template's parameter stays required, so the run asks for it before it starts.</summary>
+    /// among the project's servers, with the server of its production environment as default. The servers come from the
+    /// project and its environment, never from the Compose file (R-80), so they are written even when the repository
+    /// could not be read. With no server known nothing is written: the template's parameter stays required, so the
+    /// run asks for it before it starts.</summary>
     private static void AppendDeployServer(StringBuilder yaml, PipelineSetupProductionInput? production)
     {
         var servers = (production?.Servers ?? [])
@@ -84,13 +120,14 @@ internal static class PipelineSetupYamlBuilder
         if (production is null) yield break;
         if (templateName == PipelineSetupRoles.QaTemplate)
         {
-            yield return ("COMPOSE_FILE", production.ComposeFile);
+            if (!string.IsNullOrEmpty(production.ComposeFile)) yield return ("COMPOSE_FILE", production.ComposeFile);
             yield break;
         }
         if (templateName != PipelineSetupRoles.DeployProdTemplate) yield break;
-        yield return ("COMPOSE_FILE", production.ComposeFile);
-        yield return ("DEPLOY_STRATEGY", production.Strategy);
-        yield return ("DEPLOY_HAS_API", Flag(production.HasApi));
+        // Only what is known: the Compose file, the strategy and the API of a repository that was not read are not claimed.
+        if (!string.IsNullOrEmpty(production.ComposeFile)) yield return ("COMPOSE_FILE", production.ComposeFile);
+        if (!string.IsNullOrEmpty(production.Strategy)) yield return ("DEPLOY_STRATEGY", production.Strategy);
+        if (production.HasApi is { } hasApi) yield return ("DEPLOY_HAS_API", Flag(hasApi));
     }
 
     /// <summary>The value of a double-quoted YAML scalar: a name typed in the project (a server) never ends it early.</summary>

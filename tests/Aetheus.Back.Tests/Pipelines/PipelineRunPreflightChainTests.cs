@@ -118,7 +118,7 @@ public sealed class PipelineRunPreflightChainTests
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             organizationId: 3,
             projectId: 5,
-            TestContext.Current.CancellationToken)).Problems;
+            TestContext.Current.CancellationToken)).Problems.Select(problem => problem.English).ToList();
 
     private async Task<IReadOnlyList<PreflightCheckDto>> RecordedChecksAsync(PipelineYamlDefinition definition) =>
         (await BuildSut().FindBlockingProblemsAsync(
@@ -163,7 +163,9 @@ public sealed class PipelineRunPreflightChainTests
             projectId: 5,
             TestContext.Current.CancellationToken);
 
-        var problem = Assert.Single(outcome.Problems);
+        var found = Assert.Single(outcome.Problems);
+        Assert.Equal("aetheus-qa", found.Parameters[PipelineProblem.ChainParameter]);
+        var problem = found.English;
         Assert.StartsWith("aetheus-qa: ", problem, StringComparison.Ordinal);
         Assert.Contains("environment 'qa'", problem, StringComparison.Ordinal);
     }
@@ -185,6 +187,32 @@ public sealed class PipelineRunPreflightChainTests
         var problem = Assert.Single(problems);
         Assert.Contains("aetheus-deploy-prod", problem, StringComparison.Ordinal);
         Assert.Contains("PORT_FRONT_BLUE", problem, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-113: a child's refusal that states its own code keeps it, attributed to the child.</summary>
+    [Fact]
+    public async Task AChildRefusalWithACode_KeepsItsCode_AttributedToTheChild()
+    {
+        ChildExists("aetheus-deploy-prod", Child());
+        _variables.ResolveVariablesWithWarningsAsync(
+                Arg.Any<PipelineYamlDefinition>(), Arg.Any<int?>(), Arg.Any<Dictionary<string, string>?>(),
+                Arg.Any<CancellationToken>(), Arg.Any<int?>(), Arg.Any<int?>(), "aetheus-deploy-prod",
+                Arg.Any<int?>(), Arg.Any<bool>())
+            .Returns<Task<(Dictionary<string, string>, List<string>, HashSet<string>)>>(
+                _ => throw new BadRequestException(
+                    "Pipeline variable(s) could not be resolved: 'PORT_FRONT_BLUE' (referenced by BG_PORTS).",
+                    [new ProblemDto(PipelineProblemCodes.UnresolvedVariables, new() { ["names"] = "'PORT_FRONT_BLUE'" })]));
+
+        var problem = Assert.Single((await BuildSut().FindBlockingProblemsAsync(
+            Orchestrator("aetheus-deploy-prod"), new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            organizationId: 3, projectId: 5, TestContext.Current.CancellationToken)).Problems);
+
+        Assert.Equal(PipelineProblemCodes.UnresolvedVariables, problem.Code);
+        Assert.Equal("'PORT_FRONT_BLUE'", problem.Parameters["names"]);
+        Assert.Equal("aetheus-deploy-prod", problem.Parameters[PipelineProblem.ChainParameter]);
+        Assert.Equal(
+            "aetheus-deploy-prod: Pipeline variable(s) could not be resolved: 'PORT_FRONT_BLUE' (referenced by BG_PORTS).",
+            problem.English);
     }
 
     [Fact]
@@ -211,6 +239,44 @@ public sealed class PipelineRunPreflightChainTests
         var problems = await RunAsync(definition);
 
         Assert.Contains(problems, problem => problem.Contains("aetheus-deploy-prod", StringComparison.Ordinal));
+    }
+
+    /// <summary>R-23 (local run 2026-10-26): the wizard's deploy-prod targets <c>agent: ${{ parameters.deployServer }}</c>
+    /// with the production server as default. The candidate that chains to it was refused at launch, every stage of the
+    /// child reported "no online runner (requested agent: ${{ parameters.deployServer }})": the child's agent was looked
+    /// up with the expression itself instead of the value the child will run with.</summary>
+    [Fact]
+    public async Task AnOnSuccessTargetWhoseAgentIsAParameter_IsLookedUpWithTheParameterDefault()
+    {
+        _repo.FindCandidateTargetServerIdsAsync(
+                Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<OsType>(),
+                Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult<List<int>>(call.ArgAt<string?>(2) == "vpssim" ? [4] : []));
+        var child = Child(agent: "${{ parameters.deployServer }}") with
+        {
+            Parameters = [new PipelineTemplateParameterDefinition { Name = "deployServer", Type = "choice", Default = "vpssim", Required = true }]
+        };
+        ChildExists("w7-deploy-prod", child);
+        var definition = new PipelineYamlDefinition
+        {
+            Name = "w7-candidate",
+            OnSuccess = [new PipelineDownstreamTrigger { Pipeline = "w7-deploy-prod", Release = "latest" }],
+            Stages =
+            [
+                new PipelineStageDefinition
+                {
+                    Name = "Build", Agent = string.Empty,
+                    Steps = [new PipelineStepDefinition { Name = "build", Shell = "make" }]
+                }
+            ]
+        };
+
+        var problems = await RunAsync(definition);
+
+        Assert.Empty(problems);
+        await _repo.Received().FindCandidateTargetServerIdsAsync(
+            Arg.Any<string?>(), Arg.Any<string?>(), "vpssim", Arg.Any<OsType>(),
+            Arg.Any<int?>(), Arg.Any<bool>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Git;
 
 public partial class GitRepositories : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -336,16 +337,19 @@ public partial class GitRepositories : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var result = await Api.Git.DeleteGitRepoAsync(repo.Id);
-        if (result)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("Deleted", repo.Name);
-            await ResetAndReloadAsync();
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var result = await Api.Git.DeleteGitRepoAsync(repo.Id);
+            if (result)
+            {
+                Toast.Success("Deleted", repo.Name);
+                await ResetAndReloadAsync();
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private async Task ClearFilters()

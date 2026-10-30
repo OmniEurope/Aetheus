@@ -2,30 +2,34 @@
 @* The integrated mailbox of one account. Locked until the reader types the mailbox password (held
    by the backend in memory only); then folders, the messages of the chosen folder and the reading
    pane beside them. On a narrow screen the folders, the list and the message stack one above the other. *@
+@using Microsoft.AspNetCore.Components.Sections
+@if (Unlocked)
+{
+    @* Recette R-109 (rule 1 of R-30) after R3-52: one main action (Écrire) in the server page's header, on the
+       title line, the others in the menu beside it; the way back is that header's back button. *@
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => ComposeAsync(MailboxComposeMode.New))" Class="mailbox-compose"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["MailboxCompose"]</span></ChildContent></OmniButton>
+        <OmniOverflowMenu Label="@L["MoreActions"]" Class="mailbox-more-actions">
+            <OmniMenuItem OnClick="@RefreshAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Refresh"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@CreateFolderAsync" Disabled="@(!CanWrite)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("note_add")" /></Icon><ChildContent>@L["MailboxNewFolder"]</ChildContent></OmniMenuItem>
+            <OmniMenuItem OnClick="@LockAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon><ChildContent>@L["MailboxLock"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    </SectionContent>
+}
+
 <OmniStack Gap="OmniSpacing.Medium" Class="mailbox-view">
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Wrap="true" Class="mailbox-header">
-        @* STD-BTN detection 11: the way back is the zone's dismiss action (Back, Secondary), Compose its one main action. *@
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@BackToMail" Class="mailbox-back"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("arrow_back")" /></Icon><ChildContent><span>@L["Back"]</span></ChildContent></OmniButton>
+        @* The way back to the mail accounts is a link, not a button: the page header keeps its one main action. *@
+        <OmniLink Href="@($"/servers/{ServerId}/mail?tab=accounts")" Class="mailbox-back">@L["Back"]</OmniLink>
         <OmniText Element="OmniTextElement.Strong" Class="mailbox-address">@(_access?.Email ?? string.Empty)</OmniText>
         @if (_access is { IsUnlocked: true, UnlockedUntil: { } until })
         {
-            <OmniBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal">@string.Format(L["MailboxUnlockedUntil"], until.ToString("t"))</OmniBadge>
+            <NumberBadge Tone="OmniTone.Success" Fill="OmniFill.Tonal">@string.Format(L["MailboxUnlockedUntil"], until.ToString("t"))</NumberBadge>
         }
         @if (_access is { IsUnlocked: true, OpenedAsAdministrator: true })
         {
             @* Recette R1-41: the reader sees that this opening went through the administrator access (audited). *@
-            <OmniBadge Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="mailbox-admin-badge">@L["MailboxOpenedAsAdministrator"]</OmniBadge>
-        }
-        <div class="blade-content-spacer"></div>
-        @if (Unlocked)
-        {
-            @* Recette R3-52: one main action (Écrire), the others in the menu beside it. *@
-            <OmniButton Variant="OmniButtonVariant.Primary" Disabled="@(!CanWrite)" OnClick="@(() => ComposeAsync(MailboxComposeMode.New))" Class="mailbox-compose"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon><ChildContent><span>@L["MailboxCompose"]</span></ChildContent></OmniButton>
-            <OmniOverflowMenu Label="@L["MoreActions"]" Class="mailbox-more-actions">
-                <OmniMenuItem OnClick="@RefreshAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent>@L["Refresh"]</ChildContent></OmniMenuItem>
-                <OmniMenuItem OnClick="@CreateFolderAsync" Disabled="@(!CanWrite)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("note_add")" /></Icon><ChildContent>@L["MailboxNewFolder"]</ChildContent></OmniMenuItem>
-                <OmniMenuItem OnClick="@LockAsync"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon><ChildContent>@L["MailboxLock"]</ChildContent></OmniMenuItem>
-            </OmniOverflowMenu>
+            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Tonal" Class="mailbox-admin-badge">@L["MailboxOpenedAsAdministrator"]</OmniBadge>
         }
     </OmniStack>
 
@@ -60,7 +64,7 @@
                                 <Icon><OmniIcon Name="@MaterialIconMap.Resolve(FolderIcon(folder.Role))" /></Icon><ChildContent><span class="mailbox-folder__name">@FolderLabel(folder)</span>
                                 @if (folder.Unread > 0)
                                 {
-                                    <OmniBadge Tone="OmniTone.Accent">@folder.Unread</OmniBadge>
+                                    <NumberBadge Tone="OmniTone.Accent">@folder.Unread</NumberBadge>
                                 }</ChildContent>
                             </OmniButton>
                         </ItemTemplate>
@@ -86,7 +90,7 @@
                                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                                         @if (!m.IsRead)
                                         {
-                                            <OmniBadge Tone="OmniTone.Accent">@L["MailboxUnread"]</OmniBadge>
+                                            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Envelope))" Tone="OmniTone.Accent">@L["MailboxUnread"]</OmniBadge>
                                         }
                                         @if (m.HasAttachments)
                                         {

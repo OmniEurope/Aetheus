@@ -3,8 +3,14 @@
 @if (_package is not null)
 {
     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-mb-md">
-        @_package.Kind · @_package.Name
+        @L.Localize(_package.Kind) · @_package.Name
     </OmniText>
+    @* R-58: per-package anonymous reading, saved as soon as it changes; publication stays admin-only. *@
+    <OmniSettingsTile Title="@L["AnonymousDownload"]" Description="@L["AnonymousDownloadDescription"]" Class="omni-u-mb-md">
+        <OmniSwitch Value="@_package.AllowAnonymousDownload" ValueExpression="@(() => _package.AllowAnonymousDownload)"
+                    ValueChanged="@((bool value) => SetAnonymousDownloadAsync(value))" Disabled="@_savingAnonymousDownload"
+                    aria-label="@L["AnonymousDownload"]" />
+    </OmniSettingsTile>
 }
     <AetheusDataGrid @ref="_grid" IsLoading="@_loading" Data="@_package?.Versions" TItem="PackageRegistryVersionDto" Virtualize="true"
                   KeyProperty="Id" NewRowHighlight="@NewRowHighlight">
@@ -31,7 +37,7 @@
                 <Template Context="v">
                     @if (v.IsDeprecated)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["PackageVersionDeprecated"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["PackageVersionDeprecated"]</OmniBadge>
                     }
                     @* Warning orange: exception chosen by the user (R1-18), recorded in ButtonRoleColourGuardTests. *@
                     <OmniButton Variant="OmniButtonVariant.Warning" OnClick="@(() => ToggleDeprecatedAsync(v))" title="@(v.IsDeprecated ? L["Undeprecate"] : L["Deprecate"])" Label="@(v.IsDeprecated ? L["Undeprecate"] : L["Deprecate"])"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon></OmniButton>

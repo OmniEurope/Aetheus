@@ -70,7 +70,8 @@ public class PipelinesTemplatesTests : BunitContext
                 Version = 3,
                 UpdatedAt = new DateTime(2026, 8, 9, 10, 0, 0),
                 PipelineCount = 4,
-                LatestRunAt = new DateTime(2026, 8, 10, 8, 0, 0)
+                LatestRunAt = new DateTime(2026, 8, 10, 8, 0, 0),
+                CanEdit = true
             }
         });
 
@@ -108,7 +109,7 @@ public class PipelinesTemplatesTests : BunitContext
     {
         _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
         {
-            new() { Id = id, Name = name, Category = "CI", Version = 1 }
+            new() { Id = id, Name = name, Category = "CI", Version = 1, CanEdit = true }
         });
         var cut = Render<PipelineTemplates>();
         cut.WaitForState(() => cut.Markup.Contains(name, StringComparison.Ordinal));
@@ -166,6 +167,84 @@ public class PipelinesTemplatesTests : BunitContext
         Assert.EndsWith("/pipelines/new?templateId=9", nav.Uri, StringComparison.Ordinal);
     }
 
+    // A shared delivery template is read by every organization and changed by a site Admin only: the server
+    // says so with CanEdit, and the page shows it read-only instead of offering a save that returns 403.
+    [Theory]
+    [InlineData(true, "SharedTemplateReadOnlyNote")]
+    [InlineData(false, "ReadOnlyTemplateNote")]
+    public void TemplateEditPage_WhenTheServerSaysItCannotBeChanged_IsReadOnly(bool isShared, string expectedNote)
+    {
+        _handler.SetJsonResponse("api/pipelines/templates/3", new PipelineTemplateDto
+        {
+            Id = 3,
+            Name = "application-ci",
+            Category = "CI",
+            Version = 2,
+            YamlContent = "name: ci\nstages: []",
+            IsShared = isShared,
+            CanEdit = false
+        });
+
+        var cut = Render<PipelineTemplateEdit>(parameters => parameters.Add(component => component.Id, 3));
+        cut.WaitForAssertion(() => Assert.Contains(expectedNote, cut.Markup, StringComparison.Ordinal));
+
+        Assert.Empty(cut.FindAll("button[type=submit]"));
+        Assert.DoesNotContain("Save", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("input#ChangelogEntry"));
+        Assert.Empty(cut.FindComponents<MonacoEditor>());
+        Assert.Equal("name: ci\nstages: []", cut.FindComponent<OmniCodeViewer>().Instance.Code);
+        Assert.True(cut.Find("input#Category").HasAttribute("disabled"));
+        Assert.True(cut.Find("textarea#Description").HasAttribute("disabled"));
+        // Reading and using the template stay available.
+        Assert.Contains(cut.FindAll("button"), button => button.TextContent.Contains("UseTemplate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TemplateEditPage_WhenTheServerSaysItCanBeChanged_OffersTheSave()
+    {
+        _handler.SetJsonResponse("api/pipelines/templates/3", new PipelineTemplateDto
+        {
+            Id = 3,
+            Name = "own-ci",
+            Category = "CI",
+            Version = 1,
+            YamlContent = "name: ci\nstages: []",
+            CanEdit = true
+        });
+
+        var cut = Render<PipelineTemplateEdit>(parameters => parameters.Add(component => component.Id, 3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("button[type=submit]")));
+
+        Assert.NotEmpty(cut.FindAll("input#ChangelogEntry"));
+        Assert.Single(cut.FindComponents<MonacoEditor>());
+        Assert.Empty(cut.FindComponents<OmniCodeViewer>());
+        Assert.DoesNotContain("ReadOnlyTemplateNote", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TemplatesPage_ASharedTemplateTheUserCannotChange_OffersUseAndNoEditOrDelete()
+    {
+        _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
+        {
+            new() { Id = 3, Name = "application-ci", Version = 2, IsShared = true, CanEdit = false },
+            new() { Id = 4, Name = "own-ci", Version = 1, CanEdit = true }
+        });
+
+        var cut = Render<PipelineTemplates>();
+        cut.WaitForState(() => cut.Markup.Contains("own-ci", StringComparison.Ordinal));
+
+        var rows = cut.FindAll("tbody tr");
+        var shared = rows.Single(row => row.TextContent.Contains("application-ci", StringComparison.Ordinal));
+        var own = rows.Single(row => row.TextContent.Contains("own-ci", StringComparison.Ordinal));
+        Assert.Empty(shared.QuerySelectorAll("button[title=\"Edit\"]"));
+        Assert.Empty(shared.QuerySelectorAll("button[title=\"Delete\"]"));
+        Assert.NotEmpty(shared.QuerySelectorAll("button[title=\"UseTemplate\"]"));
+        Assert.Contains("SharedTemplate", shared.TextContent, StringComparison.Ordinal);
+        Assert.NotEmpty(own.QuerySelectorAll("button[title=\"Edit\"]"));
+        Assert.NotEmpty(own.QuerySelectorAll("button[title=\"Delete\"]"));
+        Assert.DoesNotContain("SharedTemplate", own.TextContent, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void NewTemplatePage_StartsWithUsableYamlAndInitialChangelog()
     {
@@ -214,7 +293,7 @@ public class PipelinesTemplatesTests : BunitContext
         // Enter/Space, or the row click runs after its own and wins the navigation.
         _handler.SetJsonResponse("api/pipelines/templates", new List<PipelineTemplateSummaryDto>
         {
-            new() { Id = 4, Name = "dotnet-ci", Version = 2, PipelineCount = 3, UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc) }
+            new() { Id = 4, Name = "dotnet-ci", Version = 2, PipelineCount = 3, UpdatedAt = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc), CanEdit = true }
         });
 
         var cut = Render<PipelineTemplates>();

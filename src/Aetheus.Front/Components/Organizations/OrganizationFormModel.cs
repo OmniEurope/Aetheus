@@ -8,7 +8,7 @@ internal sealed class OrganizationFormModel
     [Required, StringLength(100, MinimumLength = 2)]
     public string Name { get; set; } = string.Empty;
 
-    [Required, StringLength(100, MinimumLength = 2)]
+    [StringLength(100)]
     [RegularExpression("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$",
         ErrorMessage = "SlugFormatError")]
     public string Slug { get; set; } = string.Empty;

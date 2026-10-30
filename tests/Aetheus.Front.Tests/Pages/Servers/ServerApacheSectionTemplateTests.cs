@@ -9,7 +9,6 @@ namespace Aetheus.Front.Tests.Pages.Servers;
 public class ServerApacheSectionTemplateTests : BunitContext
 {
     private readonly BunitTestHelper.TestHandler _handler;
-    private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
     private static readonly Type SectionType = typeof(ServerApacheSection);
 
     public ServerApacheSectionTemplateTests()
@@ -50,7 +49,7 @@ public class ServerApacheSectionTemplateTests : BunitContext
         };
 
     [Fact]
-    public void Renders_ApacheRunning_WithVersionAndPid()
+    public void Renders_ApacheRunning_WithPidButNoVersion()
     {
         var server = BuildServer(isRunning: true, version: "2.4.51", pid: 1234);
         var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
@@ -58,7 +57,8 @@ public class ServerApacheSectionTemplateTests : BunitContext
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
-        Assert.Contains("2.4.51", cut.Markup);
+        // R-120: the version is in the page title, not in the status line; the PID stays.
+        Assert.DoesNotContain("2.4.51", cut.Markup);
         Assert.Contains("1234", cut.Markup);
     }
 
@@ -71,7 +71,8 @@ public class ServerApacheSectionTemplateTests : BunitContext
             p.Add(x => x.Server, server);
             p.Add(x => x.ServerId, 1);
         });
-        Assert.Contains("2.4.51", cut.Markup);
+        // R-120: the version is in the page title, not in the status line.
+        Assert.DoesNotContain("2.4.51", cut.Markup);
         // No PID block when pid is null
         Assert.DoesNotContain("PID null", cut.Markup);
     }
@@ -145,28 +146,6 @@ public class ServerApacheSectionTemplateTests : BunitContext
             .GetValue(cut.FindComponent<ServerApacheSection>().Instance)!;
         Assert.Single(disabled);
         Assert.Equal("old.example.com", disabled[0].ServerName);
-    }
-
-    [Fact]
-    public void FilteredModules_FiltersOnSearch()
-    {
-        var modules = new List<ApacheModuleDto>
-        {
-            new() { Name = "ssl_module", Type = "shared", IsEnabled = true },
-            new() { Name = "rewrite_module", Type = "shared", IsEnabled = true },
-            new() { Name = "core_module", Type = "static", IsEnabled = true }
-        };
-        var server = BuildServer(modules: modules);
-        var cut = this.RenderWithPageHeader<ServerApacheSection>(p =>
-        {
-            p.Add(x => x.Server, server);
-            p.Add(x => x.ServerId, 1);
-        });
-        SectionType.GetField("_moduleSearch", Priv)!.SetValue(cut.FindComponent<ServerApacheSection>().Instance, "ssl");
-        var filtered = (List<ApacheModuleDto>)
-            SectionType.GetProperty("FilteredModules", Priv)!.GetValue(cut.FindComponent<ServerApacheSection>().Instance)!;
-        Assert.Single(filtered);
-        Assert.Equal("ssl_module", filtered[0].Name);
     }
 
     [Fact]

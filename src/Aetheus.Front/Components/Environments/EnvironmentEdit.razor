@@ -9,8 +9,8 @@
     <Badges>
         @if (!_isNew && _detail is not null)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="@TypeStyle(_detail.Type)">@L.Localize(_detail.Type)</OmniBadge>
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["ServersCount"], _detail.Servers.Count)</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(TypeStyle(_detail.Type)))" Fill="OmniFill.Solid" Tone="@TypeStyle(_detail.Type)">@L.Localize(_detail.Type)</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["ServersCount"], _detail.Servers.Count)</NumberBadge>
         }
     </Badges>
     <ActionsContent>
@@ -35,17 +35,20 @@ else if (!_isNew && _detail is null)
 }
 else
 {
+    <OmniStack>
     <OmniTemplateForm TModel="EnvironmentModel" Model="@_model" OnValidSubmit="@OnSubmit">
         <OmniDataAnnotationsValidator Localizer="@L" />
+        <OmniStack>
         @if (_isNew)
         {
-            <OmniCard Class="environment-copy-source omni-u-mb-lg">
+            @* R-69: a plain card like the dashboard's, its title an H5 beside an icon of the usual size. *@
+            <OmniCard data-testid="environment-copy-source">
                 <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center">
                     <OmniColumn Span="12" MediumSpan="5">
                         <OmniStack Gap="OmniSpacing.XSmall">
                             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                                <OmniIcon Name="OmniIconName.Copy" Class="environment-copy-source__icon" />
-                                <OmniHeading Level="OmniHeadingLevel.H2">@L["StartFromExistingEnvironment"]</OmniHeading>
+                                <OmniIcon Name="OmniIconName.Copy" Class="omni-u-text-accent" />
+                                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["StartFromExistingEnvironment"]</OmniHeading>
                             </OmniStack>
                             <OmniText Element="OmniTextElement.Paragraph" Class="environment-copy-source__hint">
                                 @L["StartFromExistingEnvironmentHint"]
@@ -54,7 +57,7 @@ else
                     </OmniColumn>
                     <OmniColumn Span="12" MediumSpan="7">
                         <OmniFormField Label="@L["SourceEnvironment"]" Class="omni-u-w-100" For="oe-formfield-pages-environments-environmentedit-1">
-                            <OmniDropDown Id="oe-formfield-pages-environments-environmentedit-1" TValue="int?" Options="@(_copySources.ToOptions(item => (int?)item.Id, item => item.Label))"
+                            <OmniDropDown Id="oe-formfield-pages-environments-environmentedit-1" TValue="int?" Options="@CopySourceOptions"
                                 Value="@_sourceEnvironmentId" ValueChanged="@(value => OnSourceEnvironmentChanged(value))"
                                 ValueExpression="@(() => _sourceEnvironmentId)"
                                 AllowEmpty="true" Filterable="true"
@@ -115,7 +118,7 @@ else
             </OmniColumn>
         </OmniRow>
 
-        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-lg omni-u-mb-sm">@L["Servers"]</OmniHeading>
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["Servers"]</OmniHeading>
         <OmniMultiSelect aria-label="@L["Servers"]" TValue="int"
                          Value="@_model.ServerIds"
                          ValueChanged="@(values => _model.ServerIds = values)"
@@ -125,8 +128,9 @@ else
                          Placeholder="@L["SelectServers"]"
                          Class="omni-u-w-100" />
 
-        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
+        </OmniStack>
         </OmniStack>
     </OmniTemplateForm>
     @* R-18: only a production environment carries the database's expand/contract tracking. *@
@@ -134,4 +138,5 @@ else
     {
         <EnvironmentSchemaTracking EnvironmentId="@production.Id" />
     }
+    </OmniStack>
 }

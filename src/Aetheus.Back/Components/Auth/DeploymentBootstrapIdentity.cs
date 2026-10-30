@@ -22,13 +22,17 @@ internal static class DeploymentBootstrapIdentity
         return expiresAt > now && expiresAt <= now.Add(MaximumWindow) ? expiresAt : null;
     }
 
-    internal static bool CredentialsMatch(LoginRequest request, string username, string password)
+    internal static bool CredentialsMatch(LoginRequest request, string email, string password)
     {
-        // Bitwise AND keeps both fixed-time comparisons observable on every attempt.
-        var suppliedUsername = AuthTokenHelper.PadOrTrim(request.Username, username.Length);
+        // Bitwise AND keeps both fixed-time comparisons observable on every attempt. A bootstrap identity
+        // signs in like everyone else: by an e-mail address, compared the way stored e-mails are (trimmed,
+        // lower-case).
+        var expectedEmail = email.Trim().ToLowerInvariant();
+        var suppliedEmail = AuthTokenHelper.PadOrTrim(
+            request.Email.Trim().ToLowerInvariant(), expectedEmail.Length);
         var suppliedPassword = AuthTokenHelper.PadOrTrim(request.Password, password.Length);
         var usernameMatches = CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(suppliedUsername), Encoding.UTF8.GetBytes(username));
+            Encoding.UTF8.GetBytes(suppliedEmail), Encoding.UTF8.GetBytes(expectedEmail));
         var passwordMatches = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(suppliedPassword), Encoding.UTF8.GetBytes(password));
         return usernameMatches & passwordMatches;

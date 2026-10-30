@@ -43,6 +43,9 @@ public class ServiceConnectionsController(
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.ServiceConnection, null, Permission.Write, ct))
             return Forbid();
+        // ADR-059: the new resource goes to a project of an organization that lets the caller write.
+        if (!await authz.CanCreateInProjectAsync(User, ResourceType.ServiceConnection, request.ProjectId, ct))
+            return Forbid();
 
         var result = await service.CreateConnectionAsync(request, ct);
         return CreatedAtAction(nameof(GetConnection), new { id = result.Id }, result);
@@ -53,6 +56,9 @@ public class ServiceConnectionsController(
         int id, [FromBody] UpdateServiceConnectionRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.ServiceConnection, id, Permission.Write, ct))
+            return Forbid();
+        // The project the resource ends up in must also let the caller write (no move out of reach).
+        if (!await authz.CanCreateInProjectAsync(User, ResourceType.ServiceConnection, request.ProjectId, ct))
             return Forbid();
 
         var result = await service.UpdateConnectionAsync(id, request, ct);

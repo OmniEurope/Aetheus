@@ -27,7 +27,8 @@ public sealed class RefreshTokenCleanupIntegrationTests(PostgresFixture fixture)
 
         await using (var seed = NewContext())
         {
-            var user = new User { Username = $"sweep-{Guid.NewGuid():N}", PasswordHash = "x", CreatedAt = now, UpdatedAt = now };
+            var sweepName = $"sweep-{Guid.NewGuid():N}";
+            var user = new User { Username = sweepName, Email = $"{sweepName}@example.test", PasswordHash = "x", CreatedAt = now, UpdatedAt = now };
             seed.Users.Add(user);
             await seed.SaveChangesAsync(ct);
             seed.RefreshTokens.AddRange(

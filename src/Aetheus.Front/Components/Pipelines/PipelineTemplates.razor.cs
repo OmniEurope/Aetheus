@@ -7,6 +7,7 @@ public partial class PipelineTemplates : IAsyncDisposable
 {
     [Parameter] public bool Embedded { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
@@ -104,11 +105,14 @@ public partial class PipelineTemplates : IAsyncDisposable
         var confirmed = await Dialog.Confirm(string.Format(L["DeleteConfirm"], template.Name), L["Delete"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
-        if (await Api.PipelineTemplates.DeletePipelineTemplateAsync(template.Id))
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("Deleted");
-            await LoadTemplatesAsync();
-        }
+            if (await Api.PipelineTemplates.DeletePipelineTemplateAsync(template.Id))
+            {
+                Toast.Success("Deleted");
+                await LoadTemplatesAsync();
+            }
+        });
     }
 
     private async Task ExportTemplateAsync(PipelineTemplateSummaryDto template)

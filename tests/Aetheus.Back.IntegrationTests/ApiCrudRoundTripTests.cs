@@ -147,8 +147,8 @@ public sealed class ApiCrudRoundTripTests(ApiSmokeFixture fixture)
         var createResp = await client.PostAsJsonAsync("/api/users", new CreateUserRequest
         {
             Username = username,
-            Password = "Smoke-User-Pwd-2026!",
-            Roles = ["Reader"]
+            Email = $"{username}@example.com",
+            OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(client, "Reader")
         }, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
         var user = await createResp.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
@@ -304,6 +304,36 @@ public sealed class ApiCrudRoundTripTests(ApiSmokeFixture fixture)
         }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+    }
+
+    /// <summary>
+    /// R-22: the slug is optional. Two organizations created with the same name-derived slug and no slug of their
+    /// own get distinct, generated slugs over real HTTP and PostgreSQL (unique index respected).
+    /// </summary>
+    [Fact]
+    public async Task Organization_CreatedWithoutSlug_GetsAGeneratedUniqueSlug()
+    {
+        using var client = fixture.CreateAdminClient();
+        var token = Guid.NewGuid().ToString("N")[..8];
+        var name = $"Sans Slug {token}";
+
+        var first = await client.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest { Name = name },
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        var firstOrg = await first.Content.ReadFromJsonAsync<OrganizationDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(firstOrg);
+        Assert.Equal($"sans-slug-{token}", firstOrg.Slug);
+
+        // Same derived slug (different case and punctuation in the name, so the name itself is not a duplicate).
+        var second = await client.PostAsJsonAsync("/api/organizations", new CreateOrganizationRequest { Name = $"sans slug {token}!" },
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+        var secondOrg = await second.Content.ReadFromJsonAsync<OrganizationDto>(IntegrationJsonOptions.Default, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.NotNull(secondOrg);
+        Assert.Equal($"sans-slug-{token}-2", secondOrg.Slug);
+
+        await client.DeleteAsync($"/api/organizations/{firstOrg.Id}", TestContext.Current.CancellationToken);
+        await client.DeleteAsync($"/api/organizations/{secondOrg.Id}", TestContext.Current.CancellationToken);
     }
 
     /// <summary>

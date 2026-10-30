@@ -3,11 +3,13 @@
 <OmniPageHeader Title="@L["PersonalAccessTokens"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("key")" /></Icon>
 </OmniPageHeader>
-<OmniText Element="OmniTextElement.Paragraph" Class="omni-u-mb-lg">@L["PatPageDescription"]</OmniText>
+@* R-14: the description, the revealed token, the creation form and the grid are separated by this stack's gap, not by margins. *@
+<OmniStack>
+<OmniText Element="OmniTextElement.Paragraph">@L["PatPageDescription"]</OmniText>
 
 @if (_revealedToken is not null)
 {
-    <OmniCard Class="omni-u-mb-lg">
+    <OmniCard>
         <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                 <OmniIcon Name="OmniIconName.Warning" />
@@ -16,7 +18,7 @@
             <OmniText Element="OmniTextElement.Paragraph">@L["PatRevealWarning"]</OmniText>
             <OmniTextBox Value="@_revealedToken" ReadOnly="true" Class="omni-u-w-100" aria-label="@L["PersonalAccessTokens"]"  ValueExpression="@(() => _revealedToken)"/>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CopyRevealedAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CopyRevealedAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                 @* STD-BTN detection 11: Copy visible, the reveal's dismiss action labelled Close (it only hides the card). *@
                 <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DismissReveal"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Close"]</span></ChildContent></OmniButton>
             </OmniStack>
@@ -24,7 +26,7 @@
     </OmniCard>
 }
 
-<OmniCard Class="omni-u-mb-lg">
+<OmniCard>
     <OmniTemplateForm TModel="NewTokenModel" Model="@_form" OnValidSubmit="@CreateAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End">
@@ -56,13 +58,13 @@
         <OmniDataGridColumn Frozen="true" TItem="PersonalAccessTokenDto" Property="Name" Title="@L["PatName"]" Filterable="true" />
         <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="Scope" Title="@L["PatScope"]" Width="150px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ScopeText" >
             <Template Context="t">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(t.Scope == PatScope.ReadOnly ? OmniTone.Accent : OmniTone.Warning)">@ScopeLabel(t.Scope)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.Of(t.Scope == PatScope.ReadOnly ? OmniIconName.Eye : OmniIconName.Key))" Fill="OmniFill.Solid" Tone="@(t.Scope == PatScope.ReadOnly ? OmniTone.Accent : OmniTone.Warning)">@ScopeLabel(t.Scope)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="TokenPrefix" Title="@L["PatTokenPrefix"]" Width="160px" Filterable="true" />
-        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="CreatedAt" Title="@L["PatCreatedAt"]" Width="160px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="ExpiresAt" Title="@L["PatExpires"]" Width="160px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="LastUsedAt" Title="@L["PatLastUsed"]" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="CreatedAt" Title="@L["PatCreatedAt"]" Width="160px" FormatString="{0:g}" Filterable="true" />
+        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="ExpiresAt" Title="@L["PatExpires"]" Width="160px" FormatString="{0:g}" Filterable="true" />
+        <OmniDataGridColumn TItem="PersonalAccessTokenDto" Property="LastUsedAt" Title="@L["PatLastUsed"]" Width="160px" Filterable="true" >
             <Template Context="t">
                 @if (t.LastUsedAt.HasValue)
                 {
@@ -76,7 +78,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PersonalAccessTokenDto" Title="@L["PatStatus"]" ExportValue="@StatusExport" Width="120px" Sortable="false" Filterable="false" >
             <Template Context="t">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@StatusStyle(t)">@StatusLabel(t)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(StatusStyle(t)))" Fill="OmniFill.Solid" Tone="@StatusStyle(t)">@StatusLabel(t)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PersonalAccessTokenDto" Title="@L["Actions"]" Width="90px" Sortable="false" Filterable="false" >
@@ -89,3 +91,4 @@
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

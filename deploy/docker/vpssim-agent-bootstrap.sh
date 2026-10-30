@@ -9,7 +9,7 @@
 #
 # Token sourcing:
 #   - if AGENT_TOKEN is set, use it verbatim (host-minted path);
-#   - else log in as ADMIN_USER/ADMIN_PASSWORD and POST /api/auth/registration-tokens.
+#   - else log in as ADMIN_EMAIL/ADMIN_PASSWORD and POST /api/auth/registration-tokens.
 #
 # Real operations only - no faked success. LOCAL TEST ONLY.
 # =============================================================================
@@ -49,7 +49,7 @@ restore_deploy_state() {
 if [ -r /proc/1/environ ]; then
     while IFS= read -r -d '' _kv; do
         case "$_kv" in
-            AGENT_AUTOINSTALL=*|BACKEND_URL=*|ADMIN_USER=*|ADMIN_PASSWORD=*|AGENT_NAME=*|AGENT_TOKEN=*)
+            AGENT_AUTOINSTALL=*|BACKEND_URL=*|ADMIN_EMAIL=*|ADMIN_PASSWORD=*|AGENT_NAME=*|AGENT_TOKEN=*)
                 export "${_kv?}" ;;
         esac
     done < /proc/1/environ
@@ -58,7 +58,7 @@ fi
 [ "${AGENT_AUTOINSTALL:-0}" = "1" ] || { log "auto-install disabled (AGENT_AUTOINSTALL!=1) - box stays blank."; exit 0; }
 
 BACKEND_URL="${BACKEND_URL:-https://host.docker.internal:5301}"
-ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-admin@aetheus.local}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 AGENT_NAME="${AGENT_NAME:-vpssim}"
 TOKEN="${AGENT_TOKEN:-}"
@@ -131,14 +131,14 @@ if ! curl -sk --max-time 4 "$BACKEND_URL/health/live" -o /dev/null; then
 fi
 
 if [ -z "$TOKEN" ]; then
-    log "Logging in as $ADMIN_USER to mint a registration token..."
-    LOGIN_PAYLOAD="$(jq -n --arg username "$ADMIN_USER" --arg password "$ADMIN_PASSWORD" \
-        '{username: $username, password: $password}')"
+    log "Logging in as $ADMIN_EMAIL to mint a registration token..."
+    LOGIN_PAYLOAD="$(jq -n --arg email "$ADMIN_EMAIL" --arg password "$ADMIN_PASSWORD" \
+        '{email: $email, password: $password}')"
     JWT="$(curl -sk --max-time 10 -X POST "$BACKEND_URL/api/auth/login" \
         -H 'Content-Type: application/json' \
         -d "$LOGIN_PAYLOAD" | jq -r '.token // empty')"
     if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then
-        log "ERROR: login failed (no JWT). Check ADMIN_USER/ADMIN_PASSWORD."
+        log "ERROR: login failed (no JWT). Check ADMIN_EMAIL/ADMIN_PASSWORD."
         exit 1
     fi
     log "Minting registration token via /api/auth/registration-tokens..."

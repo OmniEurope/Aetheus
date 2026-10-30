@@ -76,6 +76,8 @@ public sealed class SilentMutationFailureNotificationTests : BunitContext
         cut.WaitForState(() => !(bool)typeof(RoleEdit).GetField("_loading", PrivateInstance)!
             .GetValue(cut.Instance)!);
         typeof(RoleEdit).GetField("_selectedUserId", PrivateInstance)!.SetValue(cut.Instance, 42);
+        // ADR-059: the Editor role is given for an organization (the one the users tab picks).
+        typeof(RoleEdit).GetField("_organizationId", PrivateInstance)!.SetValue(cut.Instance, 4);
         handler.SetResponse(HttpMethod.Post, "api/roles/3/users", HttpStatusCode.Conflict);
 
         await cut.InvokeAsync(() => (Task)typeof(RoleEdit)

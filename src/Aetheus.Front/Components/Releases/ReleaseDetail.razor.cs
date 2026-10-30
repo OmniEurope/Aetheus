@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Git;
+using Aetheus.Front.Components.Pipelines;
 using Microsoft.Extensions.Logging;
 
 namespace Aetheus.Front.Components.Releases;
@@ -16,6 +17,9 @@ public partial class ReleaseDetail : IAsyncDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
+    [Inject] private ClipboardService Clipboard { get; set; } = default!;
+    [Inject] private PipelineRunGate RunGate { get; set; } = default!;
+    [Inject] private PipelineRunDialogCoordinator RunDialogs { get; set; } = default!;
 
     [Parameter] public int ReleaseId { get; set; }
 
@@ -28,6 +32,12 @@ public partial class ReleaseDetail : IAsyncDisposable
     private ReleaseProvenanceDto? _provenance;
     private bool _canWrite;
     private List<string> _linkedCommitMessages = [];
+
+    /// <summary>R-31: copies the release's full name, shown in the Source tile.</summary>
+    private Task CopyVersionAsync() => Clipboard.CopyAsync(_release!.Version, _release.Version);
+
+    /// <summary>R-31: copies the release's tag, shown in the Source tile.</summary>
+    private Task CopyTagAsync() => Clipboard.CopyAsync(_release!.TagName!, _release.TagName!);
 
     // The Deliverables panel groups what the release ships (artifacts) and where it targets
     // (environment). Hide it when the release has neither, so we never render an empty panel.
@@ -70,7 +80,9 @@ public partial class ReleaseDetail : IAsyncDisposable
     }
 
     private bool CanRollback => _rollbackPreview?.CanRollback == true;
-    private string RollbackDisabledReason => !_canWrite ? L["InsufficientPermissions"]
+    /// <summary>R-11: rolling back is a permission of its own (release.rollback); the backend also asks Project.Write.</summary>
+    private bool CanRollbackRelease => _release is not null && Permissions.Can(PermissionKeys.ReleaseRollback, _release.Id);
+    private string RollbackDisabledReason => !CanRollbackRelease ? L["InsufficientPermissions"]
         : _rollbackPreview?.Reason ?? L["RollbackUnavailable"];
 
     protected override void OnInitialized()
@@ -156,6 +168,18 @@ public partial class ReleaseDetail : IAsyncDisposable
         await new ArchivedReleaseRelauncher(Api, Dialog, Toast, Nav, L).RelaunchAsync(_release);
     }
 
+    /// <summary>R-72: any release is deployed again from its page through the project's deployment pipeline.</summary>
+    private bool RedeployOffered => _release is not null && ReleaseRedeploy.IsOffered(_release.Status);
+    private bool CanRedeploy => _release is not null && _canWrite && ReleaseRedeploy.CanRedeploy(_release);
+    private string RedeployTitle => !_canWrite ? L["InsufficientPermissions"]
+        : _release is not null && ReleaseRedeploy.CanRedeploy(_release) ? L["Redeploy"] : L["RedeployNoArtifact"];
+
+    private async Task RedeployAsync()
+    {
+        if (_release is null) return;
+        await new ReleaseRedeployer(Api, RunGate, RunDialogs, Dialog, Toast, Nav, L).RedeployAsync(_release);
+    }
+
     private async Task RollbackAsync()
     {
         if (_release is null || _rollbackPreview is not { CanRollback: true, TargetVersion: { } targetVersion }) return;
@@ -174,9 +198,9 @@ public partial class ReleaseDetail : IAsyncDisposable
             Toast.Success("RollbackQueued", _release.Version);
     }
 
-    /// <summary>Recette R-13: the backend asks Release.Write and Project.Admin; an archived release only
+    /// <summary>Recette R-13: the backend asks release.status.restore (R-11) and Project.Admin; an archived release only
     /// comes back through a new publication.</summary>
-    private bool CanRestoreStatus => _release is not null && _canWrite
+    private bool CanRestoreStatus => _release is not null && Permissions.Can(PermissionKeys.ReleaseStatusRestore, _release.Id)
         && ReleaseStatusRestore.CanRestoreFrom(_release.Status)
         && Permissions.CanAdmin(ResourceType.Project, _release.ProjectId);
 

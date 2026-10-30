@@ -60,6 +60,10 @@ public class VariableLibrariesController(IVariableLibraryService service, IResou
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct))
             return Forbid();
+        // ADR-059: the owner named (project, environment or project server) is one the caller writes,
+        // in an organization that lets it create libraries (RBAC audit, findings 1 and 8).
+        if (!await authz.CanOwnAsync(User, ResourceType.VariableLibrary, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
+            return Forbid();
 
         var library = await service.CreateLibraryAsync(request, ct);
         return CreatedAtAction(nameof(GetLibrary), new { id = library.Id }, library);
@@ -69,6 +73,9 @@ public class VariableLibrariesController(IVariableLibraryService service, IResou
     public async Task<ActionResult<VariableLibraryDto>> UpdateLibrary(int id, [FromBody] UpdateVariableLibraryRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, id, Permission.Write, ct))
+            return Forbid();
+        // The owner the resource ends up with must also let the caller write (no move out of reach).
+        if (!await authz.CanOwnAsync(User, ResourceType.VariableLibrary, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
             return Forbid();
 
         var library = await service.UpdateLibraryAsync(id, request, ct);

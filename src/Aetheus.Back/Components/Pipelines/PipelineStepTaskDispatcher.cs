@@ -33,7 +33,8 @@ public interface IPipelineStepTaskDispatcher
 /// Why a stage was refused while it was creating its tasks, and the step it was refused for (null when
 /// the refusal belongs to the stage, a matrix leg without a runner for instance).
 /// </summary>
-public sealed record StageDispatchRefusal(string Reason, PipelineStepRun? RefusedStep);
+public sealed record StageDispatchRefusal(
+    string Reason, PipelineStepRun? RefusedStep, string FailureCode = TaskFailureCodes.InfrastructureMismatch);
 
 /// <summary>
 /// The step dispatcher, extracted from <see cref="PipelineRunService"/>. Every step type that is not a
@@ -334,9 +335,11 @@ public sealed class PipelineStepTaskDispatcher(
 
     /// <summary>Records a refusal met while the stage was creating its tasks (a factory, an AI step without a
     /// profile, an environment sample that cannot be rendered).</summary>
-    private static StepDispatchResult Refuse(string reason, PipelineStepRun refusedStep, StageTaskCreationState state)
+    private static StepDispatchResult Refuse(
+        string reason, PipelineStepRun refusedStep, StageTaskCreationState state,
+        string failureCode = TaskFailureCodes.InfrastructureMismatch)
     {
-        state.Refusal = new StageDispatchRefusal(reason, refusedStep);
+        state.Refusal = new StageDispatchRefusal(reason, refusedStep, failureCode);
         return StepDispatchResult.StageRefused;
     }
 
@@ -420,7 +423,7 @@ public sealed class PipelineStepTaskDispatcher(
                 ? new EnvFilePreparation(null, null, "env_template is not available on this backend.")
                 : await envFiles.PrepareAsync(runId, stepDef, legVars, secretKeys, ct).ConfigureAwait(false);
             if (prepared.Error is not null)
-                return Refuse($"Step '{stepRun.StepName}': {prepared.Error}", stepRun, creationState);
+                return Refuse($"Step '{stepRun.StepName}': {prepared.Error}", stepRun, creationState, prepared.FailureCode);
             legVars = prepared.Variables!;
             secretKeys = prepared.SecretKeys!;
         }
@@ -501,7 +504,7 @@ public sealed class PipelineStepTaskDispatcher(
                 MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError,
                     error ?? "The release artifact could not be resolved.", now);
                 await repo.AppendRunWarningsAsync(
-                    runId, [$"Release step '{stepRun.StepName}': {error}"], ct).ConfigureAwait(false);
+                    runId, [PipelineStepFailureWarning.Release(stepRun.StepName, error)], ct).ConfigureAwait(false);
                 return;
             }
             releaseVars["AETHEUS_RELEASE_ARTIFACT_RUN_ID"] = artifact.PipelineRunId.ToString();
@@ -569,7 +572,11 @@ public sealed class PipelineStepTaskDispatcher(
         // agent that runs the step predates the step-log line.
         if (execution!.IsFallback)
             await repo.AppendRunWarningsAsync(
-                runId, [$"AI step '{stepDef.Name}': {execution.Resolution}"], ct).ConfigureAwait(false);
+                runId,
+                [PipelineProblem.Of(
+                    PipelineProblemCodes.AiStepFallback, $"AI step '{stepDef.Name}': {execution.Resolution}",
+                    ("step", stepDef.Name), ("detail", execution.Resolution)).ToStored()],
+                ct).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(stepDef.PromptFile))
             spec.EnvironmentVariables["AETHEUS_AI_PROMPT_FILE"] = stepDef.PromptFile;
         if (stepDef.ContextPaths.Count > 0)
@@ -619,7 +626,6 @@ public sealed class PipelineStepTaskDispatcher(
         if (stepDef.Advisory) environment["AETHEUS_AI_ADVISORY"] = "true";
         if (!stepDef.Findings) return;
         environment["AETHEUS_AI_FINDINGS"] = "true";
-        if (stepDef.FindingsPlaceholder) environment["AETHEUS_AI_FINDINGS_PLACEHOLDER"] = "true";
         environment["AETHEUS_RUN_ID"] = runId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         environment["AETHEUS_STAGE_NAME"] = stageName;
     }

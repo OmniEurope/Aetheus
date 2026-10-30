@@ -228,8 +228,9 @@ public class ServerDockerSectionTemplateTests : BunitContext
             Output = "{\"Id\": \"abc123\"}"
         })));
 
-        var content = (string?)typeof(DockerContainersTab).GetField("_inspectContent", BF)!.GetValue(tab.Instance);
-        Assert.NotNull(content);
+        // Dispatched fire-and-forget after the task's log is read: wait for it (see BrowseContent_SetViaTaskCompleted).
+        var inspectContent = typeof(DockerContainersTab).GetField("_inspectContent", BF)!;
+        cut.WaitForAssertion(() => Assert.NotNull(inspectContent.GetValue(tab.Instance)));
     }
 
     // ── Test 7: Shell panel state set via OpenShell ───────────────────────────
@@ -282,8 +283,9 @@ public class ServerDockerSectionTemplateTests : BunitContext
             Output = "[\"PATH=/usr/bin\",\"HOME=/root\"]"
         })));
 
-        var content = (string?)typeof(DockerContainersTab).GetField("_envContent", BF)!.GetValue(tab.Instance);
-        Assert.NotNull(content);
+        // Dispatched fire-and-forget after the task's log is read: wait for it (see BrowseContent_SetViaTaskCompleted).
+        var envContent = typeof(DockerContainersTab).GetField("_envContent", BF)!;
+        cut.WaitForAssertion(() => Assert.NotNull(envContent.GetValue(tab.Instance)));
     }
 
     // ── Test 10: Prune dialog state ───────────────────────────────────────────
@@ -362,9 +364,9 @@ public class ServerDockerSectionTemplateTests : BunitContext
             Output = "version: '3'\nservices:\n  web:\n    image: nginx"
         })));
 
-        var content = (string?)typeof(DockerComposeTab).GetField("_composeEditorContent", BF)!.GetValue(composeTab.Instance);
-        Assert.NotNull(content);
-        Assert.Contains("nginx", content!);
+        // Dispatched fire-and-forget after the task's log is read: wait for it (see BrowseContent_SetViaTaskCompleted).
+        var composeContent = typeof(DockerComposeTab).GetField("_composeEditorContent", BF)!;
+        cut.WaitForAssertion(() => Assert.Contains("nginx", (string?)composeContent.GetValue(composeTab.Instance) ?? string.Empty));
     }
 
     // ── Test 14: Logs panel state via ToggleLogsAsync ────────────────────────
@@ -433,7 +435,9 @@ public class ServerDockerSectionTemplateTests : BunitContext
             Output = "bin  etc  usr"
         })));
 
-        var content = (string?)typeof(DockerContainersTab).GetField("_browseContent", BF)!.GetValue(tab.Instance);
-        Assert.Equal("bin  etc  usr", content);
+        // The section hands the output to its tabs from a fire-and-forget dispatch (it reads the task's log
+        // first), so the content lands after HandleTaskCompleted returns: wait for it rather than race it.
+        var browseContent = typeof(DockerContainersTab).GetField("_browseContent", BF)!;
+        cut.WaitForAssertion(() => Assert.Equal("bin  etc  usr", (string?)browseContent.GetValue(tab.Instance)));
     }
 }

@@ -69,7 +69,7 @@ public sealed class LoginRedirectTests : BunitContext
         Nav.NavigateTo($"http://localhost/login?returnUrl={EncodedRunLogs}");
 
         var cut = Render<Login>();
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("secret-password");
         cut.Find("form").Submit();
 
@@ -85,11 +85,45 @@ public sealed class LoginRedirectTests : BunitContext
         Nav.NavigateTo($"http://localhost/login?returnUrl={encodedReturnUrl}");
 
         var cut = Render<Login>();
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("secret-password");
         cut.Find("form").Submit();
 
         cut.WaitForAssertion(() => Assert.Equal("http://localhost/", Nav.Uri));
+    }
+
+    /// <summary>Recette R-24: an approval mail's Approve link opened while signed out leads through the sign-in
+    /// to the approval page without its action, so signing in decides nothing.</summary>
+    [Fact]
+    public void R24_ToLogin_DropsTheOneShotAction_KeepingTheRestOfTheAddress()
+    {
+        Nav.NavigateTo("http://localhost/pipelines/runs/12/approvals/34?action=approve&tab=logs#top");
+
+        Assert.Equal("/login?returnUrl=" + Uri.EscapeDataString("/pipelines/runs/12/approvals/34?tab=logs#top"), LoginRedirect.ToLogin(Nav));
+    }
+
+    [Theory]
+    [InlineData("/pipelines/runs/12/approvals/34?action=approve", "/pipelines/runs/12/approvals/34")]
+    [InlineData("/pipelines/runs/12/approvals/34?ACTION=reject&x=1", "/pipelines/runs/12/approvals/34?x=1")]
+    [InlineData("/pipelines/runs/12/approvals/34?x=1&action=approve&action=reject", "/pipelines/runs/12/approvals/34?x=1")]
+    [InlineData("/pipelines/runs/12?tab=logs", "/pipelines/runs/12?tab=logs")]
+    public void R24_Resolve_NeverReturnsWithAnAction(string returnUrl, string expected) =>
+        Assert.Equal(expected, LoginRedirect.Resolve(returnUrl));
+
+    /// <summary>The whole trip, crafted or not: signing in from a return address that carries an action lands on
+    /// the page without it.</summary>
+    [Fact]
+    public void R24_Login_FromAReturnUrlWithAnAction_LandsWithoutIt()
+    {
+        _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token" });
+        Nav.NavigateTo("http://localhost/login?returnUrl=" + Uri.EscapeDataString("/pipelines/runs/12/approvals/34?action=approve"));
+
+        var cut = Render<Login>();
+        cut.Find("input#Email").Input("admin@aetheus.local");
+        cut.Find("input#Password").Input("secret-password");
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Equal("http://localhost/pipelines/runs/12/approvals/34", Nav.Uri));
     }
 
     /// <summary>A forced password change sits between the login and the page: the page is kept through it.</summary>
@@ -100,7 +134,7 @@ public sealed class LoginRedirectTests : BunitContext
         Nav.NavigateTo($"http://localhost/login?returnUrl={EncodedRunLogs}");
 
         var cut = Render<Login>();
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("secret-password");
         cut.Find("form").Submit();
 

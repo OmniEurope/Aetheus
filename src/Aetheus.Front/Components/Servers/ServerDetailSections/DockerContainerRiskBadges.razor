@@ -7,11 +7,11 @@
     <OmniRow Gap="OmniSpacing.XSmall" Class="docker-risk-badges">
         @if (RoleLabel is { } role)
         {
-            <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Info" title="@L["DockerRoleHint"]" data-docker-role="@Container.AetheusRole">@role</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Info))" Fill="OmniFill.Tonal" Tone="OmniTone.Info" title="@L["DockerRoleHint"]" data-docker-role="@Container.AetheusRole">@role</OmniBadge>
         }
         @foreach (var flag in Flags)
         {
-            <OmniBadge Fill="OmniFill.Tonal" Tone="@(flag.Expected ? OmniTone.Neutral : OmniTone.Danger)"
+            <OmniBadge Icon="@(BadgeIcon.Of(flag.Expected ? OmniIconName.Info : OmniIconName.ShieldWarning))" Fill="OmniFill.Tonal" Tone="@(flag.Expected ? OmniTone.Neutral : OmniTone.Danger)"
                 title="@(flag.Expected ? $"{flag.Hint} {L["DockerRiskExpected"]}" : flag.Hint)"
                 data-docker-risk="@flag.Risk" data-expected="@(flag.Expected ? "true" : "false")">@flag.Label</OmniBadge>
         }

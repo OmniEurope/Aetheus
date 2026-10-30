@@ -34,7 +34,7 @@
             @* The comment field appears on request; Approve and Reject both stay visible (user decision, 2026-10-17). *@
             @if (CommentOpen)
             {
-                <OmniTextArea aria-label="@L["ApprovalCommentsOptional"]" @bind-Value="Approval.Comments" Placeholder="@L["ApprovalCommentsOptional"]" Rows="2" Class="omni-u-w-100 approval-comment" />
+                <OmniTextArea aria-label="@L["ApprovalCommentsOptional"]" @bind-Value="Approval.Comments" Placeholder="@L["ApprovalCommentsOptional"]" Rows="2" Id="@CommentFieldId" Class="omni-u-w-100 approval-comment" />
             }
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Class="approval-decisions">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Approval.DecideAsync(ApprovalStatus.Approved))" Class="@DecisionClass" Busy="@(Approval.Deciding)" Label="@L["Approve"]" title="@L["Approve"]"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent><span>@L["Approve"]</span></ChildContent></OmniButton>

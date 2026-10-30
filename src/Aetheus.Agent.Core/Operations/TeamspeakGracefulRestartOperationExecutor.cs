@@ -12,8 +12,8 @@ namespace Aetheus.Agent.Core.Operations;
 /// <c>tail | sort | tail</c> log pipe):
 /// <list type="bullet">
 /// <item><b>Graceful restart</b> - broadcast a warning (gm) over the native ServerQuery TCP client, wait
-/// the grace period, kick everyone, then restart the <c>ts3server</c> systemd unit via the service-control
-/// sudoers grant. Each phase reports honestly; a failed restart is a non-zero exit (never a fake green).</item>
+/// the grace period, kick everyone, then restart the installed TeamSpeak systemd unit (<see cref="TeamspeakUnit"/>)
+/// via the aetheus-teamspeak sudoers grant. Each phase reports honestly; a failed restart is a non-zero exit (never a fake green).</item>
 /// <item><b>Log read</b> - tail the newest file under <c>{installPath}/logs/</c> by direct file read
 /// (read access via the teamspeak group), no shell pipe.</item>
 /// </list>
@@ -32,6 +32,9 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
     // The grace-period wait, replaceable so the sequence is asserted without waiting.
     internal Func<TimeSpan, CancellationToken, Task> DelayAsync { get; init; } =
         static (delay, ct) => Task.Delay(delay, ct);
+
+    // Replaceable so the unit choice is asserted without systemd (R-119).
+    internal Func<string, CancellationToken, Task<bool>>? UnitExistsAsync { get; init; }
 
     // The process runner, replaceable so the restart argv is asserted without sudo.
     internal Func<ProcessStartInfo, int, Func<string, TaskLogLevel, Task>, ILogger, CancellationToken, Task<ExecutorResult>>
@@ -89,16 +92,21 @@ public sealed class TeamspeakGracefulRestartOperationExecutor(
         await onOutput("Kicking connected clients…", TaskLogLevel.Info).ConfigureAwait(false);
         await queryClient.ExecuteAsync(port, kick, ct).ConfigureAwait(false);
 
-        // 4) Restart the systemd unit. `ts3server` is allow-listed in the AETHEUS_SYSTEMCTL sudoers set
-        //    (service-control capability); without it sudo fails and the step fails honestly.
+        // 4) Restart the systemd unit. R-119: the installed TeamSpeak unit (TeamspeakUnit), through the argv-exact
+        //    aetheus-teamspeak grant; the former `ts3server` name matched no install. Without the grant sudo fails
+        //    and the step fails honestly.
+        var unit = await TeamspeakUnit.ResolveAsync(
+            UnitExistsAsync ?? ((name, token) => TeamspeakUnit.ExistsAsync(name, logger, token)), ct).ConfigureAwait(false);
+        if (unit is null)
+        {
+            await onOutput(TeamspeakUnit.NoUnitMessage, TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
         var restartTimeout = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
         var psi = SudoProcessStartInfo.Create();
-        psi.ArgumentList.Add("-n");
-        psi.ArgumentList.Add("/bin/systemctl");
-        psi.ArgumentList.Add("restart");
-        psi.ArgumentList.Add("ts3server");
+        foreach (var argument in TeamspeakUnit.BuildSystemctlArgv("restart", unit)) psi.ArgumentList.Add(argument);
 
-        await onOutput("Restarting ts3server…", TaskLogLevel.Info).ConfigureAwait(false);
+        await onOutput($"Restarting {unit}…", TaskLogLevel.Info).ConfigureAwait(false);
         return await RunProcessAsync(psi, restartTimeout, onOutput, logger, ct).ConfigureAwait(false);
     }
 

@@ -73,9 +73,14 @@ stages:
         scanner: trivy-iac
         timeout_seconds: 900
 
-  # The generic grade counts open findings by severity (owner decision of 2026-10-17, ADR-030
-  # amendment of that date): no `finding_score: weighted` rule here. A project that wants the weighted
-  # score overrides this step in its own pipeline.
+  # The generic grade counts open findings, never weighted (owner decision of 2026-10-17, ADR-030
+  # amendment of that date): a project that wants the weighted score overrides this step in its own
+  # pipeline. Every rule is required, so the domain always has a grade (owner decision of 2026-10-25,
+  # recette R-73 and R-74, ADR-030 amendment of that date): no open finding is an A, the first one costs
+  # the A whatever its severity (one rule per severity, so the lines add up to the findings of the run), and
+  # the grade falls with the severity, never to an E: info, low and medium (B up to 5, C from 6, never
+  # worse), high (a D from the first one, whatever the count), critical (F). A rule that stops its
+  # thresholds leaves the grade beyond the last one at the next grade.
   - name: Grade security
     group: Security
     execution_role: build
@@ -105,18 +110,24 @@ stages:
               severity: high
               direction: lower-is-better
               a: 0
-              b: 1
-              c: 3
-              d: 5
-              e: 10
+              b: 0
+              c: 0
             - key: grade.security.medium
               domain: security
               severity: medium
-              required: false
               direction: lower-is-better
               a: 0
               b: 5
-              c: 15
-              d: 30
-              e: 60
+            - key: grade.security.low
+              domain: security
+              severity: low
+              direction: lower-is-better
+              a: 0
+              b: 5
+            - key: grade.security.info
+              domain: security
+              severity: info
+              direction: lower-is-better
+              a: 0
+              b: 5
         timeout_seconds: 300

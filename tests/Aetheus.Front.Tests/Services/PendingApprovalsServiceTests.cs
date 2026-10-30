@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aetheus.Front.Tests.Services;
@@ -21,6 +23,59 @@ public class PendingApprovalsServiceTests
 
         Assert.Equal(["JoinPipelineUpdatesGroup"], factory.Connection!.Invoked);
         Assert.Empty(service.Items);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_WhenTheHubRefusesTheJoin_TheRefusalIsAnExpectedStateNotAWarning()
+    {
+        // A user the hub refuses (no pipeline of the organizations they hold) is in a normal state, not a
+        // fault: a warning on every page of every session buried the real ones (local instance, Organization
+        // Admin of organization 2 only). The refusal is kept at debug; the list stays as loaded.
+        var auth = AuthenticatedUser();
+        var api = new ApiClient(new HttpClient(new ApprovalsHandler()) { BaseAddress = new Uri("http://test/") });
+        var factory = new SilentHubConnectionFactory(auth, refuseJoin: true);
+        var logger = new CapturingLogger();
+        await using var service = new PendingApprovalsService(api, auth, factory, logger);
+
+        await service.EnsureStartedAsync();
+
+        Assert.Equal(["JoinPipelineUpdatesGroup"], factory.Connection!.Invoked);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level >= LogLevel.Warning);
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Debug);
+    }
+
+    [Fact]
+    public async Task WhenTheBackendIsReplaced_TheRefusedJoinIsAlsoNotAWarning()
+    {
+        var auth = AuthenticatedUser();
+        var api = new ApiClient(new HttpClient(new ApprovalsHandler()) { BaseAddress = new Uri("http://test/") });
+        var factory = new SilentHubConnectionFactory(auth, refuseJoin: true);
+        var logger = new CapturingLogger();
+        await using var service = new PendingApprovalsService(api, auth, factory, logger);
+        await service.EnsureStartedAsync();
+
+        factory.AnnounceBackendReplaced();
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (factory.Connection!.Starts < 2 && DateTime.UtcNow < deadline)
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, factory.Connection!.Starts);
+        Assert.DoesNotContain(logger.Entries, entry => entry.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task EnsureStartedAsync_WhenTheJoinFailsForAnotherReason_StillWarns()
+    {
+        var auth = AuthenticatedUser();
+        var api = new ApiClient(new HttpClient(new ApprovalsHandler()) { BaseAddress = new Uri("http://test/") });
+        var factory = new SilentHubConnectionFactory(auth, joinFailure: new HubException("Boom."));
+        var logger = new CapturingLogger();
+        await using var service = new PendingApprovalsService(api, auth, factory, logger);
+
+        await service.EnsureStartedAsync();
+
+        Assert.Contains(logger.Entries, entry => entry.Level == LogLevel.Warning);
     }
 
     [Fact]
@@ -68,6 +123,25 @@ public class PendingApprovalsServiceTests
         typeof(AuthStateProvider).GetProperty(nameof(AuthStateProvider.Token))!.SetValue(auth, "jwt");
         typeof(AuthStateProvider).GetProperty(nameof(AuthStateProvider.Roles))!.SetValue(auth, new List<string>());
         return auth;
+    }
+
+    private sealed class CapturingLogger : ILogger<PendingApprovalsService>
+    {
+        private readonly List<(LogLevel Level, string Message)> _entries = [];
+
+        public IReadOnlyList<(LogLevel Level, string Message)> Entries
+        {
+            get { lock (_entries) return [.. _entries]; }
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (_entries) _entries.Add((logLevel, formatter(state, exception)));
+        }
     }
 
     private sealed class ApprovalsHandler : HttpMessageHandler

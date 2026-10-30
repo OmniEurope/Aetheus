@@ -44,7 +44,8 @@ internal sealed class NuGetRegistryService(
             Kind = PackageRegistryKind.NuGet,
             Name = metadata.Name,
             NormalizedName = metadata.NormalizedName,
-            Description = metadata.Description
+            Description = metadata.Description,
+            AllowAnonymousDownload = PackageRegistryDefaults.IsPublicByDefault(PackageRegistryKind.NuGet, metadata.NormalizedName)
         };
         if (package.Id == 0)
             await repository.AddPackageAsync(package, ct).ConfigureAwait(false);

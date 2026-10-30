@@ -26,7 +26,7 @@
             <div class="task-tracker-popover">
                 <div class="task-tracker-header">
                     <OmniHeading Level="OmniHeadingLevel.H5">@L["TaskTrackerTitle"]</OmniHeading>
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@(_count > 0 ? OmniTone.Accent : OmniTone.Neutral)">@_count.ToString()</OmniBadge>
+                    <NumberBadge Fill="OmniFill.Solid" Tone="@(_count > 0 ? OmniTone.Accent : OmniTone.Neutral)">@_count.ToString()</NumberBadge>
                 </div>
                 <div class="task-tracker-list">
                     @if (_count == 0)
@@ -68,7 +68,7 @@
                             <div class="task-tracker-group-header">
                                 <OmniIcon Name="OmniIconName.Database" Class="task-tracker-group-icon" />
                                 <span class="task-tracker-group-name">@(string.IsNullOrWhiteSpace(group.Key.ServerName) ? $"#{group.Key.ServerId}" : group.Key.ServerName)</span>
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="task-tracker-group-badge">@group.Count()</OmniBadge>
+                                <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="task-tracker-group-badge">@group.Count()</NumberBadge>
                             </div>
                             @foreach (var task in group)
                             {

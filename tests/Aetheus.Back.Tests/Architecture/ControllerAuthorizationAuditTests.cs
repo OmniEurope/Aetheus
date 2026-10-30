@@ -68,13 +68,21 @@ public class ControllerAuthorizationAuditTests
         // Public login-page metadata. Returns one boolean only, contains no secret or user data,
         // and must be available before authentication so credentials can be explained on the demo.
         "Aetheus.Back.Components.Auth.AuthController.GetPublicDemoInfo",
+        // Owner decision 2026-10-28, R-14: the set-password link of a mail. The single-use token (stored
+        // hashed, expiring) is the only proof; login rate limiter; one generic 400 for every refusal.
+        "Aetheus.Back.Components.Auth.AuthController.CompletePasswordSetup",
+        // Owner decision 2026-10-28, R-14: "forgotten password". Always the same 202 whether an account
+        // holds the address or not (work queued, so no timing either); per-IP limiter and per-account limit.
+        "Aetheus.Back.Components.Auth.AuthController.RequestPasswordReset",
         // Inbound git webhook - authenticated by HMAC signature (WebhookSecret), not by a JWT.
         "Aetheus.Back.Components.Pipelines.PipelinesController.HandleWebhook",
         // Inbound release webhook - authenticated by a shared secret (Webhook:Secret), not by a JWT.
         "Aetheus.Back.Components.Releases.ReleasesController.Webhook",
         // NuGet v3 bootstrap document: clients must discover the authenticated protocol resources
         // before they can attach source credentials or an X-NuGet-ApiKey. It contains URLs only;
-        // search, metadata, downloads and every write endpoint remain PAT-authenticated.
+        // search, metadata, downloads and every write endpoint remain PAT-authenticated (metadata and
+        // downloads of a package an administrator opened to anonymous download excepted, R-58: that
+        // goes through the PackageRegistryRead policy, not through [AllowAnonymous]).
         "Aetheus.Back.Components.PackageRegistry.NuGetRegistryController.GetServiceIndex",
     };
 

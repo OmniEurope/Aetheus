@@ -268,9 +268,12 @@ public partial class Projects : IAsyncDisposable
             var setUp = await Dialog.Confirm(
                 string.Format(L["SetUpNewProjectPipelinesConfirm"].Value, created.Name),
                 L["ProjectCreated"].Value,
-                new OmniConfirmOptions { OkButtonText = L["SetUpPipelines"].Value, CancelButtonText = L["StayHere"].Value });
+                new OmniConfirmOptions { OkButtonText = L["SetUpPipelines"].Value, CancelButtonText = L["OpenProject"].Value });
+            // The secondary button opens the new project; closing the dialog (null) stays on the list.
             if (setUp == true)
                 Nav.NavigateTo($"/pipelines/setup?projectId={created.Id}");
+            else if (setUp == false)
+                Nav.NavigateTo($"/projects/{created.Id}");
         }
     }
 
@@ -294,9 +297,17 @@ public partial class Projects : IAsyncDisposable
             _ => OmniTone.Neutral
         };
 
-    /// <summary>The API sends UTC instants; the relative-time component takes an offset.</summary>
-    private static DateTimeOffset AsOffset(DateTime utc) =>
-        new(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+    /// <summary>
+    /// The relative-time component takes an offset. REST payloads reach the page in browser-local time
+    /// (the UTC-to-Local converter of JsonOptions, Kind Local), so stamping them UTC shifted every date
+    /// by the browser offset and past events read "in 35 min". Each kind keeps its own meaning; an
+    /// Unspecified value is the wire UTC.
+    /// </summary>
+    internal static DateTimeOffset AsOffset(DateTime value) => value.Kind switch
+    {
+        DateTimeKind.Local => new DateTimeOffset(value),
+        _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
+    };
 
     /// <summary>The first line of a commit message: the tile shows one line, the title carries the rest.</summary>
     internal static string FirstLine(string message) =>

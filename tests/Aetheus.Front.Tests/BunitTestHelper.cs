@@ -37,7 +37,8 @@ internal static class BunitTestHelper
     public static void Interactive(BunitContext ctx) =>
         ctx.SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("WebAssembly", isInteractive: true));
 
-    public static TestHandler RegisterServices(BunitContext ctx, bool authenticated = true, bool isAdmin = false)
+    public static TestHandler RegisterServices(BunitContext ctx, bool authenticated = true, bool isAdmin = false,
+        IReadOnlyCollection<string>? extraPermissionKeys = null)
     {
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
 
@@ -53,6 +54,8 @@ internal static class BunitTestHelper
         handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
         // Every logout tells the server first; it answers 204.
         handler.SetResponse(HttpMethod.Post, "api/auth/logout", HttpStatusCode.NoContent);
+        // The user administers no organization through the switcher unless a test says otherwise.
+        handler.SetJsonResponse("api/organizations/administered", new List<AdministeredOrganizationDto>());
         // No pipeline requirement is unmet unless a test says otherwise.
         handler.SetJsonResponse("api/pipelines/setup/unmet", new List<UnmetRequirementDto>());
         // Nothing stops a project's or a pipeline's runs unless a test says otherwise.
@@ -66,8 +69,12 @@ internal static class BunitTestHelper
         handler.SetJsonResponse("/stage-baselines", new RunStageBaselinesDto());
         // No approval waits unless a test says otherwise (top bar, home page).
         handler.SetJsonResponse("api/pipelines/approvals/pending", new List<PendingApprovalDto>());
+        // R-43: the run page also reads the pipeline's first page of runs for its average duration; shortest key, so a test's own runs response wins.
+        handler.SetPaginatedJsonResponse("/runs?page", new List<PipelineRunDto>());
         // Nothing reads a library or a vault unless a test says otherwise (the "Used by" line and column).
         handler.SetJsonResponse("api/pipelines/resource-usage", new ResourceUsageDto());
+        // R-69: the Certbot page reads its "expires soon" horizon; 30 days (the former fixed one) unless a test says otherwise.
+        handler.SetJsonResponse("api/certbot/expiry-warning", new CertificateExpiryWarningDto());
         // Default to no notifications, preferences or subscriptions unless overridden by a test.
         handler.SetJsonResponse("api/notifications/me/unread-count", 0);
         handler.SetPaginatedJsonResponse("api/notifications/me?", new List<NotificationDeliveryDto>());
@@ -138,7 +145,6 @@ internal static class BunitTestHelper
         ctx.Services.AddScoped<LegacyPreferenceMigration>();
         ctx.Services.AddScoped<UserPreferenceSession>();
         ctx.Services.AddScoped<LegacyAppearanceMigration>();
-        ctx.Services.AddScoped<Aetheus.Front.Components.Users.AdminIdentitySearch>();
         ctx.Services.AddScoped<ProjectNavContextService>();
         ctx.Services.AddScoped(sp => new ClientErrorReporter(
             http,
@@ -155,10 +161,12 @@ internal static class BunitTestHelper
             sp.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<Aetheus.Front.Components.Shared.ServerDetailLoader>.Instance));
         ctx.Services.AddSingleton(new ActiveOrganizationService(apiClient, preferences));
+        ctx.Services.AddSingleton(new AdministrationScopeService(apiClient, authProvider));
         ctx.Services.AddScoped<NotifyHelper>();
         ctx.Services.AddScoped<GridExportContext>();
         ctx.Services.AddScoped<ClipboardService>();
         ctx.Services.AddScoped<UiActions>();
+        ctx.Services.AddScoped<BusyVeil>();
         ctx.Services.AddScoped<PipelineRunGate>();
         ctx.Services.AddScoped<PipelineRunDialogCoordinator>();
         ctx.Services.AddScoped<PipelineImportState>();
@@ -184,7 +192,14 @@ internal static class BunitTestHelper
                     new EffectivePermissionDto { ResourceType = rt, ResourceId = null, Permission = Permission.Write }
                 })
                 .ToList();
-            permissionService.SetPermissions(readWritePermissions, isAdmin);
+            // R-11: Read and Write everywhere is a Contributor, so the user also holds the named permissions a
+            // Contributor holds by default, as GET api/users/me/permissions would report them.
+            var contributorKeys = PermissionCatalog.DefaultKeysOf(RoleNames.Contributor)
+                .Where(key => !PermissionCatalog.Get(key).IsLevel)
+                .Concat(extraPermissionKeys ?? [])
+                .Select(key => new EffectivePermissionKeyDto(key, null, null))
+                .ToList();
+            permissionService.SetPermissions(readWritePermissions, isAdmin, contributorKeys);
         }
         ctx.Services.AddSingleton(permissionService);
         ctx.Services.AddSingleton(TimeProvider.System);
@@ -363,6 +378,14 @@ internal static class BunitTestHelper
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
             };
         }
+
+        /// <summary>The organizations the role picker and the role page offer (ADR-059): one by default,
+        /// the seeded default organization, so the picker hides its organization choice.</summary>
+        public void SetOrganizations(params OrganizationDto[] organizations) =>
+            SetPaginatedJsonResponse("api/organizations?page=1&pageSize=100",
+                organizations.Length > 0
+                    ? organizations
+                    : [new OrganizationDto(4, "Aetheus", "aetheus", string.Empty, 1, 0, DateTime.UnixEpoch, DateTime.UnixEpoch)]);
 
         public void SetPaginatedJsonResponse<T>(string urlContains, IEnumerable<T> data)
         {

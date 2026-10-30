@@ -16,7 +16,7 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         IReadOnlyDictionary<string, string>? parameters = null,
         CancellationToken ct = default)
     {
-        var definition = Parse(yamlContent, "pipeline");
+        var definition = Parse(yamlContent, YamlSource.Pipeline);
         var rootReference = ParseReference(definition.Extends);
         var composed = await ComposeAsync(definition, organizationId, [], ct, rootReference, 0).ConfigureAwait(false);
         var serialized = definition.Extends is null ? yamlContent : YamlParsingHelper.Serializer.Serialize(composed);
@@ -24,9 +24,11 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
             ? serialized
             : ResolveParameters(serialized, composed.Parameters, parameters);
         if (resolvedYaml.Length > MaxResolvedYamlLength)
-            throw new BadRequestException(
-                $"Resolved pipeline YAML exceeds the {MaxResolvedYamlLength} character safety limit.");
-        var resolvedDefinition = parameters is null ? composed : Parse(resolvedYaml, "resolved pipeline");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateResolvedYamlTooLong,
+                $"Resolved pipeline YAML exceeds the {MaxResolvedYamlLength} character safety limit.",
+                ("limit", MaxResolvedYamlLength)).ToRefusal();
+        var resolvedDefinition = parameters is null ? composed : Parse(resolvedYaml, YamlSource.ResolvedPipeline);
         return new PipelineTemplateResolution(
             resolvedDefinition,
             resolvedYaml,
@@ -45,8 +47,10 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         int depth = 0)
     {
         if (depth > MaxInheritanceDepth)
-            throw new BadRequestException(
-                $"Pipeline template inheritance exceeds the maximum depth of {MaxInheritanceDepth}.");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateInheritanceTooDeep,
+                $"Pipeline template inheritance exceeds the maximum depth of {MaxInheritanceDepth}.",
+                ("limit", MaxInheritanceDepth)).ToRefusal();
         var reference = parsedReference ?? ParseReference(child.Extends);
         if (reference is null) return child;
 
@@ -55,19 +59,27 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         // without a copy of the catalog.
         var template = await repo.FindTemplateByNameAsync(reference.Name, organizationId, ct).ConfigureAwait(false)
             ?? await repo.FindSharedTemplateByNameAsync(reference.Name, ct).ConfigureAwait(false)
-            ?? throw new BadRequestException(
-                $"Pipeline template '{reference.Name}' was not found in organization {organizationId}.");
+            ?? throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateNotFound,
+                $"Pipeline template '{reference.Name}' was not found in organization {organizationId}.",
+                ("template", reference.Name), ("organization", organizationId)).ToRefusal();
         var versionNumber = reference.Version ?? template.LatestVersion;
         reference.ResolvedVersion = versionNumber;
         var cycleKey = $"{template.Id}@{versionNumber}";
         if (!visited.Add(cycleKey))
-            throw new BadRequestException($"Cyclic template inheritance detected at '{reference.Name}@{versionNumber}'.");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateCyclic,
+                $"Cyclic template inheritance detected at '{reference.Name}@{versionNumber}'.",
+                ("template", $"{reference.Name}@{versionNumber}")).ToRefusal();
 
         var version = template.Versions.FirstOrDefault(item => item.Version == versionNumber)
             ?? await repo.GetTemplateVersionAsync(template.Id, versionNumber, ct).ConfigureAwait(false)
-            ?? throw new BadRequestException(
-                $"Pipeline template version '{reference.Name}@{versionNumber}' does not exist.");
-        var baseDefinition = Parse(version.YamlContent, $"template '{reference.Name}@{versionNumber}'");
+            ?? throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateVersionMissing,
+                $"Pipeline template version '{reference.Name}@{versionNumber}' does not exist.",
+                ("template", $"{reference.Name}@{versionNumber}")).ToRefusal();
+        var baseDefinition = Parse(
+            version.YamlContent, YamlSource.Template, $"{reference.Name}@{versionNumber}");
         var composedBase = await ComposeAsync(
             baseDefinition, organizationId, visited, ct, depth: depth + 1).ConfigureAwait(false);
         visited.Remove(cycleKey);
@@ -129,12 +141,17 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         IReadOnlyList<PipelineStageDefinition> child)
     {
         var result = parent.ToList();
+        var removed = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in child)
         {
             var index = CaseInsensitiveNameLookup.FindIndex(result, item.Name, stage => stage.Name);
             if (item.Remove)
             {
-                if (index >= 0) result.RemoveAt(index);
+                if (index >= 0)
+                {
+                    removed[result[index].Name] = result[index].DependsOn;
+                    result.RemoveAt(index);
+                }
                 continue;
             }
 
@@ -145,7 +162,31 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
             };
             if (index >= 0) result[index] = merged; else result.Add(merged);
         }
-        return result;
+        return removed.Count == 0 ? result : SpliceRemovedDependencies(result, removed);
+    }
+
+    /// <summary>R-105: a stage removed at compile time is not waited for. A stage that depended on it depends on what it
+    /// depended on instead (all the way up when several removed stages follow one another), so removing a stage from
+    /// the template's chain never leaves the stages after it waiting for one that does not exist. A name that is still
+    /// a stage of the result (removed, then declared again) is kept as it is.</summary>
+    private static List<PipelineStageDefinition> SpliceRemovedDependencies(
+        List<PipelineStageDefinition> stages, Dictionary<string, IReadOnlyList<string>> removed)
+    {
+        var present = stages.Select(stage => stage.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var gone = removed.Where(entry => !present.Contains(entry.Key)).ToDictionary(
+            entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+        if (gone.Count == 0) return stages;
+        return [.. stages.Select(stage => stage.DependsOn.Any(gone.ContainsKey)
+            ? stage with { DependsOn = [.. Expand(stage.DependsOn, gone, [])] }
+            : stage)];
+
+        // `path` is the removed stages being expanded: a cycle among them (never valid) ends there instead of looping.
+        static IEnumerable<string> Expand(
+            IEnumerable<string> dependencies, Dictionary<string, IReadOnlyList<string>> gone, string[] path) =>
+            dependencies
+                .SelectMany(name => !gone.TryGetValue(name, out var inherited) ? [name]
+                    : path.Contains(name, StringComparer.OrdinalIgnoreCase) ? [] : Expand(inherited, gone, [.. path, name]))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private static List<PipelineJobDefinition> MergeJobs(
@@ -196,9 +237,9 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         IReadOnlyList<PipelineTemplateParameterDefinition> declarations,
         IReadOnlyDictionary<string, string>? supplied)
     {
-        if (!PipelineParameterResolver.TryResolve(
+        if (!PipelineParameterResolver.TryResolveProblems(
                 declarations, supplied, out var values, out var parameterErrors))
-            throw new BadRequestException(string.Join(" ", parameterErrors));
+            throw PipelineProblem.Refusal(parameterErrors);
 
         var declaredNames = declarations
             .Select(parameter => parameter.Name)
@@ -213,23 +254,52 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         });
         var unresolved = ParameterPattern.Match(resolved);
         if (unresolved.Success)
-            throw new BadRequestException(
-                $"Pipeline template parameter '{unresolved.Groups[1].Value}' could not be resolved.");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateParameterUnresolved,
+                $"Pipeline template parameter '{unresolved.Groups[1].Value}' could not be resolved.",
+                ("parameter", unresolved.Groups[1].Value)).ToRefusal();
         return resolved;
     }
 
-    private static PipelineYamlDefinition Parse(string yaml, string source)
+    /// <summary>Which YAML a parse refusal is about, so the front names it in the user's language.</summary>
+    private enum YamlSource { Pipeline, ResolvedPipeline, Template }
+
+    private static PipelineYamlDefinition Parse(string yaml, YamlSource source, string? template = null)
     {
         try
         {
             return YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(yaml)
-                ?? throw new BadRequestException($"The {source} YAML is empty.");
+                ?? throw YamlRefusal(source, template, null).ToRefusal();
         }
         catch (Exception exception) when (exception is YamlDotNet.Core.YamlException
             or InvalidOperationException or ArgumentException)
         {
-            throw new BadRequestException($"The {source} YAML is invalid: {exception.Message}");
+            throw YamlRefusal(source, template, YamlParsingHelper.DescribeParseError(exception)).ToRefusal();
         }
+    }
+
+    /// <summary>The refusal of a YAML that is empty (<paramref name="detail"/> null) or that cannot be read.
+    /// The parser's own words (<paramref name="detail"/>) stay as the parser wrote them.</summary>
+    private static PipelineProblem YamlRefusal(YamlSource source, string? template, string? detail)
+    {
+        var label = source switch
+        {
+            YamlSource.Pipeline => "pipeline",
+            YamlSource.ResolvedPipeline => "resolved pipeline",
+            _ => $"template '{template}'"
+        };
+        var code = (source, detail is null) switch
+        {
+            (YamlSource.Pipeline, true) => PipelineProblemCodes.PipelineYamlEmpty,
+            (YamlSource.Pipeline, false) => PipelineProblemCodes.PipelineYamlInvalid,
+            (YamlSource.ResolvedPipeline, true) => PipelineProblemCodes.ResolvedPipelineYamlEmpty,
+            (YamlSource.ResolvedPipeline, false) => PipelineProblemCodes.ResolvedPipelineYamlInvalid,
+            (_, true) => PipelineProblemCodes.TemplateYamlEmpty,
+            _ => PipelineProblemCodes.TemplateYamlInvalid
+        };
+        return detail is null
+            ? PipelineProblem.Of(code, $"The {label} YAML is empty.", ("template", template))
+            : PipelineProblem.Of(code, $"The {label} YAML is invalid: {detail}", ("template", template), ("detail", detail));
     }
 
     private static TemplateReference? ParseReference(string? value)
@@ -239,7 +309,10 @@ public sealed class PipelineTemplateResolver(IPipelineTemplateRepository repo) :
         if (separator < 1) return new TemplateReference(value.Trim(), null);
         var name = value[..separator].Trim();
         if (!int.TryParse(value[(separator + 1)..], out var version) || version < 1)
-            throw new BadRequestException($"Invalid pinned pipeline template reference '{value}'. Expected name@N.");
+            throw PipelineProblem.Of(
+                PipelineProblemCodes.TemplateReferenceInvalid,
+                $"Invalid pinned pipeline template reference '{value}'. Expected name@N.",
+                ("reference", value)).ToRefusal();
         return new TemplateReference(name, version);
     }
 

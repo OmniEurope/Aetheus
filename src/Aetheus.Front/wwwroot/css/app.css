@@ -28,6 +28,13 @@
        one row taller than the default compact row. */
     --aetheus-grid-row-content-height: 1.25rem;
     --aetheus-grid-row-height: 2.25rem;
+
+    /* R-53, the rule of every full-height grid: at least ten rows, whatever the window or the page above it, then
+       the whole height the page leaves it. The scroll body holds the sticky header row too, hence ten rows plus one.
+       Every floor of a grid body below reads this variable; none writes its own number of rows. */
+    --aetheus-grid-min-rows: 10;
+    --aetheus-grid-min-viewport: calc((var(--aetheus-grid-min-rows) + 1) * var(--aetheus-grid-row-height));
+
     /* Row-action sizing follows OE's badge-height token, which also determines cell padding and
        height caps. */
     --aetheus-grid-action-size: var(--omni-badge-height);
@@ -130,7 +137,6 @@
 
 /* The hero uses the shared card surface and border. */
 .analysis-grade-overview {
-    margin-bottom: 1rem;
     border-color: var(--omni-card-border-color);
     background: var(--omni-color-surface);
 }
@@ -212,11 +218,10 @@
     text-align: center;
 }
 
+/* R-112: a measure's label is read in full; it wraps when its column is too narrow. */
 .analysis-grade-measure-label {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .analysis-grade-value {
@@ -244,9 +249,8 @@
 }
 
 .analysis-grade-domain-empty > .analysis-grade-domain-state {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 /* R1-38: the run's single grade block is one OE accordion (OmniAccordion Multiple). Every line (Gate grade,
@@ -273,7 +277,7 @@
 
 .analysis-grade-row-title > .analysis-grade-measure-hint { color: var(--omni-color-text-muted); font-size: 0.75rem; font-weight: 400; }
 
-.analysis-grade-row .omni-accordion__summary > .analysis-grade-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analysis-grade-row .omni-accordion__summary > .analysis-grade-value { min-width: 0; overflow-wrap: anywhere; }
 
 .analysis-grade-row-detail {
     display: grid;
@@ -419,15 +423,6 @@
     unicode-bidi: isolate;
 }
 
-/* The findings export uses the grid export-bar layout. */
-.analysis-findings-export {
-    display: flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: var(--omni-space-xs, 0.25rem);
-    padding-top: var(--omni-space-xs, 0.25rem);
-}
-
 .analysis-finding-location-unavailable {
     color: var(--omni-color-text-muted);
     font-size: 0.75rem;
@@ -564,10 +559,6 @@
 .quality-gate-rules-card {
     padding: 0;
     overflow: hidden;
-}
-
-.quality-gate-stat-tiles {
-    margin-bottom: var(--omni-space-sm);
 }
 
 .quality-gate-table {
@@ -992,6 +983,16 @@ code {
     font-size: var(--aetheus-grid-row-content-height);
     line-height: var(--aetheus-grid-row-content-height);
 }
+/* R-42: that row size is for the row's own icons and togglers, not for the icon of a badge in the row, which
+   keeps OE's size (the badge's text size): measured 2026-10-25, a badge icon in a row was 20px for 11.2px text. */
+.omni-data-grid tr[data-omni-row-index] .omni-badge .omni-icon {
+    min-width: 0;
+    width: var(--omni-icon-size);
+    min-height: 0;
+    height: var(--omni-icon-size);
+    font-size: inherit;
+    line-height: inherit;
+}
 
 /* Icon-only actions use OE's badge-height token for both dimensions; labelled actions share its
    height. */
@@ -1041,6 +1042,7 @@ code {
     line-height: 0.875rem;
 }
 
+
 /* Full-height grids shrink to content or scroll within available space, with min-height: 0
    allowing flex shrinkage. Direct grids use the parent flex viewport; nested grids use OE's
    measured remaining height. */
@@ -1052,12 +1054,14 @@ code {
 
 .aetheus-grid-fullheight .omni-data-grid__viewport {
     flex: 1 1 auto;
-    /* Floor of the scroll body: OE writes the grid MinHeight (its 75dvh default, three quarters of the
-       window) into --omni-grid-viewport-min; 10 compact rows when a grid sets none. Without it the scroll body is free to collapse toward nothing when
+    /* Floor of the scroll body (R-53): the larger of ten rows plus the header (--aetheus-grid-min-viewport) and
+       what OE writes for the grid MinHeight into --omni-grid-viewport-min (its 75dvh default, three quarters of the
+       window). Without it the scroll body is free to collapse toward nothing when
        the surrounding page is short, which is how a table ends up showing two rows above its own
        scrollbar: the reader gets a scrollbar to see data that had room to be displayed. Above the
-       floor the grid still takes whatever height the window leaves it. */
-    min-height: var(--omni-grid-viewport-min, calc(10 * var(--aetheus-grid-row-height)));
+       floor the grid still takes whatever height the window leaves it. OE's MinHeight part is capped by the room
+       the grid really has (OE 1.9.4 --omni-grid-viewport-room, R-121), never below the ten rows. */
+    min-height: max(var(--aetheus-grid-min-viewport), min(var(--omni-grid-viewport-min, 0px), var(--omni-grid-viewport-room, var(--omni-grid-viewport-min, 0px))));
     overflow-y: auto;
 }
 
@@ -1077,6 +1081,14 @@ code {
     --aetheus-grid-floor: min-content;
 }
 
+/* R-53 for OE's own full-height grids (the ones no Aetheus wrapper class decorates: the pipeline catalogue and run
+   lists, the dashboards): OE floors the scroll body at its MinHeight (75dvh), which is under ten rows on a short
+   window (a phone held sideways, a split screen). The larger of the two wins, so a grid never shows fewer than ten
+   rows and still takes the whole height the page leaves it above that. */
+.omni-data-grid--fill .omni-data-grid__viewport--fill {
+    min-height: max(var(--aetheus-grid-min-viewport), min(var(--omni-grid-viewport-min, 0px), var(--omni-grid-viewport-room, var(--omni-grid-viewport-min, 0px))));
+}
+
 /* Opt-in infinite scroll. Virtualization is off product-wide (tables page instead), but a caller can
    still set Virtualize="true", and when it does the grid needs a bounded, scrollable body: legacy UI
    only virtualises inside one. Removing these rules while the wrapper still emits the class left that
@@ -1092,13 +1104,13 @@ code {
     /* The floor is what makes virtualization possible at all: legacy UI fills the scroll body with rows,
        but the body only gets a height from its rows, so a body allowed to be 0 tall renders no rows and
        stays 0. Declared after the full-height rule so it also wins when both classes are present. */
-    min-height: var(--omni-grid-viewport-min, calc(10 * var(--aetheus-grid-row-height)));
+    min-height: max(var(--aetheus-grid-min-viewport), min(var(--omni-grid-viewport-min, 0px), var(--omni-grid-viewport-room, var(--omni-grid-viewport-min, 0px))));
     max-height: calc(100vh - 18rem);
     overflow-y: auto;
 }
 
 .aetheus-grid-virtualized.aetheus-grid-fullheight .omni-data-grid__viewport {
-    min-height: var(--omni-grid-viewport-min, calc(10 * var(--aetheus-grid-row-height)));
+    min-height: max(var(--aetheus-grid-min-viewport), min(var(--omni-grid-viewport-min, 0px), var(--omni-grid-viewport-room, var(--omni-grid-viewport-min, 0px))));
     max-height: none;
 }
 
@@ -1121,11 +1133,25 @@ code {
     padding-block-start: 0;
 }
 
-/* On phones, OmniMain alone supplies the horizontal gutter. */
-@media (max-width: 39.99rem) {
-    .app-body-wrapper.omni-u-px-md {
-        padding-inline: 0;
-    }
+/* R-46: one horizontal gutter for every page, supplied by OmniMain alone (the wrapper adds none, it used to
+   add a second one on desktop). It is the header's own side padding (OE --omni-header-pad-x, 0.75rem), so the
+   right edge of the content (the dashboard "Gérer" button, the cards) lines up with the right edge of the
+   top-right app menu, and the left edge with the header's. The formula is OE's own (.omni-main--scrollable) with
+   that gutter, so the centred column chosen in the Theme window keeps working. */
+:root {
+    --aetheus-page-gutter: 0.75rem;
+}
+
+.omni-main.omni-main--scrollable {
+    padding-inline: max(var(--aetheus-page-gutter), calc((100% - var(--omni-main-max-width)) / 2 + var(--aetheus-page-gutter)));
+}
+
+/* R-46: the page scrollbar belongs to OmniMain alone, so the content area is one scrollbar narrower than the
+   header, which spans the window. layout.js measures that width (--aetheus-scrollbar-width, 0 with an overlay or
+   no scrollbar) and the header gives it back on its trailing side: the top-right app menu then ends where the
+   content ends, with or without a classic scrollbar. */
+.omni-layout > .omni-header {
+    padding-inline-end: calc(var(--omni-header-pad-x) + var(--aetheus-scrollbar-width, 0px));
 }
 
 /* E-flex (PRIMARY): when the page body DIRECTLY hosts a full-height grid, make the body wrapper a
@@ -1138,6 +1164,9 @@ code {
     display: flex;
     flex-direction: column;
     height: 100%;
+    /* The wrapper keeps its bottom padding (omni-u-py-md) inside the 100%, so the page itself never scrolls by
+       that padding (R-30 page-scroll-with-grid, R-100). */
+    box-sizing: border-box;
 }
 
 .app-body-wrapper:has(> .aetheus-grid-fullheight) > .aetheus-grid-fullheight,
@@ -1156,6 +1185,35 @@ code {
     flex-direction: column;
     flex: 1 1 0;
     min-height: var(--aetheus-grid-floor);
+}
+
+/* A page whose full-height grid sits one level down, in a stack that also holds a failure alert or a card under it
+   (R-14: the stack's gap separates them): the stack relays the page's flex column, as .iam-list-body does for the
+   IAM lists, so the grid still takes what the window leaves it and keeps its three-quarter floor (min-content)
+   instead of falling back to that floor with a page scrollbar on top. */
+.app-body-wrapper:has(> .page-fill-body) {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.app-body-wrapper > .page-fill-body {
+    flex: 1 1 0;
+    min-height: min-content;
+}
+
+.page-fill-body > .aetheus-grid-host:has(> .aetheus-grid-fullheight) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: var(--aetheus-grid-floor);
+}
+
+.page-fill-body > .aetheus-grid-host > .aetheus-grid-fullheight {
+    flex: 1 1 0;
+    min-height: var(--aetheus-grid-floor);
+    max-height: none;
 }
 
 /* E-bis: keep inline action buttons (e.g. "Run again") from inflating a row — compact + centered so
@@ -1562,6 +1620,18 @@ code {
     padding: 0.25rem 0;
     overflow-x: auto;
     min-width: 0;
+    /* R-110: a section's root blocks (the offline notice, then the section) are separated by the container gap. */
+    display: flex;
+    flex-direction: column;
+    gap: var(--omni-space-md);
+}
+
+/* R-119: the section body is veiled (OE's omni-busy) while a task launched from it runs. The task follower keeps
+   its place above the veil: it says what the task is doing, and its link to the task stays usable. */
+.blade-content.omni-busy .server-task-follower {
+    position: relative;
+    z-index: 1;
+    pointer-events: auto;
 }
 
 .blade-content-hidden {
@@ -1641,6 +1711,19 @@ code {
 }
 
 /* ==========================================================================
+   Project deletion dialog
+   ========================================================================== */
+
+.project-deletion-resources {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--omni-space-xs, 0.25rem);
+}
+
+/* ==========================================================================
    Project Cards
    ========================================================================== */
 
@@ -1684,12 +1767,12 @@ code {
     color: var(--omni-color-accent, #1b6ec2);
 }
 
+/* R-112: a project's name is read in full; it wraps when the card is too narrow. */
 .project-card-name {
     font-weight: 600;
     color: var(--aetheus-tile-title);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .project-card-desc {
@@ -1889,12 +1972,10 @@ code {
     font-size: 0.8rem;
 }
 
-.analysis-portfolio-project-metrics span {
+/* The counts are OE badges and their look (fill, ink, radius) is OE's. A bare span rule here also painted
+   the badge's own text span (omni-badge__text) with a muted background under white ink. */
+.analysis-portfolio-project-metrics .omni-badge {
     white-space: nowrap;
-    padding: 0.2rem 0.4rem;
-    border: 1px solid var(--aetheus-tile-separator);
-    border-radius: var(--omni-radius-sm); /* Badges use square corners. */
-    background: var(--omni-color-surface-muted);
 }
 
 .analysis-portfolio-grade {
@@ -1989,6 +2070,14 @@ code {
     display: grid;
     gap: 0.2rem;
     overflow-wrap: anywhere;
+}
+
+/* R-52: the table of empty values takes the whole width of its parent (it sits under the finding, not in its text
+   column) and never widens it: when its columns do not fit, the grid's own viewport scrolls sideways. */
+.pipeline-readiness-empty-values {
+    inline-size: 100%;
+    max-inline-size: 100%;
+    min-inline-size: 0;
 }
 
 /* Pipeline readiness findings precede the project pipeline list. */
@@ -2109,9 +2198,8 @@ code {
 }
 
 .project-activity-link span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .project-activity-run {
@@ -2121,25 +2209,23 @@ code {
     min-width: 0;
 }
 
-/* Status badges retain their width; adjacent names truncate when space is limited. */
+/* Status badges retain their width; the adjacent name wraps when space is limited (the dense list cuts it
+   instead, see .project-dense-activity a). */
 .project-activity-run > .omni-badge {
     flex: 0 0 auto;
 }
 
 .project-activity-run > a {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
-/* D44 / D45: the commit message's first line, or the active run's step, one line with an ellipsis. */
+/* D44 / D45: the commit message's first line, or the active run's step. R-112: it wraps on a card; only the
+   dense list's fixed-width cell cuts it (see .project-dense-activity > span), with the full text as title. */
 .project-activity-line {
     display: block;
     margin-top: 0.125rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     font-size: 0.75rem;
 }
 
@@ -2349,12 +2435,12 @@ code {
     flex: 0 0 auto;
 }
 
+/* R-112: a name is read in full. In a grid cell the cell keeps it on one line (the column fits its content);
+   anywhere else it wraps when there is no room. */
 .pipeline-name-link,
 .server-name-link {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     min-width: 2.5rem;
+    overflow-wrap: anywhere;
 }
 
 .pipeline-template-link {
@@ -2440,10 +2526,9 @@ code {
     font-weight: 700;
 }
 
-.pipeline-status-chip-failed .omni-icon { color: var(--omni-color-danger); }
-.pipeline-status-chip-running .omni-icon { color: var(--omni-color-accent); }
-.pipeline-status-chip-neverrun .omni-icon { color: var(--omni-color-text-muted); }
-.pipeline-status-chip-outdated .omni-icon { color: var(--omni-color-warning); }
+/* R-108: every chip keeps its icon in the button's text colour; a coloured icon on the same coloured fill could
+   not be seen, and the muted icon of the never-run chip measured 2.08:1 on its grey fill in the dark theme
+   (2026-10-25), under the 3:1 a graphic needs. */
 
 .pipeline-run-duration {
     font-variant-numeric: tabular-nums;
@@ -2473,8 +2558,6 @@ code {
     gap: 0.35rem;
     max-width: 100%;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .pipeline-project-context .omni-icon {
@@ -2757,12 +2840,11 @@ a.pipeline-relation-card:hover {
     opacity: 0.55;
 }
 
+/* R-112: the pipeline name and the current step are read in full; they wrap inside their column. */
 .pipeline-run-tree-name,
 .pipeline-run-tree-step {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .pipeline-run-tree-name {
@@ -2791,11 +2873,12 @@ a.pipeline-relation-card:hover {
 
 .pipeline-run-tree-project {
     min-width: 0;
+    white-space: normal;
 }
 
 .pipeline-run-tree-project > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .pipeline-run-tree-step {
@@ -3101,7 +3184,8 @@ a.pipeline-relation-card:hover {
     border: 0;
 }
 
-.omni-code-editor__host > .omni-code-editor-frame {
+.omni-code-editor__host > .omni-code-editor-frame,
+.omni-diff-viewer__host > .omni-code-editor-frame {
     display: block;
     width: 100%;
     height: 100%;
@@ -3489,7 +3573,8 @@ a.pipeline-relation-card:hover {
     min-width: 0;
     color: var(--omni-color-text, #e8eaed);
 }
-.run-gantt-label-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* R-112: a stage or step name is read in full; it wraps inside its label gutter. */
+.run-gantt-label-text { min-width: 0; overflow-wrap: anywhere; }
 .run-gantt-system { color: var(--omni-color-text-muted, #c0c6cd); font-style: italic; }
 /* Status uses distinct shapes as well as colours. */
 .run-gantt-status-icon { flex-shrink: 0; width: 0.875rem; height: 0.875rem; }
@@ -3513,6 +3598,8 @@ a.pipeline-relation-card:hover {
     background-repeat: no-repeat;
 }
 .run-gantt-svg { display: block; width: 100%; height: 0.75rem; }
+/* R-40: the stage bands lead down to the detailed timeline. */
+.run-gantt-track-link { cursor: pointer; }
 .run-gantt-track-fill { fill: var(--omni-color-surface-highlight, #21262c); }
 /* ...and across the track itself, under the bars. */
 .run-gantt-gridline {
@@ -3571,9 +3658,8 @@ a.pipeline-relation-card:hover {
 .run-gantt-step-nostart {
     color: var(--omni-color-text-muted, #c0c6cd);
     font-style: italic;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 .run-gantt-untimed {
     color: var(--omni-color-text-muted, #c0c6cd);
@@ -3636,6 +3722,39 @@ a.pipeline-relation-card:hover {
 /* Orchestration runs keep the side-by-side split but widen the left column so the run tree's
    stage label + child-pipeline chip + description fit on one line (logs stay on the right). */
 .run-split-wide { grid-template-columns: 34rem 1fr; }
+
+/* R-80: the split stacks on the width really left to the page (side menu included), not on the screen's.
+   The container is the box the layout sits in; its inline size is the content area, so opening the side menu
+   narrows it and stacks the columns although the screen is wide. The log keeps at least 32rem (about 64
+   monospace characters) beside the step list, so the threshold is the list + the gap + 32rem:
+     22rem + 1rem + 32rem = 55rem  (default list)    34rem + 1rem + 32rem = 67rem  (orchestration list).
+   Below it the columns stack exactly as on a phone (the media query above). */
+.run-split-container { container-type: inline-size; container-name: run-split; min-width: 0; }
+
+@container run-split (max-width: 54.99rem) {
+    .run-split-container .run-split-layout:not(.run-split-wide),
+    .run-split-container .run-split-layout:not(.run-split-wide):has(.run-split-logs) {
+        grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; min-width: 0;
+    }
+    .run-split-container .run-split-layout:not(.run-split-wide) .run-split-timeline {
+        height: auto; overflow-y: visible; overscroll-behavior: auto; padding-right: 0; scrollbar-gutter: auto; width: 100%;
+    }
+    .run-split-container .run-split-layout:not(.run-split-wide) .run-split-logs {
+        height: auto; min-height: 20rem; max-height: 70vh;
+    }
+}
+@container run-split (max-width: 66.99rem) {
+    .run-split-container .run-split-wide,
+    .run-split-container .run-split-wide:has(.run-split-logs) {
+        grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; min-width: 0;
+    }
+    .run-split-container .run-split-wide .run-split-timeline {
+        height: auto; overflow-y: visible; overscroll-behavior: auto; padding-right: 0; scrollbar-gutter: auto; width: 100%;
+    }
+    .run-split-container .run-split-wide .run-split-logs {
+        height: auto; min-height: 20rem; max-height: 70vh;
+    }
+}
 
 /* Stage wrapper — rail spans full height of header + sub-steps */
 .run-tl-stage {
@@ -3702,10 +3821,10 @@ a.pipeline-relation-card:hover {
     text-transform: uppercase;
     letter-spacing: 0.02em;
 }
+/* R-112: a step name is read in full; it wraps when its row has no room (the scrolling run tree sizes to its
+   content, see .run-tree-scroll, so it never wraps there). */
 .run-tl-name {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
     flex: 1;
     min-width: 0;
 }
@@ -3762,6 +3881,9 @@ a.pipeline-relation-card:hover {
         height: 100%;
         min-height: 0;
     }
+    /* R-80: the container takes the shell's height; side by side the layout fills it, stacked (container
+       queries after .run-split-wide) the two panels size to content and the container scrolls them. */
+    .run-split-container { height: 100%; min-height: 0; overflow-y: auto; }
     .run-split-layout:has(.run-split-logs) { height: 100%; min-height: 0; }
     .run-split-timeline { height: 100%; }
     .run-split-logs { height: 100%; }
@@ -3836,9 +3958,7 @@ a.pipeline-relation-card:hover {
 .run-step-logs-title {
     flex: 1 1 auto;
     min-width: 4rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .run-step-logs-duration,
@@ -4027,10 +4147,8 @@ a.pipeline-relation-card:hover {
     gap: 0.1875rem;
     color: var(--omni-color-text-muted, #555);
     font-size: 0.6875rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 22rem;
+    overflow-wrap: anywhere;
+    max-width: min(22rem, 100%);
 }
 
 .run-tl-current-stage .omni-icon {
@@ -4095,12 +4213,9 @@ a.pipeline-relation-card:hover {
     font-size: 0.8125rem;
     justify-content: space-between;
 }
-.run-tile-subrow > :last-child {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* R-112: the run link (first child) wraps; the status badge keeps its own width. */
+.run-tile-subrow > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.run-tile-subrow > :last-child { flex: 0 0 auto; }
 .run-release-version,
 .run-release-app-version { font-family: monospace; }
 .run-overview-stage-grouped { margin-left: 1.5rem; }
@@ -4137,7 +4252,7 @@ a.pipeline-relation-card:hover {
    content — so no custom display:none / flex override is needed here (R2HD). */
 .run-logs-timeline .omni-timeline__content { text-align: left; }
 .run-logs-timeline .omni-timeline__content { padding-bottom: 0.25rem; }
-.run-logs-timeline .run-tl-name-grow { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-logs-timeline .run-tl-name-grow { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .run-logs-timeline .run-tl-row {
     display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap;
     padding: 0.25rem 0.5rem; border-radius: var(--aetheus-radius); cursor: pointer;
@@ -4187,7 +4302,6 @@ a.pipeline-relation-card:hover {
     gap: 0.375rem;
     min-width: 0;
     overflow: hidden;
-    white-space: nowrap;
 }
 /* Stage label column (CI / QA / DEPLOY) + child-pipeline chip on a trigger row */
 .run-tl-stage-label {
@@ -4641,7 +4755,6 @@ a.pipeline-relation-card:hover {
     opacity: 1;
 }
 
-.vp-editor-guide { margin: 0.5rem 0; }
 
 .inline-text {
     display: inline;
@@ -4753,6 +4866,28 @@ a.pipeline-relation-card:hover {
 .omni-data-grid .omni-data-grid__viewport {
     overflow-x: auto;
     overscroll-behavior-inline: contain;
+}
+
+/* A content-sized table (the app-wide grid preset) is invisible until OE has measured it: revealed at
+   once when sized, else after 1 s (5 s while the grid is busy). Its viewport still scrolled over that
+   invisible, wider table, a scroll region without anything a keyboard can reach (axe
+   scrollable-region-focusable) for as long as the data took to load. The viewport does not scroll
+   while its table is hidden and gets its scrolling back with it: the same two reveal times as OE's own
+   rule, kept in step with it (omni-grid-reveal, omnieurope.blazor.css). */
+@keyframes aetheus-grid-scroll-reveal {
+    100% {
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+}
+
+.omni-data-grid .omni-data-grid__viewport:has(> .omni-data-grid__table[data-omni-sizing="content"]:not([data-omni-sized])) {
+    overflow: hidden;
+    animation: aetheus-grid-scroll-reveal 0s ease 1s 1 normal both running, aetheus-grid-scroll-reveal 0s ease 5s 1 normal both running;
+}
+
+.omni-data-grid[aria-busy="true"] .omni-data-grid__viewport:has(> .omni-data-grid__table[data-omni-sizing="content"]:not([data-omni-sized])) {
+    animation-play-state: paused, running;
 }
 
 @media (max-width: 39.99rem) {
@@ -4877,11 +5012,6 @@ a.pipeline-relation-card:hover {
 }
 
 /* OE code blocks own commands and token presentation; Aetheus supplies spacing. */
-.wizard-code-block,
-.wizard-token-code {
-    margin-bottom: 0.5rem;
-}
-
 /* S-DES-14: expandable changelog cell in the releases grid */
 
 /* ---- Console-style output blocks (unified with the wizard code tokens) ----
@@ -4984,7 +5114,6 @@ a.pipeline-relation-card:hover {
     border: 0.0625rem solid var(--omni-color-border);
     border-radius: var(--omni-radius);
     padding: 0.75rem;
-    margin-top: 0.75rem;
     background-color: var(--omni-color-surface-muted);
 }
 
@@ -5042,9 +5171,8 @@ a.pipeline-relation-card:hover {
        for the stage name. Fit to screen scales the whole graph instead. */
 }
 
-/* The dashboard panels (OmniRow columns, R-35: each as high as its content) and the project overview tiles. Their body is a flex
+/* The dashboard panels sit in an OE OmniTileGrid (R-41): one width and one height. Their body is a flex
    column so the grid inside a panel fills it. */
-.dashboard-tile .omni-card__body,
 .dashboard-tile-row .omni-card > .omni-card__body {
     display: flex;
     flex-direction: column;
@@ -5054,53 +5182,6 @@ a.pipeline-relation-card:hover {
 .project-section-grid-scroll {
     max-width: 100%;
     padding: 0.125rem;
-}
-
-/* The section tiles sit in an OE OmniTileGrid (R1-20): one width and one height; each tile is itself the link (OmniCard.Href). */
-}
-
-.project-section-tile {
-    min-width: 0;
-    height: 100%;
-    min-height: 5.25rem;
-    padding: 0.625rem;
-}
-
-.project-section-tile-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    height: 100%;
-    text-align: center;
-}
-
-.project-section-tile-heading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    min-width: 0;
-}
-
-.project-section-tile-heading > .omni-icon {
-    flex: 0 0 auto;
-    color: var(--omni-color-accent);
-    font-size: 1.25rem;
-}
-
-.project-section-tile-heading .omni-text {
-    overflow: hidden;
-    font-size: 0.75rem;
-    line-height: 1.15;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.project-section-tile-current {
-    border-color: color-mix(in srgb, var(--omni-color-accent) 55%, var(--omni-color-text));
-    background: color-mix(in srgb, var(--omni-color-accent) 9%, var(--omni-color-surface));
 }
 
 /* Server overview — Pipeline runner / Container isolation posture tiles.
@@ -5421,7 +5502,11 @@ a.pipeline-relation-card:hover {
 
 .error-card {
     max-width: 32rem;
-    margin-top: 4rem;
+}
+
+/* The offset below the page header belongs to this host, the card itself carries no outer margin (STD-SPACE). */
+.error-card-host {
+    padding-block-start: 4rem;
 }
 
 .error-icon {
@@ -5543,21 +5628,36 @@ textarea:focus-visible,
    ========================================================================== */
 
 @media (max-width: 39.99rem) {
-    .omni-data-grid {
-        overflow-x: auto;
-    }
-
+    /* R-51: no `overflow-x: auto` on the grid itself here. The scroll body (.omni-data-grid__viewport, above) is the
+       one horizontal scroller of a grid at every width; making the grid a second one under 40rem stacked a second
+       horizontal bar under the table in narrow windows and on phones. */
     .server-list-search,
     .pipeline-list-search {
         min-width: 0;
         width: 100%;
     }
 
-    .pipeline-runs-grid .pipeline-run-tree-name {
-        overflow: hidden;
-        overflow-wrap: normal;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    /* R-112: at phone width a run row of the tree is a wrapping line, not a 33 to 62rem grid that scrolls
+       sideways: the name takes the first line, the status, step and times flow under it. */
+    .pipeline-run-tree-row,
+    .pipeline-run-tree-with-project .pipeline-run-tree-row,
+    .pipeline-run-tree-compact .pipeline-run-tree-row,
+    .pipeline-run-tree-compact.pipeline-run-tree-with-project .pipeline-run-tree-row,
+    .pipeline-run-tree-compact.pipeline-run-tree-with-duration .pipeline-run-tree-row,
+    .pipeline-run-tree-compact.pipeline-run-tree-with-duration.pipeline-run-tree-with-project .pipeline-run-tree-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.125rem 0.25rem;
+        min-width: 0;
+    }
+
+    .pipeline-run-tree-name {
+        flex: 1 1 8rem;
+    }
+
+    .pipeline-run-tree-project,
+    .pipeline-run-tree-step {
+        flex: 1 1 100%;
     }
 
     .project-list-heading > .project-list-create,
@@ -5815,10 +5915,6 @@ textarea:focus-visible,
    ========================================================================== */
 
 /* Administration tiles are OE navigation tiles in an OmniTileGrid (R1-20); the grid only needs room below. */
-.admin-tile-grid {
-    margin-bottom: var(--omni-space-xl, 2rem);
-}
-
 .color-primary {
     color: var(--omni-color-accent);
 }
@@ -5859,24 +5955,36 @@ textarea:focus-visible,
     padding: 0.05rem 0.35rem;
 }
 
-/* Site-wide fine badge baseline (hors tableaux/grilles), aligned with the compact 1.75rem button
-   and input heights above so a badge sitting next to a button or input reads at the same scale
-   instead of the previous component bulkier default. */
+/* Site-wide badge baseline: outside grids a badge (status, type, tag) is exactly as tall as a button
+   (OE's control height, 1.75rem), so badges, tags and buttons side by side read at one height (user
+   decision 2026-10-26). In a grid row the compact badge height stays, shared with the icon-only actions. */
 .omni-badge {
     font-size: 0.7rem;
     padding: 0.15rem 0.45rem;
-    /* Badges and icon-only grid actions share OE's badge-height token, independent of text size. */
-    height: var(--omni-badge-height);
-    min-height: var(--omni-badge-height);
+    height: var(--omni-control-height);
+    min-height: var(--omni-control-height);
     display: inline-flex;
     align-items: center;
     box-sizing: border-box;
 }
 
-/* R-6: min-width is min-inline-size, so on every badge it would override OE's uniform status width
-   (omni-badge--width-*), loaded earlier; a badge with a width variant keeps OE's. */
-.omni-badge:not([class*="omni-badge--width-"]) {
-    min-width: var(--omni-badge-height);
+.omni-data-grid .omni-badge {
+    height: var(--omni-badge-height);
+    min-height: var(--omni-badge-height);
+}
+
+/* R-42: the padding above replaces OE's, so OE's start compensation for a leading icon (the margin drawn
+   inside the glyph box, 24/256 on each side) is given again on Aetheus's own padding: the icon's ink then
+   sits as far from the start edge as the text ends from the other one. */
+.omni-badge.omni-badge--leading-icon {
+    padding-inline-start: calc(0.45rem - 0.09375 * var(--omni-icon-size));
+}
+
+/* R-5: OE keeps a badge at least as wide as its own badge height; outside grids Aetheus draws it at the
+   control height (above), so that taller height is its width floor here. A badge with an OE width variant
+   (omni-badge--width-*) keeps OE's uniform width. In a grid row OE's floor applies as is. */
+.omni-badge:not([class*="omni-badge--width-"]):not(.omni-data-grid .omni-badge) {
+    min-width: var(--omni-control-height);
 }
 
 /* R-21: no alias of OE's badge height here. A custom property that reads another one is resolved where
@@ -6195,15 +6303,6 @@ html:root,
     font-size: 1rem;
 }
 
-.git-file-option-path {
-    min-width: 0;
-    overflow: hidden;
-    color: inherit;
-    font-size: 0.75rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .git-file-option-delta {
     display: flex;
     gap: 0.375rem;
@@ -6244,12 +6343,10 @@ html:root,
 
 .git-focused-diff-title > code {
     display: block;
-    overflow: hidden;
     color: var(--omni-color-text);
     font-size: 0.8125rem;
     font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 
 .git-focused-diff-title > div {
@@ -6616,7 +6713,8 @@ textarea.omni-text-box,
 .task-tracker-count {
     font-size: 0.8125rem;
     font-weight: 700;
-    font-variant-numeric: tabular-nums;
+    /* lining-nums: a theme font with old-style figures (Corbel, Nénuphar) dropped the "9" below the "+". */
+    font-variant-numeric: lining-nums tabular-nums;
     line-height: 1;
     color: var(--omni-color-accent);
     white-space: nowrap;
@@ -6652,13 +6750,14 @@ textarea.omni-text-box,
 .task-tracker-row:hover,
 .task-tracker-row:nth-of-type(even):hover { background: var(--omni-color-surface-hover); }
 .task-tracker-row-body { flex: 1 1 auto; min-width: 0; }
+/* R-112: a task, a notification or a server name is read in full; it wraps in the 22rem popover. */
 .task-tracker-row-name {
     font-size: 0.875rem; font-weight: 500;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 .task-tracker-row-meta {
     font-size: 0.75rem; color: var(--omni-color-text-muted);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 .task-tracker-icon-running  { color: var(--omni-color-accent); }
 .task-tracker-icon-assigned { color: var(--omni-color-warning); }
@@ -6684,7 +6783,7 @@ textarea.omni-text-box,
 .task-tracker-group-name {
     font-size: 0.8125rem; font-weight: 600;
     flex: 1 1 auto; min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow-wrap: anywhere;
 }
 .task-tracker-group-badge { font-size: 0.6875rem; }
 .task-tracker-row-grouped { padding-left: 2rem; }
@@ -6720,6 +6819,14 @@ textarea.omni-text-box,
 .nav-alert-item { position: relative; }
 .nav-alert-item .omni-panel-menu__link { padding-right: 3.5rem; }
 .nav-alert-count { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
+
+/* R-50: down to the icon rail the entry is a square one icon wide, so the open-menu room kept for the pill
+   (3.5rem on the right) pushed the icon off the rail's axis and the pill sat beside it. Folded, the link gets
+   the rail's own inset back and the pill leaves the right edge for a line of its own under the icon, centred on
+   the same axis as the icons (it takes the place of one row, which the user accepted). */
+.omni-panel-menu--icons .nav-alert-item .omni-panel-menu__link { padding-inline: var(--omni-sidebar-inset); }
+.omni-panel-menu--icons .nav-alert-item { display: flex; flex-direction: column; }
+.omni-panel-menu--icons .nav-alert-item > .nav-alert-count { position: static; transform: none; align-self: center; margin-block: 0.125rem 0.25rem; }
 
 /* Toasts begin below the top bar and its popovers. */
 :root { --omni-notification-top: calc(3.3125rem + 0.5rem); }
@@ -6862,100 +6969,37 @@ textarea.omni-text-box,
     min-width: 0;
 }
 
-.iam-page-header,
-.iam-entity-header {
-    padding: 1rem 0;
+/* R-7: the Users, Organizations and Roles tabs hold no panel (the page below is the selected tab's content), so the
+   empty panel OE draws under the strip is hidden and the page's gap spaces the strip. */
+.iam-section-tabs > .omni-tabs__panel {
+    display: none;
 }
 
-.iam-page-header .omni-page-header__icon,
-.iam-entity-header .omni-page-header__icon {
-    display: inline-grid;
-    place-items: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: var(--aetheus-radius);
-    color: var(--omni-color-accent);
-    background: color-mix(in srgb, var(--omni-color-accent) 14%, transparent);
-}
-
-/* Section links align left and their shared search aligns right. */
-.iam-section-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--omni-space-sm);
-    margin: 0 0 var(--aetheus-header-gap);
-}
-
-.iam-section-search {
-    /* Room for the links first; the search takes up to 16rem of what is left, on the same line. */
-    flex: 0 1 16rem;
-    min-width: 8rem;
-    width: auto;
-}
-
-.iam-section-nav {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    width: fit-content;
-    max-width: 100%;
-    margin: 0;
-    padding: 0.3125rem;
-    overflow-x: auto;
-    border: 0.0625rem solid var(--aetheus-tile-separator);
-    border-radius: var(--aetheus-radius);
-    border: 0.0625rem solid var(--omni-color-border);
-    background: var(--omni-color-surface-muted);
-    scrollbar-width: thin;
-}
-
-.iam-section-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4375rem;
-    min-height: 2.375rem;
-    padding: 0.5rem 0.875rem;
-    border: 0.0625rem solid transparent;
-    border-radius: var(--aetheus-radius);
-    color: var(--omni-color-text-muted);
-    font-weight: 600;
-    white-space: nowrap;
-    text-decoration: none;
-    color: var(--omni-color-text);
-    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.iam-section-link:hover {
-    color: var(--omni-color-text);
-    background: var(--omni-color-surface-hover);
-}
-
-.iam-section-link-active {
-    color: var(--omni-color-text);
-    border-color: color-mix(in srgb, var(--omni-color-accent) 45%, var(--omni-color-border));
-    background: var(--omni-color-accent-subtle);
-}
-
-.iam-section-link .omni-icon {
-    font-size: 1.1rem;
-}
-
-/* The list pages keep their grid at the floor every full-height grid has (three quarters of the window,
-   OE MinHeight default, 75dvh): min-content instead of 0 down the chain, so a short window scrolls the page
-   instead of clipping the grid in the surface below (overflow hidden). */
+/* The list pages keep their grid at its ten-row floor (the grids pass MinHeight="0", so OE's 75dvh default no longer
+   piles on top of the page header and the tabs: R-6, the page scrolled with three users listed). The grid takes
+   the rest of the window above that floor; min-content instead of 0 down the chain, so a window shorter than the
+   header, the tabs and ten rows scrolls the page instead of clipping the grid in the surface below (overflow hidden). */
 .app-body-wrapper:has(> .iam-list-page) {
     display: flex;
     flex-direction: column;
     min-height: 100%;
+    /* The wrapper's own bottom padding stays inside the 100%, as for the other full-height pages (R-6). */
+    box-sizing: border-box;
 }
 
 .app-body-wrapper > .iam-list-page {
     display: flex;
     flex: 1 1 0;
     flex-direction: column;
+    min-height: min-content;
+    /* The page header, the tabs and the grid are separated by this gap, not by a margin of their own (STD-SPACE). */
+    gap: var(--aetheus-header-gap);
+}
+
+/* The stack holding the failure alert above the grid surface relays the list page's flex column, so the surface
+   still takes the remaining height (R-14: the alert and the surface are separated by the stack's gap). */
+.iam-list-body {
+    flex: 1 1 0;
     min-height: min-content;
 }
 
@@ -7012,14 +7056,6 @@ textarea.omni-text-box,
     font-size: 1rem;
 }
 
-.iam-entity-header {
-    margin-bottom: 1rem;
-}
-
-.iam-entity-header .omni-page-header__subtitle {
-    margin-left: 3.125rem;
-}
-
 .iam-detail-card {
     padding: 1.125rem;
     border: 0.0625rem solid var(--aetheus-tile-separator);
@@ -7041,19 +7077,14 @@ textarea.omni-text-box,
     width: 100%;
 }
 
-.iam-role-autosave-status {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.375rem;
-    min-height: 1.5rem;
-    margin-top: 0.625rem;
-    color: var(--omni-color-text-muted);
+/* R-41: a control saved on the fly (no Save button) shows the STD-BUSY veil while it saves, with no text; the
+   success toast confirms. Unlike .btn-busy it does not clip, so a dropdown inside keeps its popup. */
+.iam-autosave-busy { position: relative; pointer-events: none; cursor: progress; }
+.iam-autosave-busy::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: var(--surface); opacity: 0; animation: btn-veil 1.3s ease-in-out infinite;
 }
-
-.role-assignment-heading {
-    margin-bottom: 0.75rem;
-}
+@media (prefers-reduced-motion: reduce) { .iam-autosave-busy::after { animation-duration: 4s; } }
 
 .role-assignment-selected {
     display: flex;
@@ -7080,11 +7111,7 @@ textarea.omni-text-box,
 }
 
 .role-assignment-filter {
-    min-height: 2.5rem;
-    padding-inline: 0.625rem;
-    border: 0.0625rem solid var(--aetheus-tile-separator);
-    border-radius: var(--aetheus-radius);
-    background: var(--omni-color-surface-muted);
+    flex: 0 0 auto;
 }
 
 .role-assignment-grid {
@@ -7115,35 +7142,6 @@ textarea.omni-text-box,
 }
 
 @media (max-width: 39.99rem) {
-    .iam-page-header,
-    .iam-entity-header {
-        padding: 0.875rem 0;
-    }
-
-    .iam-page-header .omni-page-header__actions .omni-button,
-    .iam-entity-header .omni-page-header__actions .omni-button {
-        min-width: var(--aetheus-control-height);
-        min-height: var(--aetheus-control-height);
-    }
-
-    .iam-page-header .omni-page-header__actions .omni-button .omni-button__content,
-    .iam-entity-header .omni-page-header__actions .omni-button .omni-button__content {
-        display: none;
-    }
-
-    .iam-entity-header .omni-page-header__subtitle {
-        margin-left: 0;
-    }
-
-    .iam-section-nav {
-        width: 100%;
-    }
-
-    .iam-section-link {
-        flex: 1 0 auto;
-        min-height: 2.75rem;
-    }
-
     .iam-detail-card {
         padding: 0.875rem;
     }
@@ -7216,7 +7214,11 @@ textarea.omni-text-box,
 .status-dot-success { background-color: var(--omni-color-success); }
 
 /* The gap-free wrapper lets the banner own its spacing above the page. */
-.version-alert-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.version-alert-bar { display: flex; align-items: center; gap: 0.75rem; }
+
+/* R-110: the banner and the page below it are separated by the gap of the body wrapper (already a flex column),
+   not by a margin on the banner. The gap exists only while the banner does. */
+.app-body-wrapper:has(> .version-alert-bar) { gap: var(--omni-space-md); }
 .version-alert-bar-text { flex: 1; }
 
 /* Service-action progress appears below its status badge. */
@@ -7278,15 +7280,15 @@ textarea.omni-text-box,
 .release-picker-cards { display: none; }
 .release-picker-card-group { width: 100%; }
 .release-picker-card-badges { flex-wrap: wrap; }
+/* The wrapper only keeps DialogFooter in view (R-56): it adds no band of its own. Its fill is the
+   dialog's own (the chain OE's .omni-dialog uses), so the content scrolling under it stays hidden
+   without a second, darker rectangle showing above the buttons. */
 .run-params-footer {
     position: sticky;
     bottom: 0;
     z-index: 1;
-    padding-block: 0.5rem;
-    background: var(--omni-color-surface);
+    background: var(--omni-dialog-background, var(--omni-card-background, var(--omni-color-surface)));
 }
-.run-params-advanced { margin: 0; }
-.run-params-release-warning { margin-block-start: 0.25rem; }
 @media (max-width: 39.99rem) {
     .release-picker-table { display: none; }
     .release-picker-cards { display: block; }
@@ -7420,28 +7422,6 @@ textarea.omni-text-box,
         var(--omni-color-surface, var(--omni-color-surface));
 }
 
-.analysis-decision-heading {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    margin-bottom: 1.25rem;
-}
-
-.analysis-decision-icon {
-    display: inline-grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: var(--aetheus-radius);
-    color: var(--omni-color-accent);
-    background: color-mix(in srgb, var(--omni-color-accent) 16%, transparent);
-}
-
-.analysis-decision-icon .omni-icon {
-    font-size: 1.4rem;
-}
-
 .analysis-decision-layout {
     display: grid;
     grid-template-columns: minmax(16rem, 0.9fr) minmax(20rem, 1.5fr);
@@ -7549,7 +7529,6 @@ textarea.omni-text-box,
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-bottom: 0.75rem;
 }
 
 .analysis-source-heading > .omni-icon {
@@ -7601,7 +7580,6 @@ textarea.omni-text-box,
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.6rem;
-    margin-top: 0.75rem;
 }
 
 .analysis-source-metadata > div {
@@ -7646,10 +7624,6 @@ textarea.omni-text-box,
     .analysis-workspace-tabs > .omni-tabs__strip .omni-tabs__viewport .omni-tabs__tab {
         justify-content: center;
         padding-inline: 0.5rem;
-    }
-
-    .analysis-decision-heading {
-        align-items: flex-start;
     }
 
     .analysis-decision-layout {
@@ -7761,7 +7735,6 @@ textarea.omni-text-box,
 }
 
 .project-onboarding {
-    margin-bottom: 1.25rem;
     overflow: hidden;
     border: 0.0625rem solid color-mix(in srgb, var(--omni-color-accent) 22%, var(--omni-color-border));
     background:
@@ -7782,6 +7755,9 @@ textarea.omni-text-box,
 }
 
 .project-onboarding-heading h5 { margin: 0; }
+
+/* R71: the Done button of a finished checklist sits at the end of the heading line. */
+.project-onboarding-done { margin-inline-start: auto; flex: 0 0 auto; }
 
 .git-repositories-grid-empty {
     display: none;
@@ -7908,16 +7884,21 @@ textarea.omni-text-box,
     .onboarding-steps td {
         padding: 0.5rem;
     }
-}
 
-.environment-copy-source {
-    border: 1px solid color-mix(in srgb, var(--omni-color-accent) 34%, var(--omni-color-border));
-    background: linear-gradient(135deg, color-mix(in srgb, var(--omni-color-accent) 9%, var(--omni-color-surface)), var(--omni-color-surface));
-}
+    /* R-112: the welcome steps table drops its 34rem floor; the title, the copy and the action wrap in their
+       cells instead of the table scrolling sideways. */
+    .onboarding-steps {
+        min-width: 0;
+    }
 
-.environment-copy-source__icon {
-    color: var(--omni-color-accent);
-    font-size: 1.5rem;
+    .onboarding-step-copy {
+        min-width: 0;
+    }
+
+    .onboarding-step-title,
+    .onboarding-step-action {
+        white-space: normal;
+    }
 }
 
 .environment-copy-source__hint {
@@ -8006,7 +7987,8 @@ textarea.omni-text-box,
     }
 }
 
-/* Grades share a colour scale across pages, while the quality hero retains its larger size. */
+/* A grade is a badge without icon filled with the colour of its grade (recettes R-59 as corrected, R-107);
+   the quality hero retains its larger size. */
 .grade-badge {
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -8018,17 +8000,23 @@ textarea.omni-text-box,
     padding-block: 0.125rem;
 }
 
-/* Grades beside status badges use the shared square badge size and radius. */
+/* R-5: a grade is a square as tall as the other badges beside it (the control height outside grids, the
+   compact badge height inside a grid row, rule below); R-3: OE's pill radius makes it a round badge. */
 .omni-badge.grade-badge:not(.analysis-grade-letter) {
-    height: var(--omni-badge-height);
-    width: var(--omni-badge-height);
-    min-width: var(--omni-badge-height);
+    height: var(--omni-control-height);
+    width: var(--omni-control-height);
+    min-width: var(--omni-control-height);
     padding-inline: 0;
-    border-radius: var(--aetheus-radius);
     justify-content: center;
     /* Grade letters center on both axes within their squares. */
     align-items: center;
     padding-block: 0;
+}
+
+.omni-data-grid .omni-badge.grade-badge:not(.analysis-grade-letter) {
+    height: var(--omni-badge-height);
+    width: var(--omni-badge-height);
+    min-width: var(--omni-badge-height);
 }
 
 /* Recent-run wrappers allow badge height so grades align with history dots. */
@@ -8036,8 +8024,17 @@ textarea.omni-text-box,
     max-height: var(--omni-badge-height);
 }
 
-/* The run tab rail sticks to its scroll container while the transparent page header scrolls away. */
-.pipeline-run-tabs > .omni-tabs__tab {
+/* R-14: the run page is one stack at the standard gap, so the tab rail and the panel under it are spaced by
+   that same gap (OE's panel padding is the larger --omni-space-lg), and the first block of a panel carries no
+   margin of its own. */
+.pipeline-run-tabs > .omni-tabs__panel {
+    padding-block: var(--omni-space-md);
+}
+
+/* R-39: the run tab rail no longer sticks while the page scrolls (the page background showed behind it). The
+   behaviour is kept behind the opt-in modifier .pipeline-run-tabs--sticky-strip, which no markup sets today:
+   add that class on the UrlSyncedTabs of PipelineRun.razor to bring the sticky rail back. */
+.pipeline-run-tabs.pipeline-run-tabs--sticky-strip > .omni-tabs__strip {
     position: sticky;
     top: 0;
     z-index: 2;
@@ -8048,8 +8045,6 @@ textarea.omni-text-box,
 .aetheus-grid-host {
     position: relative;
 }
-
-.grid-load-alert { margin-block-end: 0.5rem; }
 
 /* Grid loading and empty states remain visible. */
 .omni-data-grid__state {
@@ -8120,10 +8115,15 @@ textarea.omni-text-box,
     max-width: 60rem;
 }
 
-.omni-dialog:has(.aetheus-dialog--height-600) { height: min(37.5rem, calc(100vh - 2rem)); }
-.omni-dialog:has(.aetheus-dialog--height-720) { height: min(45rem, calc(100vh - 2rem)); }
-.omni-dialog:has(.aetheus-dialog--height-80vh) { height: 80vh; }
-.omni-dialog:has(.aetheus-dialog--height-85vh) { height: 85vh; }
+/* R-60: a dialog never exceeds the height really available, whatever height it asks for. The unit is dvh, never
+   vh: on a phone vh is the viewport with the address bar hidden, so a height in vh went past the visible screen
+   and cut the title and the footer buttons off. The ceiling is the same as OE's own (100dvh minus 2rem, OE 1.9.2,
+   dialog as a column whose body alone scrolls); stated here too so the rule also holds on the OE version the
+   application references today. */
+.omni-dialog:has(.aetheus-dialog--height-600) { height: min(37.5rem, calc(100dvh - 2rem)); }
+.omni-dialog:has(.aetheus-dialog--height-720) { height: min(45rem, calc(100dvh - 2rem)); }
+.omni-dialog:has(.aetheus-dialog--height-80vh) { height: min(80dvh, calc(100dvh - 2rem)); }
+.omni-dialog:has(.aetheus-dialog--height-85vh) { height: min(85dvh, calc(100dvh - 2rem)); }
 .omni-dialog:has(.aetheus-dialog--resizable) { resize: both; }
 .aetheus-dialog { min-height: 0; }
 
@@ -8146,7 +8146,7 @@ textarea.omni-text-box,
 }
 
 /* Grade colours progress from green to red; every grade is written in white, the single badge ink the
-   user chose on 2026-10-23 (light fills included). */
+   user chose on 2026-10-23 (light fills included). The grade is a badge again (recette R-107). */
 :root {
     --aetheus-grade-a: #15803d;
     --aetheus-grade-a-text: #ffffff;
@@ -8257,13 +8257,31 @@ textarea.omni-text-box,
 }
 
 /* The readers of a resource inside a grid cell: one line, cut with an ellipsis, all names in the title. */
-.resource-usage {
+.resource-usage,
+.certbot-domains {
     display: inline-block;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: middle;
+}
+/* R-22: the wrapper of a count badge must not cut it. Its overflow clip made the box as tall as the text line
+   (measured 20 px against the 22 px badge in a grid row), so "2 domaines" was drawn smaller than "Conforme"
+   beside it; the badge keeps its own height and the row is not taller (the cell already holds 22 px). */
+.resource-usage:has(> .omni-badge),
+.certbot-domains:has(> .omni-badge) {
+    display: inline-flex;
+    overflow: visible;
+}
+/* The full list of readers opened from the count badge (R-103). */
+.resource-usage-dialog__list,
+.certbot-domains-dialog__list {
+    margin: 0;
+    padding-left: var(--omni-space-lg, 1.25rem);
+    display: flex;
+    flex-direction: column;
+    gap: var(--omni-space-xs, 0.25rem);
 }
 .vault-add-row__messages:empty {
     display: none;
@@ -8538,7 +8556,6 @@ a.short-id__text:hover {
     padding-right: 0.75rem;
 }
 
-.run-attestation-card { margin-bottom: var(--omni-space-lg, 1rem); }
 .run-attestation-card > .omni-card__body {
     display: flex;
     flex-direction: column;
@@ -8663,7 +8680,7 @@ a.short-id__text:hover {
 
 /* The first failing mail check displays its resolution beneath the item. */
 .mail-status-fix {
-    margin: 0.25rem 0 0.5rem 1rem;
+    margin-left: 1rem;
 }
 
 @media (max-width: 39.99rem) {
@@ -8677,35 +8694,19 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
-/* Phone status-count badges replace visible names with icons while retaining accessible text and
-   tooltips. */
-.status-count-badge .status-count-badge__icon { display: none; }
-@media (max-width: 39.99rem) {
-    .status-count-badge { position: relative; }
-    .status-count-badge .status-count-badge__icon { display: inline-block; }
-    .status-count-badge__label {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-    }
-}
-
 /* All domains tied for the determining grade use bold text. */
 .analysis-grade-domain-limiting {
     font-weight: 700;
 }
 
-/* Commit, date, latest run and release form aligned tiles beside the grade. */
+/* R-32: commit, date, latest run and release sit on a row of their own below the grade, as wide as the card (like the tiles of a run's Gate tab). */
 .analysis-grade-primary {
     flex-wrap: wrap;
 }
 
 .analysis-grade-meta-tiles {
-    flex: 1 1 32rem;
     min-width: 0;
+    margin-bottom: 1rem;
 }
 
 /* Erasure progress aligns its loader, text and elapsed time on one line. */
@@ -8732,6 +8733,12 @@ a.short-id__text:hover {
 .mail-task-running__elapsed {
     color: var(--omni-color-text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+/* Recette R-116: a zone that has never held its result (logs not read yet, a first run of an action)
+   still gets a veil of a sensible height instead of a loader. */
+.action-veil-placeholder {
+    min-height: 8rem;
 }
 
 /* Daily recap settings: the section check boxes flow in columns, and the preview shows the e-mail on
@@ -8769,6 +8776,25 @@ a.short-id__text:hover {
     overflow-wrap: anywhere;
 }
 
+/* Certificate expiry alert settings (R-69): the value being added, and one row per lead time. */
+.certificate-alert-new-days {
+    flex: 0 1 10rem;
+    min-width: 0;
+}
+
+.certificate-alert-lead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border-bottom: var(--omni-border-width) solid var(--omni-color-border);
+}
+
+.certificate-alert-lead-text {
+    overflow-wrap: anywhere;
+}
+
 /* Received HTML mail uses a light sandboxed frame with its own scrolling, independent of the
    application theme. */
 .mailbox-html {
@@ -8798,7 +8824,7 @@ a.short-id__text:hover {
    entries, the count at the end; a message row shows the sender and the date on one line, the subject
    below; an unread row is bold, the open one is tinted (never a side stripe). */
 .mailbox-folders { display: flex; flex-direction: column; gap: var(--omni-space-xs); }
-.mailbox-folder__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: start; }
+.mailbox-folder__name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; text-align: start; }
 .mailbox-message { min-width: 0; padding-block: var(--omni-space-xs); }
 .mailbox-message > * { min-width: 0; }
 .mailbox-message__from, .mailbox-message__subject { flex: 1 1 auto; min-width: 0; }
@@ -8896,11 +8922,6 @@ a.short-id__text:hover {
     margin-left: auto;
 }
 
-/* Recette R1-59: room under the gate card before the page ends. */
-.analysis-run-gate-page {
-    margin-bottom: var(--omni-space-lg);
-}
-
 /* Recette R1-78: long test names and the title row break inside the card instead of widening the page. */
 .run-blocking-test,
 .run-blocking-test-failures {
@@ -8981,4 +9002,18 @@ a.short-id__text:hover {
 
 .ssh-config-card .ssh-section {
     min-width: 0;
+}
+
+/* R-27: the pipeline name and the step of a run in progress stay on one line on a card; the full text is the
+   tooltip. Keeps a tile with a run in progress as tall as one without. */
+.project-activity-line.project-activity-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+
+.project-activity-run > .project-activity-link {
+    flex: 0 1 auto;
+    white-space: nowrap;
 }

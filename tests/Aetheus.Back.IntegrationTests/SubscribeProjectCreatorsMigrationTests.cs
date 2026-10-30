@@ -35,10 +35,15 @@ public sealed class SubscribeProjectCreatorsMigrationTests(PostgresFixture fixtu
             await db.GetService<IMigrator>().MigrateAsync(migrations[index - 1], ct);
 
             var organizationId = await db.Organizations.OrderBy(o => o.Id).Select(o => o.Id).FirstAsync(ct);
-            var aliceUser = new User { Username = "alice-r2034" };
-            var carolUser = new User { Username = "carol-r2034", IsActive = false };
+            // The users go through the current model, which holds Users.LastActivityAt (20261028150000, after
+            // this migration): the column is present while the rows are written, then dropped again so that
+            // migration still runs for real afterwards (as ScopeRoleAssignmentsMigrationTests does).
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" ADD COLUMN \"LastActivityAt\" timestamp with time zone NULL", ct);
+            var aliceUser = new User { Username = "alice-r2034", Email = "alice-r2034@example.test" };
+            var carolUser = new User { Username = "carol-r2034", Email = "carol-r2034@example.test", IsActive = false };
             db.Users.AddRange(aliceUser, carolUser);
             await db.SaveChangesAsync(ct);
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE \"Users\" DROP COLUMN \"LastActivityAt\"", ct);
             var projects = new List<int>();
             foreach (var name in new[] { "Shop", "Blog", "Docs", "Legacy", "Followed" })
                 projects.Add(await LegacyProjectRows.InsertAsync(db, name + "-r2034", organizationId, ct));

@@ -1,7 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
+<OmniStack>
 @* Reinstallation is offered whenever the host has a mail stack. *@
 <AgentOfflineNotice Server="@Server" />
+
+@* R-119: what became of the task an action of this page queued; the page is veiled until it ends. *@
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Mail" SettleOnHeartbeat="true" OnSettled="ReloadAfterSettleAsync" />
 
 <ServerMailReinstall @ref="_reinstall" Server="@Server" ServerId="@ServerId" Mail="@Mail" CanManage="@Server.MailSetupAvailable" RunningChanged="@(() => StateHasChanged())" />
 
@@ -20,14 +24,14 @@
 else if (_countsFailed)
 {
     @* SITE-FUNC-METRICS-001: a failed read is said, not shown as a load that never ends. *@
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-lg mail-counts-failed">
+    <OmniAlert Severity="OmniSeverity.Danger" Class="mail-counts-failed">
         @L["LoadFailed"]
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ReadCountsAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 else if (!_countsRead)
 {
-    <AetheusLoader Size="OmniControlSize.Small" Class="omni-u-mb-lg mail-counts-loading" />
+    <AetheusLoader Size="OmniControlSize.Small" Class="mail-counts-loading" />
 }
 else if (_domainCount == 0 && _accountCount == 0)
 {
@@ -36,7 +40,7 @@ else if (_domainCount == 0 && _accountCount == 0)
 else
 {
     @* R1-29: the state of the stack has its own tab; a stack that is not compliant also shows its failing lines up here. *@
-    <MailComplianceBanner ServerId="@ServerId" Visible="@(_tabIndex != StateTabIndex)" />
+    <MailComplianceBanner @ref="_complianceBanner" ServerId="@ServerId" Visible="@(_tabIndex != StateTabIndex)" />
 }
 
 @if (Mail.IsInstalled)
@@ -50,7 +54,7 @@ else
                     <div class="blade-content-spacer"></div>
                     @* Recette R3-49: Add is the one visible action; "Client mail" (R1-17), "Purger" and, for an administrator, the administrator access (R1-41) sit in the menu next to it. *@
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenAddAccountDialogAsync" Disabled="@AgentOffline" title="@L["AddAccount"]"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
-                    <ServerMailAccountsMenu ServerId="@ServerId" CanManage="@CanManageTasks" OnAccountsChanged="@ReloadDataAsync" />
+                    <ServerMailAccountsMenu ServerId="@ServerId" CanManage="@CanManageTasks" Follower="@_follower" OnAccountsChanged="@ReloadDataAsync" />
                 </OmniStack>
                 <AetheusDataGrid FullHeight="true" @ref="_accountsGrid" Data="@_accounts" Count="@_accountCount"
                     TItem="MailAccountDto" RowClick="@OpenMailboxFromRow" IsLoading="@_accountsLoading" LoadData="@LoadAccountsAsync" ExportRead="@ReadAccountsExportAsync" ExportName="@L["MailAccounts"]"
@@ -76,7 +80,7 @@ else
                                 <MailRecordBadges IsActive="@a.IsActive" Source="@a.Source" MissingSince="@a.MissingSince" />
                             </Template>
                         </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="MailAccountDto" Property="CreatedAt" Title="@L["Created"]" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+                        <OmniDataGridColumn TItem="MailAccountDto" Property="CreatedAt" Title="@L["Created"]" Width="140px" Filterable="true" >
                             <Template Context="a">
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@a.CreatedAt.ToString("d")</OmniText>
                             </Template>
@@ -120,9 +124,9 @@ else
                         <OmniDataGridColumn TItem="MailDomainDto" Title="DNS" ExportValue="@DnsExport" Width="17rem" Filterable="false" >
                             <Template Context="d">
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasSpf ? OmniTone.Success : OmniTone.Neutral)">SPF</OmniBadge>
-                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasDkim ? OmniTone.Success : OmniTone.Neutral)">DKIM</OmniBadge>
-                                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@(d.HasDmarc ? OmniTone.Success : OmniTone.Neutral)">DMARC</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(d.HasSpf ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(d.HasSpf ? OmniTone.Success : OmniTone.Neutral)">SPF</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(d.HasDkim ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(d.HasDkim ? OmniTone.Success : OmniTone.Neutral)">DKIM</OmniBadge>
+                                    <OmniBadge Icon="@(BadgeIcon.ForState(d.HasDmarc ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(d.HasDmarc ? OmniTone.Success : OmniTone.Neutral)">DMARC</OmniBadge>
                                 </OmniStack>
                             </Template>
                         </OmniDataGridColumn>
@@ -193,7 +197,7 @@ else
 
             @* --- Spam filter tab --- *@
             <OmniTabsItem Key="spam" Title="@L["MailSpamFilter"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("shield")" /></Icon><ChildContent>
-                <ServerMailSpamTab Spam="@Mail.SpamFilter" ServerId="@ServerId" CanManage="@CanManageTasks" />
+                <ServerMailSpamTab Spam="@Mail.SpamFilter" ServerId="@ServerId" CanManage="@CanManageTasks" Follower="@_follower" />
             </ChildContent></OmniTabsItem>
 
             @* --- Queue tab --- *@
@@ -214,3 +218,4 @@ else
     </UrlSyncedTabs>
 }
 }
+</OmniStack>

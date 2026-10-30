@@ -10,8 +10,8 @@ namespace Aetheus.Back.IntegrationTests;
 
 /// <summary>
 /// PLAN-002 lot 10, gap 2: a user of organization B never reaches organization A's data through the
-/// real list and by-id endpoints. User B is a member of B and holds Read on B's own vault and pipeline
-/// only, so every list must show B's row (positive control: the filter is not simply "nothing") and
+/// real list and by-id endpoints. User B is a member of B and, for B only (ADR-059), holds wildcard
+/// Read on projects and servers and Read on B's own vault and pipeline, so every list must show B's row (positive control: the filter is not simply "nothing") and
 /// never A's, and every by-id read of A's row is refused.
 /// </summary>
 [Collection(PostgresCollection.Name)]
@@ -30,7 +30,10 @@ public sealed class OrganizationTenantIsolationHttpIntegrationTests(PostgresFixt
         var userB = await IntegrationUsers.CreateAsync(factory.Services, "tenant-b",
             [
                 new IntegrationUsers.Grant(ResourceType.Vault, b.VaultId, Permission.Read),
-                new IntegrationUsers.Grant(ResourceType.Pipeline, b.PipelineId, Permission.Read)
+                new IntegrationUsers.Grant(ResourceType.Pipeline, b.PipelineId, Permission.Read),
+                // ADR-059: wildcard grants, bounded by the organization the role is held for (B).
+                new IntegrationUsers.Grant(ResourceType.Project, null, Permission.Read),
+                new IntegrationUsers.Grant(ResourceType.Server, null, Permission.Read)
             ],
             b.OrganizationId);
         using var client = await IntegrationUsers.LoginClientAsync(factory, userB.Username);
@@ -73,10 +76,11 @@ public sealed class OrganizationTenantIsolationHttpIntegrationTests(PostgresFixt
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
         var a = await SeedTenantAsync(factory, "a");
         var b = await SeedTenantAsync(factory, "b");
-        var userB = await IntegrationUsers.CreateAsync(factory.Services, "tenant-b-artifacts", [], b.OrganizationId);
+        var userB = await IntegrationUsers.CreateAsync(factory.Services, "tenant-b-artifacts",
+            [new IntegrationUsers.Grant(ResourceType.Project, null, Permission.Read)], b.OrganizationId);
         using var client = await IntegrationUsers.LoginClientAsync(factory, userB.Username);
 
-        // Positive control: membership of B is enough to download B's artifact, bytes intact.
+        // Positive control: a Project Read role held for B (ADR-059) downloads B's artifact, bytes intact.
         var ownDownload = await client.GetAsync($"/api/artifacts/{b.ArtifactId}/download", ct);
         Assert.Equal(HttpStatusCode.OK, ownDownload.StatusCode);
         Assert.Equal(b.ArtifactBytes, await ownDownload.Content.ReadAsByteArrayAsync(ct));

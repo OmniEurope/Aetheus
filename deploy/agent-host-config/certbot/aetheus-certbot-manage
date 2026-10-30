@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: EUPL-1.2
-# aetheus-certbot-helper-version: 6
+# aetheus-certbot-helper-version: 9
 # Aetheus Agent certbot-manage helper - root-owned, invoked via /etc/sudoers.d/aetheus-certbot.
 # Args: $1 = verb (renew|renew-all|delete|revoke|normalize|renewal-check|remove-name), $2 = cert lineage name
 # (only for renew, delete, revoke and remove-name), $3 = the name remove-name takes out of the certificate.
@@ -20,10 +20,34 @@ CR="$(printf '\r')"
 one_line() { case "$1" in *"$NL"*|*"$CR"*) return 1 ;; esac; }
 valid_name() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$'; }
 valid_domain() { one_line "$1" && printf '%s' "$1" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$'; }
-# The names a lineage covers, as certbot lists them ("Domains: a b c"), lower case, on one line.
+# The names a lineage covers, as certbot lists them, lower case, on one line. certbot labels that line
+# "Domains:" up to 5.1 and "Identifiers:" from 5.2 (cert_manager.py, human_readable_cert_info), so both are
+# read. Nothing is printed on stdout when certbot succeeded and listed no such certificate; certbot's own
+# stdout and stderr (the last 20 non-blank lines) are then shown on stderr, so the task log says what certbot
+# printed instead of a bare "not found" (recette R-54). When certbot itself fails (a lock held by another
+# run, an unreadable renewal file...), its own output and exit code are shown on stderr and the function
+# fails: that failure must never be reported as "certificate not found" (recette R-124).
 certificate_names() {
-    certbot certificates --cert-name "$1" 2>/dev/null \
-        | sed -n 's/^[[:space:]]*Domains:[[:space:]]*//p' | head -n 1 | tr 'A-Z' 'a-z' | tr -d '\r'
+    cn_out="$(mktemp)"
+    cn_err="$(mktemp)"
+    cn_rc=0
+    certbot certificates --cert-name "$1" >"$cn_out" 2>"$cn_err" || cn_rc=$?
+    if [ "$cn_rc" -ne 0 ]; then
+        echo "certbot could not list certificate $1 (exit code $cn_rc):" >&2
+        cat "$cn_err" "$cn_out" >&2
+        rm -f "$cn_out" "$cn_err"
+        return 1
+    fi
+    cn_names="$(sed -n 's/^[[:space:]]*\(Domains\|Identifiers\):[[:space:]]*//p' "$cn_out" | head -n 1 | tr 'A-Z' 'a-z' | tr -d '\r')"
+    if [ -z "$cn_names" ]; then
+        echo "certbot exited 0 for certificate $1 but its output names no Domains or Identifiers line; its last output lines:" >&2
+        {
+            sed 's/^/stdout: /' "$cn_out"
+            sed 's/^/stderr: /' "$cn_err"
+        } | tr -d '\000-\010\013-\037' | grep -Ev '^std(out|err):[[:space:]]*$' | tail -n 20 | cut -c 1-300 >&2
+    fi
+    rm -f "$cn_out" "$cn_err"
+    printf '%s\n' "$cn_names"
 }
 # authenticator value of a renewal file ("" when absent).
 renewal_authenticator() {
@@ -358,7 +382,7 @@ record_unprotected_rewrite_rules() {
     rm -rf "$rur_work"
 }
 # Prints the helper version before anything else, so it answers on a host where certbot is missing too.
-[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 6"; exit 0; }
+[ "${1:-}" != "version" ] || { echo "aetheus-certbot-helper-version: 9"; exit 0; }
 command -v certbot >/dev/null 2>&1 || { echo "certbot not installed" >&2; exit 1; }
 verb="${1:-}"
 case "$verb" in
@@ -369,8 +393,11 @@ case "$verb" in
         echo "Aetheus ACME alias not enabled in Apache: no lineage converted."
         exit 0
     fi
-    certbot reconfigure --help >/dev/null 2>&1 \
-        || { echo "certbot reconfigure is unavailable (certbot 2.3 or newer is required)" >&2; exit 1; }
+    if ! reconfigure_help="$(certbot reconfigure --help 2>&1)"; then
+        echo "certbot reconfigure is unavailable (certbot 2.3 or newer is required); certbot said:" >&2
+        printf '%s\n' "$reconfigure_help" | tail -n 5 >&2
+        exit 1
+    fi
     mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge"
     refresh_acme_conf || exit 1
     protect_proxy_rewrite_rules || exit 1
@@ -427,6 +454,20 @@ case "$verb" in
     certbot renew --cert-name "$name" --non-interactive ;;
   delete)
     name="${2:-}"; valid_name "$name" || { echo "invalid cert name" >&2; exit 2; }
+    # The local certificate mode of aetheus-certbot-issue writes a self-signed pair straight into the
+    # live directory, with no renewal file: certbot does not know that lineage and cannot delete it
+    # (recette R-97). Only such a pair is removed here, and only when its subject is its own issuer;
+    # a lineage certbot manages, or any CA-issued certificate, still goes through certbot.
+    live="/etc/letsencrypt/live/$name"
+    if [ ! -e "$RENEWAL_DIR/$name.conf" ] && [ -f "$live/fullchain.pem" ] && [ ! -L "$live/fullchain.pem" ]; then
+        subject=$(openssl x509 -in "$live/fullchain.pem" -noout -subject 2>/dev/null) || subject=""
+        issuer=$(openssl x509 -in "$live/fullchain.pem" -noout -issuer 2>/dev/null) || issuer=""
+        if [ -n "$subject" ] && [ "${subject#subject}" = "${issuer#issuer}" ]; then
+            rm -rf -- "$live"
+            echo "local self-signed certificate $name removed."
+            exit 0
+        fi
+    fi
     certbot delete --cert-name "$name" --non-interactive ;;
   revoke)
     name="${2:-}"; valid_name "$name" || { echo "invalid cert name" >&2; exit 2; }
@@ -442,7 +483,7 @@ case "$verb" in
         echo "Aetheus ACME alias not enabled in Apache: $name cannot be reissued through the web root." >&2
         exit 1
     fi
-    names="$(certificate_names "$name")"
+    names="$(certificate_names "$name")" || exit 1
     [ -n "$names" ] || { echo "certificate $name not found" >&2; exit 1; }
     # The names are split on blanks but never globbed: a wildcard name ("*.example.com") must reach the check
     # below as written, not as the file names it would match in the working directory.

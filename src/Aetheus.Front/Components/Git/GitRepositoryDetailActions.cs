@@ -6,7 +6,8 @@ internal sealed class GitRepositoryDetailActions(
     ApiClient api,
     OmniDialogService dialog,
     NotifyHelper toast,
-    IStringLocalizer<AppStrings> localizer)
+    IStringLocalizer<AppStrings> localizer,
+    BusyVeil veil)
 {
     public async Task<bool> CreateBranchAsync(int repositoryId)
         => await OpenCreateDialogAsync<GitBranchCreateDialog>(
@@ -16,9 +17,12 @@ internal sealed class GitRepositoryDetailActions(
     {
         var confirmed = await ConfirmDeleteAsync(branch.Name);
         if (!confirmed) return false;
-        var success = await api.Git.DeleteGitBranchAsync(repositoryId, branch.Name);
-        if (success) toast.Success("Deleted", branch.Name);
-        return success;
+        return await veil.RunAsync(async () =>
+        {
+            var success = await api.Git.DeleteGitBranchAsync(repositoryId, branch.Name);
+            if (success) toast.Success("Deleted", branch.Name);
+            return success;
+        });
     }
 
     public async Task<bool> CreateTagAsync(int repositoryId)
@@ -46,9 +50,12 @@ internal sealed class GitRepositoryDetailActions(
     {
         var confirmed = await ConfirmDeleteAsync(tag.Name);
         if (!confirmed) return false;
-        var success = await api.Git.DeleteGitTagAsync(repositoryId, tag.Name);
-        if (success) toast.Success("Deleted", tag.Name);
-        return success;
+        return await veil.RunAsync(async () =>
+        {
+            var success = await api.Git.DeleteGitTagAsync(repositoryId, tag.Name);
+            if (success) toast.Success("Deleted", tag.Name);
+            return success;
+        });
     }
 
     public async Task<bool> CreatePullRequestAsync(int repositoryId)
@@ -95,9 +102,12 @@ internal sealed class GitRepositoryDetailActions(
                 CancelButtonText = localizer["GoBack"].Value
             });
         if (confirmed != true) return false;
-        var result = await api.Git.CloseGitPullRequestAsync(repositoryId, pullRequest.Number);
-        if (result is not null) toast.Success("Closed", $"#{pullRequest.Number}");
-        return result is not null;
+        return await veil.RunAsync(async () =>
+        {
+            var result = await api.Git.CloseGitPullRequestAsync(repositoryId, pullRequest.Number);
+            if (result is not null) toast.Success("Closed", $"#{pullRequest.Number}");
+            return result is not null;
+        });
     }
 
     public async Task<bool> AddProtectionRuleAsync(int repositoryId)
@@ -132,9 +142,12 @@ internal sealed class GitRepositoryDetailActions(
     {
         var confirmed = await ConfirmDeleteAsync(rule.Pattern);
         if (!confirmed) return false;
-        var success = await api.Git.DeleteGitBranchProtectionRuleAsync(repositoryId, rule.Id);
-        if (success) toast.Success("Deleted", rule.Pattern);
-        return success;
+        return await veil.RunAsync(async () =>
+        {
+            var success = await api.Git.DeleteGitBranchProtectionRuleAsync(repositoryId, rule.Id);
+            if (success) toast.Success("Deleted", rule.Pattern);
+            return success;
+        });
     }
 
     public async Task<bool> UpdateProtectionRuleAsync(

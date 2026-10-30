@@ -4,7 +4,8 @@
 @using Microsoft.JSInterop
 @using Aetheus.Front.Resources
 
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
+<OmniStack>
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
     <OmniLabel For="docker-project-filter">@L["Project"]</OmniLabel>
     <OmniDropDown Id="docker-project-filter" TValue="string" name="docker-project-filter" Options="@(_projectOptions.ToOptions(item => (string)item, item => item))" @bind-Value="_selectedProject"
         @bind-Value:after="RebuildAndLoad" AllowEmpty="true" Placeholder="@L["AllProjects"]" Class="docker-graph-filter-dropdown" />
@@ -22,12 +23,13 @@
 
 @if (_selectedNodeLabel is not null)
 {
-    <OmniCard Class="omni-u-mt-sm">
+    <OmniCard>
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_selectedNodeKind</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@_selectedNodeKind</OmniBadge>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0"><strong>@_selectedNodeLabel</strong></OmniText>
             <div class="flex-spacer"></div>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _selectedNodeLabel = null; _selectedNodeKind = null; })" title="@L["Close"]"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon></OmniButton>
         </OmniStack>
     </OmniCard>
 }
+</OmniStack>

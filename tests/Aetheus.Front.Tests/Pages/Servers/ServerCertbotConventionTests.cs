@@ -267,10 +267,51 @@ public sealed class ServerCertbotConventionTests : BunitContext
         Assert.Empty(cut.FindAll(".certbot-renewal-failures"));
     }
 
+    [Fact]
+    public void R_55_AFailedRehearsal_HasNoRedHeaderBadge_ItsDateIsInTheFailureBanner()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            RenewalCheckedAt = new DateTime(2026, 9, 18, 12, 8, 8, DateTimeKind.Utc),
+            RenewalCheckSucceeded = false
+        });
+
+        Assert.Empty(cut.FindAll(".omni-badge[data-testid=certbot-renewal-check]"));
+        Assert.Equal("CertbotRenewalCheckFailed", cut.Find(".certbot-renewal-failures [data-testid=certbot-renewal-check]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void R_53_TheRenewButtonOfARow_IsPrimaryBlue()
+    {
+        var cut = Render(new CertbotDataDto
+        {
+            IsInstalled = true,
+            Certificates = [Certificate("ok.example.com", CertbotRenewalConvention.Conforming, "webroot", "/var/www/aetheus-acme")]
+        });
+
+        Assert.Contains("omni-button--primary", cut.Find("button[title='Renew']").ClassList);
+    }
+
+    [Fact]
+    public void R_56_AConfirmedAction_DoesNotRaiseTheWholePageVeil_TheSectionFollowerVeilsAlone()
+    {
+        var veil = Services.GetRequiredService<BusyVeil>();
+        var changes = new List<bool>();
+        veil.Changed += () => changes.Add(veil.IsBusy);
+        var cut = Render(new CertbotDataDto { IsInstalled = true });
+        Confirmation.ConfirmResult = true;
+
+        cut.FindMenuItem("CertbotNormalize")!.Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request => request.Url.Contains("certbot/action")));
+        Assert.DoesNotContain(true, changes);
+        Assert.False(veil.IsBusy);
+    }
+
     [Theory]
     [InlineData(null, "CertbotRenewalCheckNever")]
     [InlineData(true, "CertbotRenewalCheckPassed")]
-    [InlineData(false, "CertbotRenewalCheckFailed")]
     public void RenewalCheck_ShowsTheLastOutcome(bool? succeeded, string expected)
     {
         var cut = Render(new CertbotDataDto

@@ -6,8 +6,8 @@ namespace Aetheus.Back.Components.Pipelines;
 
 /// <param name="Kind">The requirement class, matching the recorded preflight kinds.</param>
 /// <param name="Name">What was required.</param>
-/// <param name="Problem">Null when satisfied; otherwise the readable refusal.</param>
-public sealed record PipelineRequirementOutcome(string Kind, string Name, string? Problem)
+/// <param name="Problem">Null when satisfied; otherwise the refusal, as a launch problem.</param>
+public sealed record PipelineRequirementOutcome(string Kind, string Name, PipelineProblem? Problem)
 {
     public bool Satisfied => Problem is null;
 }
@@ -142,8 +142,11 @@ public sealed class PipelineRequirementsChecker(
                 LibraryKind, name,
                 found.Contains(name, StringComparer.OrdinalIgnoreCase)
                     ? null
-                    : $"Variable library '{name}' is required by this pipeline and does not exist here. "
-                      + "Create it with the entries the pipeline reads, then launch."));
+                    : PipelineProblem.Of(
+                        PipelineProblemCodes.RequiredLibraryMissing,
+                        $"Variable library '{name}' is required by this pipeline and does not exist here. "
+                        + "Create it with the entries the pipeline reads, then launch.",
+                        ("library", name))));
     }
 
     private async Task CheckVaultsAsync(
@@ -158,8 +161,11 @@ public sealed class PipelineRequirementsChecker(
                 VaultKind, name,
                 names.Contains(name, StringComparer.OrdinalIgnoreCase)
                     ? null
-                    : $"Vault '{name}' is required by this pipeline and does not exist here. "
-                      + "Create it and add the secrets the pipeline reads, then launch."));
+                    : PipelineProblem.Of(
+                        PipelineProblemCodes.RequiredVaultMissing,
+                        $"Vault '{name}' is required by this pipeline and does not exist here. "
+                        + "Create it and add the secrets the pipeline reads, then launch.",
+                        ("vault", name))));
     }
 
     private async Task CheckEnvironmentsAsync(
@@ -172,7 +178,10 @@ public sealed class PipelineRequirementsChecker(
                 EnvironmentKind, name,
                 environment is not null
                     ? null
-                    : $"Environment '{name}' is required by this pipeline and does not exist here."));
+                    : PipelineProblem.Of(
+                        PipelineProblemCodes.RequiredEnvironmentMissing,
+                        $"Environment '{name}' is required by this pipeline and does not exist here.",
+                        ("environment", name))));
         }
     }
 
@@ -188,15 +197,19 @@ public sealed class PipelineRequirementsChecker(
                 // guarantee nothing behind it verifies.
                 outcomes.Add(new PipelineRequirementOutcome(
                     CapabilityKind, capability,
-                    $"Capability '{capability}' is not one this control plane can verify "
-                    + $"(known: {string.Join(", ", PipelineCapabilities.Known)})."));
+                    PipelineProblem.Of(
+                        PipelineProblemCodes.RequiredCapabilityUnknown,
+                        $"Capability '{capability}' is not one this control plane can verify "
+                        + $"(known: {string.Join(", ", PipelineCapabilities.Known)}).",
+                        ("capability", capability), ("known", string.Join(", ", PipelineCapabilities.Known)))));
                 continue;
             }
 
             var satisfied = await repo.HasRunnerWithDockerAsync(organizationId, ct).ConfigureAwait(false);
             outcomes.Add(new PipelineRequirementOutcome(
                 CapabilityKind, capability,
-                satisfied ? null : "No enrolled runner reports Docker available."));
+                satisfied ? null : PipelineProblem.Of(
+                    PipelineProblemCodes.RequiredDockerMissing, "No enrolled runner reports Docker available.")));
         }
     }
 }

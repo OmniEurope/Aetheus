@@ -20,8 +20,26 @@ public class LoginTests : BunitContext
         var cut = Render<Login>();
 
         Assert.Contains("Login", cut.Markup);
-        Assert.Contains("Username", cut.Markup);
+        Assert.Contains("LoginEmail", cut.Markup);
         Assert.Contains("Password", cut.Markup);
+    }
+
+    /// <summary>PLAN-003 P3-2: people sign in by e-mail address, and the browser offers its saved
+    /// address for it.</summary>
+    [Fact]
+    public void SignInField_IsAnEmailAddress_WithTheUsernameAutofillHint()
+    {
+        _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
+        var cut = Render<Login>();
+
+        var field = cut.Find("form input#Email");
+        Assert.Equal("email", field.GetAttribute("type"));
+        // One autofill field name only: "username email" is not a valid token list, so browsers read it as
+        // no hint at all (autocomplete IDL ""), and password managers miss the sign-in field.
+        Assert.Equal("username", field.GetAttribute("autocomplete"));
+        // The label names the field and carries OE's required mark.
+        Assert.Equal("LoginEmail*", cut.Find("label[for='Email']").TextContent.Trim());
+        Assert.Empty(cut.FindAll("input#Username"));
     }
 
     /// <summary> The demo account sits in two read-only fields under the "Public demo" title, each
@@ -35,7 +53,7 @@ public class LoginTests : BunitContext
 
         var box = cut.WaitForElement(".public-demo-account");
         Assert.Contains("PublicDemo", box.QuerySelector("strong")!.TextContent, StringComparison.Ordinal);
-        foreach (var (id, value) in new[] { ("public-demo-username", "admin"), ("public-demo-password", "aetheus-demo") })
+        foreach (var (id, value) in new[] { ("public-demo-email", "admin@aetheus.local"), ("public-demo-password", "aetheus-demo") })
         {
             var input = box.QuerySelector($"input#{id}")!;
             Assert.True(input.HasAttribute("readonly"));
@@ -48,7 +66,7 @@ public class LoginTests : BunitContext
     }
 
     [Theory]
-    [InlineData("public-demo-username", "admin", true)]
+    [InlineData("public-demo-email", "admin@aetheus.local", true)]
     [InlineData("public-demo-password", "aetheus-demo", false)]
     public void PublicDemo_CopyButton_PutsTheValueOnTheClipboard_AndOnlyARefusedCopyToasts(string id, string value, bool accepted)
     {
@@ -78,10 +96,10 @@ public class LoginTests : BunitContext
 
         var fill = cut.WaitForElement(".public-demo-account button.public-demo-fill");
         Assert.Contains("PublicDemoFillForm", fill.TextContent, StringComparison.Ordinal);
-        Assert.Contains("omni-button--secondary", fill.ClassList);
+        Assert.Contains("omni-button--primary", fill.ClassList);
         fill.Click();
 
-        Assert.Equal("admin", cut.Find("form input#Username").GetAttribute("value"));
+        Assert.Equal("admin@aetheus.local", cut.Find("form input#Email").GetAttribute("value"));
         Assert.Equal("aetheus-demo", cut.Find("form input#Password").GetAttribute("value"));
         cut.Find("form").Submit();
         cut.WaitForAssertion(() => Assert.Contains(
@@ -91,7 +109,7 @@ public class LoginTests : BunitContext
             request.Method == "POST" && request.Url.EndsWith("auth/login", StringComparison.Ordinal)).Body;
         var sent = System.Text.Json.JsonSerializer.Deserialize<LoginRequest>(
             body!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
-        Assert.Equal("admin", sent!.Username);
+        Assert.Equal("admin@aetheus.local", sent!.Email);
         Assert.Equal("aetheus-demo", sent.Password);
     }
 
@@ -115,7 +133,7 @@ public class LoginTests : BunitContext
         _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token" });
         var cut = Render<Login>();
 
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("aetheus-dev-admin-pwd");
         cut.Find("form").Submit();
 
@@ -126,7 +144,7 @@ public class LoginTests : BunitContext
             request.Method == "POST" && request.Url.EndsWith("auth/login", StringComparison.Ordinal)).Body;
         var request = System.Text.Json.JsonSerializer.Deserialize<LoginRequest>(
             body!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
-        Assert.Equal("admin", request!.Username);
+        Assert.Equal("admin@aetheus.local", request!.Email);
         Assert.Equal("aetheus-dev-admin-pwd", request.Password);
     }
 
@@ -140,7 +158,7 @@ public class LoginTests : BunitContext
         nav.NavigateTo("/login");
         var cut = Render<Login>();
 
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("aetheus-dev-admin-pwd");
         cut.Find("form").Submit();
 
@@ -221,6 +239,59 @@ public class LoginTests : BunitContext
         Assert.Contains("ReturnUrl=%2Fservers", href, StringComparison.Ordinal);
     }
 
+    // R-14 (owner decision 2026-10-28): the forgotten-password hint is now a form that asks for a link.
+    private IRenderedComponent<Login> RenderForgot()
+    {
+        _handler.SetJsonResponse("api/auth/public-demo", new PublicDemoInfoDto());
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo("/login?forgot=true");
+        BunitTestHelper.Interactive(this);
+        return Render<Login>();
+    }
+
+    [Fact]
+    public void ForgotPassword_AskingForALink_PostsTheAddress_AndShowsTheSameNeutralAnswer()
+    {
+        _handler.SetResponse(HttpMethod.Post, "api/auth/password-reset", System.Net.HttpStatusCode.Accepted);
+        var cut = RenderForgot();
+
+        cut.Find("#login-forgot-hint input#ForgotEmail").Input("  jean@example.org ");
+        cut.Find("#login-forgot-hint form").Submit();
+
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("#login-forgot-hint .login-forgot-sent")));
+        var post = Assert.Single(_handler.RequestDetails, r => r.Method == "POST" && r.Url.Contains("api/auth/password-reset"));
+        Assert.Contains("\"jean@example.org\"", post.Body, StringComparison.Ordinal);
+        Assert.Contains("ForgotPasswordSent", cut.Find(".login-forgot-sent").TextContent, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll("#login-forgot-hint form"));
+        // The main sign-in form is untouched.
+        Assert.NotNull(cut.Find("form input#Email"));
+    }
+
+    [Fact]
+    public void ForgotPassword_ARefusedRequest_SaysSo_AndKeepsTheForm()
+    {
+        _handler.SetResponse(HttpMethod.Post, "api/auth/password-reset", System.Net.HttpStatusCode.TooManyRequests);
+        var cut = RenderForgot();
+
+        cut.Find("#login-forgot-hint input#ForgotEmail").Input("jean@example.org");
+        cut.Find("#login-forgot-hint form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Contains("ForgotPasswordRefused", cut.Find(".login-forgot-error").TextContent, StringComparison.Ordinal));
+        Assert.Empty(cut.FindAll(".login-forgot-sent"));
+        Assert.NotNull(cut.Find("#login-forgot-hint form"));
+    }
+
+    [Fact]
+    public void ForgotPassword_AnInvalidAddress_IsNotSent()
+    {
+        var cut = RenderForgot();
+
+        cut.Find("#login-forgot-hint input#ForgotEmail").Input("not-an-address");
+        cut.Find("#login-forgot-hint form").Submit();
+
+        Assert.DoesNotContain(_handler.RequestDetails, r => r.Url.Contains("api/auth/password-reset"));
+        Assert.Empty(cut.FindAll(".login-forgot-sent"));
+    }
+
     [Fact]
     public void Renders_LoginForm_Unauthenticated()
     {
@@ -258,7 +329,7 @@ public class LoginTests : BunitContext
         _handler.SetJsonResponse("auth/login", new LoginResponse { Token = "jwt-token" });
         var cut = Render<Login>();
 
-        cut.Find("input#Username").Input("admin");
+        cut.Find("input#Email").Input("admin@aetheus.local");
         cut.Find("input#Password").Input("secret");
         cut.Find("input.omni-checkbox").Change(true);
         cut.Find("form").Submit();

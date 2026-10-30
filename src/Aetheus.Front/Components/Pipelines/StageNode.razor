@@ -16,7 +16,7 @@
         <span class="vp-node-header-title" title="@Stage.Name">@Stage.Name</span>
         @if (!string.IsNullOrWhiteSpace(Provenance))
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(Provenance == L["Overridden"] ? OmniTone.Warning : OmniTone.Accent)">@Provenance</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(Provenance == L["Overridden"] ? OmniTone.Warning : OmniTone.Accent))" Fill="OmniFill.Solid" Tone="@(Provenance == L["Overridden"] ? OmniTone.Warning : OmniTone.Accent)">@Provenance</OmniBadge>
         }
         @if (Warnings.Count > 0)
         {

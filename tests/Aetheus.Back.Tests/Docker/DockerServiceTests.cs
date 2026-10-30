@@ -65,10 +65,22 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("docker stop abc123def456") &&
+            IsOperation(t, OperationKind.DockerStopContainer, "abc123def456") &&
             t.Status == TaskExecutionStatus.Pending), TestContext.Current.CancellationToken);
         await _taskService.Received(1).NotifyTaskQueuedAsync(Arg.Any<ServerTask>(), ct: Arg.Any<CancellationToken>());
     }
+
+    // R-119: a state-changing Docker action reaches the agent as a typed operation whose kind it maps to its cached
+    // Docker inventory, so the inventory is collected again and sent at once. A plain shell task carries no kind:
+    // the page kept showing the container running after it had been stopped. The target is the only variable, never
+    // a docker command line.
+    private static bool IsOperation(ServerTask task, OperationKind kind, string target) =>
+        task.Executor == ExecutorType.Operation
+        && task.Operation == kind
+        && task.Command == target;
+
+    private static Dictionary<string, string> Environment(ServerTask task) =>
+        System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(task.EnvironmentVariables)!;
 
     [Fact]
     public async Task ExecuteActionAsync_InvalidContainerId_Throws()
@@ -92,7 +104,8 @@ public class DockerServiceTests
         await _sut.PullImageAsync(1, new DockerPullImageRequest { Image = "nginx:latest" }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker pull nginx:latest"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerPullImage, "nginx:latest") && t.TimeoutSeconds == 300),
+            TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -126,9 +139,7 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("docker container prune") &&
-            t.Command.Contains("docker image prune") &&
-            t.Command.Contains("docker volume prune")), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerPrune, "containers,images,volumes")), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -155,8 +166,24 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains("--cpus=2.00") &&
-            t.Command.Contains("--memory=512m")), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerUpdateResources, "abc123def456")
+            && Environment(t)["AETHEUS_DOCKER_CPUS"] == "2.00"
+            && Environment(t)["AETHEUS_DOCKER_MEMORY_MB"] == "512"), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UpdateResourceLimitsAsync_CpuOnly_SendsNoMemoryLimit()
+    {
+        await _sut.UpdateResourceLimitsAsync(1, new DockerResourceLimitsRequest
+        {
+            ContainerId = "abc123def456",
+            CpuLimit = 0.5
+        }, ct: TestContext.Current.CancellationToken);
+
+        await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
+            IsOperation(t, OperationKind.DockerUpdateResources, "abc123def456")
+            && Environment(t).Count == 1
+            && Environment(t)["AETHEUS_DOCKER_CPUS"] == "0.50"), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -198,7 +225,16 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker compose -p my-stack up -d"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerComposeProjectUp, "my-stack")), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ExecuteComposeActionAsync_StackNameComposeRefuses_RejectedBeforeQueueing()
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.ExecuteComposeActionAsync(1, new DockerComposeActionRequest { StackName = "Web.Stack", Action = DockerComposeAction.Down },
+                ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     // --- GetImagesAsync ---
@@ -310,7 +346,8 @@ public class DockerServiceTests
         await _sut.RemoveImageAsync(1, "sha256:abcdef1234560000000000000000000000000000000000000000000000000000", ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker rmi sha256:abcdef1234560000000000000000000000000000000000000000000000000000"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerRemoveImage, "sha256:abcdef1234560000000000000000000000000000000000000000000000000000")),
+            TestContext.Current.CancellationToken);
     }
 
     // --- ExecuteComposeActionAsync (more actions) ---
@@ -327,7 +364,7 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker compose -p my-stack down"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerComposeProjectDown, "my-stack")), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -342,7 +379,7 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker compose -p web restart"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerComposeProjectRestart, "web")), TestContext.Current.CancellationToken);
     }
 
     // --- PruneAsync (partial flags) ---
@@ -355,7 +392,7 @@ public class DockerServiceTests
         await _sut.PruneAsync(1, new DockerPruneRequest { Containers = true }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command == "docker container prune -f"), TestContext.Current.CancellationToken);
+            IsOperation(t, OperationKind.DockerPrune, "containers")), TestContext.Current.CancellationToken);
     }
 
     // --- InspectContainerAsync ---
@@ -581,10 +618,11 @@ public class DockerServiceTests
     // --- ExecuteActionAsync (all actions) ---
 
     [Theory]
-    [InlineData(DockerContainerAction.Start, "start")]
-    [InlineData(DockerContainerAction.Restart, "restart")]
-    [InlineData(DockerContainerAction.Remove, "rm")]
-    public async Task ExecuteActionAsync_AllActions_CorrectCommand(DockerContainerAction action, string expected)
+    [InlineData(DockerContainerAction.Start, OperationKind.DockerStartContainer)]
+    [InlineData(DockerContainerAction.Stop, OperationKind.DockerStopContainer)]
+    [InlineData(DockerContainerAction.Restart, OperationKind.DockerRestartContainer)]
+    [InlineData(DockerContainerAction.Remove, OperationKind.DockerRemoveContainer)]
+    public async Task ExecuteActionAsync_AllActions_QueueTheTypedOperation(DockerContainerAction action, OperationKind expected)
     {
         _repo.ServerExistsAsync(1, TestContext.Current.CancellationToken).Returns(true);
 
@@ -595,7 +633,7 @@ public class DockerServiceTests
         }, ct: TestContext.Current.CancellationToken);
 
         await _repo.Received(1).AddTaskAsync(Arg.Is<ServerTask>(t =>
-            t.Command.Contains($"docker {expected} abc123def456")), TestContext.Current.CancellationToken);
+            IsOperation(t, expected, "abc123def456") && t.TimeoutSeconds == 30), TestContext.Current.CancellationToken);
     }
 
     // --- PullImageAsync ---

@@ -195,6 +195,46 @@ public class UrlSyncedTabsTests : BunitContext
         Assert.Equal([2, 0], changes);
     }
 
+    // Seen on the local instance: /pipelines/runs/1400?tab=coverage opened the Artefacts tab. The run page
+    // adds tabs (Gate, YAML) after the first pass, so the index computed from the slug pointed at another tab.
+    [Fact]
+    public async Task TabsAddedBeforeTheSelectedOne_KeepTheSelectedTab_AndTellTheBoundPage()
+    {
+        var indexes = new List<int>();
+        var c = NewComponent();
+        SetParam(c, nameof(UrlSyncedTabs.Slugs), new[] { "overview", "logs", "artifacts", "coverage" });
+        SetParam(c, nameof(UrlSyncedTabs.SelectedIndexChanged),
+            Microsoft.AspNetCore.Components.EventCallback.Factory.Create<int>(indexes, indexes.Add));
+        SetParam(c, nameof(UrlSyncedTabs.Tab), "coverage");
+        OnParametersSet(c);
+        await InvokeParametersSetAsync(c);
+        Assert.Equal(3, Index(c));
+        SetParam(c, nameof(UrlSyncedTabs.SelectedIndex), 3);
+
+        SetParam(c, nameof(UrlSyncedTabs.Slugs), new[] { "overview", "logs", "gate", "yaml", "artifacts", "coverage" });
+        OnParametersSet(c);
+        await InvokeParametersSetAsync(c);
+
+        Assert.Equal(5, Index(c));
+        Assert.Equal([3, 5], indexes);
+    }
+
+    // A shared link can name a tab the page only adds once its data is loaded: it opens when it appears.
+    [Fact]
+    public void AUrlTabNotYetRendered_IsSelectedWhenItAppears()
+    {
+        var c = NewComponent();
+        SetParam(c, nameof(UrlSyncedTabs.Slugs), new[] { "overview", "logs" });
+        SetParam(c, nameof(UrlSyncedTabs.Tab), "gate");
+        OnParametersSet(c);
+        Assert.Equal(0, Index(c));
+
+        SetParam(c, nameof(UrlSyncedTabs.Slugs), new[] { "overview", "logs", "gate" });
+        OnParametersSet(c);
+
+        Assert.Equal(2, Index(c));
+    }
+
     private static Task InvokeParametersSetAsync(UrlSyncedTabs component) =>
         (Task)typeof(UrlSyncedTabs)
             .GetMethod("OnParametersSetAsync", BindingFlags.NonPublic | BindingFlags.Instance)!

@@ -98,7 +98,7 @@ public sealed class ServerDockerAdminGatingTests : BunitContext
         tab.Find(".omni-overflow-menu__trigger").Click();
         tab.Find(".omni-menu__item[title='EditCompose']").Click();
         tab.InvokeAsync(() => tab.Instance.HandleTaskOutput(DockerTaskNames.ComposeFile("monitoring"), "services: {}"));
-        tab.WaitForAssertion(() => Assert.Contains("Cancel", tab.Markup, StringComparison.Ordinal));
+        tab.WaitForAssertion(() => Assert.Contains("GoBack", tab.Markup, StringComparison.Ordinal));
         return tab.FindAll("button").Any(button => button.TextContent.Contains("Deploy", StringComparison.Ordinal));
     }
 

@@ -1,0 +1,62 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-43: the dashboard of a user who can read no server, project nor pipeline. It shows the least
+   they can see (the active organization, their notifications), and says there is nothing to show
+   when even that is empty; never "Access denied". *@
+@if (HasNothing)
+{
+    <OmniEmptyState Class="dashboard-minimal-empty" Title="@L["DashboardNothingToShow"]"
+                    Description="@L["DashboardNothingToShowHint"]">
+        <Icon><OmniIcon Name="OmniIconName.Tray" /></Icon>
+    </OmniEmptyState>
+}
+else
+{
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="dashboard-minimal">
+        <OmniCard Class="dashboard-tile dashboard-minimal-organization">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title omni-u-mb-sm">
+                <OmniIcon Name="OmniIconName.Buildings" />
+                <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ActiveOrganization"]</OmniHeading>
+            </OmniStack>
+            @if (Organizations.Active is { } active)
+            {
+                <OmniText Element="OmniTextElement.Strong" Class="dashboard-minimal-organization-name">@active.Name</OmniText>
+            }
+            else
+            {
+                <OmniText Tone="OmniTextTone.Muted">@L["DashboardNoOrganization"]</OmniText>
+            }
+            <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mt-sm">@L["DashboardNoReadableResources"]</OmniText>
+        </OmniCard>
+        <OmniCard Class="dashboard-tile dashboard-minimal-notifications">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-sm">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="dashboard-tile-title">
+                    <OmniIcon Name="OmniIconName.Bell" />
+                    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MyNotifications"]</OmniHeading>
+                </OmniStack>
+                <OmniLink Href="/notifications">@L["SeeAll"]</OmniLink>
+            </OmniStack>
+            @if (Feed.Latest.Count == 0)
+            {
+                <OmniText Tone="OmniTextTone.Muted">@L["NotificationsEmpty"]</OmniText>
+            }
+            else
+            {
+                <div class="task-tracker-list">
+                    @foreach (var delivery in Feed.Latest)
+                    {
+                        <a href="/notifications" class="@(delivery.ReadAt is null ? "task-tracker-row notification-bell-row notification-bell-row--unread" : "task-tracker-row notification-bell-row")">
+                            <OmniIcon Name="@Aetheus.Front.Components.Notifications.NotificationLabels.EventIcon(delivery.EventType)" Class="notification-event-icon" />
+                            <div class="task-tracker-row-body">
+                                <div class="task-tracker-row-name">@Aetheus.Front.Components.Notifications.NotificationLabels.EventLabel(L, delivery.EventType)</div>
+                                <div class="task-tracker-row-meta">
+                                    <span title="@delivery.CreatedAt.ToString("g", System.Globalization.CultureInfo.CurrentCulture)">@RelativeTime.FormatAgo(L, delivery.CreatedAt)</span>
+                                    · @delivery.Subject
+                                </div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            }
+        </OmniCard>
+    </OmniTileGrid>
+}

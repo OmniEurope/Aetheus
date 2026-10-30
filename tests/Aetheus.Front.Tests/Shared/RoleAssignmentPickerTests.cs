@@ -47,6 +47,21 @@ public class RoleAssignmentPickerTests : BunitContext
     }
 
     [Fact]
+    public void BuiltInRole_ShowsItsLocalizedDescription_AndACustomRoleItsOwn()
+    {
+        SetupRoles(
+            new RoleDto { Id = 1, Name = "Admin", Description = "Full access" },
+            new RoleDto { Id = 9, Name = "Security Auditor", Description = "Reads the audit log" });
+
+        var cut = Render<RoleAssignmentPicker>(parameters =>
+            parameters.Add(component => component.SelectedRoles, []));
+
+        cut.WaitForAssertion(() => Assert.Contains("Security Auditor", cut.Markup));
+        var descriptions = cut.FindAll(".role-assignment-description").Select(node => node.TextContent.Trim()).ToList();
+        Assert.Equal(["RoleAdminDescription", "Reads the audit log"], descriptions);
+    }
+
+    [Fact]
     public void Search_ReloadsFirstPageWithServerQuery()
     {
         SetupRoles(new RoleDto { Id = 2, Name = "Security Auditor" });
@@ -166,5 +181,46 @@ public class RoleAssignmentPickerTests : BunitContext
             Assert.Contains("Admin", rows[0].TextContent);
             Assert.DoesNotContain("Reader", rows[0].TextContent);
         });
+    }
+
+    [Fact]
+    public void OrganizationMode_OneOrganization_HidesTheChoice_AndGivesTheRoleForIt()
+    {
+        // R-47 (ADR-059): a role other than Admin is given for an organization; with one, no choice shows.
+        _handler.SetOrganizations();
+        SetupRoles(new RoleDto { Id = 1, Name = "Admin" }, new RoleDto { Id = 2, Name = "Reader" });
+        List<OrganizationRoleAssignmentDto>? given = null;
+        List<string>? siteRoles = null;
+        var cut = Render<RoleAssignmentPicker>(parameters => parameters
+            .Add(component => component.SelectedRoles, [])
+            .Add(component => component.SelectedRolesChanged, roles => siteRoles = roles)
+            .Add(component => component.SelectedOrganizationRoles, [])
+            .Add(component => component.SelectedOrganizationRolesChanged, roles => given = roles));
+        cut.WaitForAssertion(() => Assert.Contains("Reader", cut.Markup));
+
+        Assert.Empty(cut.FindAll(".role-assignment-organization"));
+        cut.FindAll(".role-assignment-toggle input")
+            .Single(input => input.ParentElement!.TextContent.Contains("Reader", StringComparison.Ordinal))
+            .Change(true);
+
+        cut.WaitForAssertion(() => Assert.NotNull(given));
+        var assignment = Assert.Single(given!);
+        Assert.Equal((4, "Reader"), (assignment.OrganizationId, assignment.Role));
+        Assert.Null(siteRoles);
+    }
+
+    [Fact]
+    public void OrganizationMode_SeveralOrganizations_ShowsTheChoice()
+    {
+        _handler.SetOrganizations(
+            new OrganizationDto(4, "Aetheus", "aetheus", string.Empty, 1, 0, DateTime.UnixEpoch, DateTime.UnixEpoch),
+            new OrganizationDto(7, "Acme", "acme", string.Empty, 1, 0, DateTime.UnixEpoch, DateTime.UnixEpoch));
+        SetupRoles(new RoleDto { Id = 2, Name = "Reader" });
+
+        var cut = Render<RoleAssignmentPicker>(parameters => parameters
+            .Add(component => component.SelectedRoles, [])
+            .Add(component => component.SelectedOrganizationRoles, []));
+
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll(".role-assignment-organization")));
     }
 }

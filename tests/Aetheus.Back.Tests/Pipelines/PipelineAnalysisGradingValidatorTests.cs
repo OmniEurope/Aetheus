@@ -113,14 +113,81 @@ public sealed class PipelineAnalysisGradingValidatorTests
     }
 
     [Fact]
-    public void Validate_RejectsAWeightedFindingScoreWithoutItsDThreshold()
+    public void Validate_RejectsAFindingScoreWhoseThresholdsHaveAGap()
     {
+        // D is missing but E is set: the grade beyond C would be neither D nor E.
         var grading = WeightedGrading();
-        grading = grading with { Rules = [grading.Rules[0] with { D = null }] };
+        grading = grading with { Rules = [grading.Rules[0] with { D = null, E = 60 }] };
 
         var errors = PipelineAnalysisGradingValidator.Validate("security", grading);
 
-        Assert.Contains(errors, error => error.Contains("must define finite A, B, C and D thresholds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("without a gap", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(5.0, null, null, null)]
+    [InlineData(5.0, 15.0, null, null)]
+    [InlineData(5.0, 15.0, 30.0, null)]
+    [InlineData(5.0, 15.0, 30.0, 60.0)]
+    public void Validate_AcceptsASeverityRuleThatStopsItsThresholdsEarly(double b, double? c, double? d, double? e)
+    {
+        // Owner decision of 2026-10-25 (R-73): one high finding or more is a D whatever the count, six medium
+        // findings or more are a C. The grade beyond the last threshold is the next grade, never worse.
+        var grading = SeverityGrading() with
+        {
+            Rules = [SeverityGrading().Rules[0] with { B = b, C = c, D = d, E = e }]
+        };
+
+        Assert.Empty(PipelineAnalysisGradingValidator.Validate("security", grading));
+    }
+
+    [Fact]
+    public void Validate_AcceptsAWeightedFindingScoreThatStopsAfterB()
+    {
+        var grading = WeightedGrading();
+        grading = grading with { Rules = [grading.Rules[0] with { C = null, D = null }] };
+
+        Assert.Empty(PipelineAnalysisGradingValidator.Validate("security", grading));
+    }
+
+    [Fact]
+    public void Validate_RejectsASeverityRuleWithoutItsBThreshold()
+    {
+        var grading = SeverityGrading() with
+        {
+            Rules = [SeverityGrading().Rules[0] with { B = null, C = null, D = null, E = null }]
+        };
+
+        var errors = PipelineAnalysisGradingValidator.Validate("security", grading);
+
+        Assert.Contains(errors, error => error.Contains("must define finite A and B thresholds", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_RejectsASeverityRuleWhoseThresholdsHaveAGap()
+    {
+        var grading = SeverityGrading() with
+        {
+            Rules = [SeverityGrading().Rules[0] with { C = null, D = 30, E = 60 }]
+        };
+
+        var errors = PipelineAnalysisGradingValidator.Validate("security", grading);
+
+        Assert.Contains(errors, error => error.Contains("without a gap", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_StillRequiresFiveThresholdsFromAMetricRule()
+    {
+        // Only the rules on findings may stop early: a coverage percentage has no "next grade beyond".
+        var grading = CoverageGrading() with
+        {
+            Rules = [CoverageGrading().Rules[0] with { C = null, D = null, E = null }]
+        };
+
+        var errors = PipelineAnalysisGradingValidator.Validate("quality", grading);
+
+        Assert.Contains(errors, error => error.Contains("must define finite A, B, C, D and E", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -207,6 +274,24 @@ public sealed class PipelineAnalysisGradingValidatorTests
                 B = 5,
                 C = 15,
                 D = 30
+            }
+        ]
+    };
+
+    private static PipelineAnalysisGradingDefinition SeverityGrading() => new()
+    {
+        MinimumGrade = "F",
+        RequiredDomains = ["security"],
+        Rules =
+        [
+            new PipelineAnalysisGradeRuleDefinition
+            {
+                Key = "grade.security.medium",
+                Domain = "security",
+                Severity = "medium",
+                Direction = "lower-is-better",
+                A = 0,
+                B = 5
             }
         ]
     };

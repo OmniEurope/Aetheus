@@ -32,6 +32,7 @@ internal sealed class PackageRegistryAdminService(
             Kind = package.Kind,
             Name = package.Name,
             Description = package.Description,
+            AllowAnonymousDownload = package.AllowAnonymousDownload,
             CreatedAt = package.CreatedAt,
             UpdatedAt = package.UpdatedAt,
             Versions = package.Versions
@@ -77,10 +78,33 @@ internal sealed class PackageRegistryAdminService(
         return true;
     }
 
-    private async Task SaveAndAnnounceAsync(
+    public async Task<bool> SetAnonymousDownloadAsync(
+        int packageId, bool allowed, CancellationToken ct = default)
+    {
+        var package = await repository.GetPackageByIdForUpdateAsync(packageId, ct).ConfigureAwait(false);
+        if (package is null)
+            return false;
+
+        package.AllowAnonymousDownload = allowed;
+        await SaveAndAnnounceAsync(
+            package,
+            allowed ? "AnonymousDownloadAllowed" : "AnonymousDownloadRevoked",
+            package.Name,
+            ct).ConfigureAwait(false);
+        return true;
+    }
+
+    private Task SaveAndAnnounceAsync(
         Aetheus.Back.Data.Entities.RegistryPackage package,
         Aetheus.Back.Data.Entities.RegistryPackageVersion version,
         string action,
+        CancellationToken ct)
+        => SaveAndAnnounceAsync(package, action, $"{package.Name}@{version.Version}", ct);
+
+    private async Task SaveAndAnnounceAsync(
+        Aetheus.Back.Data.Entities.RegistryPackage package,
+        string action,
+        string details,
         CancellationToken ct)
     {
         await repository.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -93,7 +117,7 @@ internal sealed class PackageRegistryAdminService(
                 _ => "NpmPackage"
             },
             package.Id,
-            $"{package.Name}@{version.Version}",
+            details,
             ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(
             AdminEntities.PackageRegistry, package.Id, EntityChangeOps.Updated, ct).ConfigureAwait(false);

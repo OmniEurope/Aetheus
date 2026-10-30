@@ -99,7 +99,7 @@ public interface IServerRepository
     Task<List<Project>> GetProjectsForServerAsync(int serverId, CancellationToken ct = default);
     Task<(List<Project> Items, int Total)> GetProjectsForServerPagedAsync(
         int serverId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null);
+        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, List<int>? readableProjectIds = null);
 
     Task<List<Pipeline>> GetPipelinesForServerAsync(int serverId, CancellationToken ct = default);
 

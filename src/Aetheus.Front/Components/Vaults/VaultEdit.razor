@@ -20,6 +20,7 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon>
 </OmniPageHeader>
 
+<OmniStack>
 @if (!_isNew && _detail is null)
 {
     <AetheusLoader Size="OmniControlSize.Large" />
@@ -60,7 +61,7 @@ else
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_isNew ? "add" : "save"))" /></Icon><ChildContent><span>@(_isNew ? L["Create"] : L["Save"])</span></ChildContent></OmniButton>
             @if (!_isNew)
             {
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CancelPropertiesEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             }
         </OmniStack>
     </OmniTemplateForm>
@@ -69,11 +70,11 @@ else
     @if (!_isNew && _detail is not null)
     {
         @* Who reads this vault (R-66), above the secrets: a vault read by nothing is the one to delete. *@
-        <div class="@(_editingProperties ? "resource-usage-line omni-u-mt-2xl" : "resource-usage-line")">
+        <div class="resource-usage-line">
             <span class="resource-usage-line__label">@L["UsedBy"]</span>
             <ResourceUsageSummary Users="@_usage" Loaded="@_usageLoaded" />
         </div>
-        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["Secrets"]</OmniHeading>
+        <OmniHeading Level="OmniHeadingLevel.H5">@L["Secrets"]</OmniHeading>
 
         <OmniTemplateForm TModel="NewSecretModel" Model="@_newSecret" OnValidSubmit="@((EditContext context) => AddSecret((NewSecretModel)context.Model))">
         <OmniDataAnnotationsValidator Localizer="@L" />
@@ -114,7 +115,7 @@ else
                         <span class="library-cell">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => CopyKey(secret.Key))" Class="library-copy-btn"
                                         title="@L["CopyKey"]" Label="@L["CopyKey"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
-                            <span class="clickable-cell" role="button" tabindex="0"
+                            <span class="clickable-cell" role="button" tabindex="0" title="@secret.Key"
                                   @onclick="@(() => UpdateSecret(secret))"
                                   @onkeydown="@(e => OnSecretCellKeyDown(e, secret))">@secret.Key</span>
                         </span>
@@ -133,13 +134,13 @@ else
                         </span>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="VaultSecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-                <OmniDataGridColumn TItem="VaultSecretDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" Width="10rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange">
+                <OmniDataGridColumn TItem="VaultSecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" />
+                <OmniDataGridColumn TItem="VaultSecretDto" Property="ExpiresAt" Title="@L["ExpiresAt"]" Width="10rem" Sortable="false" Filterable="true">
                     <Template Context="secret">
                         @if (secret.ExpiresAt.HasValue)
                         {
                             var badge = GetExpiryBadge(secret.ExpiresAt.Value);
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@badge">@secret.ExpiresAt.Value.ToString("d")</OmniBadge>
+                            <NumberBadge Fill="OmniFill.Solid" Tone="@badge">@secret.ExpiresAt.Value.ToString("d")</NumberBadge>
                         }
                     </Template>
                 </OmniDataGridColumn>
@@ -164,3 +165,4 @@ else
         </OmniDataGrid>
     }
 }
+</OmniStack>

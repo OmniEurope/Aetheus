@@ -4,14 +4,23 @@ using Aetheus.Back.Data.Entities;
 using Aetheus.Shared.Components.Organizations;
 namespace Aetheus.Back.Components.Organizations;
 
-public class OrganizationService(IOrganizationRepository repo, IResourceAuthorizationService authz, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IAuditService audit) : IOrganizationService
+public class OrganizationService(IOrganizationRepository repo, IResourceAuthorizationService authz, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IAuditService audit, IOrganizationRoleAssignmentService roleAssignments) : IOrganizationService
 {
-    public async Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(string? search, PaginationRequest request, CancellationToken ct)
+    public Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(string? search, PaginationRequest request, CancellationToken ct) =>
+        GetOrganizationsAsync(search, request, null, ct);
+
+    public async Task<List<AdministeredOrganizationDto>> GetOrganizationNamesAsync(IReadOnlyList<int>? organizationIds, CancellationToken ct) =>
+        [.. (await repo.GetNamesAsync(organizationIds, ct).ConfigureAwait(false))
+            .Select(row => new AdministeredOrganizationDto(row.Id, row.Name, []))];
+
+    public async Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(
+        string? search, PaginationRequest request, IReadOnlyList<int>? organizationIds, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(request);
         var page = Math.Max(1, request.Page);
         var pageSize = PaginationDefaults.Clamp(request.PageSize);
         var (items, total) = await repo.GetPagedAsync(
-            search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters).ConfigureAwait(false);
+            search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters, organizationIds).ConfigureAwait(false);
         return new PaginatedResult<OrganizationDto>
         {
             Items = items.Select(MapToListDto).ToList(),
@@ -34,21 +43,27 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
             org.UpdatedAt,
             org.Members.Select(m => new OrganizationMemberDto(
                 m.Id, m.UserId, m.User.Username, m.User.Email, m.Role, m.CreatedAt)).ToList(),
-            org.Projects.Select(p => new OrganizationProjectDto(p.Id, p.Name, p.Status)).ToList());
+            org.Projects.Select(p => new OrganizationProjectDto(p.Id, p.Name, p.Status)).ToList(),
+            org.AutoCreateDevelopBranch);
     }
 
     public async Task<OrganizationDto> CreateOrganizationAsync(CreateOrganizationRequest request, CancellationToken ct)
     {
         if (await repo.NameExistsAsync(request.Name, null, ct).ConfigureAwait(false))
             throw new ConflictException($"Organization name '{request.Name}' already exists.");
-        if (await repo.SlugExistsAsync(request.Slug, null, ct).ConfigureAwait(false))
-            throw new ConflictException($"Organization slug '{request.Slug}' already exists.");
+        // The slug is optional (R-22): an empty one is generated from the name, made unique.
+        var slug = string.IsNullOrWhiteSpace(request.Slug)
+            ? await GenerateUniqueSlugAsync(request.Name, null, ct).ConfigureAwait(false)
+            : request.Slug.Trim().ToLowerInvariant();
+        if (await repo.SlugExistsAsync(slug, null, ct).ConfigureAwait(false))
+            throw new ConflictException($"Organization slug '{slug}' already exists.");
 
         var org = new Organization
         {
             Name = request.Name.Trim(),
-            Slug = request.Slug.Trim().ToLowerInvariant(),
-            Description = request.Description?.Trim() ?? string.Empty
+            Slug = slug,
+            Description = request.Description?.Trim() ?? string.Empty,
+            AutoCreateDevelopBranch = request.AutoCreateDevelopBranch
         };
         await repo.AddAsync(org, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -58,6 +73,15 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
         return MapToListDto(org);
     }
 
+    private async Task<string> GenerateUniqueSlugAsync(string name, int? excludeId, CancellationToken ct)
+    {
+        var baseSlug = OrganizationSlug.FromName(name);
+        var candidate = baseSlug;
+        for (var suffix = 2; await repo.SlugExistsAsync(candidate, excludeId, ct).ConfigureAwait(false); suffix++)
+            candidate = $"{baseSlug}-{suffix}";
+        return candidate;
+    }
+
     public async Task<OrganizationDto?> UpdateOrganizationAsync(int id, UpdateOrganizationRequest request, CancellationToken ct)
     {
         var org = await repo.GetByIdAsync(id, ct).ConfigureAwait(false);
@@ -65,12 +89,19 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
 
         if (await repo.NameExistsAsync(request.Name, id, ct).ConfigureAwait(false))
             throw new ConflictException($"Organization name '{request.Name}' already exists.");
-        if (await repo.SlugExistsAsync(request.Slug, id, ct).ConfigureAwait(false))
-            throw new ConflictException($"Organization slug '{request.Slug}' already exists.");
+        // An empty slug keeps the current one (generated from the name if the row somehow has none).
+        var slug = !string.IsNullOrWhiteSpace(request.Slug)
+            ? request.Slug.Trim().ToLowerInvariant()
+            : !string.IsNullOrWhiteSpace(org.Slug)
+                ? org.Slug
+                : await GenerateUniqueSlugAsync(request.Name, id, ct).ConfigureAwait(false);
+        if (await repo.SlugExistsAsync(slug, id, ct).ConfigureAwait(false))
+            throw new ConflictException($"Organization slug '{slug}' already exists.");
 
         org.Name = request.Name.Trim();
-        org.Slug = request.Slug.Trim().ToLowerInvariant();
+        org.Slug = slug;
         org.Description = request.Description?.Trim() ?? string.Empty;
+        org.AutoCreateDevelopBranch = request.AutoCreateDevelopBranch;
         org.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync("Organization.Updated", "Organization", org.Id,
@@ -103,20 +134,22 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
         var org = await repo.GetByIdAsync(organizationId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Organization {organizationId} not found.");
 
-        var user = await repo.GetUserByIdAsync(request.UserId, ct).ConfigureAwait(false)
-            ?? throw new NotFoundException($"User {request.UserId} not found.");
+        var user = await FindUserToAddAsync(request, ct).ConfigureAwait(false);
 
-        var existing = await repo.GetMemberAsync(organizationId, request.UserId, ct).ConfigureAwait(false);
+        var existing = await repo.GetMemberAsync(organizationId, user.Id, ct).ConfigureAwait(false);
         if (existing is not null)
             throw new ConflictException($"User '{user.Username}' is already a member of '{org.Name}'.");
 
         var member = new OrganizationMember
         {
             OrganizationId = organizationId,
-            UserId = request.UserId,
+            UserId = user.Id,
             Role = request.Role
         };
         await repo.AddMemberAsync(member, ct).ConfigureAwait(false);
+        // R-45: a member is never without rights; the membership level gives its role. Both share the
+        // request's unit of work, so the membership and its role are saved together.
+        await roleAssignments.GrantMembershipRoleAsync(user.Id, organizationId, member.Role, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync("Organization.MemberAdded", "Organization", organizationId,
             $"User '{user.Username}' added as {member.Role}", ct).ConfigureAwait(false);
@@ -130,7 +163,17 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
     {
         var member = await repo.GetMemberWithUserByIdAsync(memberId, organizationId, ct).ConfigureAwait(false);
         if (member is null) return null;
+        var demotesOwner = member.Role == OrganizationRole.Owner && request.Role != OrganizationRole.Owner;
+        // RBAC audit, finding 10: counted and saved under the owners lock, so two Owners demoted at once
+        // never both pass the count.
+        await using var owners = demotesOwner ? await roleAssignments.LockOwnersAsync(ct).ConfigureAwait(false) : null;
+        if (demotesOwner)
+            await RefuseLastOwnerAsync(organizationId, ct).ConfigureAwait(false);
+        var previousRole = member.Role;
         member.Role = request.Role;
+        // The new level's role replaces the old one's in the same unit of work as the level itself.
+        await roleAssignments.ChangeMembershipRoleAsync(
+            member.UserId, organizationId, previousRole, member.Role, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await audit.LogAsync("Organization.MemberRoleUpdated", "Organization", organizationId,
             $"User '{member.User.Username}' role changed to {member.Role}", ct).ConfigureAwait(false);
@@ -143,6 +186,13 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
     public async Task<bool> RemoveMemberAsync(int organizationId, int memberId, CancellationToken ct)
     {
         var member = await repo.GetMemberWithUserByIdAsync(memberId, organizationId, ct).ConfigureAwait(false);
+        var removesOwner = member?.Role == OrganizationRole.Owner;
+        await using var owners = removesOwner ? await roleAssignments.LockOwnersAsync(ct).ConfigureAwait(false) : null;
+        if (removesOwner)
+            await RefuseLastOwnerAsync(organizationId, ct).ConfigureAwait(false);
+        // A former member keeps no role for the organization (ADR-059).
+        if (member is not null)
+            await roleAssignments.RemoveAllAsync(member.UserId, organizationId, ct).ConfigureAwait(false);
         var removed = await repo.RemoveMemberAsync(organizationId, memberId, ct).ConfigureAwait(false);
         if (removed && member?.User is not null)
             authz.InvalidateRoleCache(member.User.Username);
@@ -155,6 +205,29 @@ public class OrganizationService(IOrganizationRepository repo, IResourceAuthoriz
                 await userNotifier.NotifyPermissionsChangedAsync(member.UserId, PermissionChangeReasons.OrganizationMembership, ct).ConfigureAwait(false);
         }
         return removed;
+    }
+
+    /// <summary>The 409 reason when the last Owner would be removed or demoted (M6); the front checks
+    /// the same rule first and shows its localized message.</summary>
+    public const string LastOwnerMessage = OrganizationRoleAssignmentService.LastOwnerMessage;
+
+    private async Task<User> FindUserToAddAsync(AddOrganizationMemberRequest request, CancellationToken ct)
+    {
+        if (request.UserId is { } userId)
+            return await repo.GetUserByIdAsync(userId, ct).ConfigureAwait(false)
+                ?? throw new NotFoundException($"User {userId} not found.");
+        var login = request.UserLogin?.Trim();
+        if (string.IsNullOrEmpty(login))
+            throw new BadRequestException("Name the user to add by username or e-mail address.");
+        return await repo.GetUserByLoginAsync(login, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException("No user has this exact username or e-mail address.");
+    }
+
+    // M6: the last Owner (who holds the Organization Admin role) is never removed nor demoted.
+    private async Task RefuseLastOwnerAsync(int organizationId, CancellationToken ct)
+    {
+        if (await repo.CountOwnersAsync(organizationId, ct).ConfigureAwait(false) <= 1)
+            throw new ConflictException(LastOwnerMessage);
     }
 
     public async Task AssignProjectsAsync(int organizationId, List<int> projectIds, CancellationToken ct)

@@ -151,8 +151,13 @@ public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryReposi
     {
         return await db.VariableLibraries
             .AsNoTracking()
+            // Same scope as the vaults: the project's own libraries, those of its environments and project
+            // servers, and the global ones; never another project's environment (RBAC audit, finding 1).
             .Where(vl => names.Contains(vl.Name)
-                && (vl.ProjectId == projectId || vl.ProjectId == null))
+                && ((vl.ProjectId != null && vl.ProjectId == projectId)
+                    || (vl.ProjectId == null && vl.EnvironmentId != null && vl.Environment!.ProjectId == projectId)
+                    || (vl.ProjectId == null && vl.ProjectServerId != null && vl.ProjectServer!.ProjectId == projectId)
+                    || (vl.ProjectId == null && vl.EnvironmentId == null && vl.ProjectServerId == null)))
             .Include(vl => vl.Entries)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -160,12 +165,14 @@ public class VariableLibraryRepository(AppDbContext db) : IVariableLibraryReposi
 
     public async Task<List<VariableLibrary>> FindByNamesWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
     {
+        // Through the run's own project only: a row naming another project and this project's environment
+        // (written before the owner check) never reaches the run (RBAC audit, finding 1).
         return await db.VariableLibraries
             .AsNoTracking()
             .Where(vl => names.Contains(vl.Name)
                 && (vl.ProjectId == projectId
-                    || (vl.EnvironmentId != null && vl.Environment!.ProjectId == projectId)
-                    || (vl.ProjectServerId != null && vl.ProjectServer!.ProjectId == projectId)
+                    || (vl.ProjectId == null && vl.EnvironmentId != null && vl.Environment!.ProjectId == projectId)
+                    || (vl.ProjectId == null && vl.ProjectServerId != null && vl.ProjectServer!.ProjectId == projectId)
                     || (vl.ProjectId == null && vl.EnvironmentId == null && vl.ProjectServerId == null)))
             .Include(vl => vl.Entries)
             .ToListAsync(ct)

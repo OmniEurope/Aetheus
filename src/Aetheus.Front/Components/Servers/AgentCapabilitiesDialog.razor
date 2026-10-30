@@ -35,7 +35,7 @@
         @L["EnableAgentCapabilitiesRestart"]
     </OmniAlert>
 
-    <DialogFooter OnCancel="@Cancel" CancelText="@L["Cancel"]">
+    <DialogFooter OnCancel="@Cancel">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SubmitAsync" Disabled="@(!CanSubmit)" Busy="@_busy"
                     Class="agent-capabilities-submit">
             <Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L[SubmitKey]</span></ChildContent>

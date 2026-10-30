@@ -43,6 +43,8 @@ public sealed class AdminEndpointAuthorizationMatrixTests(CustomWebApplicationFa
         var requests = new List<HttpRequestMessage>
         {
             new(HttpMethod.Get, "/api/roles"),
+            new(HttpMethod.Get, "/api/roles/assignable?organizationId=1"),
+            WithJson(HttpMethod.Post, "/api/users", new { username = "forbidden-user", email = "forbidden-user@test.com", organizationRoles = new[] { new { organizationId = 1, role = RoleNames.Reader } } }),
             new(HttpMethod.Get, "/api/roles/1"),
             new(HttpMethod.Get, "/api/roles/1/permissions"),
             new(HttpMethod.Get, "/api/roles/1/users"),

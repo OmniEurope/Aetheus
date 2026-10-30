@@ -60,7 +60,10 @@ internal static partial class PipelineCommandBuilder
     // `$(NAME:-default)` carries a fallback used when NAME is missing or empty, as in POSIX. The
     // default cannot contain a parenthesis: nesting is not supported, and refusing it keeps
     // `$(A:-$(B))` from matching half of itself.
-    [GeneratedRegex(@"\$\(([A-Za-z_][A-Za-z0-9_.]*)(?::-([^()]*))?\)")]
+    // `$(NAME:suffix=text)` (R-74) is NAME's value followed by `text` when NAME is not empty, and nothing at all when NAME is
+    // empty or unset: `$(APP_SUBDOMAIN:suffix=.)` writes the dot of a host only when there is a sub-domain. It is the
+    // optional form of a part of a formula, so an empty value is accepted, as with `:-`.
+    [GeneratedRegex(@"\$\(([A-Za-z_][A-Za-z0-9_.]*)(?::-([^()]*)|:suffix=([^()]*))?\)")]
     private static partial Regex VariablePattern();
 
     /// <summary>Every default applies: the value is being rendered for the step that runs now.</summary>
@@ -118,10 +121,18 @@ internal static partial class PipelineCommandBuilder
         {
             var varName = match.Groups[1].Value;
             var fallback = match.Groups[2];
-            if (!fallback.Success)
+            var suffix = match.Groups[3];
+            if (!fallback.Success && !suffix.Success)
                 return variables.TryGetValue(varName, out var value) ? value : match.Value;
             if (defaultApplies is null)
                 return match.Value;
+            if (suffix.Success)
+            {
+                // Same timing as a default: a name that may still come later in the run keeps its reference.
+                if (variables.TryGetValue(varName, out var present))
+                    return present.Length > 0 ? present + suffix.Value : string.Empty;
+                return defaultApplies(varName) ? string.Empty : match.Value;
+            }
             if (variables.TryGetValue(varName, out var defined) && defined.Length > 0)
                 return defined;
             return defaultApplies(varName) ? fallback.Value : match.Value;
@@ -147,6 +158,11 @@ internal static partial class PipelineCommandBuilder
 
     // --- Clone scripts (F-016: single builder, parameterized by the working-dir expression) ---
 
+    // git errors that waiting cannot fix: bad or missing credentials, a repository that does not exist.
+    // Shared by the bash (grep -E) and PowerShell (-match) retry functions: no single quote, no backslash.
+    private const string FinalGitErrorPattern =
+        "authentication failed|could not read (username|password)|terminal prompts disabled|repository not found|repository .* not found|returned error: (401|403|404)";
+
     private static string BuildLinuxCloneScript(string workdirExpr) =>
         "set -e\n" +
         "export GIT_TERMINAL_PROMPT=0\n" +
@@ -157,9 +173,33 @@ internal static partial class PipelineCommandBuilder
         "GIT_HISTORY_DEPTH=\"${AETHEUS_GIT_HISTORY_DEPTH:-1}\"\n" +
         "case \"$GIT_HISTORY_DEPTH\" in *[!0-9]*|'') echo \"AETHEUS_GIT_HISTORY_DEPTH must be a positive integer.\" >&2; exit 1 ;; esac\n" +
         "[ \"$GIT_HISTORY_DEPTH\" -ge 1 ] || { echo \"AETHEUS_GIT_HISTORY_DEPTH must be at least 1.\" >&2; exit 1; }\n" +
+        // Mandatory git network calls retry up to 3 attempts (10 s, then 30 s apart) so a git server that
+        // restarts briefly does not fail the step; a final failure returns git's own exit code, which
+        // set -e turns into the step failure. An authentication or missing-repository error is final: it
+        // fails on the first attempt, since waiting cannot fix it. git's own error text stays in the log.
+        // An optional GIT_RETRY_CLEANUP function runs before a retry.
+        "git_with_retry() {\n" +
+        "  local attempt=1 max=3 rc delay err\n" +
+        "  err=\"$(mktemp)\"\n" +
+        "  while :; do\n" +
+        "    if \"$@\" 2>\"$err\"; then cat \"$err\" >&2; rm -f \"$err\"; return 0; else rc=$?; fi\n" +
+        "    cat \"$err\" >&2\n" +
+        "    if grep -qiE '" + FinalGitErrorPattern + "' \"$err\"; then rm -f \"$err\"; echo \">>> git $2 failed (exit $rc) on an authentication or missing-repository error; not retrying.\" >&2; return \"$rc\"; fi\n" +
+        "    if [ \"$attempt\" -ge \"$max\" ]; then rm -f \"$err\"; echo \">>> git $2 failed (attempt $attempt of $max, exit $rc); giving up.\" >&2; return \"$rc\"; fi\n" +
+        "    if [ \"$attempt\" -eq 1 ]; then delay=10; else delay=30; fi\n" +
+        "    echo \">>> git $2 failed (attempt $attempt of $max, exit $rc); retrying in $delay s.\" >&2\n" +
+        "    sleep \"$delay\"\n" +
+        "    if [ -n \"${GIT_RETRY_CLEANUP:-}\" ]; then \"$GIT_RETRY_CLEANUP\"; fi\n" +
+        "    attempt=$((attempt + 1))\n" +
+        "  done\n" +
+        "}\n" +
+        // A failed clone into . can leave a partial checkout. The clone branch uses this only when the
+        // workspace was empty before the first attempt (WORKSPACE can name a directory the pipeline owns),
+        // so it never removes anything the attempt did not write.
+        "clear_partial_clone() { find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +; }\n" +
         "if [ -n \"${BUILD_SOURCEVERSION:-}\" ]; then\n" +
         "  if [ ! -d .git ]; then git init; git remote add origin \"${REPOSITORY_URL}\"; fi\n" +
-        "  git fetch --depth \"$GIT_HISTORY_DEPTH\" origin \"${DEFAULT_BRANCH:-main}\"\n" +
+        "  git_with_retry git fetch --depth \"$GIT_HISTORY_DEPTH\" origin \"${DEFAULT_BRANCH:-main}\"\n" +
         "  if ! git cat-file -e \"${BUILD_SOURCEVERSION}^{commit}\" 2>/dev/null; then\n" +
         "    git fetch --depth 1 origin \"${BUILD_SOURCEVERSION}\" || true\n" +
         "  fi\n" +
@@ -174,11 +214,13 @@ internal static partial class PipelineCommandBuilder
         "  git reset --hard \"${BUILD_SOURCEVERSION}\"\n" +
         "  echo \"Repository pinned to ${BUILD_SOURCEVERSION}\"\n" +
         "elif [ -d .git ]; then\n" +
-        "  git fetch --depth 1 origin \"${DEFAULT_BRANCH:-main}\"\n" +
+        "  git_with_retry git fetch --depth 1 origin \"${DEFAULT_BRANCH:-main}\"\n" +
         "  git reset --hard \"origin/${DEFAULT_BRANCH:-main}\"\n" +
         "  echo \"Repository updated (fetch + reset)\"\n" +
         "else\n" +
-        "  git clone --branch \"${DEFAULT_BRANCH:-main}\" --single-branch --depth 1 \"${REPOSITORY_URL}\" .\n" +
+        "  clone_cleanup=''\n" +
+        "  [ -n \"$(ls -A)\" ] || clone_cleanup=clear_partial_clone\n" +
+        "  GIT_RETRY_CLEANUP=\"$clone_cleanup\" git_with_retry git clone --branch \"${DEFAULT_BRANCH:-main}\" --single-branch --depth 1 \"${REPOSITORY_URL}\" .\n" +
         "  echo \"Repository cloned\"\n" +
         "fi\n";
 
@@ -190,6 +232,30 @@ internal static partial class PipelineCommandBuilder
         // Stop. Every mandatory git call checks its own, so a failed checkout never reads as prepared;
         // the fallback fetches stay optional, the final cat-file check decides.
         "function Assert-GitSucceeded([string]$operation) { if ($LASTEXITCODE -ne 0) { throw \"git $operation failed with exit code $LASTEXITCODE.\" } }\n" +
+        // Mandatory git network calls retry up to 3 attempts (10 s, then 30 s apart) so a git server that
+        // restarts briefly does not fail the step; the final failure throws with git's own exit code. An
+        // authentication or missing-repository error is final on the first attempt. git's stderr is read
+        // under a local Continue preference so it is classified and echoed instead of throwing.
+        // BeforeRetry clears the leftovers of a failed clone into the workspace.
+        "function Invoke-GitWithRetry([string]$Name, [scriptblock]$Operation, [scriptblock]$BeforeRetry = $null) {\n" +
+        "  $ErrorActionPreference = 'Continue'\n" +
+        "  $max = 3\n" +
+        "  for ($attempt = 1; $attempt -le $max; $attempt++) {\n" +
+        "    $gitErrors = [System.Collections.Generic.List[string]]::new()\n" +
+        "    & $Operation 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $gitErrors.Add($_.ToString()); [Console]::Error.WriteLine($_.ToString()) } else { $_ } }\n" +
+        "    $code = $LASTEXITCODE\n" +
+        "    if ($code -eq 0) { return }\n" +
+        "    if (($gitErrors -join ' ') -match '(?i)" + FinalGitErrorPattern + "') { [Console]::Error.WriteLine(\">>> git $Name failed (exit $code) on an authentication or missing-repository error; not retrying.\"); throw \"git $Name failed with exit code $code.\" }\n" +
+        "    if ($attempt -ge $max) { [Console]::Error.WriteLine(\">>> git $Name failed (attempt $attempt of $max, exit $code); giving up.\"); throw \"git $Name failed with exit code $code.\" }\n" +
+        "    $delay = if ($attempt -eq 1) { 10 } else { 30 }\n" +
+        "    [Console]::Error.WriteLine(\">>> git $Name failed (attempt $attempt of $max, exit $code); retrying in $delay s.\")\n" +
+        "    Start-Sleep -Seconds $delay\n" +
+        "    if ($BeforeRetry) { & $BeforeRetry }\n" +
+        "  }\n" +
+        "}\n" +
+        // The clone branch passes this only when the workspace was empty before the first attempt, so it
+        // never removes anything the attempt did not write.
+        "$clearPartialClone = { Get-ChildItem -Force | Remove-Item -Recurse -Force }\n" +
         $"New-Item -ItemType Directory -Force -Path '{workdirExpr}' | Out-Null\n" +
         $"Set-Location '{workdirExpr}'\n" +
         "$branch = if ($env:DEFAULT_BRANCH) { $env:DEFAULT_BRANCH } else { 'main' }\n" +
@@ -197,7 +263,7 @@ internal static partial class PipelineCommandBuilder
         "if ($historyDepth -notmatch '^[1-9][0-9]*$') { throw 'AETHEUS_GIT_HISTORY_DEPTH must be a positive integer.' }\n" +
         "if ($env:BUILD_SOURCEVERSION) {\n" +
         "  if (-not (Test-Path '.git')) { git init; Assert-GitSucceeded 'init'; git remote add origin $env:REPOSITORY_URL; Assert-GitSucceeded 'remote add' }\n" +
-        "  git fetch --depth $historyDepth origin $branch; Assert-GitSucceeded 'fetch'\n" +
+        "  Invoke-GitWithRetry 'fetch' { git fetch --depth $historyDepth origin $branch }; Assert-GitSucceeded 'fetch'\n" +
         "  git cat-file -e \"$env:BUILD_SOURCEVERSION`^{commit}\" 2>$null\n" +
         "  if ($LASTEXITCODE -ne 0) { git fetch --depth 1 origin $env:BUILD_SOURCEVERSION }\n" +
         "  git cat-file -e \"$env:BUILD_SOURCEVERSION`^{commit}\" 2>$null\n" +
@@ -210,11 +276,12 @@ internal static partial class PipelineCommandBuilder
         "  git reset --hard $env:BUILD_SOURCEVERSION; Assert-GitSucceeded 'reset'\n" +
         "  Write-Output \"Repository pinned to $env:BUILD_SOURCEVERSION\"\n" +
         "} elseif (Test-Path '.git') {\n" +
-        "  git fetch --depth 1 origin $branch; Assert-GitSucceeded 'fetch'\n" +
+        "  Invoke-GitWithRetry 'fetch' { git fetch --depth 1 origin $branch }; Assert-GitSucceeded 'fetch'\n" +
         "  git reset --hard \"origin/$branch\"; Assert-GitSucceeded 'reset'\n" +
         "  Write-Output 'Repository updated (fetch + reset)'\n" +
         "} else {\n" +
-        "  git clone --branch $branch --single-branch --depth 1 $env:REPOSITORY_URL .; Assert-GitSucceeded 'clone'\n" +
+        "  $cloneCleanup = if (Get-ChildItem -Force | Select-Object -First 1) { $null } else { $clearPartialClone }\n" +
+        "  Invoke-GitWithRetry 'clone' { git clone --branch $branch --single-branch --depth 1 $env:REPOSITORY_URL . } $cloneCleanup; Assert-GitSucceeded 'clone'\n" +
         "  Write-Output 'Repository cloned'\n" +
         "}\n";
 

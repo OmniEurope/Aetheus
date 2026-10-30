@@ -61,7 +61,7 @@ public partial class ServerDisksCard
 
     /// <summary>"412 Go libres sur 796 Go": what is left first, then what the disk holds.</summary>
     internal static string FreeOfTotal(double usedGb, double totalGb, IStringLocalizer<AppStrings> l) =>
-        l["DiskFreeOfTotal", DisplayFormatting.SizeFromGo(Math.Max(0d, totalGb - usedGb)), DisplayFormatting.SizeFromGo(totalGb)];
+        l["DiskFreeOfTotal", DisplayFormatting.SizeFromGoWhole(Math.Max(0d, totalGb - usedGb)), DisplayFormatting.SizeFromGoWhole(totalGb)];
 
     // The count of files of one filesystem, "12 345 sur 6 553 600 (3,3 % utilisés)", or unknown (Windows,
     // an older agent, a filesystem without a fixed table). A summed disk only knows the fullest share.

@@ -29,8 +29,8 @@ public class ServerHub(IResourceAuthorizationService authz) : Hub
         }
         // Per-org aggregate groups close the CREATE blind spot: a server enrolled AFTER this connection
         // has an empty server-{id} group, so its ServerRegistered would otherwise reach only admins.
-        // Org membership grants Read on every org server, so the org group is a safe durable channel.
-        var orgIds = await authz.GetUserOrganizationIdsAsync(Context.User!).ConfigureAwait(false);
+        // Only the organizations whose role grants Read on every server get the org group (ADR-059).
+        var orgIds = await authz.GetOrganizationIdsWithPermissionAsync(Context.User!, ResourceType.Server, Permission.Read).ConfigureAwait(false);
         if (accessibleIds.Count == 0 && orgIds.Count == 0)
             throw new HubException("Access denied.");
         foreach (var id in accessibleIds)
@@ -47,7 +47,7 @@ public class ServerHub(IResourceAuthorizationService authz) : Hub
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, HubGroups.AllServers).ConfigureAwait(false);
             return;
         }
-        var orgIds = await authz.GetUserOrganizationIdsAsync(Context.User!).ConfigureAwait(false);
+        var orgIds = await authz.GetOrganizationIdsWithPermissionAsync(Context.User!, ResourceType.Server, Permission.Read).ConfigureAwait(false);
         foreach (var id in accessibleIds)
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, HubGroups.Server(id)).ConfigureAwait(false);
         foreach (var orgId in orgIds)

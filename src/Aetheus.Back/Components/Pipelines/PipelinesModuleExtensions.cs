@@ -35,6 +35,7 @@ public static class PipelinesModuleExtensions
         services.AddScoped<IPipelineGitService, PipelineGitService>();
         services.AddScoped<IProjectConfigRepositoryService, ProjectConfigRepositoryService>();
         services.AddScoped<IPipelineEnvFilePreparer, PipelineEnvFilePreparer>();
+        services.AddScoped<IPipelineSetupServerRepository, PipelineSetupServerRepository>();
         services.AddScoped<IPipelineProductionSetupService, PipelineProductionSetupService>();
         services.AddScoped<IPipelineVariableResolver, PipelineVariableResolver>();
         services.AddScoped<IPipelineService, PipelineService>();
@@ -144,6 +145,9 @@ public static class PipelinesModuleExtensions
         services.AddScoped<
             Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepMigrationGateReportedEvent>,
             PipelineStepMigrationGateHandler>();
+        services.AddScoped<
+            Services.DomainEvents.IDomainEventHandler<Tasks.Events.PipelineStepRunWarningsReportedEvent>,
+            PipelineStepRunWarningsHandler>();
         // SSRF hardening: the string-level IsSafeOutboundUrl guard in PipelineEnvironmentCheckGuard can be
         // bypassed by DNS-rebinding (TOCTOU between the check and the request). Re-validate the
         // resolved IP at connect time via SocketsHttpHandler.ConnectCallback, mirroring the

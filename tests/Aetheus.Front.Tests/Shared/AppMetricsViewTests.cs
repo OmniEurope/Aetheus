@@ -64,6 +64,43 @@ public sealed class AppMetricsViewTests : BunitContext
         Assert.Empty(cut.FindComponents<AetheusLoader>());
     }
 
+    /// <summary>Recette R-116: changing the period reads the series under OE's busy veil; the chart already on
+    /// screen stays mounted underneath and no loader replaces it.</summary>
+    [Fact]
+    public void R116_ChangingThePeriod_VeilsTheChartZone_KeepsTheChart_AndAddsNoLoader()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetJsonResponse("api/appmonitoring/apps/3/metrics/names", new List<string> { "process.cpu" });
+        handler.SetJsonResponse("metrics/series-groups", new List<string?> { null });
+        handler.SetJsonResponse("/send-interval", new AppTelemetrySendIntervalDto { ServerIntervalSeconds = 300 });
+        var first = new MetricSeriesDto
+        {
+            MetricName = "process.cpu",
+            Points =
+            [
+                new MetricPointDto { Timestamp = new DateTime(2026, 9, 26, 8, 0, 0, DateTimeKind.Utc), Value = 0.2 },
+                new MetricPointDto { Timestamp = new DateTime(2026, 9, 26, 8, 1, 0, DateTimeKind.Utc), Value = 0.3 }
+            ]
+        };
+        var second = new TaskCompletionSource<MetricSeriesDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        handler.SetAsyncJsonResponse(HttpMethod.Get, "metrics/series?metric", _ => ++calls == 1 ? Task.FromResult(first) : second.Task);
+
+        var cut = Render<AppMetricsView>(parameters => parameters.Add(component => component.AppId, 3));
+        cut.WaitForAssertion(() => Assert.NotEmpty(cut.FindAll("[data-testid=app-metrics-zone] svg")));
+        Assert.Empty(cut.FindAll(".omni-busy"));
+
+        cut.Find("select#app-metrics-period").Change("1");
+
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=app-metrics-zone]").GetAttribute("aria-busy")));
+        Assert.Contains("omni-busy", cut.Find("[data-testid=app-metrics-zone]").ClassName, StringComparison.Ordinal);
+        Assert.NotEmpty(cut.FindAll("[data-testid=app-metrics-zone] svg"));
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+
+        second.SetResult(first);
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".omni-busy")));
+    }
+
     [Fact]
     public void R444_MetricSeriesAndPeriod_ShareOneLine_EachLabelTiedToItsField()
     {

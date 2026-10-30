@@ -26,6 +26,7 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
     private Func<string, string> DeprecatedText => _deprecatedText ??= value =>
         bool.TryParse(value, out var deprecated) ? L[deprecated ? "PackageVersionDeprecated" : "PackageVersionNotDeprecated"].Value : value;
     private bool _loading = true;
+    private bool _savingAnonymousDownload;
     private AdminEntitySubscription? _adminRt;
     private readonly TrailingReloadCoalescer _realtimeReload = new(500);
 
@@ -89,6 +90,26 @@ public partial class PackageRegistryPackageDialog : ComponentBase, IAsyncDisposa
         }
         await LoadAsync();
         Toast.Success("Saved", "Saved");
+    }
+
+    private async Task SetAnonymousDownloadAsync(bool allowed)
+    {
+        _savingAnonymousDownload = true;
+        try
+        {
+            var status = await Api.Packages.UpdateRegistryAnonymousDownloadAsync(PackageId, allowed);
+            if (!status.Success)
+            {
+                Toast.Error("Error", "SaveFailed");
+                return;
+            }
+            await LoadAsync();
+            Toast.Success("Saved", "Saved");
+        }
+        finally
+        {
+            _savingAnonymousDownload = false;
+        }
     }
 
     private void Close() => Dialog.Close();

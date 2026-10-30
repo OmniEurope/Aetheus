@@ -40,6 +40,9 @@ public static class NotificationMailVariables
     /// <summary>Block: the banner with the event in the colours of its status.</summary>
     public const string StatusBanner = "StatusBanner";
 
+    /// <summary>Block: an approval request's Approve, Reject and Comment buttons (recette R-24); empty for any other event.</summary>
+    public const string ApprovalActions = "ApprovalActions";
+
     /// <summary>Block: the table of the event's details, statuses as coloured badges.</summary>
     public const string Details = "Details";
 

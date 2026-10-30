@@ -1,0 +1,26 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-59: fills one empty variable or secret over the setup wizard, so the user never leaves the page. A secret is
+   typed in a masked field (never shown afterwards), as on the vaults page; a variable in a plain text field. *@
+<OmniStack Gap="OmniSpacing.Large" data-testid="setup-fill-dialog">
+    <OmniText Element="OmniTextElement.Paragraph" data-testid="setup-fill-intro">@Intro</OmniText>
+    <OmniFormField Label="@L[IsVault ? "NewValue" : "Value"]" For="setup-fill-value" Required="true" Help="@L["PipelineFillValueHelp"].Value">
+        @if (IsVault)
+        {
+            <div @onkeydown="@OnKeyDown">
+                <OmniPassword @bind-Value="_value" Id="setup-fill-value" IgnorePasswordManagers="true"
+                              RevealLabel="@L["ShowValue"]" HideLabel="@L["HideValue"]" aria-label="@L["NewValue"]"
+                              data-testid="setup-fill-secret" />
+            </div>
+        }
+        else
+        {
+            <div @onkeydown="@OnKeyDown">
+                <OmniTextBox @bind-Value="_value" Id="setup-fill-value" Class="omni-u-w-100" data-testid="setup-fill-text" />
+            </div>
+        }
+    </OmniFormField>
+    <DialogFooter OnCancel="@(() => Dialog.Close())">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAsync" Busy="@_saving"
+                    Disabled="@string.IsNullOrWhiteSpace(_value)" data-testid="setup-fill-validate"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["PipelineFillValidate"]</span></ChildContent></OmniButton>
+    </DialogFooter>
+</OmniStack>

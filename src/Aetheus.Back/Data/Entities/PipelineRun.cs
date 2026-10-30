@@ -100,6 +100,20 @@ public class PipelineRun
     public bool RunToEnd { get; set; }
 
     /// <summary>
+    /// R-72: the user who deployed this run's release despite the quality gate (the launch's
+    /// <c>GateOverride</c>), null for every run launched without it. With it, the control-plane grade gate
+    /// lets the run start; the artifact check and the approval stages still apply.
+    /// </summary>
+    public string? GateOverrideBy { get; set; }
+
+    /// <summary>R-72: when the override was given (the launch time).</summary>
+    public DateTime? GateOverrideAt { get; set; }
+
+    /// <summary>R-72: what the gate held against the release at the launch, as a JSON list of
+    /// <c>DeploymentGateWarningDto</c>; null without an override.</summary>
+    public string? GateOverrideWarningsJson { get; set; }
+
+    /// <summary>
     /// Recette R-39: the end of the wait for a resume. Set when a timed-out stage confirmation was rolled
     /// back and the run entered <see cref="PipelineStatus.AwaitingResume"/>. A run has one window, counted
     /// from its first missed confirmation: a resume keeps the date, and a later missed confirmation parks

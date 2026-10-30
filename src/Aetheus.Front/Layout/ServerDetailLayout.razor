@@ -72,14 +72,16 @@
             @* The section is the title and breadcrumb leaf; the server name is an ancestor. *@
             <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" ActionsContent="@headerActions">
                 <Icon><OmniIcon Name="@MaterialIconMap.Resolve(SectionIcon)" /></Icon>
+                <Badges><Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.BadgesSectionName" /></Badges>
             </OmniPageHeader>
         </HeaderContent>
         <ChildContent>
+            <OmniStack>
             @if (Loader.Server is not null)
             {
                 @if (_editVisible)
                 {
-                    <OmniCard Class="omni-u-mb-lg edit-panel">
+                    <OmniCard Class="edit-panel">
                         <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["EditServer"]</OmniHeading>
                         <OmniRow Gap="OmniSpacing.Large">
                             <OmniColumn Span="12" MediumSpan="6">
@@ -103,7 +105,7 @@
                         </OmniRow>
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveEditAsync" Class="@(_editSaving ? "btn-busy" : null)" Busy="@(_editSaving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _editVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _editVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                         </OmniStack>
                     </OmniCard>
                 }
@@ -112,9 +114,12 @@
                     Request="@Loader.Server.AgentUpdateRequest"
                     OnRetry="@UpdateAgentAsync" OnStale="@ReloadAgentUpdateAsync" />
             }
-            <div class="blade-content">
+            @* R-119: while a task launched from the section runs, OE's busy veil lies over the section body; its content
+               stays mounted underneath (the task follower stays readable, see .server-task-follower in app.css). *@
+            <div class="@(Loader.TaskPending ? "blade-content omni-busy" : "blade-content")" aria-busy="@(Loader.TaskPending ? "true" : "false")" data-testid="server-section-body">
                 @Body
             </div>
+            </OmniStack>
         </ChildContent>
     </OmniDetailShell>
 </CascadingValue>

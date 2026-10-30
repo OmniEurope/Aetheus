@@ -98,10 +98,11 @@ public class ProjectsTests : BunitContext
         Assert.NotNull(lines[0].QuerySelector("[data-testid=\"project-production-status\"]"));
         Assert.NotNull(lines[1].QuerySelector(".grade-badge"));
         Assert.NotNull(lines[1].QuerySelector(".project-online-users"));
-        // The tile grade is the shared badge, not a hand-coloured strong.
+        // The tile grade is the shared filled badge (R-107), not a hand-coloured strong.
         var grade = Assert.Single(cut.FindAll(".grade-badge"));
         Assert.Equal("B", grade.TextContent.Trim());
-        Assert.Contains("omni-badge--success", grade.ClassName, StringComparison.Ordinal);
+        Assert.Contains("grade-badge--b", grade.ClassName, StringComparison.Ordinal);
+        Assert.Contains("omni-badge--solid", grade.ClassName, StringComparison.Ordinal);
         Assert.Contains("href=\"/projects/1/quality\"", cut.Markup);
         Assert.Contains("OnlineUsers", cut.Markup);
         Assert.DoesNotContain("PipelineCount", cut.Markup);
@@ -167,7 +168,10 @@ public class ProjectsTests : BunitContext
         // A finished run is "last run", with no step line; a commit without a message falls back to "Commit".
         Assert.Contains("LastRun", quiet.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain("RunInProgress", quiet.TextContent, StringComparison.Ordinal);
-        Assert.Empty(quiet.QuerySelectorAll(".project-activity-line"));
+        // R-27: the pipeline name is its own ellipsis line; a finished run has no step line after it.
+        Assert.Equal(["Lint"], quiet.QuerySelectorAll(".project-activity-line").Select(line => line.TextContent));
+        Assert.Equal(["Deploy", "Deploy · push"],
+            active.QuerySelectorAll(".project-activity-run ~ .project-activity-ellipsis").Select(line => line.TextContent));
         Assert.Contains("Commit", quiet.QuerySelector(".project-activity-link")!.TextContent, StringComparison.Ordinal);
     }
 
@@ -241,6 +245,86 @@ public class ProjectsTests : BunitContext
         var line = cut.Find(".project-dense-row .project-dense-activity .project-activity-line");
         Assert.Equal("fix: keep the session", line.TextContent);
         Assert.Equal("fix: keep the session\n\nlong body", line.GetAttribute("title"));
+    }
+
+    private static PaginatedResult<ProjectDto> DeletionPendingProject() => new()
+    {
+        Items =
+        [
+            new ProjectDto
+            {
+                Id = 9, Name = "Doomed", Description = "Should not show", Status = ProjectStatus.Active,
+                DeletionRequestedAt = DateTime.UtcNow,
+                LastCommitId = 5, LastCommitSha = "abcdef1234567890", LastCommitMessage = "commit message",
+                LastRunId = 3, LastRunName = "Deploy", LastRunStatus = PipelineStatus.Success,
+                Tags = ["tag-a"]
+            }
+        ],
+        TotalCount = 1
+    };
+
+    /// <summary>R-8: a project whose deletion is to be finished keeps its name and the badge, nothing else.</summary>
+    [Fact]
+    public void DeletionPendingProject_Tile_ShowsOnlyTheNameAndTheBadge()
+    {
+        _handler.SetJsonResponse("api/projects", DeletionPendingProject());
+        var cut = Render<ProjectsPage>();
+        cut.WaitForState(() => cut.Markup.Contains("Doomed"));
+
+        var card = cut.Find(".project-card");
+        Assert.NotNull(card.QuerySelector("[data-testid='project-deletion-pending']"));
+        Assert.Contains("Doomed", card.TextContent, StringComparison.Ordinal);
+        Assert.Empty(card.QuerySelectorAll(".project-favorite"));
+        Assert.Empty(card.QuerySelectorAll(".project-production, .project-activity, .project-card-tags, .project-card-desc"));
+        Assert.DoesNotContain("Should not show", card.TextContent, StringComparison.Ordinal);
+        Assert.Empty(card.QuerySelectorAll("[data-testid='project-production-status']"));
+    }
+
+    [Fact]
+    public void DeletionPendingProject_DenseRow_ShowsOnlyTheNameAndTheBadge()
+    {
+        _handler.SetJsonResponse("api/projects", DeletionPendingProject());
+        var cut = Render<ProjectsPage>();
+        cut.WaitForState(() => cut.Markup.Contains("Doomed"));
+        cut.Find("button[title='DenseView']").Click();
+
+        var row = cut.Find(".project-dense-row");
+        Assert.NotNull(row.QuerySelector("[data-testid='project-deletion-pending']"));
+        Assert.Empty(row.QuerySelectorAll(".project-favorite, .project-dense-activity, .project-dense-users, .project-dense-description"));
+        Assert.Empty(row.QuerySelectorAll("[data-testid='project-production-status']"));
+    }
+
+    /// <summary>R-28: REST dates arrive as Kind Local (UTC-to-Local converter); stamping them UTC shifted
+    /// them by the browser offset and past events read "in 35 min". Each kind must give the same instant.</summary>
+    [Fact]
+    public void AsOffset_KeepsTheInstant_WhateverTheKind()
+    {
+        var instant = new DateTime(2026, 7, 30, 9, 0, 0, DateTimeKind.Utc);
+        var asOffset = typeof(ProjectsPage).GetMethod("AsOffset", BindingFlags.NonPublic | BindingFlags.Static)!;
+        DateTimeOffset Convert(DateTime value) => (DateTimeOffset)asOffset.Invoke(null, [value])!;
+
+        Assert.Equal(instant, Convert(instant).UtcDateTime);
+        Assert.Equal(instant, Convert(instant.ToLocalTime()).UtcDateTime);
+        Assert.Equal(instant, Convert(DateTime.SpecifyKind(instant, DateTimeKind.Unspecified)).UtcDateTime);
+    }
+
+    /// <summary>R-30: the second choice of the "Project created" dialog opens the project.</summary>
+    [Fact]
+    public async Task NewProject_Created_SecondChoiceOpensTheProject()
+    {
+        BunitTestHelper.UseImmediateDialogs(this);
+        _handler.SetJsonResponse("api/projects", new PaginatedResult<ProjectDto> { Items = [], TotalCount = 0 });
+        var dialog = (Aetheus.Front.Tests.TestDoubles.ImmediateDialogService)Services.GetRequiredService<OmniDialogService>();
+        dialog.OpenResult = new ProjectDto { Id = 42, Name = "Portfolio" };
+        dialog.ConfirmResult = false;
+        var cut = Render<ProjectsPage>();
+
+        cut.WaitForAssertion(() => Assert.False(cut.Find(".project-list-create").HasAttribute("disabled")));
+        await cut.Find(".project-list-create").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        Assert.Equal("OpenProject", dialog.LastConfirmOptions?.CancelButtonText);
+        Assert.EndsWith("/projects/42",
+            Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -4,8 +4,15 @@
 
 <PageTitle>@L["UpdatePipelineTemplate"] - Aetheus</PageTitle>
 
-<OmniPageHeader Title="@L["UpdatePipelineTemplate"]" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
+@* Recette R-109 (rule 1 of R-30): Confirm, the main action, sits in the page header; dismissing is the header's back button. *@
+<OmniPageHeader Title="@L["UpdatePipelineTemplate"]" ShowBack="true" BackHref="@($"/pipelines/{PipelineId}")" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("system_update_alt")" /></Icon>
+    <ActionsContent>
+        @if (!_loading && !_forbidden && !_notAvailable && !_loadFailed && _preview is not null)
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_preview.RequiresOrphanAcknowledgement && !_acknowledged)" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["ConfirmUpdate"]</span></ChildContent></OmniButton>
+        }
+    </ActionsContent>
 </OmniPageHeader>
 
 @if (_loading)
@@ -29,25 +36,23 @@ else if (_loadFailed || _preview is null)
 }
 else
 {
-    <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-md">
-        @string.Format(L["TemplateVersionTransition"], _preview.TemplateName, _preview.CurrentVersion, _preview.TargetVersion)
-    </OmniText>
-    @if (_preview.OrphanOverrides.Count > 0)
-    {
-        <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>
-            <OmniText Element="OmniTextElement.Paragraph">@L["OrphanOverridesWarning"]</OmniText>
-            <ul>
-                @foreach (var orphan in _preview.OrphanOverrides)
-                {
-                    <li><code>@orphan</code></li>
-                }
-            </ul>
-        </ChildContent></OmniAlert>
-        <OmniCheckBox @bind-Value="_acknowledged" Class="omni-u-mb-md">@L["AcknowledgeOrphanOverrides"]</OmniCheckBox>
-    }
-    <MonacoDiffViewer OriginalValue="@_preview.CurrentResolvedYaml" ModifiedValue="@_preview.TargetResolvedYaml" />
-    <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_preview.RequiresOrphanAcknowledgement && !_acknowledged)" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["ConfirmUpdate"]</span></ChildContent></OmniButton>
+    <OmniStack Class="page-fill-body">
+        <OmniText Element="OmniTextElement.Strong">
+            @string.Format(L["TemplateVersionTransition"], _preview.TemplateName, _preview.CurrentVersion, _preview.TargetVersion)
+        </OmniText>
+        @if (_preview.OrphanOverrides.Count > 0)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>
+                <OmniText Element="OmniTextElement.Paragraph">@L["OrphanOverridesWarning"]</OmniText>
+                <ul>
+                    @foreach (var orphan in _preview.OrphanOverrides)
+                    {
+                        <li><code>@orphan</code></li>
+                    }
+                </ul>
+            </ChildContent></OmniAlert>
+            <OmniCheckBox @bind-Value="_acknowledged">@L["AcknowledgeOrphanOverrides"]</OmniCheckBox>
+        }
+        <OmniDiffViewer Original="@_preview.CurrentResolvedYaml" Modified="@_preview.TargetResolvedYaml" Language="yaml" FillAvailableHeight="true" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
     </OmniStack>
 }

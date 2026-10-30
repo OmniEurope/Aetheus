@@ -72,6 +72,11 @@ public sealed record ProductionServerDto
 {
     public int Id { get; init; }
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>Recette R-77: the project has no server yet, and this one, which the user administers, is offered so a new
+    /// project needs nothing attached by hand. The setup attaches the one chosen to the project; the others stay
+    /// unattached and are never written into the pipeline.</summary>
+    public bool Candidate { get; init; }
 }
 
 /// <summary>The repository of a project's system configuration files (Apache virtual hosts, environment
@@ -107,7 +112,8 @@ public sealed record PipelineProductionAnalysisDto
     /// <summary>The Compose file the analysis read: the one asked for, else the one that looks like production.</summary>
     public string? ComposeFile { get; init; }
 
-    /// <summary>The project's servers and those of its production environment, by name.</summary>
+    /// <summary>The project's servers and those of its production environment, by name; when the project has none, the
+    /// servers the user administers, each marked <see cref="ProductionServerDto.Candidate"/>.</summary>
     public List<ProductionServerDto> Servers { get; init; } = [];
 
     /// <summary>The server proposed by default (recette R-21): the single server of the project's production
@@ -127,8 +133,9 @@ public sealed record PipelineProductionAnalysisDto
     /// pipeline's <c>DEPLOY_STRATEGY</c> is <c>bluegreen</c>), otherwise a replacement of the running services.</summary>
     public bool DeclaresBlueGreen { get; init; }
 
-    /// <summary>The deployment strategy the wizard writes into the pipeline: <c>bluegreen</c> or <c>replace</c>.</summary>
-    public string Strategy => DeclaresBlueGreen ? "bluegreen" : "replace";
+    /// <summary>The deployment strategy the Compose file declares: <c>bluegreen</c> or <c>replace</c>. The operator may choose
+    /// the other one (recette R-89); this is what applies when he does not.</summary>
+    public string Strategy => DeclaresBlueGreen ? ProductionStrategy.BlueGreen : ProductionStrategy.Replace;
 
     /// <summary>The Compose file publishes a back port, so the API has its own host and virtual hosts.</summary>
     public bool DeclaresApi => DeclaresBackPort || DeclaresBlueGreen;
@@ -217,6 +224,21 @@ public sealed record PipelineProductionApplyRequest
     /// <summary>The values the operator gave to the variables that need one, by variable name.</summary>
     [BoundedDictionary(64, 128, 4096)]
     public Dictionary<string, string> Values { get; init; } = [];
+
+    /// <summary>The deployment strategy the operator chose (recette R-89), <see cref="ProductionStrategy.BlueGreen"/> or
+    /// <see cref="ProductionStrategy.Replace"/>; empty keeps the one the Compose file declares.</summary>
+    [StringLength(20)]
+    public string? Strategy { get; init; }
+}
+
+/// <summary>The two ways the production pipeline brings a release up: the pipeline's <c>DEPLOY_STRATEGY</c>.</summary>
+public static class ProductionStrategy
+{
+    /// <summary>Starts the idle colour, moves the Apache upstream to it and keeps the previous colour in reserve.</summary>
+    public const string BlueGreen = "bluegreen";
+
+    /// <summary>Replaces the running services of the Compose project.</summary>
+    public const string Replace = "replace";
 }
 
 /// <summary>One entry written, kept or still missing after the production setup.</summary>
@@ -239,7 +261,7 @@ public sealed record PipelineProductionApplyResultDto
     public string Server { get; init; } = string.Empty;
 
     /// <summary><c>bluegreen</c> or <c>replace</c>: the pipeline's <c>DEPLOY_STRATEGY</c>.</summary>
-    public string Strategy { get; init; } = "replace";
+    public string Strategy { get; init; } = ProductionStrategy.Replace;
 
     /// <summary>The pipeline's <c>DEPLOY_HAS_API</c>: the API has its own host and virtual hosts.</summary>
     public bool DeclaresApi { get; init; }

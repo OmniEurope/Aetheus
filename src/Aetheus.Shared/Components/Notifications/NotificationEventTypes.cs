@@ -40,6 +40,10 @@ public static class NotificationEventTypes
     /// only for the root run. Their in-app notifications are unchanged.</summary>
     public const string PipelineChildResults = "pipeline.child-results";
 
+    /// <summary>Recette R-69: a certificate reached one of the alert lead times the administrator set (one per
+    /// certificate, expiry date and lead time). Carries no project, so it reaches the notification rules only.</summary>
+    public const string CertificateExpiring = "certbot.certificate-expiring";
+
     public static IReadOnlyList<NotificationEventTypeDescriptor> All { get; } =
     [
         new(PipelineFailed, DefaultEnabled: true, CarriesProjectId: true),
@@ -73,6 +77,7 @@ public static class NotificationEventTypes
         new("app.metric.threshold", DefaultEnabled: false, CarriesProjectId: true),
         new("alert.triggered", DefaultEnabled: false, CarriesProjectId: false),
         new("certbot.renewal-check.failed", DefaultEnabled: false, CarriesProjectId: false),
+        new(CertificateExpiring, DefaultEnabled: false, CarriesProjectId: false),
         // Carries the project owning the vault; a vault of a shared environment has none.
         new("SecretExpiring", DefaultEnabled: false, CarriesProjectId: true)
     ];

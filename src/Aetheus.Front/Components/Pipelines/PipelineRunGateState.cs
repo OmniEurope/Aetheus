@@ -68,7 +68,9 @@ internal sealed class PipelineRunGateState
             {
                 FindingCount = page.OpenCount,
                 NewFindingCount = page.NewOpenCount,
-                DecidedFindingCount = page.DecidedCount
+                DecidedFindingCount = page.DecidedCount,
+                // Recette R-74: the per-category figures behind the findings tile, over the same tree.
+                OpenFindingCounts = page.OpenCountsByCategory
             };
         }
         catch (HttpRequestException)

@@ -3,9 +3,11 @@
 @* Load grouped errors through server-side virtualized filtering and refresh on project telemetry
    events so the view covers every matching error group (ADR-021); export through the same grid
    contract with source context. *@
+@* R-14: the failure alert and the grid are separated by this stack's gap, not by a margin of their own. *@
+<OmniStack>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+    <OmniAlert Severity="OmniSeverity.Danger">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["LoadFailed"]</OmniText>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
@@ -39,3 +41,4 @@
         <OmniDataGridColumn TItem="AppErrorEventDto" Property="LastSeenAt" Title="@L["LastSeen"]" Width="150px" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

@@ -21,7 +21,8 @@
     </MenuContent>
 </OmniPageHeader>
 
-<OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm notifications-transport-notice">
+<OmniStack Class="page-fill-body">
+<OmniAlert Severity="OmniSeverity.Info" Density="OmniDensity.Compact" Class="notifications-transport-notice">
     <Icon><OmniIcon Name="OmniIconName.Info" /></Icon>
     <ChildContent>@L["NotificationsNotSentNotice"]</ChildContent>
 </OmniAlert>
@@ -34,7 +35,7 @@
     RowRender="@(args => args.Class = args.Item.ReadAt is null ? "notification-row--unread" : null)">
     <Columns>
         @* Every header filter is a real column filter of the endpoint. *@
-        <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="CreatedAt" Title="@L["Date"]" Width="11rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange">
+        <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="CreatedAt" Title="@L["Date"]" Width="11rem" Filterable="true">
             <Template Context="row">
                 @* The date itself; how long ago stays in the tooltip. *@
                 <span title="@RelativeTime.FormatAgo(L, row.CreatedAt)">@row.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
@@ -60,7 +61,7 @@
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Subject" Truncate="true" Title="@L["NotificationSubject"]" MinWidth="16rem" Filterable="true" />
         <OmniDataGridColumn TItem="NotificationDeliveryDto" Property="Status" Title="@L["Status"]" Width="16rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="row">
-                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row)"
+                <OmniBadge Icon="@(BadgeIcon.ForState(NotificationLabels.StatusVariant(row)))" Fill="OmniFill.Solid" Tone="@NotificationLabels.StatusVariant(row)"
                            Class="notification-status-badge">@NotificationLabels.StatusLabel(L, row)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
@@ -79,3 +80,4 @@
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

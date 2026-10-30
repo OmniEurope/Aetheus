@@ -27,6 +27,18 @@ public sealed record MailTemplateSummaryDto
     public bool IsCustomized { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public string? UpdatedBy { get; init; }
+
+    /// <summary>The organization whose own version this line is; null for the platform's.</summary>
+    public int? OrganizationId { get; init; }
+}
+
+/// <summary>The kinds an organization may have its own version of: the mails about its resources. The
+/// others (channel test, daily recap, account mails) concern no organization and stay the platform's.</summary>
+public static class MailTemplateScopes
+{
+    public static IReadOnlyList<MailTemplateKind> OrganizationKinds { get; } = [MailTemplateKind.NotificationEvent];
+
+    public static bool IsOrganizationKind(MailTemplateKind kind) => OrganizationKinds.Contains(kind);
 }
 
 /// <summary>A variable the template of a kind may insert, written <c>{{Name}}</c>; its label is localized by the front.</summary>
@@ -48,9 +60,14 @@ public sealed record MailTemplateDto
     public string Language { get; init; } = MailTemplateLanguages.English;
     public string Subject { get; init; } = string.Empty;
     public string Body { get; init; } = string.Empty;
+    /// <summary>For the platform version, changed by a site Admin; for an organization, the organization has
+    /// its own version (else the platform's is shown, as it is sent).</summary>
     public bool IsCustomized { get; init; }
     public DateTime? UpdatedAt { get; init; }
     public string? UpdatedBy { get; init; }
+
+    /// <summary>The organization the template was read for; null for the platform's.</summary>
+    public int? OrganizationId { get; init; }
     public List<MailTemplateVariableDto> Variables { get; init; } = [];
 }
 

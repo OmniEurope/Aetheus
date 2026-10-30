@@ -10,6 +10,7 @@ namespace Aetheus.Front.Components.MailTemplates;
 /// </summary>
 public partial class MailTemplates
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -18,6 +19,12 @@ public partial class MailTemplates
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private OmniAppearanceState Appearance { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
+
+    // Owner decision 2026-10-28: the organization whose own versions are edited; null for the platform's
+    // templates (site Admin only). An organization's administrator always edits one of its organizations.
+    private int? _organizationId;
 
     private MailTemplateKind _kind = MailTemplateKind.NotificationChannelTest;
     private string _language = MailTemplateLanguages.English;
@@ -43,20 +50,51 @@ public partial class MailTemplates
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Auth.IsAdmin)
-        {
-            Nav.NavigateTo("/");
+        if (!AdminPageEntry.TryEnter(Auth, Permissions, PermissionKeys.OrganizationMailTemplatesManage, Nav, Breadcrumb, L, "MailTemplates"))
             return;
-        }
 
-        Breadcrumb.Set(
-            new BreadcrumbItem(L["Administration"], "/admin"),
-            new BreadcrumbItem(L["MailTemplates"]));
-        _kinds = [.. Enum.GetValues<MailTemplateKind>().Select(kind => new OmniOption<MailTemplateKind>(kind, L.Localize(kind)))];
+        await Scope.EnsureLoadedAsync();
+        ApplyOrganization();
         _languages = [.. MailTemplateLanguages.All.Select(language => new OmniOption<string>(language, L["MailTemplateLanguage_" + language]))];
         _language = MailTemplateLanguages.Normalize(System.Globalization.CultureInfo.CurrentUICulture.Name);
         _theme = ThemeOf(Appearance);
         await LoadAsync();
+    }
+
+    /// <summary>Takes the switcher's organization and the mails an organization may word its own way (the
+    /// others stay the platform's).</summary>
+    private void ApplyOrganization()
+    {
+        _organizationId = Auth.IsAdmin ? Scope.SelectedFor(PermissionKeys.OrganizationMailTemplatesManage) : Scope.SelectedOrFirstFor(PermissionKeys.OrganizationMailTemplatesManage);
+        var kinds = _organizationId is null
+            ? Enum.GetValues<MailTemplateKind>()
+            : [.. MailTemplateScopes.OrganizationKinds];
+        _kinds = [.. kinds.Select(kind => new OmniOption<MailTemplateKind>(kind, L.Localize(kind)))];
+        if (!kinds.Contains(_kind)) _kind = kinds[0];
+    }
+
+    /// <summary>The switcher chose another organization: the unsaved draft is confirmed away first, as when
+    /// choosing another mail.</summary>
+    private async Task OnOrganizationChangedAsync()
+    {
+        if (!await MayDiscardDraftAsync())
+        {
+            Scope.Select(_organizationId);
+            return;
+        }
+
+        ApplyOrganization();
+        await LoadAsync();
+    }
+
+    /// <summary>True when there is no unsaved draft, or the administrator chose to drop it. Dropping a draft
+    /// runs nothing on the server: no veil.</summary>
+    private async Task<bool> MayDiscardDraftAsync()
+    {
+        if (!IsDirty) return true;
+        var leave = await Dialog.Confirm(L["MailTemplateDiscardConfirm"].Value, L["MailTemplateDiscard"].Value,
+            new OmniConfirmOptions { Destructive = true, OkButtonText = L["MailTemplateDiscard"].Value, CancelButtonText = L["GoBack"].Value });
+        return leave == true;
     }
 
     /// <summary>The colours of the administrator's appearance, as the server resolves a recipient's.</summary>
@@ -68,12 +106,7 @@ public partial class MailTemplates
 
     private async Task SelectAsync(MailTemplateKind kind, string language)
     {
-        if (IsDirty)
-        {
-            var leave = await Dialog.Confirm(L["MailTemplateDiscardConfirm"].Value, L["MailTemplateDiscard"].Value,
-                new OmniConfirmOptions { Destructive = true, OkButtonText = L["MailTemplateDiscard"].Value, CancelButtonText = L["GoBack"].Value });
-            if (leave != true) return;
-        }
+        if (!await MayDiscardDraftAsync()) return;
 
         _kind = kind;
         _language = language;
@@ -85,7 +118,7 @@ public partial class MailTemplates
         _loading = true;
         try
         {
-            Show(await Api.MailTemplates.GetAsync(_kind, _language));
+            Show(await Api.MailTemplates.GetAsync(_kind, _language, _organizationId));
         }
         catch (HttpRequestException)
         {
@@ -126,7 +159,7 @@ public partial class MailTemplates
         _saving = true;
         try
         {
-            var outcome = await Api.MailTemplates.SaveAsync(_kind, _language, Draft());
+            var outcome = await Api.MailTemplates.SaveAsync(_kind, _language, Draft(), _organizationId);
             if (outcome.Value is { } saved)
             {
                 Show(saved);
@@ -149,22 +182,25 @@ public partial class MailTemplates
         var confirmed = await Dialog.Confirm(L["MailTemplateRestoreDefaultConfirm"].Value, L["MailTemplateRestoreDefault"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["MailTemplateRestore"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
-        var outcome = await Api.MailTemplates.ResetAsync(_kind, _language);
-        if (outcome.Value is { } restored)
+        await Veil.RunAsync(async () =>
         {
-            Show(restored);
-            Toast.Success("MailTemplateRestored");
-        }
-        else
-        {
-            Toast.ErrorRaw(L["SaveFailed"].Value, outcome.ErrorMessage ?? string.Empty);
-        }
+            var outcome = await Api.MailTemplates.ResetAsync(_kind, _language, _organizationId);
+            if (outcome.Value is { } restored)
+            {
+                Show(restored);
+                Toast.Success("MailTemplateRestored");
+            }
+            else
+            {
+                Toast.ErrorRaw(L["SaveFailed"].Value, outcome.ErrorMessage ?? string.Empty);
+            }
+        });
     }
 
     /// <summary>The editor rendered the draft for its preview; the server renders and sends it, so the mail received is the one recipients get.</summary>
     internal async Task SendTestAsync(OmniMailRenderResult _)
     {
-        var outcome = await Api.MailTemplates.SendTestAsync(_kind, _language, Draft());
+        var outcome = await Api.MailTemplates.SendTestAsync(_kind, _language, Draft(), _organizationId);
         if (outcome.Value is not { } result)
         {
             Toast.ErrorRaw(L["MailTemplateTestFailed"].Value, outcome.ErrorMessage ?? string.Empty);

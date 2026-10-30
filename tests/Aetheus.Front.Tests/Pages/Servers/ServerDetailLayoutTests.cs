@@ -72,6 +72,35 @@ public class ServerDetailLayoutTests : BunitContext
         return Render<ServerDetailLayout>(p => p.Add(x => x.Body, b => b.AddMarkupContent(0, "<div id=\"body\">body</div>")));
     }
 
+    // ── R-120: the Apache version is in the page title ────────────────────────
+
+    [Theory]
+    [InlineData("servers/5/apache", "Apache", "2.4.58", "Apache 2.4.58")]
+    [InlineData("servers/5/apache?tab=modules", "Apache", " 2.4.58 ", "Apache 2.4.58")]
+    [InlineData("servers/5/apache", "Apache", "", "Apache")]
+    [InlineData("servers/5/services", "Services", "2.4.58", "Services")]
+    [InlineData("servers/5/overview", "Overview", "2.4.58", "Overview")]
+    public void R120_OnlyTheApacheSectionCarriesTheVersionInItsTitle(string path, string title, string version, string expected)
+    {
+        var server = MakeServer();
+        server = server with { Apache = server.Apache! with { Version = version } };
+
+        Assert.Equal(expected, ServerDetailLayout.SectionTitle(path, title, server));
+    }
+
+    [Fact]
+    public void R120_TheApachePageTrail_EndsWithTheTitleAndTheVersion()
+    {
+        var server = MakeServer();
+        server = server with { Apache = server.Apache! with { Version = "2.4.58" } };
+
+        RenderLayout(server, "apache");
+
+        var leaf = Services.GetRequiredService<Aetheus.Front.Components.Shared.BreadcrumbService>().Items[^1];
+        Assert.EndsWith(" 2.4.58", leaf.Text, StringComparison.Ordinal);
+        Assert.StartsWith("Apache", leaf.Text, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── action buttons gated by _canWrite ─────────────────────────────────────
 
     [Fact]
@@ -176,6 +205,30 @@ public class ServerDetailLayoutTests : BunitContext
     public void SectionIconFor_MatchesTheSideMenuIcon(string relativePath, string expected)
     {
         Assert.Equal(expected, ServerDetailLayout.SectionIconFor(relativePath));
+    }
+
+    [Theory]
+    [InlineData("servers/1/certbot", "5.8.0", "5.8.0")]
+    [InlineData("servers/1/certbot?tab=relations", " 5.8.0 ", "5.8.0")]
+    [InlineData("servers/1/certbot", "", null)]
+    [InlineData("servers/1/apache", "5.8.0", null)]
+    [InlineData("servers/1", "5.8.0", null)]
+    public void SectionVersion_IsSaidOnlyInTheTitleOfTheSectionThatReportsOne(string relativePath, string certbotVersion, string? expected)
+    {
+        var server = MakeServer() with { Certbot = new CertbotDataDto { Version = certbotVersion } };
+        Assert.Equal(expected, ServerDetailLayout.SectionVersion(server, relativePath));
+    }
+
+    // Same header rule as R-120 for PortSentry: its version is in the title, without the Debian package revision.
+    [Theory]
+    [InlineData("servers/1/portsentry", "1.2-14build1", "1.2")]
+    [InlineData("servers/1/portsentry?tab=config", " 1.2 ", "1.2")]
+    [InlineData("servers/1/portsentry", "", null)]
+    [InlineData("servers/1/apache", "1.2-14build1", null)]
+    public void SectionVersion_PortsentryUpstreamVersionIsInItsTitle(string relativePath, string version, string? expected)
+    {
+        var server = MakeServer() with { Portsentry = new PortsentryDataDto { Version = version } };
+        Assert.Equal(expected, ServerDetailLayout.SectionVersion(server, relativePath));
     }
 
     [Fact]

@@ -17,6 +17,7 @@ else
         ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("folder")" /></Icon>
     </OmniPageHeader>
+    <OmniStack>
     <Aetheus.Front.Components.Projects.ProjectDetailSections.ProjectEditSection
         Project="@Loader.Project" OnSaved="@OnSaved" />
     @* How much data the project keeps, saved on its own. *@
@@ -26,7 +27,7 @@ else
        here rather than with OmniSettingsDangerAction: that action asks its own yes or no first, and the
        project deletion already has its dialog (R2-122: what goes with the project, its name typed, refused
        while a run is in progress), so the OE tile would ask twice. *@
-    <OmniSettingsDangerZone Class="omni-u-mt-lg">
+    <OmniSettingsDangerZone>
         <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.Between" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium" Wrap="true">
             <OmniStack Gap="OmniSpacing.XSmall">
                 <OmniText Element="OmniTextElement.Strong">@L["ProjectDeletionTitle"]</OmniText>
@@ -35,4 +36,5 @@ else
             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
         </OmniStack>
     </OmniSettingsDangerZone>
+    </OmniStack>
 }

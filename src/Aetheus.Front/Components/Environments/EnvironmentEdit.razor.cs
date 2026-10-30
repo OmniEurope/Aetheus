@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Environments;
 
 public partial class EnvironmentEdit
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -42,6 +43,16 @@ public partial class EnvironmentEdit
 
     private readonly record struct EnvironmentTypeOption(string Text, EnvironmentType Value);
     private readonly record struct EnvironmentCopySource(int Id, string Label, EnvironmentDto Environment);
+
+    /// <summary>
+    /// R-70: the source environments listed under their project (a native list renders each group as an
+    /// optgroup). The label keeps the project too, because a closed list shows only the chosen option's text.
+    /// </summary>
+    private IReadOnlyList<OmniOption<int?>> CopySourceOptions =>
+    [
+        .. _copySources.Select(source => new OmniOption<int?>(
+            source.Id, source.Label, Group: source.Environment.ProjectName ?? L["NoProject"]))
+    ];
 
     protected override void OnInitialized()
     {
@@ -247,17 +258,20 @@ public partial class EnvironmentEdit
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Servers.DeleteEnvironmentAsync(Id!.Value);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Cache.InvalidatePrefix("environments:"); // S-TECH-SWIV
-            Toast.Success("Deleted", "Deleted");
-            Nav.NavigateTo("/environments");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var status = await Api.Servers.DeleteEnvironmentAsync(Id!.Value);
+            if (status.Success)
+            {
+                Cache.InvalidatePrefix("environments:"); // S-TECH-SWIV
+                Toast.Success("Deleted", "Deleted");
+                Nav.NavigateTo("/environments");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private static OmniTone TypeStyle(EnvironmentType type) => type switch
@@ -279,7 +293,21 @@ public partial class EnvironmentEdit
         [StringLength(500)]
         public string Description { get; set; } = string.Empty;
 
-        public EnvironmentType Type { get; set; } = EnvironmentType.Development;
+        private EnvironmentType _type = EnvironmentType.Development;
+
+        /// <summary>R-70: choosing Production checks "Approval required" by default; the user can uncheck it
+        /// afterwards. Initializers that also set <see cref="RequireApproval"/> list it after the type, so a
+        /// stored or copied choice always wins.</summary>
+        public EnvironmentType Type
+        {
+            get => _type;
+            set
+            {
+                if (value == EnvironmentType.Production && _type != EnvironmentType.Production)
+                    RequireApproval = true;
+                _type = value;
+            }
+        }
 
         public int? ProjectId { get; set; }
 

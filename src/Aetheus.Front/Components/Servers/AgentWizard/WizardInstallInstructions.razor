@@ -3,6 +3,7 @@
 @* Renders the platform-specific install instructions (Linux or Windows). *@
 @if (IsLinux)
 {
+<OmniStack Gap="OmniSpacing.Small">
     <WizardCodeBlock Code="@_linuxCombined" Label="@L["WizardInstallOneCommandLabel"]" InlineLine="true" />
     @if (!string.IsNullOrEmpty(_linuxCombinedDev))
     {
@@ -18,9 +19,11 @@
     <WizardStepSection Label="@L["WizardInstallLinuxStep1"].Value" Lines="@_linuxStep1" />
     <WizardStepSection Label="@L["WizardInstallLinuxStep2"].Value" Lines="@_linuxStep2" />
     <WizardStepSection Label="@L["WizardInstallLinuxStep3"].Value" Lines="@_linuxStep3" />
+</OmniStack>
 }
 else
 {
+<OmniStack Gap="OmniSpacing.Small">
     <WizardCodeBlock Code="@_winCombined" Label="@L["WizardInstallOneCommandLabel"]" InlineLine="true" />
     @if (!string.IsNullOrEmpty(Token))
     {
@@ -32,4 +35,5 @@ else
     <WizardStepSection Label="@L["WizardInstallWindowsStep1"].Value" Lines="@_winStep1" />
     <WizardStepSection Label="@L["WizardInstallWindowsStep2"].Value" Lines="@_winStep2" />
     <WizardStepSection Label="@L["WizardInstallWindowsStep3"].Value" Lines="@_winStep3" />
+</OmniStack>
 }

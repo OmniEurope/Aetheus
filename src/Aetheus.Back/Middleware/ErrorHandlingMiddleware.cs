@@ -20,11 +20,11 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         }
         catch (BadRequestException ex)
         {
-            await WriteErrorAsync(context, HttpStatusCode.BadRequest, ex.Message);
+            await WriteErrorAsync(context, HttpStatusCode.BadRequest, ex.Message, ex.Problems);
         }
         catch (ConflictException ex)
         {
-            await WriteErrorAsync(context, HttpStatusCode.Conflict, ex.Message);
+            await WriteErrorAsync(context, HttpStatusCode.Conflict, ex.Message, code: ex.Code);
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
         {
@@ -35,6 +35,17 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
             // Kestrel uses BadHttpRequestException for protocol failures such as an exceeded
             // endpoint body limit. Preserve its explicit 4xx status instead of hiding it as 500.
             await WriteErrorAsync(context, (HttpStatusCode)ex.StatusCode, ex.Message);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException
+        {
+            SqlState: Npgsql.PostgresErrorCodes.UniqueViolation or Npgsql.PostgresErrorCodes.SerializationFailure
+        })
+        {
+            // RBAC audit, finding 10: two requests writing the same row at once lose a race, not the
+            // server. The later one gets a 409 it can retry; the constraint name stays in the log only.
+            logger.LogWarning(ex, "Concurrent write conflict for {Method} {Path}", context.Request.Method, context.Request.Path);
+            await WriteErrorAsync(context, HttpStatusCode.Conflict,
+                "This change conflicts with another one made at the same time; reload and try again.");
         }
         catch (Exception ex)
         {
@@ -47,7 +58,9 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
     /// the status.</summary>
     public const string ErrorReasonItem = "Aetheus.ErrorReason";
 
-    private static async Task WriteErrorAsync(HttpContext context, HttpStatusCode statusCode, string message)
+    private static async Task WriteErrorAsync(
+        HttpContext context, HttpStatusCode statusCode, string message, IReadOnlyList<ProblemDto>? problems = null,
+        string? code = null)
     {
         context.Items[ErrorReasonItem] = message;
         context.Response.StatusCode = (int)statusCode;
@@ -55,7 +68,9 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         var error = new ApiError
         {
             Message = message,
-            CorrelationId = context.TraceIdentifier
+            CorrelationId = context.TraceIdentifier,
+            Code = code,
+            Problems = problems is null ? null : [.. problems]
         };
         await context.Response.WriteAsync(JsonSerializer.Serialize(error, JsonOptions));
     }

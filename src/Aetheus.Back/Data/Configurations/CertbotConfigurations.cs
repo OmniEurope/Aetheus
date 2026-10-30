@@ -18,6 +18,19 @@ internal sealed class CertbotCertificateConfiguration : IEntityTypeConfiguration
     }
 }
 
+internal sealed class CertificateExpiryAlertMarkConfiguration : IEntityTypeConfiguration<CertificateExpiryAlertMark>
+{
+    public void Configure(EntityTypeBuilder<CertificateExpiryAlertMark> builder)
+    {
+        builder.Property(e => e.CertificateName).HasMaxLength(255);
+        builder.HasIndex(e => new { e.ServerId, e.CertificateName, e.ExpiryDate, e.LeadDays }).IsUnique();
+        builder.HasOne(e => e.Server)
+               .WithMany()
+               .HasForeignKey(e => e.ServerId)
+               .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class CertbotStateConfiguration : IEntityTypeConfiguration<CertbotState>
 {
     public void Configure(EntityTypeBuilder<CertbotState> builder)

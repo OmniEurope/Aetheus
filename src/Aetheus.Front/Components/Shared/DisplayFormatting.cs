@@ -47,6 +47,13 @@ public static class DisplayFormatting
     /// sizes of a heartbeat: the same units and rounding, never a second format.</summary>
     public static string SizeFromGo(double gigabytes) => Size(ToBytes(gigabytes, Giga));
 
+    /// <summary>R-10: like <see cref="SizeFromGo(double)"/> but a size of one Go or more is written as a whole
+    /// number ("155 Go"), for the disk figures where a decimal says nothing. Under one Go the usual unit applies.</summary>
+    public static string SizeFromGoWhole(double gigabytes) =>
+        gigabytes >= 1d
+            ? string.Create(CultureInfo.CurrentCulture, $"{Math.Round(gigabytes, MidpointRounding.AwayFromZero):0} Go")
+            : SizeFromGo(gigabytes);
+
     /// <summary><see cref="Size(long)"/> of a figure the agent reports in Mo (1024² bytes), such as the
     /// memory of a heartbeat or of a container.</summary>
     public static string SizeFromMo(double megabytes) => Size(ToBytes(megabytes, Mega));

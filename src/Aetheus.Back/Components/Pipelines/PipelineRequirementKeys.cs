@@ -36,9 +36,10 @@ internal sealed record RequirementKey(
 /// (<c>${{ project.slug }}.share</c>, <c>.qa</c>, <c>.prod</c>), and the rule that fills each one. A key
 /// the project cannot be doubted about is filled; any other is created empty rather than guessed:
 /// <list type="bullet">
-/// <item><description><b>Literal</b>: sub-domains <c>app</c> and <c>api</c>, the host prefix <c>qa.</c> of
+/// <item><description><b>Literal</b>: the empty application sub-domain (R-74) and the sub-domain <c>api</c>, the host prefix <c>qa.</c> of
 /// the QA environment, and the names derived from the slug (Compose project <c>&lt;slug&gt;-qa</c> or
-/// <c>&lt;slug&gt;-prod</c>, state directory <c>/var/lib/&lt;slug&gt;-production</c>), the layout
+/// <c>&lt;slug&gt;-prod</c>, state directory <c>/var/lib/aetheus-agent/projects/&lt;slug&gt;-production</c>, inside the directory the agent owns so it
+/// creates and deletes it itself, R-97), the layout
 /// ADR-053 gives the platform's own production.</description></item>
 /// <item><description><b>Secret</b>: the database password, JWT signing key, encryption key and salt, with
 /// the recipes of <see cref="VaultSecretGenerator"/> (the ones a deployment generates on the host), and the
@@ -62,7 +63,9 @@ internal static class PipelineRequirementKeys
         if (Is(name, slug, "share"))
             return
             [
-                new("APP_SUBDOMAIN", RequirementKeyFill.Literal, "app"),
+                // R-74: the application answers on the domain itself by default; the host formulas add the dot only for a
+                // sub-domain that is not empty. The API keeps its own sub-domain.
+                new("APP_SUBDOMAIN", RequirementKeyFill.Literal, string.Empty),
                 new("API_SUBDOMAIN", RequirementKeyFill.Literal, "api"),
                 new("CERTBOT_EMAIL", RequirementKeyFill.Empty),
                 // Where the HTTP virtual hosts serve the ACME challenge: the web root the agent installer creates.
@@ -82,7 +85,7 @@ internal static class PipelineRequirementKeys
                 new("HOST_PREFIX", RequirementKeyFill.Literal, string.Empty),
                 new("VERSION_SUFFIX", RequirementKeyFill.Empty),
                 new("COMPOSE_PROJECT", RequirementKeyFill.Literal, $"{slug}-prod"),
-                new("STATE_DIR", RequirementKeyFill.Literal, $"/var/lib/{slug}-production")
+                new("STATE_DIR", RequirementKeyFill.Literal, ProjectServerResourceNames.ProjectStateDirectory(slug, "production"))
             ];
         return [];
     }

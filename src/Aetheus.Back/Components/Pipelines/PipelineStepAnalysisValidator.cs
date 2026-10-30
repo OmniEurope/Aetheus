@@ -27,7 +27,7 @@ internal static class PipelineStepAnalysisValidator
             if (!string.Equals(step.Type, "lint", StringComparison.OrdinalIgnoreCase))
                 errors.Add($"Step '{step.Name}' in {context} analysis_category is only valid on a lint step.");
             else if (!LintAnalysisCategories.TryParse(step.AnalysisCategory, out _))
-                errors.Add($"Step '{step.Name}' in {context} analysis_category must be code-quality or accessibility.");
+                errors.Add($"Step '{step.Name}' in {context} analysis_category must be code-quality, accessibility or container.");
         }
 
         if (!string.Equals(step.Type, "scanner", StringComparison.OrdinalIgnoreCase)) return;

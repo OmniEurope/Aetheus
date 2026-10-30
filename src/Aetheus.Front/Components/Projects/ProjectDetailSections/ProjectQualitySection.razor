@@ -6,7 +6,8 @@
 }
 else
 {
-    <div class="@($"analysis-quality-workspace {(_qualitySectionIndex == 1 ? "analysis-quality-findings" : string.Empty)}")">
+    @* R-110: the tabs and their panel are separated by this stack's gap. *@
+    <OmniStack Class="@($"analysis-quality-workspace {(_qualitySectionIndex == 1 ? "analysis-quality-findings" : string.Empty)}")">
         <UrlSyncedTabs Slugs="@QualitySectionSlugs" RenderAllPanels="true"
                        @bind-SelectedIndex="_qualitySectionIndex"
                        Change="OnQualitySectionChangedAsync"
@@ -17,7 +18,7 @@ else
             </Tabs>
         </UrlSyncedTabs>
 
-        <section class="analysis-workspace-panel" role="tabpanel">
+        <OmniStack Class="analysis-workspace-panel" role="tabpanel">
         @if (_qualitySectionIndex == 0)
         {
                 @* The quality hero uses the shared grade colours with its own larger letter
@@ -32,14 +33,20 @@ else
                             {
                                 <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeNotConfigured"]</OmniText>
                             }
-                            else if (_summary.Grade.Completeness == AnalysisGradeCompleteness.Incomplete)
+                            else if (_summary.Grade.OverallGrade is null)
                             {
-                                <OmniText Element="OmniTextElement.Span">@L["AnalysisGradeIncomplete"]</OmniText>
+                                @* Recettes R-73, R-74: a grade is never "incomplete"; without any measure there is no letter yet. *@
+                                <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-no-measure">@L["AnalysisGradeNoMeasure"]</OmniText>
+                            }
+                            else if (AnalysisGradeBreakdown.MissingMeasureCount(_summary.Grade) is > 0 and var missingMeasures)
+                            {
+                                <OmniText Element="OmniTextElement.Span" data-testid="quality-grade-partial">@string.Format(L["AnalysisGradePartial"], missingMeasures)</OmniText>
                             }
                         </div>
+                    </div>
                         @* Linked commit, date, analysis-run and release tiles align beside the
                            grade; the breakdown highlights limiting domains. *@
-                        <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
+                        <OmniTileGrid Columns="4" MinColumnWidth="@Aetheus.Front.Components.Pipelines.PipelineRun.RunTileMinColumnWidth" Gap="OmniSpacing.Small" Class="analysis-grade-meta-tiles">
                             @if (GradeCommitHref is { } commitHref)
                             {
                                 <OmniStatTile Value="@ShortHash(_summary.Grade?.CommitHash)" Title="@L["Commit"]" Href="@commitHref" />
@@ -58,13 +65,13 @@ else
                                 <OmniStatTile Value="@_summary.LatestReleaseVersion" Title="@L["LatestRelease"]" Href="@($"/releases/{latestReleaseId}")" />
                             }
                         </OmniTileGrid>
-                    </div>
+
                     @* The breakdown is shared with a run's Quality tab. *@
                     <AnalysisGradeBreakdown Grade="@_summary.Grade" CrapScore="@_complexity.LastOrDefault()?.Crap" />
                 </OmniCard>
 
                 @* A count card shows only when its count is at least one. *@
-                <OmniTileGrid Columns="6" Gap="OmniSpacing.Small" Class="omni-u-mb-lg analysis-summary-row">
+                <OmniTileGrid Columns="6" MinColumnWidth="@Aetheus.Front.Components.Pipelines.PipelineRun.RunTileMinColumnWidth" Gap="OmniSpacing.Small" Class="analysis-summary-row">
                     @if (_summary.OpenCount > 0)
                     {
                         <OmniStatTile Value="@($"{_summary.OpenCount}")" Title="@L["AnalysisOpenFindings"]" OnClick="@(() => OpenFindingsAsync(status: AnalysisFindingStatus.Open))" data-quality-shortcut="open">
@@ -127,8 +134,7 @@ else
         }
         else
         {
-                @* Column headers own filtering, and Markdown export belongs beneath the findings
-                   grid. *@
+                @* Column headers own filtering; the grid's own MD button is the only export. *@
                  <AetheusDataGrid ShowFooterBar="true" @ref="_findingsGrid" Data="@_findings" Count="@_findingCount" TItem="AnalysisFindingDto" LoadData="LoadFindingsAsync" ExportRead="@ReadFindingsAsync" ExportName="@L["AnalysisFindings"]" RowClick="OpenFinding" AllowSorting="true" AllowFiltering="true" FilterMode="OmniDataGridFilterMode.Simple" PageSize="25" class="analysis-table aetheus-clickable-rows aetheus-grid-fullheight" AllowColumnResize="true" Virtualize="@AetheusGrid.RemoteVirtualization" VirtualData="@(() => new OmniDataGridResult<AnalysisFindingDto>(_findings, _findingCount))" FullHeight="true" VirtualizationOverscanCount="3">
                     <Columns>
                         @* The one definition of a findings list, shared with the Gate tab of a
@@ -136,15 +142,7 @@ else
                         <AnalysisFindingColumns Defaults="@_findingDefaults" />
                     </Columns>
                 </AetheusDataGrid>
-                @* It writes the AI prompt of every open finding (what resolves them), which OE's bar cannot: its
-                   Markdown is a table of the columns. Same place, label and colour as that bar. *@
-                <div class="analysis-findings-export" role="group" aria-label="@L["AnalysisExportAllAiPrompt"]">
-                    <OmniButton Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small" Class="analysis-findings-export-button"
-                                Busy="@_exportingPrompt" Disabled="@(_findingCount == 0 || _exportingPrompt)" OnClick="@ExportAllAiPromptAsync">
-                        <Icon><OmniIcon Name="OmniIconName.FileMd" /></Icon><ChildContent><span>@L["AnalysisExportAllAiPrompt"]</span></ChildContent>
-                    </OmniButton>
-                </div>
         }
-        </section>
-    </div>
+        </OmniStack>
+    </OmniStack>
 }

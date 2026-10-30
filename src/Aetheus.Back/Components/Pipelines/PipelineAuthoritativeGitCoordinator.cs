@@ -10,6 +10,29 @@ internal static class PipelineAuthoritativeGitCoordinator
         string actor, CancellationToken ct)
     {
         if (pipeline.ProjectId is not { } projectId) return;
+
+        // R-95: a creation never overwrites a definition the repository already holds. The same
+        // content is nothing to write; other content is a change Aetheus has not seen, refused
+        // rather than adopted (the user typed this definition on purpose, so replacing it with the
+        // repository's would hand them a pipeline they did not write).
+        var repositoryYaml = await pipelineGit.ReadProjectPipelineYamlAsync(
+            projectId, pipeline.Name, ct, pipeline.SourceBranch, pipeline.SourceRepositoryId)
+            .ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(repositoryYaml))
+        {
+            if (PipelineRepositoryDefinitionGuard.Same(repositoryYaml, pipeline.YamlDefinition))
+            {
+                logger.LogInformation(
+                    "Pipeline '{Name}' already has this definition in the project's git repository; nothing to commit.",
+                    pipeline.Name);
+                return;
+            }
+            throw new ConflictException(
+                $"The project's git repository already holds a definition file for a pipeline named '{pipeline.Name}' "
+                + $"on branch '{pipeline.SourceBranch ?? "default"}' with different content, and creating the pipeline "
+                + "would overwrite it. Choose another name or branch, or remove that file from the repository first.");
+        }
+
         var (outcome, error) = await pipelineGit.WriteProjectPipelineYamlAsync(
             projectId, pipeline.Name, pipeline.YamlDefinition, actor, ct,
             pipeline.SourceBranch, pipeline.SourceRepositoryId)

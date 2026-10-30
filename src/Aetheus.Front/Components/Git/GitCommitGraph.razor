@@ -30,7 +30,7 @@ else
                     @foreach (var r in n.Commit.RefNames)
                     {
                         var isTag = r.StartsWith("tag: ", StringComparison.Ordinal);
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@(isTag ? OmniTone.Warning : OmniTone.Accent)"
+                        <OmniBadge Icon="@(BadgeIcon.Of(isTag ? OmniIconName.Tag : OmniIconName.GitFork))" Fill="OmniFill.Solid" Tone="@(isTag ? OmniTone.Warning : OmniTone.Accent)"
                                    Class="git-graph-ref-badge">
                             @(isTag ? r["tag: ".Length..] : r)
                         </OmniBadge>

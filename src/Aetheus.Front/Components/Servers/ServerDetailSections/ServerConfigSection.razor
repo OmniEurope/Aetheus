@@ -1,14 +1,17 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @inject GridExportContext ExportContext
-<OmniStack Gap="OmniSpacing.Large">
-    @* STD-BTN detection 11: Export visible, the other actions in the menu. *@
-    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ExportConfigAsync" Class="@(_configExporting ? "btn-busy" : null)" Busy="@(_configExporting)" title="@L["ExportYaml"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Export"]</span></ChildContent></OmniButton>
-        <OmniOverflowMenu Label="@L["MoreActions"]">
-            <OmniMenuItem OnClick="@(() => _configImportVisible = true)" title="@L["ImportYaml"]"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
-        </OmniOverflowMenu>
-    </OmniStack>
 
+@* Recette R-109 (rule 1 of R-30): Export, the page's main action, sits in the page header on the title line,
+   with the other actions in its menu. STD-BTN detection 11: Export visible, the others in the menu. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ExportConfigAsync" Class="@(_configExporting ? "btn-busy" : null)" Busy="@(_configExporting)" title="@L["ExportYaml"]"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Export"]</span></ChildContent></OmniButton>
+    <OmniOverflowMenu Label="@L["MoreActions"]">
+        <OmniMenuItem OnClick="@(() => _configImportVisible = true)" title="@L["ImportYaml"]"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
+    </OmniOverflowMenu>
+</SectionContent>
+
+<OmniStack Gap="OmniSpacing.Large">
     @if (!string.IsNullOrEmpty(_configYaml))
     {
         @* The configuration in OE's code block, whose copy button sits at the end of its title. *@
@@ -18,22 +21,22 @@
     @if (_configImportVisible)
     {
         <OmniCard>
+            <OmniStack>
             <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["ImportYamlConfiguration"]</OmniText>
             <OmniTextArea aria-label="@L["ImportYamlConfiguration"]" @bind-Value="_configImportYaml" Rows="15" Class="config-yaml-editor" />
-            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small" Class="omni-u-mt-md">
+            <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Small">
                 @* STD-BTN detection 11: Deploy visible, the other actions in the menu. *@
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@DeployConfigAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_configImportYaml))" title="@(AgentOffline ? L["AgentOfflineActionBlocked"].Value : null)" Class="@(_configDeploying ? "btn-busy" : null)" Busy="@(_configDeploying)"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["Deploy"]</span></ChildContent></OmniButton>
                 <OmniOverflowMenu Label="@L["MoreActions"]">
                     <OmniMenuItem OnClick="@ValidateConfigAsync" Disabled="@_configValidating"><Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon><ChildContent>@L["ValidateYaml"]</ChildContent></OmniMenuItem>
                     <OmniMenuItem OnClick="@PreviewConfigAsync" Disabled="@_configPreviewing"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["Preview"]</ChildContent></OmniMenuItem>
                 </OmniOverflowMenu>
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => { _configImportVisible = false; _configPreview = null; })"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             </OmniStack>
 
             @if (_configValidation is not null)
             {
-                <OmniAlert Severity="@(_configValidation.IsValid ? OmniSeverity.Success : OmniSeverity.Danger)"
-                    Class="omni-u-mt-md">
+                <OmniAlert Severity="@(_configValidation.IsValid ? OmniSeverity.Success : OmniSeverity.Danger)">
                     @if (_configValidation.IsValid)
                     {
                         <span>@L["ConfigurationValid"]</span>
@@ -52,7 +55,7 @@
 
             @if (_configPreview is not null)
             {
-                <OmniCard Class="omni-u-mt-md">
+                <OmniCard>
                     <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">
                         @string.Format(L["TasksPlanned"], _configPreview.TaskCount)
                     </OmniText>
@@ -61,7 +64,7 @@
                             <OmniDataGridColumn Frozen="true" TItem="ServerConfigChange" Property="Category" Title="@L["Category"]" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                             <OmniDataGridColumn TItem="ServerConfigChange" Property="Action" Title="@L["Action"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">
                                 <Template Context="change">
-                                    <OmniBadge Fill="OmniFill.Solid"
+                                    <OmniBadge Icon="@(BadgeIcon.For(GetChangeBadgeStyle(change.Action)))" Fill="OmniFill.Solid"
                                         Tone="@GetChangeBadgeStyle(change.Action)">@change.Action</OmniBadge>
                                 </Template>
                             </OmniDataGridColumn>
@@ -70,6 +73,7 @@
                     </OmniDataGrid>
                 </OmniCard>
             }
+            </OmniStack>
         </OmniCard>
     }
 </OmniStack>

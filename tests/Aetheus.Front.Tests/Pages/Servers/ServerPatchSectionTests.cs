@@ -103,13 +103,20 @@ public class ServerPatchSectionTests : BunitContext
     [Fact]
     public void R1_5_WithoutPatchCapability_OffersAButtonThatOpensTheComponentDialog()
     {
-        var cut = RenderWith(Known(2, 1, patchCap: false), patchCap: false, LinuxServer(), isAdmin: true);
+        // R-109: the entry sits in the menu of the page header, so the section is rendered next to the header outlet.
+        var handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        handler.SetJsonResponse(HttpMethod.Get, "security-updates", Known(2, 1, patchCap: false));
+        var cut = this.RenderWithPageHeader<ServerPatchSection>(p => p
+            .Add(c => c.ServerId, 1)
+            .Add(c => c.Server, LinuxServer())
+            .Add(c => c.PatchManagementAvailable, false));
         var dialogs = Services.GetRequiredService<OmniDialogService>();
         string? openedTitle = null;
         dialogs.OnOpen += (title, _, _, _) => openedTitle = title;
 
-        var button = cut.Find(".patch-enable-component");
-        Assert.Contains("PatchEnableComponent", button.TextContent, StringComparison.Ordinal);
+        var button = cut.FindMenuItem("PatchEnableComponent")!;
+        Assert.NotNull(button);
+        Assert.Contains("patch-enable-component", button.ClassName, StringComparison.Ordinal);
         button.Click();
 
         Assert.Equal("EnableAgentCapabilities", openedTitle);
@@ -205,6 +212,25 @@ public class ServerPatchSectionTests : BunitContext
         var cut = RenderWith(new ServerSecurityUpdatesDto { Known = false, PackageManagerPresent = false }, patchCap: null);
 
         Assert.Contains("PatchNotApplicableTitle", cut.Markup);
+    }
+
+    // R-119: the task an upgrade check queues is followed on the page (and veils the section until it ends).
+    [Fact]
+    public void R119_AQueuedUpgradeCheck_IsFollowedOnThePage()
+    {
+        var handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        handler.SetJsonResponse(HttpMethod.Get, "security-updates", Known(2, 1, patchCap: true));
+        handler.SetJsonResponse(HttpMethod.Post, "system/upgrade", new ServiceTaskResponse { TaskId = 12 });
+        var cut = this.RenderWithPageHeader<ServerPatchSection>(p => p
+            .Add(c => c.ServerId, 1)
+            .Add(c => c.Server, LinuxServer())
+            .Add(c => c.PatchManagementAvailable, true));
+        Assert.Empty(cut.FindAll(".server-task-follower"));
+
+        cut.FindMenuItem("PatchCheck")!.Click();
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".server-task-follower")));
+        Assert.Contains("/tasks/12", cut.Find(".server-task-follower").InnerHtml, StringComparison.Ordinal);
     }
 
     [Fact]

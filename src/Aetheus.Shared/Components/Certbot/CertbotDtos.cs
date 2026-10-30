@@ -126,7 +126,7 @@ public sealed record CertbotCreateRequest
 /// (or none) is shown as "to update". Bumped together with the <c>aetheus-certbot-helper-version</c> marker.</summary>
 public static class CertbotHelperVersion
 {
-    public const int Current = 6;
+    public const int Current = 9;
 }
 
 /// <summary>Task variables of the Certbot operations shared by the backend that queues them and the agent.</summary>

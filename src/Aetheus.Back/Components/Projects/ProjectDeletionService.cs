@@ -8,9 +8,12 @@ namespace Aetheus.Back.Components.Projects;
 
 /// <summary>Delete database rows transactionally only after all project runs end, then remove files
 /// after commit to avoid live rows referencing deleted files. Audit removed resources and any files
-/// that could not be removed.</summary>
+/// that could not be removed. Recette R-97 (ADR-058): the rows go only once the server tasks prove that
+/// what the project deployed is removed. Recette R-51: otherwise the project is marked deleted, waiting for its
+/// server cleanup, and goes once a relaunched cleanup proves everything removed.</summary>
 public sealed class ProjectDeletionService(
     IProjectDeletionRepository repo,
+    IProjectServerCleanupService serverCleanup,
     IDbTransactionScope transaction,
     IArtifactStorageService artifactStorage,
     IGitLightService gitLight,
@@ -19,6 +22,7 @@ public sealed class ProjectDeletionService(
     IAuditService audit,
     IEntityChangeNotifier notifier,
     IMemoryCache cache,
+    TimeProvider timeProvider,
     ILogger<ProjectDeletionService> logger) : IProjectDeletionService
 {
     public async Task<ProjectDeletionPreviewDto?> GetPreviewAsync(int projectId, CancellationToken ct = default)
@@ -26,6 +30,7 @@ public sealed class ProjectDeletionService(
         var scope = await repo.ResolveScopeAsync(projectId, ct).ConfigureAwait(false);
         if (scope is null) return null;
         var counts = await repo.CountAsync(scope, ct).ConfigureAwait(false);
+        var plan = await serverCleanup.GetPlanAsync(projectId, ct).ConfigureAwait(false);
         return new ProjectDeletionPreviewDto
         {
             ProjectId = projectId,
@@ -33,27 +38,60 @@ public sealed class ProjectDeletionService(
             ActiveRunCount = await repo.CountActiveRunsAsync(scope, ct).ConfigureAwait(false),
             Items = [.. counts.Where(item => item.Value > 0).OrderBy(item => item.Key)
                 .Select(item => new ProjectDeletionItemDto(item.Key, item.Value))],
+            Servers = plan is null ? [] : [.. plan.Servers.Select(server => server.ToDto())],
+            RefusedValues = plan is null ? [] : [.. plan.Refused],
+            DeletionRequestedAt = scope.DeletionRequestedAt,
         };
     }
 
-    public async Task<bool> DeleteAsync(int projectId, CancellationToken ct = default)
+    public async Task<ProjectDeletionOutcome?> DeleteAsync(int projectId, IReadOnlyCollection<int> serverTaskIds, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(serverTaskIds);
+        var verdict = await serverCleanup.VerifyAsync(projectId, serverTaskIds, ct).ConfigureAwait(false);
+        if (verdict is null) return null;
+        if (!verdict.Clean)
+            return await MarkPendingCleanupAsync(projectId, verdict, ct).ConfigureAwait(false);
+
         // The InMemory provider of the unit tests has no transaction to open.
         var removed = transaction.IsRelational
             ? await transaction.ExecuteInTransactionAsync(() => DeleteRowsAsync(projectId, ct), ct).ConfigureAwait(false)
             : await DeleteRowsAsync(projectId, ct).ConfigureAwait(false);
-        if (removed is null) return false;
+        if (removed is null) return null;
 
         var (scope, counts, artifactPaths, repositorySlugs) = removed.Value;
         var artifactFailures = await DeleteArtifactFilesAsync(artifactPaths, ct).ConfigureAwait(false);
         var repositoryFailures = await DeleteRepositoriesAsync(projectId, repositorySlugs, ct).ConfigureAwait(false);
         cache.Remove(ProjectService.RepoUrlsCacheKey);
 
-        await audit.LogAsync("Deleted", "Project", projectId,
-            DescribeDeletion(scope.ProjectName, counts, artifactFailures, repositoryFailures), ct).ConfigureAwait(false);
+        var description = DescribeDeletion(scope.ProjectName, counts, artifactFailures, repositoryFailures);
+        if (verdict.Summary.Length > 0)
+            description += "; " + verdict.Summary;
+        await audit.LogAsync("Deleted", "Project", projectId, description, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, projectId, EntityChangeOps.Deleted, ct,
             organizationId: scope.OrganizationId).ConfigureAwait(false);
-        return true;
+        return ProjectDeletionOutcome.Deleted;
+    }
+
+    /// <summary>Recette R-51 (ADR-058): something the project deployed is not proved removed. Its Aetheus data is
+    /// kept, whole, so the cleanup can be relaunched (it is what names the servers and the resources), and the
+    /// project becomes "deleted, to clean up": listed, unusable, until a relaunched cleanup proves everything
+    /// removed. Never a half deletion.</summary>
+    private async Task<ProjectDeletionOutcome?> MarkPendingCleanupAsync(int projectId, ProjectServerCleanupVerdict verdict, CancellationToken ct)
+    {
+        var scope = await repo.ResolveScopeAsync(projectId, ct).ConfigureAwait(false);
+        if (scope is null) return null;
+        var activeRuns = await repo.CountActiveRunsAsync(scope, ct).ConfigureAwait(false);
+        if (activeRuns > 0)
+            throw new ConflictException(
+                $"Project '{scope.ProjectName}' has {activeRuns} pipeline run(s) in progress. "
+                + "Cancel them or wait for them to end, then delete the project.");
+        if (!await repo.MarkDeletionPendingAsync(projectId, timeProvider.GetUtcNow().UtcDateTime, ct).ConfigureAwait(false))
+            return null;
+        await audit.LogAsync("DeletionPendingCleanup", "Project", projectId,
+            $"{scope.ProjectName}; kept until its server cleanup ends; {verdict.Summary}", ct).ConfigureAwait(false);
+        await notifier.BroadcastAsync(ResourceType.Project, projectId, EntityChangeOps.Updated, ct,
+            organizationId: scope.OrganizationId).ConfigureAwait(false);
+        return ProjectDeletionOutcome.PendingCleanup;
     }
 
     private async Task<(ProjectDeletionScope Scope, Dictionary<ProjectDeletionItemKind, int> Counts,

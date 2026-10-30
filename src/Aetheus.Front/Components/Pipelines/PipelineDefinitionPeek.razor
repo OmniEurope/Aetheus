@@ -12,7 +12,7 @@
             {
                 <a href="/pipelines/@pp.Id" class="pipeline-name-link" title="@L["OpenPipeline"]"><OmniIcon Name="OmniIconName.OpenExternal" /></a>
             }
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="run-system-label">@L["ReadOnly"]</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Lock))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="run-system-label">@L["ReadOnly"]</OmniBadge>
             <div class="pipeline-list-spacer"></div>
             @if (_current is not null)
             {

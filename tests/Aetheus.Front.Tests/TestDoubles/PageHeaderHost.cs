@@ -64,6 +64,13 @@ internal sealed class PageHeaderOutletHost : ComponentBase
         builder.AddAttribute(4, nameof(SectionOutlet.SectionName), Aetheus.Front.Components.Shared.PageHeaderActions.SectionName);
         builder.CloseComponent();
         builder.CloseElement();
+        builder.OpenElement(6, "div");
+        builder.AddAttribute(7, "class", "test-outlet");
+        builder.AddAttribute(8, "data-outlet", Aetheus.Front.Components.Shared.PageHeaderActions.BadgesSectionName);
+        builder.OpenComponent<SectionOutlet>(9);
+        builder.AddAttribute(10, nameof(SectionOutlet.SectionName), Aetheus.Front.Components.Shared.PageHeaderActions.BadgesSectionName);
+        builder.CloseComponent();
+        builder.CloseElement();
         builder.AddContent(5, ChildContent);
     }
 }

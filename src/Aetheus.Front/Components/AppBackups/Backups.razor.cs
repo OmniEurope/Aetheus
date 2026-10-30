@@ -7,6 +7,7 @@ public partial class Backups : IAsyncDisposable
 {
     [Parameter] public int? ProjectId { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -287,17 +288,20 @@ public partial class Backups : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Security.DeleteBackupPolicyAsync(p.Id);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("BackupDeleted", "BackupDeleted");
-            if (_runsFor?.Id == p.Id) _runsFor = null;
-            await ReloadAsync();
-        }
-        else
-        {
-            Toast.Error("BackupDeleteFailed", "BackupDeleteFailed");
-        }
+            var status = await Api.Security.DeleteBackupPolicyAsync(p.Id);
+            if (status.Success)
+            {
+                Toast.Success("BackupDeleted", "BackupDeleted");
+                if (_runsFor?.Id == p.Id) _runsFor = null;
+                await ReloadAsync();
+            }
+            else
+            {
+                Toast.Error("BackupDeleteFailed", "BackupDeleteFailed");
+            }
+        });
     }
 
     private async Task RunNowAsync(BackupPolicyDto p)

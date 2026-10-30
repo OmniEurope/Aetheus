@@ -23,7 +23,8 @@ else
 {
     @* Virtualize the month's routes across the available page height so the backend-bounded list
        remains usable without an additional capped card. *@
-    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["TopPagesThisMonth"]</OmniHeading>
+    <OmniStack Gap="OmniSpacing.Small">
+    <OmniHeading Level="OmniHeadingLevel.H5">@L["TopPagesThisMonth"]</OmniHeading>
     <AetheusDataGrid Data="@_summary.TopPages" TItem="AppWebAnalyticsPageDto" KeyProperty="Route"
                      Virtualize="true" FullHeight="true" PageSize="50" VirtualizationOverscanCount="3"
                      EmptyText="@L["NoWebAnalyticsDataYet"]">
@@ -35,4 +36,5 @@ else
                                 FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
         </Columns>
     </AetheusDataGrid>
+    </OmniStack>
 }

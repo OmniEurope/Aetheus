@@ -15,7 +15,7 @@
     <Badges>
         @if (_template is not null)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"v{_template.Version}")</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"v{_template.Version}")</NumberBadge>
         }
     </Badges>
     <ActionsContent>
@@ -43,7 +43,15 @@ else
 {
     <OmniTemplateForm TModel="TemplateFormModel" Model="@_model" OnValidSubmit="@OnSubmitAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
-        <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-md">
+        @* R-14: the blocks of the form (fields, YAML, changelog, actions) are separated only by this stack's gap. *@
+        <OmniStack>
+        @if (_readOnly)
+        {
+            @* The server says the user cannot change this template (CanEdit): a shared delivery template, or no
+               Write on it. It is shown to read, with no save. *@
+            <OmniAlert Severity="OmniSeverity.Info">@(_template!.IsShared ? L["SharedTemplateReadOnlyNote"] : L["ReadOnlyTemplateNote"])</OmniAlert>
+        }
+        <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
                 <OmniStack Gap="OmniSpacing.Large">
                     <OmniFormField Label="@L["Name"]" Class="omni-u-w-100" For="Name">
@@ -53,7 +61,7 @@ else
                     <ValidationMessage For="@(() => _model.Name)" />
                     <OmniFormField Label="@L["Category"]" Class="omni-u-w-100" For="Category">
                         <OmniTextBox @bind-Value="_model.Category"
-                            Id="Category" Class="omni-u-w-100" />
+                            Id="Category" Disabled="@_readOnly" Class="omni-u-w-100" />
                     </OmniFormField>
                     <ValidationMessage For="@(() => _model.Category)" />
                 </OmniStack>
@@ -62,31 +70,45 @@ else
                 <OmniStack Gap="OmniSpacing.Large">
                     <OmniFormField Label="@L["Description"]" Class="omni-u-w-100" For="Description">
                         <OmniTextArea @bind-Value="_model.Description"
-                            Id="Description" Rows="3" Class="omni-u-w-100" />
+                            Id="Description" Rows="3" Disabled="@_readOnly" Class="omni-u-w-100" />
                     </OmniFormField>
-                    <OmniFormField Label="@L["ChangelogEntry"]" Class="omni-u-w-100" For="ChangelogEntry">
-                        <OmniTextBox @bind-Value="_model.ChangelogEntry"
-                            Id="ChangelogEntry" Placeholder="@L["DescribeChanges"]" Class="omni-u-w-100" />
-                    </OmniFormField>
-                    <ValidationMessage For="@(() => _model.ChangelogEntry)" />
+                    @if (!_readOnly)
+                    {
+                        <OmniFormField Label="@L["ChangelogEntry"]" Class="omni-u-w-100" For="ChangelogEntry">
+                            <OmniTextBox @bind-Value="_model.ChangelogEntry"
+                                Id="ChangelogEntry" Placeholder="@L["DescribeChanges"]" Class="omni-u-w-100" />
+                        </OmniFormField>
+                        <ValidationMessage For="@(() => _model.ChangelogEntry)" />
+                    }
                 </OmniStack>
             </OmniColumn>
         </OmniRow>
 
-        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-lg omni-u-mb-sm">@L["YAML"]</OmniText>
-        <MonacoEditor Value="@_model.YamlContent" ValueChanged="@(value => _model.YamlContent = value)" />
-        <ValidationMessage For="@(() => _model.YamlContent)" />
+        <OmniText Element="OmniTextElement.Strong">@L["YAML"]</OmniText>
+        @if (_readOnly)
+        {
+            <OmniCodeViewer Code="@_model.YamlContent" Title="@_model.Name" Language="yaml" />
+        }
+        else
+        {
+            <MonacoEditor Value="@_model.YamlContent" ValueChanged="@(value => _model.YamlContent = value)" />
+            <ValidationMessage For="@(() => _model.YamlContent)" />
+        }
 
         @if (!string.IsNullOrWhiteSpace(_template?.Changelog))
         {
-            <OmniFieldset Collapsible="true" Expanded="false" Class="omni-u-mt-md"><Legend>@L["Changelog"]</Legend><ChildContent>
+            <OmniFieldset Collapsible="true" Expanded="false"><Legend>@L["Changelog"]</Legend><ChildContent>
                 <pre class="text-block-pre">@_template.Changelog</pre>
             </ChildContent></OmniFieldset>
         }
 
-        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
+            @if (!_readOnly)
+            {
+                <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+            }
+        </OmniStack>
         </OmniStack>
     </OmniTemplateForm>
 }

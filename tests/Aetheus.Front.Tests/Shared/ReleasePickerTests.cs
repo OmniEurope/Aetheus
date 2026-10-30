@@ -35,7 +35,8 @@ public sealed class ReleasePickerTests : BunitContext
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr[data-omni-row-index]").Count));
         var rows = cut.FindAll("tr[data-omni-row-index]");
         Assert.Contains(published.ToLocalTime().ToString("g"), rows[0].TextContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("0001", cut.Markup, StringComparison.Ordinal);
+        // The sentinel date is never shown in a row; the grid's date filter input carries min="0001-01-01" by design.
+        Assert.DoesNotContain("0001", string.Concat(rows.Select(row => row.TextContent)), StringComparison.Ordinal);
         Assert.Contains(rows[1].QuerySelectorAll("td"), cell => cell.TextContent.Trim() == "-");
     }
 
@@ -158,6 +159,19 @@ public sealed class ReleasePickerTests : BunitContext
         Assert.Null(RunParameterTargets.ReleaseFillTarget([new PipelineRunParameterDto { Name = "v", Required = true, Default = "x" }]));
     }
 
+    /// <summary>Recette R-76: a server name is never a version, so the production server parameter every deployment
+    /// pipeline also asks for does not make the version ambiguous. Two other required texts still do.</summary>
+    [Fact]
+    public void TheProductionServerParameter_NeverCompetesWithTheVersionForTheReleasePick()
+    {
+        PipelineRunParameterDto Required(string name) => new() { Name = name, Required = true, Type = "string" };
+
+        Assert.Equal("candidateVersion", RunParameterTargets.ReleaseFillTarget([Required("candidateVersion"), Required("deployServer")]));
+        Assert.Equal("candidateVersion", RunParameterTargets.ReleaseFillTarget([Required("deployServer"), Required("candidateVersion")]));
+        Assert.Null(RunParameterTargets.ReleaseFillTarget([Required("deployServer")]));
+        Assert.Null(RunParameterTargets.ReleaseFillTarget([Required("candidateVersion"), Required("deployServer"), Required("reason")]));
+    }
+
     private static void ShowAll(IRenderedComponent<ReleasePickerGrid> cut) =>
         cut.Find("[data-testid='release-picker-show-all']").Click();
 
@@ -221,6 +235,8 @@ public sealed class ReleasePickerTests : BunitContext
         Assert.Contains("ReleaseGateRejected", rejected.QuerySelector("[data-testid='release-gate']")!.TextContent, StringComparison.Ordinal);
         var unqualified = rows.Single(row => row.TextContent.Contains("1.0.3", StringComparison.Ordinal));
         Assert.Contains("ReleaseNotQualified", unqualified.QuerySelector("[data-testid='release-gate']")!.TextContent, StringComparison.Ordinal);
+        // R-59: "Not qualified" is a text badge, so it carries its icon.
+        Assert.NotNull(unqualified.QuerySelector(".omni-badge[data-testid='release-not-qualified'] .omni-icon"));
     }
 
     /// <summary>R-27: below 40rem the same releases are one card each (version, date, status, verdict), as
@@ -246,6 +262,81 @@ public sealed class ReleasePickerTests : BunitContext
         first.Click();
 
         Assert.Equal("1.0.5", picked);
+    }
+
+    private static IReadOnlyList<string> SelectedRows(IRenderedComponent<ReleasePickerGrid> cut) =>
+        [.. cut.FindAll("tr[data-omni-row-index]")
+            .Where(row => row.GetAttribute("aria-selected") == "true")
+            .Select(row => row.TextContent)];
+
+    /// <summary>R-58: the table marks the row of the version already in the field as selected when the
+    /// dialog opens, like the card list does.</summary>
+    [Fact]
+    public void ThePrefilledVersion_HasItsRowSelectedInTheTable()
+    {
+        var cut = Render<ReleasePickerGrid>(parameters => parameters
+            .Add(grid => grid.Releases, MixedReleases())
+            .Add(grid => grid.SelectedVersion, "1.0.1")
+            .Add(grid => grid.Pick, (string _) => { }));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr[data-omni-row-index]").Count));
+        var selected = Assert.Single(SelectedRows(cut));
+        Assert.Contains("1.0.1", selected, StringComparison.Ordinal);
+        Assert.Contains("omni-data-grid__row--selected", cut.Markup, StringComparison.Ordinal);
+    }
+
+    /// <summary>R-58: a clicked row stays selected, and only that one: the field's version comes back as the
+    /// grid's <c>SelectedVersion</c>, as it does in the page.</summary>
+    [Fact]
+    public void AClickedRow_StaysSelected_AndTheFormerOneIsReleased()
+    {
+        var cut = Render<ReleasePickerGrid>(parameters => parameters
+            .Add(grid => grid.Releases, MixedReleases())
+            .Add(grid => grid.SelectedVersion, "1.0.1")
+            .Add(grid => grid.Pick, (string version) => { }));
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr[data-omni-row-index]").Count));
+
+        cut.FindAll("tr[data-omni-row-index]").Single(row => row.TextContent.Contains("1.0.5", StringComparison.Ordinal)).Click();
+        cut.Render(parameters => parameters.Add(grid => grid.SelectedVersion, "1.0.5"));
+
+        var selected = Assert.Single(SelectedRows(cut));
+        Assert.Contains("1.0.5", selected, StringComparison.Ordinal);
+    }
+
+    /// <summary>Clicking the row that is already chosen must not leave the field with a version no row shows.</summary>
+    [Fact]
+    public void ClickingTheChosenRowAgain_KeepsItSelected()
+    {
+        var picks = new List<string>();
+        var cut = Render<ReleasePickerGrid>(parameters => parameters
+            .Add(grid => grid.Releases, MixedReleases())
+            .Add(grid => grid.SelectedVersion, "1.0.1")
+            .Add(grid => grid.Pick, (string version) => picks.Add(version)));
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr[data-omni-row-index]").Count));
+
+        cut.FindAll("tr[data-omni-row-index]").Single(row => row.TextContent.Contains("1.0.1", StringComparison.Ordinal)).Click();
+
+        Assert.Contains("1.0.1", Assert.Single(SelectedRows(cut)), StringComparison.Ordinal);
+        Assert.Empty(picks);
+    }
+
+    /// <summary>With no field to fill the rows are not selectable: no checkbox column, nothing to pick.</summary>
+    [Fact]
+    public void WithoutAPickTarget_TheTableOffersNoSelection()
+    {
+        var cut = Render<ReleasePickerGrid>(parameters => parameters.Add(grid => grid.Releases, MixedReleases()));
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("tr[data-omni-row-index]").Count));
+        Assert.Empty(cut.FindAll("tr[data-omni-row-index] input[type='checkbox']"));
+    }
+
+    /// <summary>R-57: "Tout afficher" is the user's explicit exception, a blue (Primary) button.</summary>
+    [Fact]
+    public void TheShowAllButton_IsBlue()
+    {
+        var cut = Render<ReleasePickerGrid>(parameters => parameters.Add(grid => grid.Releases, MixedReleases()));
+
+        Assert.Contains("omni-button--primary", cut.Find("[data-testid='release-picker-show-all']").ClassName, StringComparison.Ordinal);
     }
 
     [Fact]

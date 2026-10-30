@@ -1,7 +1,7 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* The runs that used the release after its creation, and what its build consumed. Both are kept
    apart from the Source card (creation) and the Deliverables (what it ships). *@
-<OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
+<OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
         <OmniCard>
             <div class="detail-panel-title">
                 <OmniIcon Name="OmniIconName.RocketLaunch" Class="run-tile-icon omni-u-text-accent" />
@@ -19,7 +19,7 @@
                         <a href="/pipelines/runs/@use.Run.RunId" class="detail-value-link">#@use.Run.RunId</a>
                     </OmniStack>
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(use.Kind)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(use.Kind)</OmniBadge>
                         <PipelineRunStatusBadge Status="use.Run.Status" />
                     </OmniStack>
                 </OmniStack>
@@ -60,10 +60,10 @@
                         </OmniText>
                     </OmniStack>
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-provenance-row">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@input.StepName">@L.Localize(input.Kind)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@input.StepName">@L.Localize(input.Kind)</OmniBadge>
                         @if (input.IsDeliverable)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["ReleaseInputIsDeliverable"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["ReleaseInputIsDeliverable"]</OmniBadge>
                         }
                     </OmniStack>
                 </OmniStack>
@@ -90,7 +90,7 @@
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         @if (package.IsDirect)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["ReleaseInputPackageDirect"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["ReleaseInputPackageDirect"]</OmniBadge>
                         }
                         <a href="/pipelines/runs/@package.PipelineRunId" class="detail-value-link" title="@L["ReleaseInputPackageSbomRun"]">#@package.PipelineRunId</a>
                     </OmniStack>

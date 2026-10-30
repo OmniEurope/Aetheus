@@ -18,6 +18,10 @@ public partial class NavMenu : IDisposable
     [Inject] private ServerDetailLoader ServerLoader { get; set; } = default!;
 
 
+    /// <summary>A page of the Administration section: every one for a site Admin, those its permissions open
+    /// for an organization's administrator (owner decision 2026-10-28).</summary>
+    private bool ShowsAdminPage(string href) => Auth.IsAdmin || OrganizationAdministration.CanOpen(href, Permissions);
+
     private string _currentPath = string.Empty;
     private bool _permDialogOpen;
 

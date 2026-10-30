@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Alerts;
 
 public partial class Alerts : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private UiActions Ui { get; set; } = default!;
@@ -132,12 +133,12 @@ public partial class Alerts : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Monitoring.DeleteAlertRuleAsync(id),
             "Deleted",
             async () => _alerts = await Api.Monitoring.GetAlertRulesAsync(),
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private static OmniTone GetMetricBadgeStyle(MetricType metric) => metric switch
@@ -176,5 +177,5 @@ public partial class Alerts : IAsyncDisposable
     }
 
     /// <summary>The export writes the threshold as the cell does.</summary>
-    private static readonly Func<AlertRuleDto, object?> ThresholdExport = alert => $"{alert.Operator} {AlertThresholdUnit.Format(alert.Metric, alert.Threshold)}";
+    private static readonly Func<AlertRuleDto, object?> ThresholdExport = alert => $"{AlertThresholdUnit.Symbol(alert.Operator)} {AlertThresholdUnit.Format(alert.Metric, alert.Threshold)}";
 }

@@ -143,6 +143,8 @@ public sealed class PipelineRunSchemaTabTests : BunitContext
         var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, 3101));
 
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='run-schema-tab']")));
+        // R-14: the tab starts at the page gap, its root carries no margin of its own.
+        Assert.DoesNotContain("omni-u-mt-", cut.Find("[data-testid='run-schema-tab']").ClassName, StringComparison.Ordinal);
     }
 
     [Fact]

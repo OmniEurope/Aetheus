@@ -18,10 +18,21 @@ public interface IPipelineProductionSetupService
     /// variables it reads and where each value comes from. Writes nothing.</summary>
     Task<PipelineProductionAnalysisDto> AnalyzeAsync(int projectId, string? composeFile, CancellationToken ct = default);
 
+    /// <summary><see cref="AnalyzeAsync(int, string?, CancellationToken)"/>, offering the servers of
+    /// <paramref name="servers"/> when the project has none (recette R-77).</summary>
+    Task<PipelineProductionAnalysisDto> AnalyzeAsync(
+        int projectId, string? composeFile, ProductionServerScope servers, CancellationToken ct = default);
+
     /// <summary>Creates what the analysis proposed: the variables in the libraries and the vault <c>prod</c> of the
     /// project, the ports in the port registry, and the project's configuration repository with its versioned
     /// files. An existing entry is never overwritten.</summary>
     Task<PipelineProductionApplyResultDto> ApplyAsync(PipelineProductionApplyRequest request, CancellationToken ct = default);
+
+    /// <summary><see cref="ApplyAsync(PipelineProductionApplyRequest, CancellationToken)"/>, where the server chosen may be
+    /// one of <paramref name="servers"/> offered to a project that has none: it is then attached to the project first
+    /// (recette R-77), so its ports are reserved and the deployment runs on it.</summary>
+    Task<PipelineProductionApplyResultDto> ApplyAsync(
+        PipelineProductionApplyRequest request, ProductionServerScope servers, CancellationToken ct = default);
 
     /// <summary>Mends the environment sample the project's configuration repository already holds (recette R-5): a token
     /// that names a variable the agent refuses to hand a step (<c>#{ENV}#</c>) becomes its scoped name
@@ -29,6 +40,13 @@ public interface IPipelineProductionSetupService
     /// nothing outside the project's own configuration repository and library; a sample with no such token is left as
     /// it is, so mending twice changes nothing. Audited.</summary>
     Task<PipelineProductionRepairResultDto> RepairEnvSampleAsync(int projectId, CancellationToken ct = default);
+}
+
+/// <summary>The servers the caller administers (a launch needs Admin on its target servers), offered to a project that has
+/// none (recette R-77). Null ids: every server (the caller administers them all); <see cref="None"/> offers nothing.</summary>
+public sealed record ProductionServerScope(IReadOnlyCollection<int>? AdministeredServerIds)
+{
+    public static ProductionServerScope None { get; } = new([]);
 }
 
 public sealed class PipelineProductionSetupService(
@@ -39,6 +57,7 @@ public sealed class PipelineProductionSetupService(
     IPortAllocationService ports,
     IProjectConfigRepositoryService configRepository,
     IAuditService audit,
+    IPipelineSetupServerRepository setupServers,
     ILogger<PipelineProductionSetupService> logger) : IPipelineProductionSetupService
 {
     private const string ProdSuffix = ".prod";
@@ -79,18 +98,24 @@ public sealed class PipelineProductionSetupService(
         Dictionary<string, VariableEntryDto> LibraryEntries,
         HashSet<string> VaultKeys);
 
-    public async Task<PipelineProductionAnalysisDto> AnalyzeAsync(
+    public Task<PipelineProductionAnalysisDto> AnalyzeAsync(
         int projectId, string? composeFile, CancellationToken ct = default) =>
-        (await InspectAsync(projectId, composeFile, ct).ConfigureAwait(false)).Analysis;
+        AnalyzeAsync(projectId, composeFile, ProductionServerScope.None, ct);
+
+    public async Task<PipelineProductionAnalysisDto> AnalyzeAsync(
+        int projectId, string? composeFile, ProductionServerScope servers, CancellationToken ct = default) =>
+        (await InspectAsync(projectId, composeFile, servers, ct).ConfigureAwait(false)).Analysis;
+
+    public Task<PipelineProductionApplyResultDto> ApplyAsync(
+        PipelineProductionApplyRequest request, CancellationToken ct = default) =>
+        ApplyAsync(request, ProductionServerScope.None, ct);
 
     public async Task<PipelineProductionApplyResultDto> ApplyAsync(
-        PipelineProductionApplyRequest request, CancellationToken ct = default)
+        PipelineProductionApplyRequest request, ProductionServerScope servers, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        if (!ProductionComposeFiles.IsSafePath(request.ComposeFile))
-            throw new BadRequestException($"'{request.ComposeFile}' is not a Compose file path of the repository.");
+        ValidateRequest(request);
 
-        var inspection = await InspectAsync(request.ProjectId, request.ComposeFile, ct).ConfigureAwait(false);
+        var inspection = await InspectAsync(request.ProjectId, request.ComposeFile, servers, ct).ConfigureAwait(false);
         var analysis = inspection.Analysis;
         if (!analysis.Readable || !string.Equals(analysis.ComposeFile, request.ComposeFile, StringComparison.Ordinal))
             throw new BadRequestException(
@@ -106,25 +131,26 @@ public sealed class PipelineProductionSetupService(
             : analysis.Servers.Find(item => string.Equals(item.Name, request.Server, StringComparison.Ordinal))
                 ?? throw new BadRequestException($"'{request.Server}' is not a server of this project.");
 
+        // Recette R-89: the strategy the operator chose rules the ports, the upstream entries and the virtual hosts.
+        var strategy = string.IsNullOrWhiteSpace(request.Strategy) ? analysis.Strategy : request.Strategy;
+        var plans = ProductionVariableClassifier.ForStrategy(inspection.Plans, strategy);
+        var declaresApi = ProductionVariableClassifier.DeclaresApi(plans, strategy);
+
         var writes = new Writes();
-        foreach (var plan in inspection.Plans)
+        foreach (var plan in plans)
             Plan(plan, inspection, request.Values, writes);
-        if (analysis.DeclaresBlueGreen)
+        if (strategy == ProductionStrategy.BlueGreen)
             PlanUpstream(inspection, writes);
 
-        if (writes.PortKeys.Count > 0)
-            await AllocatePortsAsync(library.Id, server?.Id, writes, ct).ConfigureAwait(false);
-        if (writes.LibraryAdds.Count > 0)
-            await libraries.ImportEntriesAsync(library.Id, writes.LibraryAdds, ct).ConfigureAwait(false);
-        foreach (var (entryId, key, value) in writes.LibraryUpdates)
-            await libraries.UpdateEntryAsync(
-                library.Id, entryId, new UpdateVariableEntryRequest { Key = key, Value = value }, ct).ConfigureAwait(false);
-        if (writes.VaultAdds.Count > 0)
-            await vaults.ImportSecretsAsync(vault.Id, writes.VaultAdds, ct).ConfigureAwait(false);
+        // Port allocation names the library's project as holder and only needs the server to exist, so the
+        // candidate is attached last: a failed write or repository creation never leaves it attached unconfigured.
+        await WriteAsync(writes, library.Id, vault.Id, server?.Id, inspection.LibraryEntries, ct).ConfigureAwait(false);
         var entries = writes.Entries;
 
         var repository = await configRepository.EnsureAsync(
-            request.ProjectId, ConfigFiles(inspection), ct).ConfigureAwait(false);
+            request.ProjectId, ConfigFiles(plans, declaresApi, strategy == ProductionStrategy.BlueGreen), ct).ConfigureAwait(false);
+        if (server is { Candidate: true })
+            await AttachAsync(request.ProjectId, server, ct).ConfigureAwait(false);
         logger.LogInformation(
             "Production setup of project {ProjectId}: {Created} created, {Kept} kept, configuration repository {Repository}.",
             request.ProjectId, entries.Count(entry => entry.Outcome != ProductionEntryOutcome.Kept),
@@ -134,11 +160,46 @@ public sealed class PipelineProductionSetupService(
         {
             ComposeFile = request.ComposeFile,
             Server = server?.Name ?? string.Empty,
-            Strategy = analysis.Strategy,
-            DeclaresApi = analysis.DeclaresApi,
+            Strategy = strategy,
+            DeclaresApi = declaresApi,
             Entries = entries,
             ConfigRepository = repository
         };
+    }
+
+    /// <summary>Recette R-77: the server chosen for a project that had none becomes the project's, as the project's
+    /// Servers tab would have done, so the deployment and its run dialog find it. Called once the ports, variables,
+    /// secrets and configuration repository are written.</summary>
+    private async Task AttachAsync(int projectId, ProductionServerDto server, CancellationToken ct)
+    {
+        if (!await setupServers.AttachAgentServerAsync(projectId, server.Id, ct).ConfigureAwait(false)) return;
+        await audit.LogAsync("ProductionServerAttached", "Project", projectId, server.Name, ct).ConfigureAwait(false);
+        logger.LogInformation("Production setup of project {ProjectId}: server {Server} attached.", projectId, server.Name);
+    }
+
+    private static void ValidateRequest(PipelineProductionApplyRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (!ProductionComposeFiles.IsSafePath(request.ComposeFile))
+            throw new BadRequestException($"'{request.ComposeFile}' is not a Compose file path of the repository.");
+        if (!string.IsNullOrWhiteSpace(request.Strategy) && request.Strategy is not (ProductionStrategy.BlueGreen or ProductionStrategy.Replace))
+            throw new BadRequestException(
+                $"'{request.Strategy}' is not a deployment strategy: use '{ProductionStrategy.BlueGreen}' or '{ProductionStrategy.Replace}'.");
+    }
+
+    /// <summary>Allocates the ports, then writes the planned library entries and vault secrets.</summary>
+    private async Task WriteAsync(Writes writes, int libraryId, int vaultId, int? serverId,
+        Dictionary<string, VariableEntryDto> held, CancellationToken ct)
+    {
+        if (writes.PortKeys.Count > 0)
+            await AllocatePortsAsync(libraryId, serverId, held, writes, ct).ConfigureAwait(false);
+        if (writes.LibraryAdds.Count > 0)
+            await libraries.ImportEntriesAsync(libraryId, writes.LibraryAdds, ct).ConfigureAwait(false);
+        foreach (var (entryId, key, value) in writes.LibraryUpdates)
+            await libraries.UpdateEntryAsync(
+                libraryId, entryId, new UpdateVariableEntryRequest { Key = key, Value = value }, ct).ConfigureAwait(false);
+        if (writes.VaultAdds.Count > 0)
+            await vaults.ImportSecretsAsync(vaultId, writes.VaultAdds, ct).ConfigureAwait(false);
     }
 
     /// <summary>The refused names in the sample the project's configuration repository holds; read from that
@@ -244,7 +305,7 @@ public sealed class PipelineProductionSetupService(
     /// <summary>The servers the production deployment can target (the project's port targets and its production
     /// environment's servers), and the one to preselect: the environment's only server, else the only server.</summary>
     private async Task<(List<ProductionServerDto> Servers, string? DefaultServer)> ResolveServersAsync(
-        int projectId, VariableLibraryDto? library, CancellationToken ct)
+        int projectId, VariableLibraryDto? library, ProductionServerScope scope, CancellationToken ct)
     {
         var projectServers = library is null
             ? []
@@ -255,6 +316,15 @@ public sealed class PipelineProductionSetupService(
             .DistinctBy(server => server.Id)
             .OrderBy(server => server.Name, StringComparer.Ordinal)
             .ToList();
+        if (servers.Count == 0 && scope.AdministeredServerIds is not { Count: 0 })
+        {
+            // Recette R-77: a new project has no server yet. The servers the user administers (a launch needs Admin on its target) are offered instead of leaving
+            // the deployment without one; the one chosen is attached when the setup is applied.
+            var candidates = (await setupServers.ListServersAsync(scope.AdministeredServerIds, ct).ConfigureAwait(false))
+                .Select(server => new ProductionServerDto { Id = server.Id, Name = server.Name, Candidate = true })
+                .ToList();
+            return (candidates, candidates.Count == 1 ? candidates[0].Name : null);
+        }
         var defaultServer = environmentServers.Count == 1 ? environmentServers[0].Name
             : environmentServers.Count == 0 && servers.Count == 1 ? servers[0].Name
             : null;
@@ -269,7 +339,8 @@ public sealed class PipelineProductionSetupService(
         DefaultBranch = configuration.DefaultBranch
     };
 
-    private async Task<Inspection> InspectAsync(int projectId, string? composeFile, CancellationToken ct)
+    private async Task<Inspection> InspectAsync(
+        int projectId, string? composeFile, ProductionServerScope scope, CancellationToken ct)
     {
         var slug = await PipelineProjectResourceNames.FindSlugAsync(pipelines, projectId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Project {projectId} not found.");
@@ -283,7 +354,7 @@ public sealed class PipelineProductionSetupService(
         var vaultKeys = vault is null
             ? []
             : (await vaults.ExportSecretKeysAsync(vault.Id, ct).ConfigureAwait(false)).ToHashSet(StringComparer.Ordinal);
-        var (servers, defaultServer) = await ResolveServersAsync(projectId, library, ct).ConfigureAwait(false);
+        var (servers, defaultServer) = await ResolveServersAsync(projectId, library, scope, ct).ConfigureAwait(false);
         var configuration = await configRepository.FindAsync(projectId, ct).ConfigureAwait(false);
         var configurationDto = configuration is null ? null : DescribeConfiguration(configuration);
 
@@ -301,7 +372,9 @@ public sealed class PipelineProductionSetupService(
             : ProductionComposeFiles.Choose(files);
         var text = chosen is null ? null : await probe.ReadFileAsync(chosen, ct).ConfigureAwait(false);
         var variables = text is null ? [] : ComposeVariableExtractor.Extract(text);
-        var plans = WithDomain(ProductionVariableClassifier.Classify(variables, slug));
+        // R-66, R-68: the repository's own environment sample and Apache templates are rendered at each deployment too.
+        var templates = await probe.ReadProductionTemplatesAsync(ct).ConfigureAwait(false);
+        var plans = WithDomain(ProductionTemplateVariables.Extend(ProductionVariableClassifier.Classify(variables, slug), templates, slug));
 
         var analysis = new PipelineProductionAnalysisDto
         {
@@ -312,8 +385,8 @@ public sealed class PipelineProductionSetupService(
             Servers = servers,
             DefaultServer = defaultServer,
             Variables = [.. plans.Where(Shown).Select(plan => Describe(plan, libraryEntries, vaultKeys))],
-            DeclaresFrontPort = variables.Any(variable => variable.Name == ProductionVariableClassifier.FrontPort),
-            DeclaresBackPort = variables.Any(variable => variable.Name == ProductionVariableClassifier.BackPort),
+            DeclaresFrontPort = plans.Any(plan => plan.Name == ProductionVariableClassifier.FrontPort),
+            DeclaresBackPort = plans.Any(plan => plan.Name == ProductionVariableClassifier.BackPort),
             DeclaresBlueGreen = ProductionVariableClassifier.DeclaresBlueGreen(variables),
             ConfigRepository = configurationDto,
             RefusedEnvNames = refused
@@ -427,12 +500,12 @@ public sealed class PipelineProductionSetupService(
             PlanMissing(plan, given, writes);
     }
 
-    /// <summary>An entry already there is never reserved again; an empty one is reported, to be allocated from the
-    /// library page.</summary>
+    /// <summary>A port the library already holds with a value is never reserved again. One it holds empty (a first run with no
+    /// server left it so) is allocated now: the port allocation fills an empty key and refuses one that carries a value.</summary>
     private static void PlanPort(ProductionVariablePlan plan, bool exists, bool emptyEntry, Writes writes)
     {
-        if (!exists) writes.PortKeys.Add(plan.Key);
-        else writes.Entries.Add(Entry(plan, emptyEntry ? ProductionEntryOutcome.PortUnavailable : ProductionEntryOutcome.Kept));
+        if (!exists || emptyEntry) writes.PortKeys.Add(plan.Key);
+        else writes.Entries.Add(Entry(plan, ProductionEntryOutcome.Kept));
     }
 
     private static void PlanExisting(
@@ -499,8 +572,10 @@ public sealed class PipelineProductionSetupService(
     }
 
     /// <summary>Reserves each port in the registry of the chosen server. With no server, or when the registry has no
-    /// free port, each entry is created empty for the library page to allocate later, and is reported, never hidden.</summary>
-    private async Task AllocatePortsAsync(int libraryId, int? serverId, Writes writes, CancellationToken ct)
+    /// free port, each entry is created empty for the library page to allocate later, and is reported, never hidden. An
+    /// entry the library already holds empty is not created a second time.</summary>
+    private async Task AllocatePortsAsync(
+        int libraryId, int? serverId, Dictionary<string, VariableEntryDto> held, Writes writes, CancellationToken ct)
     {
         var allocated = false;
         if (serverId is { } id)
@@ -520,7 +595,8 @@ public sealed class PipelineProductionSetupService(
 
         if (!allocated)
             writes.LibraryAdds.AddRange(
-                writes.PortKeys.Select(key => new CreateVariableEntryRequest { Key = key, Value = string.Empty }));
+                writes.PortKeys.Where(key => !held.ContainsKey(key))
+                    .Select(key => new CreateVariableEntryRequest { Key = key, Value = string.Empty }));
         var outcome = allocated ? ProductionEntryOutcome.Allocated : ProductionEntryOutcome.PortUnavailable;
         writes.Entries.AddRange(
             writes.PortKeys.Select(key => new ProductionAppliedEntryDto { Name = key, Secret = false, Outcome = outcome }));
@@ -528,14 +604,14 @@ public sealed class PipelineProductionSetupService(
 
     /// <summary>The versioned files of the configuration repository: the environment sample of the Compose file and
     /// the generic Apache virtual hosts. The repository never overwrites a file it already holds.</summary>
-    private static Dictionary<string, string> ConfigFiles(Inspection inspection)
+    private static Dictionary<string, string> ConfigFiles(
+        IEnumerable<ProductionVariablePlan> plans, bool declaresApi, bool blueGreen)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [ProductionEnvSampleBuilder.Path] = ProductionEnvSampleBuilder.Build(inspection.Plans.Where(plan => plan.Name != DomainKey))
+            [ProductionEnvSampleBuilder.Path] = ProductionEnvSampleBuilder.Build(plans.Where(plan => plan.Name != DomainKey))
         };
-        foreach (var (path, content) in ProjectConfigFiles.GenericApacheFiles(
-            inspection.Analysis.DeclaresApi, inspection.Analysis.DeclaresBlueGreen))
+        foreach (var (path, content) in ProjectConfigFiles.GenericApacheFiles(declaresApi, blueGreen))
             files[path] = content;
         return files;
     }

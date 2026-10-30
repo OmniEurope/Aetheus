@@ -22,7 +22,7 @@ internal static class DeliveryTemplateCatalog
             ["application-candidate"] = (
                 "Reusable build-once candidate orchestration with production baseline, QA and immutable release.",
                 "Application Delivery",
-                ["application-candidate-v1.yaml", "application-candidate-v2.yaml", "application-candidate-v3.yaml"]),
+                ["application-candidate-v1.yaml", "application-candidate-v2.yaml", "application-candidate-v3.yaml", "application-candidate-v4.yaml"]),
             ["application-promotion"] = (
                 "Reusable promotion orchestration deploying and verifying an already-qualified candidate.",
                 "Application Delivery",

@@ -30,7 +30,7 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         await using var factory = WithoutRemotePipelineFile(baseFactory);
         var gate = await SeedWaitingRunAsync(factory);
         var approver = await IntegrationUsers.CreateAsync(factory.Services, "approver",
-            [new IntegrationUsers.Grant(ResourceType.Pipeline, gate.PipelineId, Permission.Write)]);
+            ApproverGrants(gate), permissionKeys: ApproverKeys);
         using var client = await IntegrationUsers.LoginClientAsync(factory, approver.Username);
 
         var response = await client.PostAsJsonAsync($"/api/pipelines/approvals/{gate.ApprovalId}/decide",
@@ -69,7 +69,7 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         await using var factory = WithoutRemotePipelineFile(baseFactory);
         var gate = await SeedWaitingRunAsync(factory);
         var approver = await IntegrationUsers.CreateAsync(factory.Services, "rejecter",
-            [new IntegrationUsers.Grant(ResourceType.Pipeline, gate.PipelineId, Permission.Write)]);
+            ApproverGrants(gate), permissionKeys: ApproverKeys);
         using var client = await IntegrationUsers.LoginClientAsync(factory, approver.Username);
 
         var response = await client.PostAsJsonAsync($"/api/pipelines/approvals/{gate.ApprovalId}/decide",
@@ -93,6 +93,48 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         Assert.Equal(ApprovalStatus.Rejected, afterApproval.Status);
         Assert.Equal(PipelineStatus.Failed, afterRun.Status);
     }
+
+    /// <summary>RBAC audit, finding 11 (ADR-059): writing the pipeline does not make an approver. A
+    /// Contributor-level right (Write on the pipeline and on its project) is refused 403, and even an
+    /// approver never posts <c>TimedOut</c>, which only the expiry sweep decides (400).</summary>
+    [Fact]
+    public async Task PipelineWriterWithoutAdmin_Gets403_AndATimedOutDecisionIsRefused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        await using var factory = WithoutRemotePipelineFile(baseFactory);
+        var gate = await SeedWaitingRunAsync(factory);
+        var writer = await IntegrationUsers.CreateAsync(factory.Services, "approval-writer",
+            [
+                new IntegrationUsers.Grant(ResourceType.Pipeline, gate.PipelineId, Permission.Write),
+                new IntegrationUsers.Grant(ResourceType.Project, gate.ProjectId, Permission.Write)
+            ], permissionKeys: ApproverKeys);
+        var approver = await IntegrationUsers.CreateAsync(factory.Services, "approval-timeout", ApproverGrants(gate), permissionKeys: ApproverKeys);
+        using var writerClient = await IntegrationUsers.LoginClientAsync(factory, writer.Username);
+        using var approverClient = await IntegrationUsers.LoginClientAsync(factory, approver.Username);
+
+        var byWriter = await writerClient.PostAsJsonAsync($"/api/pipelines/approvals/{gate.ApprovalId}/decide",
+            new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, IntegrationJsonOptions.Default, ct);
+        var timedOut = await approverClient.PostAsJsonAsync($"/api/pipelines/approvals/{gate.ApprovalId}/decide",
+            new ApprovalDecisionRequest { Decision = ApprovalStatus.TimedOut }, IntegrationJsonOptions.Default, ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, byWriter.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, timedOut.StatusCode);
+        var (approval, run) = await ReadAsync(factory, gate);
+        Assert.Equal(ApprovalStatus.Pending, approval.Status);
+        Assert.Equal(PipelineStatus.WaitingForApproval, run.Status);
+    }
+
+    /// <summary>An approver administers the gated project (ADR-059, finding 11) and writes the pipeline.</summary>
+    /// <summary>R-11: deciding is a named permission; a role writing the pipeline holds it (the backfill gives
+    /// it to every existing role with Pipeline Write), the approver rule above still applies on top.</summary>
+    private static readonly string[] ApproverKeys = [PermissionKeys.PipelineApprovalDecide];
+
+    private static IntegrationUsers.Grant[] ApproverGrants(Gate gate) =>
+    [
+        new(ResourceType.Pipeline, gate.PipelineId, Permission.Write),
+        new(ResourceType.Project, gate.ProjectId, Permission.Admin)
+    ];
 
     [Fact]
     public async Task ReaderWithoutApproverRight_Gets403_AndNothingChanges()
@@ -126,7 +168,40 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         Assert.Empty(await DecisionAuditsAsync(factory, gate.ApprovalId));
     }
 
-    private sealed record Gate(int PipelineId, int RunId, int ApprovalId);
+    /// <summary>
+    /// Recette R-24: an approval mail's links are fetched by mail scanners and link previews, even with the
+    /// approver's session. A GET of the mail's address, or of the decision endpoint, decides nothing: only the
+    /// POST the approval page sends does.
+    /// </summary>
+    [Fact]
+    public async Task R24_GettingTheMailLinkOrTheDecideAddress_DecidesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var baseFactory = new AetheusWebApplicationFactory(fixture.ConnectionString);
+        await using var factory = WithoutRemotePipelineFile(baseFactory);
+        var gate = await SeedWaitingRunAsync(factory);
+        var approver = await IntegrationUsers.CreateAsync(factory.Services, "link-approver",
+            ApproverGrants(gate), permissionKeys: ApproverKeys);
+        using var client = await IntegrationUsers.LoginClientAsync(factory, approver.Username);
+
+        foreach (var action in new[] { "approve", "reject", "comment" })
+        {
+            // Whatever the back answers to the mail's own address, the checks below prove it decided nothing.
+            using var link = await client.GetAsync($"/pipelines/runs/{gate.RunId}/approvals/{gate.ApprovalId}?action={action}", ct);
+            using var decide = await client.GetAsync($"/api/pipelines/approvals/{gate.ApprovalId}/decide?action={action}", ct);
+            Assert.Equal(HttpStatusCode.MethodNotAllowed, decide.StatusCode);
+        }
+
+        var (approval, run) = await ReadAsync(factory, gate);
+        Assert.Equal(ApprovalStatus.Pending, approval.Status);
+        Assert.Null(approval.ResolvedAt);
+        Assert.Null(approval.ResolvedByUserId);
+        Assert.Equal(PipelineStatus.WaitingForApproval, run.Status);
+        Assert.Equal(0, await RunTaskCountAsync(factory, gate.RunId));
+        Assert.Empty(await DecisionAuditsAsync(factory, gate.ApprovalId));
+    }
+
+    private sealed record Gate(int PipelineId, int RunId, int ApprovalId, int ProjectId);
 
     /// <summary>
     /// A real run triggered through <see cref="IPipelineRunService"/>: its only stage deploys to an
@@ -180,7 +255,7 @@ public sealed class PipelineApprovalDecisionHttpIntegrationTests(PostgresFixture
         Assert.Equal(ApprovalStatus.Pending, approval.Status);
         Assert.Equal(ApprovalScope.Environment, approval.Scope);
         Assert.Equal(0, await db.Tasks.AsNoTracking().CountAsync(t => t.PipelineRunId == run.Id, ct));
-        return new Gate(pipeline.Id, run.Id, approval.Id);
+        return new Gate(pipeline.Id, run.Id, approval.Id, project.Id);
     }
 
     private static async Task<int> RunTaskCountAsync(WebApplicationFactory<Program> factory, int runId)

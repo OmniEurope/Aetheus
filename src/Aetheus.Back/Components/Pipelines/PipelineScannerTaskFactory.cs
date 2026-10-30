@@ -140,7 +140,7 @@ public sealed class PipelineScannerTaskFactory(
         MarkSystemStepFailed(
             stepRun, TaskFailureCodes.ToolError, reason, timeProvider.GetUtcNow().UtcDateTime);
         await repo.AppendRunWarningsAsync(
-            runId, [$"Scanner step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            runId, [PipelineStepFailureWarning.Scanner(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private static Dictionary<string, string> CreateScannerVariables(

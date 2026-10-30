@@ -105,6 +105,54 @@ public sealed class VerifyAssuranceContractFunctionTests : IDisposable
             entry.Line == "Candidate deployment readiness verified with all required evidence Passed or Available at grade D.");
     }
 
+    /// <summary>A suite whose failed test passed on its rerun is clean, and its flaky tests are sealed by name
+    /// beside its outcome: the contract stays deployable, and the names cannot be altered without breaking
+    /// the seal. A run without flaky tests seals no such property, so the contracts sealed before the rerun
+    /// existed (the whole verifier corpus) verify exactly as before.</summary>
+    [Fact]
+    public async Task FlakyTests_AreSealedBesideTheirSuiteAndTheContractStaysDeployable()
+    {
+        var testCase = AssuranceReferenceData.GeneratorCase("light-passing");
+        AssuranceReferenceData.LayOut(testCase.GetProperty("files"), _harness.Workspace);
+        var parameters = AssuranceReferenceData.Strings(testCase.GetProperty("parameters"));
+        var env = new Dictionary<string, string>(AssuranceReferenceData.Strings(testCase.GetProperty("environment")), StringComparer.Ordinal)
+        {
+            [PipelineFunctionVariables.ParametersJson] = JsonSerializer.Serialize(parameters)
+        };
+        Assert.Equal(0, (await _harness.RunAsync(new GenerateAssuranceContractFunction(), env)).Result.ExitCode);
+        var withoutFlaky = await File.ReadAllTextAsync(_harness.Artifact("assurance-contract.json"), TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("flakyTests", withoutFlaky, StringComparison.Ordinal);
+
+        env["QA_CURRENT_INTEGRATION_FLAKY_TESTS"] = "Integration.Api.Login, Integration.Api.Theory(id: 2)";
+        env["QA_PREVIOUS_E2E_FLAKY_TESTS"] = "Login";
+        _harness.Log.Clear();
+        Assert.Equal(0, (await _harness.RunAsync(new GenerateAssuranceContractFunction(), env)).Result.ExitCode);
+        await File.WriteAllTextAsync(_harness.Artifact("source-commit"), parameters["source_sha"] + "\n", TestContext.Current.CancellationToken);
+        var contractPath = _harness.Artifact("assurance-contract.json");
+        var sealedText = await File.ReadAllTextAsync(contractPath, TestContext.Current.CancellationToken);
+        using (var contract = JsonDocument.Parse(sealedText))
+        {
+            var tests = contract.RootElement.GetProperty("tests");
+            var integration = tests.GetProperty("currentIntegration");
+            Assert.Equal(["required", "status", "effectiveGrade", "flakyTests"], integration.EnumerateObject().Select(property => property.Name));
+            Assert.Equal("Passed", integration.GetProperty("status").GetString());
+            Assert.Equal("Integration.Api.Login, Integration.Api.Theory(id: 2)", integration.GetProperty("flakyTests").GetString());
+            var previousE2E = tests.GetProperty("previousE2E");
+            Assert.Equal(["required", "status", "effectiveGrade", "mode", "tested", "flakyTests"], previousE2E.EnumerateObject().Select(property => property.Name));
+            Assert.Equal("Login", previousE2E.GetProperty("flakyTests").GetString());
+            Assert.False(tests.GetProperty("currentE2E").TryGetProperty("flakyTests", out _));
+            Assert.Equal("A", contract.RootElement.GetProperty("overallGrade").GetString());
+        }
+
+        Assert.Equal(0, (await RunAsync("E", "deployment-readiness")).ExitCode);
+
+        await File.WriteAllTextAsync(contractPath, sealedText.Replace("Integration.Api.Login", "Integration.Api.Other", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken);
+        var altered = await RunAsync("E", "deployment-readiness");
+
+        Assert.Equal(Prefix + "Assurance contract seal does not match its contents.", altered.FailureReason);
+    }
+
     /// <summary>The candidate runs on after failed unit tests and seals them (UNIT_TEST_GATE_STATUS=1); the
     /// deploy boundary must still refuse that candidate. No generator parameter declares <c>unit</c>
     /// inapplicable here, which is the only way a required test could be left out of the contract.</summary>

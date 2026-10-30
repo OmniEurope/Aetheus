@@ -352,35 +352,48 @@ public sealed class ReleasesListActionTests : BunitContext
 
         Assert.Equal("C", Assert.Single(cut.FindAll(".grade-badge")).TextContent.Trim());
         Assert.Contains("ReleaseNotQualified", cut.Markup, StringComparison.Ordinal);
+        // R-59: a text badge with its icon, no longer muted text.
+        var notQualified = cut.Find(".omni-badge[data-testid='release-not-qualified']");
+        Assert.NotNull(notQualified.QuerySelector(".omni-icon"));
     }
 
     [Fact]
-    public void RedeployingThePreviousDeploymentRunsTheDeployPipelineWithItsVersion()
+    public void RedeployingThePreviousDeploymentOpensTheLaunchOnItsVersion_ThenRunsTheDeployPipelineWithIt()
     {
+        // R-72: the pipeline that deployed the live release is already known; the launch dialog opens on the version.
+        _handler.SetJsonResponse("api/pipelines/40/preflight", new PipelinePreflightDto());
+        _handler.SetJsonResponse("api/pipelines/40/parameters",
+            new List<PipelineRunParameterDto> { new() { Name = "candidateVersion", Type = "string", Required = true } });
         _handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/40/run", new PipelineRunDto { Id = 77, PipelineId = 40 });
-        _dialog.ConfirmResult = true;
+        _dialog.OpenResult = new Dictionary<string, string> { ["candidateVersion"] = "c-previous" };
         var cut = RenderList(Release(id: 2, version: "c-previous", status: ReleaseStatus.Superseded) with
         {
             IsPreviousDeployment = true,
-            RedeployPipelineId = 40
+            RedeployPipelineId = 40,
+            Artifacts = [new ArtifactLinkDto { Id = 9, Name = "ApplicationPayload-artifacts" }]
         });
 
         Action(cut, "Redeploy").Click();
 
         cut.WaitForAssertion(() => Assert.True(Sent("POST", "api/pipelines/40/run")));
         Assert.Equal("c-previous", LastBody<Dictionary<string, string>>("POST", "api/pipelines/40/run")["candidateVersion"]);
+        Assert.Equal(typeof(RunParametersDialog), _dialog.LastComponent);
+        var prefill = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(_dialog.LastParameters!["Prefill"]);
+        Assert.Equal("c-previous", prefill["candidateVersion"]);
     }
 
     [Fact]
-    public void APreviousDeploymentTheGateWouldRefuseIsShownDisabled()
+    public void APreviousDeploymentWithoutAKeptArtifactIsShownDisabledWithItsReason()
     {
-        _dialog.ConfirmResult = true;
         var cut = RenderList(Release(id: 2, version: "c-fast", status: ReleaseStatus.Superseded) with
         {
             IsPreviousDeployment = true
         });
 
-        Assert.True(Action(cut, "RedeployUnavailable").HasAttribute("disabled"));
+        var item = Action(cut, "RedeployNoArtifact");
+        Assert.True(item.HasAttribute("disabled"));
+        item.Click();
+        Assert.Equal(0, _dialog.OpenCount);
         Assert.False(Sent("POST", "/run"));
     }
 

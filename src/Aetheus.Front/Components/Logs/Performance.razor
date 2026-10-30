@@ -14,9 +14,10 @@
 @* No Refresh button. The report reloads on the ApiPerformance admin push, sent when new API
    timings were recorded (at most every 15 s while requests keep coming, nothing when idle). *@
 
+<OmniStack>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mt-lg">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["GridLoadFailed"]
     </OmniAlert>
 }
@@ -28,7 +29,7 @@ else
 {
     @* Show the measurement window in the first key-figure tile and in each table export header so
        figures retain their time context. *@
-    <OmniTileGrid Columns="4" Class="omni-u-mt-lg omni-u-mb-md">
+    <OmniTileGrid Columns="4">
         <OmniStatTile Class="app-performance-tile" Value="@SampleCountText" Title="@L["PerformanceTileRequests"]" Detail="@WindowText" data-testid="performance-window" />
         <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Title="@L["AppPerformanceRoutes"]" />
         <OmniStatTile Class="app-performance-tile" Value="@SlowestP95Text" Title="@L["AppPerformanceSlowestRoute"]" Detail="@SlowestRouteText" />
@@ -40,7 +41,7 @@ else
         <Tabs>
             <OmniTabsItem Key="slowest" Title="@L["PerformanceSlowestCalls"]"><Icon><OmniIcon Name="OmniIconName.Hourglass" /></Icon><ChildContent>
                 @* No pager, the slowest calls scroll in a virtualized, bounded grid. *@
-                <AetheusDataGrid ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_slowestGrid" ExportName="@L["PerformanceSlowestCalls"]" ExportFields="@ExportFields" Data="@_report.Slowest" TItem="ApiCallTimingDto" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
                     <Columns>
                         @* Recette R1-96: the export writes whole milliseconds under a title that names the unit,
                            not the raw double the template formats on screen. *@
@@ -59,7 +60,7 @@ else
                 </AetheusDataGrid>
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="routes" Title="@L["PerformanceByRoute"]"><Icon><OmniIcon Name="OmniIconName.Rows" /></Icon><ChildContent>
-                <AetheusDataGrid ShowFooterBar="true" @ref="_endpointsGrid" ExportName="@L["PerformanceByRoute"]" ExportFields="@ExportFields" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
+                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_endpointsGrid" ExportName="@L["PerformanceByRoute"]" ExportFields="@ExportFields" Data="@_report.Endpoints" TItem="ApiEndpointTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ApiEndpointTimingDto" Property="Method" Title="@L["Method"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
                         <OmniDataGridColumn TItem="ApiEndpointTimingDto" Property="Route" Title="@L["Route"]" Filterable="true" >
@@ -82,8 +83,7 @@ else
                 </AetheusDataGrid>
             </ChildContent></OmniTabsItem>
             <OmniTabsItem Key="browser" Title="@L["PerformanceThisBrowser"]"><Icon><OmniIcon Name="OmniIconName.Globe" /></Icon><ChildContent>
-                <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["PerformanceThisBrowserHint"]</OmniText>
-                <AetheusDataGrid ShowFooterBar="true" @ref="_browserGrid" ExportName="@L["PerformanceThisBrowser"]" ExportFields="@ExportFields" Data="@_browserCalls" TItem="ClientApiCall" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
+                <AetheusDataGrid FullHeight="true" ShowFooterBar="true" @ref="_browserGrid" ExportName="@L["PerformanceThisBrowser"]" ExportFields="@ExportFields" Data="@_browserCalls" TItem="ClientApiCall" KeyProperty="At" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]">
                     <Columns>
                         <OmniDataGridColumn Frozen="true" TItem="ClientApiCall" Property="DurationMs" Title="@L["Duration"]" Width="7rem" TextAlign="OmniAlignment.End" Filterable="true" >
                             <Template Context="call">@Milliseconds(call.DurationMs)</Template>
@@ -102,3 +102,4 @@ else
         </Tabs>
     </UrlSyncedTabs>
 }
+</OmniStack>

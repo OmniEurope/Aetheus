@@ -6,13 +6,9 @@
         <strong>@L[PipelineReadinessText.TitleKey(Check.Kind)]</strong>
         <PipelineInfoTip Text="@L[PipelineReadinessText.HintKey(Check.Kind)].Value" />
     </OmniStack>
-    @if (Check.EmptyValues.Count > 0)
-    {
-        @* R-10: library or vault, key and pipeline, one row per value and pipeline that reads it. *@
-        <PipelineReadinessEmptyValues Rows="@Check.EmptyValues" ReturnUrl="@ReturnUrl"
-                                      IsVault="@(Check.Kind == PipelineSetupReadinessKind.EmptyVaultSecrets)" />
-    }
-    else if (Check.Items.Count > 0)
+    @* R-10 / R-52: a finding with empty values has its table drawn by the host (PipelineReadinessChecks), under
+       the finding and over its full width, never in this column, which sits after the finding's icon. *@
+    @if (Check.EmptyValues.Count == 0 && Check.Items.Count > 0)
     {
         <ul class="pipeline-setup-readiness-items">
             @foreach (var item in Check.Items)
@@ -49,7 +45,7 @@
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateRepositoryAsync" data-testid="setup-readiness-create-repository"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["CreateGitRepository"]</span></ChildContent></OmniButton>
         </div>
     }
-    else if (Check.EmptyValues.Count == 0 && PipelineReadinessText.RemediationHref(Check.Kind, ProjectId, ReturnUrl) is { } href)
+    else if (Check.EmptyValues.Count == 0 && PipelineReadinessText.RemediationHref(Check.Kind, ProjectId, ReturnUrl, EnvironmentReturnUrl) is { } href)
     {
         <OmniLink Href="@href"><OmniIcon Name="OmniIconName.ArrowRight" /> @L[PipelineReadinessText.RemediationKey(Check.Kind)!]</OmniLink>
     }

@@ -23,9 +23,12 @@ public sealed class AiTasksController(
     [HttpGet("profile-options")]
     public async Task<ActionResult<List<AiRunnerProfileDto>>> GetProfileOptions(CancellationToken ct)
     {
+        // ADR-059: membership alone grants nothing; the profiles offered are those of the organizations
+        // where a role lets the caller read projects (an AI task is defined on a project or a server).
         var organizationIds = User.IsInRole("Admin")
             ? null
-            : await authorization.GetUserOrganizationIdsAsync(User, ct).ConfigureAwait(false);
+            : await authorization.GetOrganizationIdsWithPermissionAsync(
+                User, ResourceType.Project, Permission.Read, ct).ConfigureAwait(false);
         if (organizationIds is null)
             return Ok((await profiles.GetProfilesAsync(
                 new PaginationRequest { Page = 1, PageSize = 1000 }, ct).ConfigureAwait(false)).Items);

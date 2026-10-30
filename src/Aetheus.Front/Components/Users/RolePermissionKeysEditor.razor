@@ -1,0 +1,19 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-11: the named permissions of a role, ticked by area. *@
+<OmniStack>
+    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Introduction</OmniText>
+    @foreach (var area in PermissionCatalog.Areas)
+    {
+        <OmniSettingsSection Title="@L[$"PermissionArea_{area}"]" Description="@L[$"PermissionAreaDescription_{area}"]">
+            <OmniCheckBoxList TValue="string" Id="@($"role-permission-keys-{area}")" Label="@L[$"PermissionArea_{area}"]"
+                Options="@OptionsOf(area)" Value="@SelectedIn(area)" ValueExpression="@(() => _expression)"
+                ValueChanged="@(selected => OnAreaChanged(area, selected))" ReadOnly="@Locked" Disabled="@_saving" />
+        </OmniSettingsSection>
+    }
+    @if (!Locked)
+    {
+        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveAsync" Busy="@_saving" Disabled="@(!_dirty)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
+        </OmniStack>
+    }
+</OmniStack>

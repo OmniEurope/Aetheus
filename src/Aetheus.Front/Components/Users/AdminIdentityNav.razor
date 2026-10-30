@@ -1,23 +1,21 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Users
-@* The section links, then the one search of the three sections on their right. A section shows its
-   result count in brackets only when it has at least one. *@
-<div class="iam-section-bar">
-    <nav class="iam-section-nav" aria-label="@L["Administration"]">
-        <a href="/admin/users" class="@LinkClass(AdminIdentitySearch.UsersSection)" aria-current="@AriaCurrent(AdminIdentitySearch.UsersSection)">
-            <OmniIcon Name="OmniIconName.Users" />
-            <span>@LinkText(L["Users"], AdminIdentitySearch.UsersSection)</span>
-        </a>
-        <a href="/admin/organizations" class="@LinkClass(AdminIdentitySearch.OrganizationsSection)" aria-current="@AriaCurrent(AdminIdentitySearch.OrganizationsSection)">
-            <OmniIcon Name="OmniIconName.Buildings" />
-            <span>@LinkText(L["Organizations"], AdminIdentitySearch.OrganizationsSection)</span>
-        </a>
-        <a href="/admin/roles" class="@LinkClass(AdminIdentitySearch.RolesSection)" aria-current="@AriaCurrent(AdminIdentitySearch.RolesSection)">
-            <OmniIcon Name="OmniIconName.ShieldCheck" />
-            <span>@LinkText(L["Roles"], AdminIdentitySearch.RolesSection)</span>
-        </a>
-    </nav>
-    <OmniTextBox Value="@Search.Term" ValueChanged="OnTermChangedAsync" ValueExpression="@(() => Search.Term)"
-                 Debounce="@(TimeSpan.FromMilliseconds(300))" Placeholder="@L["Search"]" aria-label="@L["Search"]"
-                 Class="iam-section-search" />
-</div>
+@* R-7: the Users, Organizations and Roles pages as three OE tabs, each tab its own route. The tabs hold no
+   panel content (the page below is the content of the selected tab): selecting a tab navigates, and the side
+   menu, which follows the URL, highlights the same entry (R-20). An organization's administrator sees the tabs
+   its permissions open, and the organization switcher when it administers several (owner decision 2026-10-28). *@
+<OmniTabs Value="@ActiveSection" ValueChanged="OnTabChanged" Label="@L["Administration"]" Class="iam-section-tabs">
+    @if (Shows(UsersSection))
+    {
+        <OmniTabsItem Key="@UsersSection" Title="@L["Users"]"><Icon><OmniIcon Name="OmniIconName.Users" /></Icon></OmniTabsItem>
+    }
+    @if (Shows(OrganizationsSection))
+    {
+        <OmniTabsItem Key="@OrganizationsSection" Title="@L["Organizations"]"><Icon><OmniIcon Name="OmniIconName.Buildings" /></Icon></OmniTabsItem>
+    }
+    @if (Shows(RolesSection))
+    {
+        <OmniTabsItem Key="@RolesSection" Title="@L["Roles"]"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon></OmniTabsItem>
+    }
+</OmniTabs>
+<AdministrationOrganizationSwitcher PermissionKey="@SwitcherKey" Changed="@OrganizationChanged" />

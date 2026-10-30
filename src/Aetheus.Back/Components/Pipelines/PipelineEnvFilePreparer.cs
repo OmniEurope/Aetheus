@@ -5,7 +5,8 @@ namespace Aetheus.Back.Components.Pipelines;
 
 /// <summary>The variables a step runs with once its environment file is rendered, or why it could not be.</summary>
 public sealed record EnvFilePreparation(
-    Dictionary<string, string>? Variables, HashSet<string>? SecretKeys, string? Error);
+    Dictionary<string, string>? Variables, HashSet<string>? SecretKeys, string? Error,
+    string FailureCode = TaskFailureCodes.InfrastructureMismatch);
 
 /// <summary>
 /// Renders the environment sample a step names in <c>env_template</c> (ADR-057) from the run's resolved
@@ -58,7 +59,9 @@ public sealed class PipelineEnvFilePreparer(
         catch (BadRequestException exception)
         {
             // Mandatory: the renderer refuses an undefined or empty value, and that refusal is the step's failure.
-            return Failed($"env_template '{path}': {exception.Message}");
+            // R-68: it is a configuration to complete, not a server that does not match the step.
+            return new EnvFilePreparation(
+                null, null, $"env_template '{path}': {exception.Message}", TaskFailureCodes.ConfigurationIncomplete);
         }
 
         var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(rendered));

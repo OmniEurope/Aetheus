@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Servers;
 
 public partial class Servers : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -391,7 +392,7 @@ public partial class Servers : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Retire"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
 
-        await RetireServerConfirmedAsync(server);
+        await Veil.RunAsync(() => RetireServerConfirmedAsync(server));
     }
 
     internal async Task RetireServerConfirmedAsync(ServerDto server)

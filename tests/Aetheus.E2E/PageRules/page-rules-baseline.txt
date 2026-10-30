@@ -1,0 +1,169 @@
+# Page rules baseline (recette R-30): the violations of the presentation rules that exist today.
+# One line per violation: Page | Width | Rule | Element. Width 0 stands for a page that cannot be put on screen.
+# PageRulesTests fails on a violation that is not listed and on a listed line that no longer occurs.
+# Fix a page, then delete its lines. A line is never added by hand to turn a run green: the run writes
+# page-rules-baseline.proposed.txt next to its report, and a new line is a decision that is reviewed.
+# Exception: 3.grid-cell-truncated and 3.page-scroll-with-grid depend on the rows in the database, so their differences are reported, not failed.
+/ | 1280 | 3.grid-cell-truncated | dashboard-clickable-grid#2 td[Description]
+/ | 375 | 3.grid-cell-truncated | dashboard-clickable-grid#2 td[Description]
+/admin/audit | 375 | 3.grid-cell-truncated | grid td[Details]
+/admin/organizations | 1280 | 3.grid-height | grid
+/admin/organizations | 1280 | 3.page-scroll-with-grid | grid
+/admin/organizations | 375 | 3.grid-cell-truncated | grid td[Description]
+/admin/organizations | 375 | 3.grid-height | grid
+/admin/organizations | 375 | 3.page-scroll-with-grid | grid
+/admin/organizations/{Id:int} | 1280 | 2.block-gap-differs | div.iam-page.iam-detail-page>p.omni-text.omni-text--neutral / div.iam-page.iam-detail-page>div.omni-tabs.url-synced-tabs
+/admin/organizations/{Id:int} | 375 | 2.block-gap-differs | div.iam-page.iam-detail-page>p.omni-text.omni-text--neutral / div.iam-page.iam-detail-page>div.omni-tabs.url-synced-tabs
+/admin/organizations/{Id:int}/edit | 0 | 0.page-unreachable | redirects to /admin/organizations/{Id:int}
+/admin/package-registry | 1280 | 2.blocks-touching | div.app-body-wrapper>div.omni-tabs.url-synced-tabs / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/admin/package-registry | 1280 | 2.blocks-touching | div.omni-tabs.url-synced-tabs>div.omni-tabs__strip / div.omni-tabs.url-synced-tabs>section.omni-tabs__panel
+/admin/package-registry | 375 | 2.blocks-touching | div.app-body-wrapper>div.omni-tabs.url-synced-tabs / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/admin/package-registry | 375 | 2.blocks-touching | div.omni-tabs.url-synced-tabs>div.omni-tabs__strip / div.omni-tabs.url-synced-tabs>section.omni-tabs__panel
+/admin/performance | 1280 | 3.grid-height | grid
+/admin/performance | 1280 | 3.page-scroll-with-grid | grid
+/admin/plugins | 1280 | 2.block-gap-differs | div.app-body-wrapper>input.omni-input.omni-text-box.pipeline-list-search / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/admin/plugins | 375 | 2.block-gap-differs | div.app-body-wrapper>input.omni-input.omni-text-box.pipeline-list-search / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/admin/roles | 1280 | 3.grid-height | grid
+/admin/roles | 1280 | 3.page-scroll-with-grid | grid
+/admin/roles | 375 | 3.grid-cell-truncated | grid td[Description]
+/admin/roles | 375 | 3.grid-height | grid
+/admin/roles | 375 | 3.page-scroll-with-grid | grid
+/admin/system-logs | 1280 | 3.grid-cell-truncated | grid td[Message]
+/admin/system-logs | 1280 | 3.grid-height | grid
+/admin/system-logs | 375 | 3.grid-cell-truncated | grid td[Message]
+/admin/system-logs | 375 | 3.grid-height | grid
+/admin/system-logs | 375 | 3.page-scroll-with-grid | grid
+/admin/users | 1280 | 3.grid-height | grid
+/admin/users | 1280 | 3.page-scroll-with-grid | grid
+/admin/users | 375 | 3.grid-height | grid
+/admin/users | 375 | 3.page-scroll-with-grid | grid
+/ai-tasks | 1280 | 3.grid-height | grid
+/ai-tasks | 375 | 3.grid-height | grid
+/ai-tasks | 375 | 3.page-scroll-with-grid | grid
+/ai-tasks/{TaskId:int} | 0 | 0.page-unreachable | nothing is seeded behind api/ai/tasks
+/alerts/{AlertId:long} | 0 | 0.page-unreachable | no seeded alert has ever fired, so there is no alert occurrence to open
+/analysis/findings/{Id:int} | 0 | 0.page-unreachable | the analysis portfolio is empty, so no analysis finding is seeded
+/audit | 375 | 3.grid-cell-truncated | grid td[Details]
+/backups | 1280 | 3.grid-height | grid
+/backups | 375 | 3.grid-height | grid
+/environments | 375 | 3.grid-cell-truncated | grid td[Description]
+/git-repositories | 1280 | 3.grid-cell-truncated | pipeline-list-grid td[Description]
+/git-repositories | 375 | 3.grid-cell-truncated | pipeline-list-grid td[Description]
+/git-repositories | 375 | 3.grid-height | pipeline-list-grid
+/git-repositories/branches/{BranchId:int} | 0 | 0.page-unreachable | no branch row is seeded in the git graph (api/gitgraph/branches answers 404 for identifiers 1 to 10)
+/git-repositories/commits/{CommitId:int} | 0 | 0.page-unreachable | no commit row is seeded in the git graph (api/gitgraph/commits answers 404 for identifiers 1 to 10)
+/git-repositories/{Id:int} | 1280 | 3.grid-height | grid
+/git-repositories/{Id:int} | 375 | 3.grid-cell-truncated | grid td[Message]
+/git-repositories/{Id:int} | 375 | 3.grid-height | grid
+/git/branches/{BranchId:int} | 0 | 0.page-unreachable | no branch row is seeded in the git graph (api/gitgraph/branches answers 404 for identifiers 1 to 10)
+/git/commits/{CommitId:int} | 0 | 0.page-unreachable | no commit row is seeded in the git graph (api/gitgraph/commits answers 404 for identifiers 1 to 10)
+/logs | 1280 | 1.primary-action-outside-header | div.omni-stack>div.omni-stack.live-logs-watch>button.omni-button.omni-button--primary.omni-button--medium
+/logs | 375 | 1.primary-action-outside-header | div.omni-stack>div.omni-stack.live-logs-watch>button.omni-button.omni-button--primary.omni-button--medium
+/notifications | 375 | 3.grid-height | grid
+/pipelines | 1280 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/pipelines | 375 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/pipelines/fleet | 1280 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/pipelines/fleet | 375 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/pipelines/runs/{RunId:int}/approvals/{ApprovalId:int} | 0 | 0.page-unreachable | no seeded pipeline run raised an approval request
+/pipelines/{Id:int} | 1280 | 3.grid-height | pipeline-runs-grid
+/pipelines/{PipelineId:int}/template/promote | 0 | 0.page-unreachable | no seeded pipeline was created from a template, so none can be promoted or updated
+/pipelines/{PipelineId:int}/template/update/{TargetVersion:int} | 0 | 0.page-unreachable | no seeded pipeline was created from a template, so none can be promoted or updated
+/plugins | 1280 | 2.block-gap-differs | div.app-body-wrapper>input.omni-input.omni-text-box.pipeline-list-search / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/plugins | 375 | 2.block-gap-differs | div.app-body-wrapper>input.omni-input.omni-text-box.pipeline-list-search / div.app-body-wrapper>div.omni-stack.aetheus-grid-host
+/projects/{Id:int} | 0 | 0.page-unreachable | redirects to /projects/{Id:int}/overview
+/projects/{Id:int}/artifacts | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/artifacts | 1280 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>div.omni-stack.aetheus-grid-host
+/projects/{Id:int}/artifacts | 1280 | 3.grid-height | grid
+/projects/{Id:int}/artifacts | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/artifacts | 375 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>div.omni-stack.aetheus-grid-host
+/projects/{Id:int}/artifacts | 375 | 3.grid-height | grid
+/projects/{Id:int}/backups | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/backups | 1280 | 3.grid-height | grid
+/projects/{Id:int}/backups | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/backups | 375 | 3.grid-height | grid
+/projects/{Id:int}/board | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/board | 1280 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>div.kanban-board
+/projects/{Id:int}/board | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/board | 375 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>div.kanban-board
+/projects/{Id:int}/environments | 1280 | 0.page-never-settles | a loader stays on screen: nav.omni-breadcrumb>ol.omni-breadcrumb__list>li.omni-breadcrumb__item.omni-page-header__crumb-loading>div.omni-skeleton.omni-skeleton--text
+/projects/{Id:int}/environments | 375 | 0.page-never-settles | a loader stays on screen: nav.omni-breadcrumb>ol.omni-breadcrumb__list>li.omni-breadcrumb__item.omni-page-header__crumb-loading>div.omni-skeleton.omni-skeleton--text
+/projects/{Id:int}/external-repo | 0 | 0.page-unreachable | redirects to /git-repositories
+/projects/{Id:int}/libraries | 375 | 3.grid-cell-truncated | grid td[Description]
+/projects/{Id:int}/logs | 1280 | 2.blocks-touching | div.omni-data-grid__frame>div.omni-data-grid__viewport.omni-data-grid__viewport--virtual.omni-data-grid__viewport--fill / div.omni-data-grid__frame>div.omni-data-grid__bar.omni-data-grid__bar--footer
+/projects/{Id:int}/logs | 375 | 2.blocks-touching | div.omni-data-grid__frame>div.omni-data-grid__viewport.omni-data-grid__viewport--virtual.omni-data-grid__viewport--fill / div.omni-data-grid__frame>div.omni-data-grid__bar.omni-data-grid__bar--footer
+/projects/{Id:int}/monitoring | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/monitoring | 1280 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>h5.omni-heading.omni-heading--h5.omni-text--neutral
+/projects/{Id:int}/monitoring | 1280 | 2.block-gap-differs | div.blade-content>h5.omni-heading.omni-heading--h5.omni-text--neutral / div.blade-content>div.omni-stack
+/projects/{Id:int}/monitoring | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/monitoring | 375 | 2.block-gap-differs | div.blade-content>div.omni-stack / div.blade-content>h5.omni-heading.omni-heading--h5.omni-text--neutral
+/projects/{Id:int}/monitoring | 375 | 2.block-gap-differs | div.blade-content>h5.omni-heading.omni-heading--h5.omni-text--neutral / div.blade-content>div.omni-stack
+/projects/{Id:int}/overview | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/overview | 1280 | 3.grid-cell-truncated | project-overview-recent-grid td[Message]
+/projects/{Id:int}/overview | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/overview | 375 | 3.grid-cell-truncated | project-overview-recent-grid td[Message]
+/projects/{Id:int}/pipelines | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/pipelines | 1280 | 2.block-gap-differs | div.blade-content>section.project-pipelines-readiness / div.blade-content>div.pipeline-catalog-panel
+/projects/{Id:int}/pipelines | 1280 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/projects/{Id:int}/pipelines | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/pipelines | 375 | 2.block-gap-differs | div.blade-content>section.project-pipelines-readiness / div.blade-content>div.pipeline-catalog-panel
+/projects/{Id:int}/pipelines | 375 | 3.grid-height | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/projects/{Id:int}/pipelines | 375 | 3.page-scroll-with-grid | pipeline-dependency-grid.pipeline-grid-fill.pipeline-grid-virtualized.pipeline-grid-five-rows
+/projects/{Id:int}/quality | 1280 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/quality | 375 | 2.block-gap-differs | div.app-body-wrapper>div.omni-page-header / div.app-body-wrapper>div.blade-content
+/projects/{Id:int}/vaults | 375 | 3.grid-cell-truncated | grid td[Description]
+/projects/{ProjectId:int}/ai-tasks | 1280 | 3.grid-height | grid
+/projects/{ProjectId:int}/ai-tasks | 375 | 3.grid-height | grid
+/projects/{ProjectId:int}/ai-tasks | 375 | 3.page-scroll-with-grid | grid
+/projects/{ProjectId:int}/ai-tasks/{TaskId:int} | 0 | 0.page-unreachable | nothing is seeded behind api/ai/tasks
+/servers/{Id:int} | 0 | 0.page-unreachable | redirects to /servers/{Id:int}/overview
+/servers/{Id:int}/apache | 1280 | 2.block-gap-differs | div.blade-content>div.omni-row / div.blade-content>div.omni-tabs.url-synced-tabs
+/servers/{Id:int}/apache | 1280 | 2.block-gap-differs | div.omni-tabs.url-synced-tabs>div.omni-tabs__strip / div.omni-tabs.url-synced-tabs>section.omni-tabs__panel
+/servers/{Id:int}/apache | 1280 | 2.block-gap-differs | section.omni-tabs__panel>div.omni-data-grid / section.omni-tabs__panel>h5.omni-heading.omni-heading--h5.omni-text--neutral
+/servers/{Id:int}/apache | 1280 | 2.block-gap-differs | section.omni-tabs__panel>h5.omni-heading.omni-heading--h5.omni-text--neutral / section.omni-tabs__panel>div.omni-data-grid
+/servers/{Id:int}/apache | 375 | 2.block-gap-differs | div.blade-content>div.omni-row / div.blade-content>div.omni-tabs.url-synced-tabs
+/servers/{Id:int}/apache | 375 | 2.block-gap-differs | div.omni-tabs.url-synced-tabs>div.omni-tabs__strip / div.omni-tabs.url-synced-tabs>section.omni-tabs__panel
+/servers/{Id:int}/apache | 375 | 2.block-gap-differs | section.omni-tabs__panel>div.omni-data-grid / section.omni-tabs__panel>h5.omni-heading.omni-heading--h5.omni-text--neutral
+/servers/{Id:int}/apache | 375 | 2.block-gap-differs | section.omni-tabs__panel>h5.omni-heading.omni-heading--h5.omni-text--neutral / section.omni-tabs__panel>div.omni-data-grid
+/servers/{Id:int}/certbot | 1280 | 3.grid-height | grid
+/servers/{Id:int}/certbot | 375 | 3.grid-height | grid
+/servers/{Id:int}/cron | 1280 | 2.block-gap-differs | div.blade-content>div.omni-row / div.blade-content>div.omni-tabs
+/servers/{Id:int}/cron | 1280 | 2.block-gap-differs | section.omni-tabs__panel>div.omni-stack / section.omni-tabs__panel>div.omni-data-grid
+/servers/{Id:int}/cron | 1280 | 3.grid-height | grid
+/servers/{Id:int}/cron | 1280 | 3.page-scroll-with-grid | grid
+/servers/{Id:int}/cron | 375 | 2.block-gap-differs | div.blade-content>div.omni-row / div.blade-content>div.omni-tabs
+/servers/{Id:int}/cron | 375 | 2.block-gap-differs | section.omni-tabs__panel>div.omni-stack / section.omni-tabs__panel>div.omni-data-grid
+/servers/{Id:int}/cron | 375 | 3.grid-height | grid
+/servers/{Id:int}/cron | 375 | 3.page-scroll-with-grid | grid
+/servers/{Id:int}/docker | 1280 | 1.primary-action-outside-header | div.omni-stack>div.omni-stack.docker-bulk-actions>button.omni-button.omni-button--primary.omni-button--medium
+/servers/{Id:int}/docker | 1280 | 3.grid-height | grid
+/servers/{Id:int}/docker | 1280 | 3.page-scroll-with-grid | grid
+/servers/{Id:int}/docker | 375 | 1.primary-action-outside-header | div.omni-stack>div.omni-stack.docker-bulk-actions>button.omni-button.omni-button--primary.omni-button--medium
+/servers/{Id:int}/docker | 375 | 3.grid-height | grid
+/servers/{Id:int}/docker | 375 | 3.page-scroll-with-grid | grid
+/servers/{Id:int}/firewall | 1280 | 2.block-gap-differs | div.omni-detail-shell>div.omni-page-header / div.omni-detail-shell>div.omni-detail-shell__content
+/servers/{Id:int}/firewall | 375 | 2.block-gap-differs | div.omni-detail-shell>div.omni-page-header / div.omni-detail-shell>div.omni-detail-shell__content
+/servers/{Id:int}/libraries | 1280 | 3.grid-cell-truncated | grid td[Description]
+/servers/{Id:int}/libraries | 375 | 3.grid-cell-truncated | grid td[Description]
+/servers/{Id:int}/logs | 1280 | 2.blocks-touching | div.omni-data-grid__frame>div.omni-data-grid__viewport.omni-data-grid__viewport--virtual.omni-data-grid__viewport--fill / div.omni-data-grid__frame>div.omni-data-grid__bar.omni-data-grid__bar--footer
+/servers/{Id:int}/logs | 375 | 2.blocks-touching | div.omni-data-grid__frame>div.omni-data-grid__viewport.omni-data-grid__viewport--virtual.omni-data-grid__viewport--fill / div.omni-data-grid__frame>div.omni-data-grid__bar.omni-data-grid__bar--footer
+/servers/{Id:int}/logs | 375 | 3.grid-cell-truncated | grid td[Message]
+/servers/{Id:int}/mail/accounts/{AccountId:int}/mailbox | 0 | 0.page-unreachable | no mail account is seeded on any server
+/servers/{Id:int}/ports | 1280 | 2.block-gap-differs | div.omni-detail-shell>div.omni-page-header / div.omni-detail-shell>div.omni-detail-shell__content
+/servers/{Id:int}/ports | 1280 | 3.grid-height | grid
+/servers/{Id:int}/ports | 375 | 2.block-gap-differs | div.omni-detail-shell>div.omni-page-header / div.omni-detail-shell>div.omni-detail-shell__content
+/servers/{Id:int}/properties | 375 | 4.text-wrapped-with-room | div.omni-row>div.omni-column.omni-column--span-4>p.omni-text.omni-text--neutral
+/servers/{Id:int}/vaults | 1280 | 3.grid-cell-truncated | grid td[Description]
+/servers/{Id:int}/vaults | 375 | 3.grid-cell-truncated | grid td[Description]
+/templates | 0 | 0.page-unreachable | redirects to /pipelines
+/users | 1280 | 3.grid-height | grid
+/users | 1280 | 3.page-scroll-with-grid | grid
+/users | 375 | 3.grid-height | grid
+/users | 375 | 3.page-scroll-with-grid | grid
+/variable-libraries | 1280 | 3.grid-cell-truncated | grid td[Description]
+/variable-libraries | 375 | 3.grid-cell-truncated | grid td[Description]
+/variable-libraries/{Id:int} | 1280 | 3.grid-height | grid
+/variable-libraries/{Id:int} | 375 | 3.grid-height | grid
+/vaults | 1280 | 3.grid-cell-truncated | grid td[Description]
+/vaults | 375 | 3.grid-cell-truncated | grid td[Description]
+/vaults/{Id:int} | 1280 | 3.grid-height | grid
+/vaults/{Id:int} | 375 | 3.grid-height | grid

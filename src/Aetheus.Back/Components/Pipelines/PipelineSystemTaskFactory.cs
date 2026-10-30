@@ -272,7 +272,10 @@ public sealed class PipelineSystemTaskFactory(
         finalizer.MarkStepsAs(cleanupSteps, TaskExecutionStatus.Failed);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await repo.AppendRunWarningsAsync(runId,
-            ["System cleanup is queued for the original affinity runner; its workspace requires reconciliation when that runner returns online."],
+            [PipelineProblem.Of(
+                PipelineProblemCodes.SystemCleanupAwaitsRunner,
+                "System cleanup is queued for the original affinity runner; its workspace requires reconciliation when that runner returns online.")
+                .ToStored()],
             ct).ConfigureAwait(false);
         return false;
     }

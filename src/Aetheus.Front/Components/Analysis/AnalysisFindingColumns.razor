@@ -4,7 +4,7 @@
     <Template Context="finding"><span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@FindingHref(finding.Id, RunId)">@($"#{finding.Id}")</OmniLink></span></Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Severity" ExportValue="@SeverityExport" Title="@L["Severity"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SeverityText" DefaultFilterValue="@Defaults?.Severity">
-    <Template Context="finding"><OmniBadge Fill="OmniFill.Solid" Tone="@AnalysisPresentation.SeverityBadge(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge></Template>
+    <Template Context="finding"><OmniBadge Icon="@(BadgeIcon.ForState(AnalysisPresentation.SeverityBadge(finding.Severity)))" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.SeverityBadge(finding.Severity)">@L.Localize(finding.Severity)</OmniBadge></Template>
 </OmniDataGridColumn>
 <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Category" ExportValue="@CategoryExport" Title="@L["Category"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@CategoryText">
     <Template Context="finding">@L.Localize(finding.Category)</Template>
@@ -34,17 +34,17 @@
 @if (ShowStatus)
 {
     <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Status" ExportValue="@StatusExport" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" DefaultFilterValue="@Defaults?.Status">
-        <Template Context="finding"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.FindingStatusBadge(finding.Status)">@L.Localize(finding.Status)</OmniBadge></Template>
+        <Template Context="finding"><OmniBadge Icon="@(BadgeIcon.ForState(AnalysisPresentation.FindingStatusBadge(finding.Status)))" Fill="OmniFill.Solid" Tone="@AnalysisPresentation.FindingStatusBadge(finding.Status)">@L.Localize(finding.Status)</OmniBadge></Template>
     </OmniDataGridColumn>
 }
 @* The "New" shortcut filters on this column, so it is a filter the user can see and lift. *@
 <OmniDataGridColumn TItem="AnalysisFindingDto" Key="@FindingColumnDefaults.IsNewColumn" Property="LatestOccurrence.IsNew" ExportValue="@IsNewExport" Title="@L["AnalysisGateNewBadge"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" DefaultFilterValue="@Defaults?.IsNew">
-    <Template Context="finding">@if (finding.LatestOccurrence?.IsNew == true) { <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["AnalysisGateNewBadge"]</OmniBadge> }</Template>
+    <Template Context="finding">@if (finding.LatestOccurrence?.IsNew == true) { <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["AnalysisGateNewBadge"]</OmniBadge> }</Template>
 </OmniDataGridColumn>
 @if (ShowOwnership)
 {
     <OmniDataGridColumn TItem="AnalysisFindingDto" Property="Responsible" Title="@L["AnalysisResponsible"]" Width="10rem" Filterable="true" />
-    <OmniDataGridColumn TItem="AnalysisFindingDto" Property="LastSeenAt" Title="@L["LastSeen"]" Width="10rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+    <OmniDataGridColumn TItem="AnalysisFindingDto" Property="LastSeenAt" Title="@L["LastSeen"]" Width="10rem" FormatString="{0:g}" Filterable="true" />
 }
 <OmniDataGridColumn TItem="AnalysisFindingDto" Key="Actions" Title="@L["Actions"]" Width="@(CanRevertDecisions ? "6.5rem" : "4rem")" Sortable="false">
     @* Opening the finding is the primary row action. Stop the button click from also triggering

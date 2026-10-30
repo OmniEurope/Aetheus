@@ -214,9 +214,9 @@ public sealed record PortAllocationTargetDto
 }
 
 /// <summary>
-/// Where a library can allocate. <see cref="PreselectedServerId"/> is set only when the library's own
-/// scope names exactly one server; otherwise the operator picks, because guessing would silently
-/// reserve ports on the wrong host.
+/// Where a library can allocate. <see cref="PreselectedServerId"/> is set when exactly one server is
+/// reachable (a server attached to an environment of the project counts as one of the project's);
+/// with several the operator picks, because guessing would silently reserve ports on the wrong host.
 /// </summary>
 public sealed record PortAllocationTargetsDto
 {

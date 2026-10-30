@@ -19,19 +19,18 @@ else
 {
     @* Metric, Series and Period on one line, each label beside its field, the fields sharing the
        width; a phone stacks them (app.css). *@
-    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="app-metrics-filters omni-u-mb-md">
+    @* R-14: the filters, the headline figures, the chart and the note are separated by this stack's gap, not by margins. *@
+    <OmniStack>
+    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="app-metrics-filters">
         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
             <OmniLabel For="app-metrics-metric">@L["Metric"]</OmniLabel>
             <OmniDropDown TValue="string" Id="app-metrics-metric" name="app-metrics-metric" Label="@L["Metric"]" @bind-Value="_selectedMetric" Options="@(_names.ToOptions(item => (string)item, item => item))" @bind-Value:after="OnMetricChanged"
                             Filterable="true" Class="app-metrics-filter-field" />
         </OmniStack>
-        @if (_groupsLoading)
+        @if (_groups.Count > 1)
         {
-            <AetheusLoader Size="OmniControlSize.Small" />
-        }
-        else if (_groups.Count > 1)
-        {
-            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="app-metrics-filter">
+            @* Recette R-116: while the series of another metric are read, OE's busy veil lies over this picker. *@
+            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="@(_groupsLoading ? "app-metrics-filter omni-busy" : "app-metrics-filter")" aria-busy="@(_groupsLoading ? "true" : "false")">
                 <OmniLabel For="app-metrics-series">@L["Series"]</OmniLabel>
                 <OmniDropDown Id="app-metrics-series" name="app-metrics-series" @bind-Value="_selectedGroupKey" Options="@(_groups.ToOptions(item => item.Key, item => item.Label))"
                                 @bind-Value:after="OnFilterChanged" Class="app-metrics-filter-field" />
@@ -44,14 +43,14 @@ else
         </OmniStack>
     </OmniStack>
 
-    @if (_loading)
-    {
-        <AetheusLoader Size="OmniControlSize.Small" />
-    }
-    else if (_points.Count > 0)
+    @* Recette R-116: changing the metric, series or period reads the series under OE's busy veil; the figures and
+       the chart already on screen stay mounted underneath, and a zone that holds nothing yet is a veiled block. *@
+    @* The zone is a stack too, so the figures and the chart keep the R-14 gap between them. *@
+    <OmniStack Class="@(_loading ? (_points.Count == 0 ? "omni-busy action-veil-placeholder" : "omni-busy") : null)" aria-busy="@(_loading ? "true" : "false")" data-testid="app-metrics-zone">
+    @if (_points.Count > 0)
     {
         @* Headline figures: a chart alone makes the reader estimate the numbers that matter most. *@
-        <OmniRow Gap="OmniSpacing.ExtraLarge" Class="omni-u-mb-md">
+        <OmniRow Gap="OmniSpacing.ExtraLarge">
             <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.None">
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["Latest"]</OmniText>
                 <OmniHeading Level="OmniHeadingLevel.H6">@FormatValue(_points[^1].Value)</OmniHeading>
@@ -92,10 +91,12 @@ else
             <OmniLegend Items="@(new[] { _selectedMetric ?? L["Metric"].Value, L["P95"].Value })" />
         </OmniChart>
     }
-    else
+    else if (!_loading)
     {
         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["NotEnoughDataPoints"]</OmniText>
     }
+    </OmniStack>
     @* Beside the chart: one point per send up to 24 hours, one per hour beyond (the hourly rollup). *@
-    <TelemetrySendIntervalNote AppId="AppId" HourlyPoints="@(_hours > 24)" Class="omni-u-mt-sm" />
+    <TelemetrySendIntervalNote AppId="AppId" HourlyPoints="@(_hours > 24)" />
+    </OmniStack>
 }

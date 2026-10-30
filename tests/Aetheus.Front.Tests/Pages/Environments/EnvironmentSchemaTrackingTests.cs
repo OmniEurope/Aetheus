@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Environments;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.EnvironmentsTests;
@@ -58,15 +59,24 @@ public sealed class EnvironmentSchemaTrackingTests : BunitContext
     }
 
     [Fact]
-    public void WithoutAVerdict_SaysSoAndStillListsThePendingContractions()
+    public async Task WithoutAVerdictOfItsOwnDeployments_RendersNothing()
     {
-        _handler.SetJsonResponse("api/environments/1/schema-tracking", Schema(withGate: false));
+        // Recette R-81: the tracking is the one recorded by this environment's own deployments. Without a verdict
+        // (the production environment of another project) the section is absent, not a list of someone else's tables.
+        var answer = new TaskCompletionSource<EnvironmentSchemaDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/environments/1/schema-tracking", _ => answer.Task);
 
         var cut = Render<EnvironmentSchemaTracking>(p => p.Add(c => c.EnvironmentId, 1));
 
-        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid='environment-schema-no-gate']")));
-        Assert.Empty(cut.FindAll("[data-testid='run-migration-gate']"));
-        Assert.NotNull(cut.Find("[data-testid='schema-pending-contractions']"));
+        await _handler.WhenGetAsync("/environments/1/schema-tracking");
+        var rendersBeforeTheAnswer = cut.RenderCount;
+        // The answer is released now; the component re-renders once its load completes, whatever the answer holds.
+        // That render is the signal that the answer was read, so the emptiness below is observed after it, not
+        // after a stretch of time.
+        answer.SetResult(Schema(withGate: false));
+        await cut.WhenRenderedAsync(() => cut.RenderCount > rendersBeforeTheAnswer);
+        Assert.Empty(cut.FindAll("[data-testid='environment-schema-tracking']"));
+        Assert.Empty(cut.FindAll("[data-testid='schema-pending-contractions']"));
     }
 
     [Fact]

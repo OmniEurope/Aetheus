@@ -9,4 +9,5 @@ public interface IPackageRegistryAdminService
     Task<PackageRegistryPackageDetailDto?> GetPackageAsync(int id, CancellationToken ct = default);
     Task<bool> SetListedAsync(int packageId, int versionId, bool listed, CancellationToken ct = default);
     Task<bool> SetDeprecatedAsync(int packageId, int versionId, bool deprecated, CancellationToken ct = default);
+    Task<bool> SetAnonymousDownloadAsync(int packageId, bool allowed, CancellationToken ct = default);
 }

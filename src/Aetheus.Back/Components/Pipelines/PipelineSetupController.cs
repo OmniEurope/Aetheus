@@ -57,11 +57,12 @@ public class PipelineSetupController(
     private async Task<bool> CanCopyAsync(PipelineProjectCopyRequest request, bool requireResourceWrite, CancellationToken ct) =>
         await authz.HasPermissionAsync(User, ResourceType.Project, request.SourceProjectId, Permission.Read, ct)
         && await authz.HasPermissionAsync(User, ResourceType.Project, request.TargetProjectId, Permission.Write, ct)
-        && await authz.HasPermissionAsync(User, ResourceType.Pipeline, null, Permission.Write, ct)
+        // RBAC audit, finding 9: each right is held in the target project's organization, not in any one.
+        && await authz.CanCreateInProjectAsync(User, ResourceType.Pipeline, request.TargetProjectId, ct)
         && await ownerAuthz.CanOwnAsync(User, request.TargetProjectId, null, null, ct)
         && (!requireResourceWrite
-            || (await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct)
-                && await authz.HasPermissionAsync(User, ResourceType.Vault, null, Permission.Write, ct)));
+            || (await authz.CanCreateInProjectAsync(User, ResourceType.VariableLibrary, request.TargetProjectId, ct)
+                && await authz.CanCreateInProjectAsync(User, ResourceType.Vault, request.TargetProjectId, ct)));
 
     /// <summary>
     /// What would stop the pipelines the wizard is about to create from running. Gated on WRITE
@@ -171,7 +172,8 @@ public class PipelineSetupController(
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, request.ProjectId, Permission.Write, ct))
             return Forbid();
 
-        return Ok(await productionSetup.AnalyzeAsync(request.ProjectId, request.ComposeFile, ct));
+        return Ok(await productionSetup.AnalyzeAsync(
+            request.ProjectId, request.ComposeFile, await AdministeredServersAsync(ct), ct));
     }
 
     /// <summary>Creates the variables, secrets and ports the Compose file asks for and the project's configuration
@@ -185,8 +187,13 @@ public class PipelineSetupController(
         if (await AuthorizeProvisioningAsync(request.ProjectId, ct) is null)
             return Forbid();
 
-        return Ok(await productionSetup.ApplyAsync(request, ct));
+        return Ok(await productionSetup.ApplyAsync(request, await AdministeredServersAsync(ct), ct));
     }
+
+    /// <summary>Recette R-77: the servers a project with none may be given, those the user administers, since launching
+    /// the deployment needs Admin on its target. A server outside them is never offered nor attached.</summary>
+    private async Task<ProductionServerScope> AdministeredServersAsync(CancellationToken ct) =>
+        new(await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Server, Permission.Admin, ct));
 
     /// <summary>Mends the environment sample the project's configuration repository already holds: a refused variable
     /// name becomes its scoped name there and in the library <c>prod</c>. It writes to the project's configuration
@@ -197,7 +204,7 @@ public class PipelineSetupController(
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, request.ProjectId, Permission.Write, ct)
-            || !await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct))
+            || !await authz.CanCreateInProjectAsync(User, ResourceType.VariableLibrary, request.ProjectId, ct))
             return Forbid();
 
         return Ok(await productionSetup.RepairEnvSampleAsync(request.ProjectId, ct));
@@ -218,8 +225,8 @@ public class PipelineSetupController(
         int projectId, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Write, ct)
-            || !await authz.HasPermissionAsync(User, ResourceType.VariableLibrary, null, Permission.Write, ct)
-            || !await authz.HasPermissionAsync(User, ResourceType.Vault, null, Permission.Write, ct))
+            || !await authz.CanCreateInProjectAsync(User, ResourceType.VariableLibrary, projectId, ct)
+            || !await authz.CanCreateInProjectAsync(User, ResourceType.Vault, projectId, ct))
             return null;
 
         return (await ResolveOrganizationIdAsync(ct),

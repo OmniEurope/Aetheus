@@ -20,6 +20,16 @@ public class RoleRepositoryTests : IDisposable
         _repo = new RoleRepository(_db);
     }
 
+    // ADR-059: a role other than Admin is held for one organization the user is a member of.
+    private void HoldForOrganization(int userId, int roleId)
+    {
+        if (_db.Organizations.Local.All(organization => organization.Id != 50))
+            _db.Organizations.Add(new Organization { Id = 50, Name = "Org", Slug = "org" });
+        if (_db.OrganizationMembers.Local.All(member => member.UserId != userId))
+            _db.OrganizationMembers.Add(new OrganizationMember { UserId = userId, OrganizationId = 50, Role = OrganizationRole.Member });
+        _db.UserOrganizationRoles.Add(new UserOrganizationRole { UserId = userId, OrganizationId = 50, RoleId = roleId });
+    }
+
     [Fact]
     public async Task GetRolesPagedAsync_ReturnsOrderedPageAndTotal()
     {
@@ -53,7 +63,7 @@ public class RoleRepositoryTests : IDisposable
         var user = new User { Username = "alice", PasswordHash = "x", IsActive = true };
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        _db.Set<UserRole>().Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        HoldForOrganization(user.Id, role.Id);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var (result, total) = await _repo.GetRolesPagedAsync(
@@ -72,9 +82,8 @@ public class RoleRepositoryTests : IDisposable
         var bob = new User { Username = "bob", PasswordHash = "x", IsActive = true };
         _db.AddRange(role, alice, bob);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-        _db.Set<UserRole>().AddRange(
-            new UserRole { UserId = alice.Id, RoleId = role.Id },
-            new UserRole { UserId = bob.Id, RoleId = role.Id });
+        HoldForOrganization(alice.Id, role.Id);
+        HoldForOrganization(bob.Id, role.Id);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         var (items, total) = await _repo.GetUsersInRolePagedAsync(
@@ -86,9 +95,10 @@ public class RoleRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetUsersAvailableForRolePagedAsync_ExcludesMembers()
+    public async Task GetUsersAvailableForRolePagedAsync_ExcludesTheHoldersOfTheSiteWideAdminRole()
     {
-        var role = new Role { Name = "Operators", Description = "" };
+        // ADR-059: only Admin is held once site-wide; a role held per organization stays available.
+        var role = new Role { Name = RoleNames.Admin, Description = "" };
         var member = new User { Username = "member", PasswordHash = "x", IsActive = true };
         var available = new User { Username = "available", PasswordHash = "x", IsActive = true };
         _db.AddRange(role, member, available);
@@ -147,22 +157,51 @@ public class RoleRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task RoleNameExistsAsync_Exists_ReturnsTrue()
+    public async Task RoleNameTakenAsync_Exists_ReturnsTrue()
     {
         _db.Roles.Add(new Role { Name = "Admin", Description = "" });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.True(await _repo.RoleNameExistsAsync("Admin", ct: TestContext.Current.CancellationToken));
+        Assert.True(await _repo.RoleNameTakenAsync("Admin", null, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task RoleNameExistsAsync_ExcludeId_ExcludesSelf()
+    public async Task RoleNameTakenAsync_ExcludeId_ExcludesSelf()
     {
         var role = new Role { Name = "Admin", Description = "" };
         _db.Roles.Add(role);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        Assert.False(await _repo.RoleNameExistsAsync("Admin", role.Id, ct: TestContext.Current.CancellationToken));
+        Assert.False(await _repo.RoleNameTakenAsync("Admin", null, role.Id, ct: TestContext.Current.CancellationToken));
+    }
+
+    // R-2: a role name is unique within its organization, not site-wide.
+    [Fact]
+    public async Task RoleNameTakenAsync_IsScopedToTheOrganization()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _db.Organizations.AddRange(new Organization { Id = 61, Name = "A", Slug = "a" }, new Organization { Id = 62, Name = "B", Slug = "b" });
+        _db.Roles.Add(new Role { Name = "Deployers", Description = "", OrganizationId = 61 });
+        await _db.SaveChangesAsync(ct);
+
+        Assert.True(await _repo.RoleNameTakenAsync("Deployers", 61, ct: ct));
+        // Another organization names its own role alike.
+        Assert.False(await _repo.RoleNameTakenAsync("Deployers", 62, ct: ct));
+        // A site role of that name would make (A, "Deployers") ambiguous.
+        Assert.True(await _repo.RoleNameTakenAsync("deployers", null, ct: ct));
+    }
+
+    // R-2: a site role's name stays everybody's, in any case: no organization makes its own "admin".
+    [Fact]
+    public async Task RoleNameTakenAsync_SiteRoleName_IsTakenInEveryOrganization()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _db.Organizations.Add(new Organization { Id = 63, Name = "C", Slug = "c" });
+        _db.Roles.Add(new Role { Name = RoleNames.Admin, Description = "" });
+        await _db.SaveChangesAsync(ct);
+
+        Assert.True(await _repo.RoleNameTakenAsync(RoleNames.Admin, 63, ct: ct));
+        Assert.True(await _repo.RoleNameTakenAsync("ADMIN", 63, ct: ct));
     }
 
     [Fact]
@@ -255,7 +294,7 @@ public class RoleRepositoryTests : IDisposable
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        _db.Set<UserRole>().Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        HoldForOrganization(user.Id, role.Id);
         _db.ResourcePermissions.Add(new ResourcePermission
         {
             RoleId = role.Id,
@@ -268,6 +307,7 @@ public class RoleRepositoryTests : IDisposable
 
         Assert.Single(result);
         Assert.Equal("Dev", result[0].GrantedByRole);
+        Assert.Equal(50, result[0].OrganizationId);
     }
 
     [Fact]
@@ -298,7 +338,7 @@ public class RoleRepositoryTests : IDisposable
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        _db.Set<UserRole>().Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        HoldForOrganization(user.Id, role.Id);
         _db.ResourcePermissions.Add(new ResourcePermission
         {
             RoleId = role.Id,
@@ -322,7 +362,7 @@ public class RoleRepositoryTests : IDisposable
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        _db.Set<UserRole>().Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        HoldForOrganization(user.Id, role.Id);
         _db.ResourcePermissions.Add(new ResourcePermission
         {
             RoleId = role.Id,

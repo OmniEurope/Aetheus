@@ -1,26 +1,21 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @inject GridExportContext ExportContext
-@page "/admin/users/new"
 @page "/admin/users/{Id:int}"
-@page "/users/new"
 @page "/users/{Id:int}"
 
-<PageTitle>@(_isNew ? L["NewUser"] : _user?.Username ?? L["User"]) - Aetheus</PageTitle>
+<PageTitle>@(_user?.Username ?? L["User"]) - Aetheus</PageTitle>
 
 <div class="iam-page iam-detail-page">
-<OmniPageHeader Title="@(_isNew ? L["NewUser"] : _user?.Username ?? "")" ShowBack="true" Class="iam-entity-header" Subtitle="@Breadcrumb.Subtitle(L["UserManagement"])">
+<OmniPageHeader Title="@(_user?.Username ?? "")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("person")" /></Icon>
     <Badges>
-        @if (!_isNew && _user is not null)
+        @if (_user is not null)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(_user.IsActive ? OmniTone.Success : OmniTone.Danger)">@(_user.IsActive ? L["Active"] : L["Inactive"])</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(_user.IsActive ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(_user.IsActive ? OmniTone.Success : OmniTone.Danger)">@(_user.IsActive ? L["Active"] : L["Inactive"])</OmniBadge>
         }
     </Badges>
     <ActionsContent>
-        @if (!_isNew)
-        {
-            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
-        }
+        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@OnDelete"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
     </ActionsContent>
 </OmniPageHeader>
 
@@ -28,38 +23,11 @@
 {
     <AetheusLoader Size="OmniControlSize.Large" Class="omni-u-mt-lg" />
 }
-else if (_isNew)
-{
-    <OmniCard Class="iam-detail-card">
-    <div class="form-narrow"><OmniTemplateForm TModel="UserModel" Model="@_model" OnValidSubmit="@OnSubmit">
-        <OmniDataAnnotationsValidator Localizer="@L" />
-        <OmniStack Gap="OmniSpacing.Large">
-            <OmniFormField For="oe-pages-users-useredit-1"><LabelContent>@L["Username"]</LabelContent><ChildContent>
-                <OmniTextBox @bind-Value="_model.Username" Id="oe-pages-users-useredit-1" />
-                <ValidationMessage For="@(() => _model.Username)" />
-            </ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-users-useredit-2"><LabelContent>@L["Email"]</LabelContent><ChildContent>
-                <OmniTextBox @bind-Value="_model.Email" Id="oe-pages-users-useredit-2" />
-                <ValidationMessage For="@(() => _model.Email)" />
-            </ChildContent></OmniFormField>
-            <OmniFormField For="oe-pages-users-useredit-3"><LabelContent>@L["Password"]</LabelContent><ChildContent>
-                <OmniPassword @bind-Value="_model.Password" Id="oe-pages-users-useredit-3" />
-                <ValidationMessage For="@(() => _model.Password)" />
-            </ChildContent></OmniFormField>
-            <OmniSwitch @bind-Value="_model.MustChangePassword">@L["MustChangePassword"]</OmniSwitch>
-            <RoleAssignmentPicker @bind-SelectedRoles="_model.Roles" />
-        </OmniStack>
-        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
-        </OmniStack>
-    </OmniTemplateForm></div>
-    </OmniCard>
-}
 else
 {
     <UrlSyncedTabs Change="@OnTabChanged" Slugs="@(new[] { "general", "roles", "organizations", "security", "pipelines", "audit" })">
         <Tabs>
-            <OmniTabsItem Key="general" Title="@L["General"]">
+            <OmniTabsItem Key="general" Title="@L["General"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("tune")" /></Icon><ChildContent>
                 <OmniCard Class="iam-detail-card">
                 <div class="form-narrow"><OmniTemplateForm TModel="UserModel" Model="@_model" OnValidSubmit="@OnSubmit">
                     <OmniDataAnnotationsValidator Localizer="@L" />
@@ -72,37 +40,31 @@ else
                             <OmniTextBox @bind-Value="_model.Email" Id="oe-pages-users-useredit-5" />
                             <ValidationMessage For="@(() => _model.Email)" />
                         </ChildContent></OmniFormField>
-                        <OmniSwitch TValue="bool" Value="@_model.IsActive" ValueExpression="@(() => _model.IsActive)" ValueChanged="@OnActiveChangedAsync">@L["Active"]</OmniSwitch>
-                        <OmniSwitch TValue="bool" Value="@_model.MustChangePassword" ValueExpression="@(() => _model.MustChangePassword)" ValueChanged="@OnMustChangePasswordChangedAsync">@L["MustChangePassword"]</OmniSwitch>
-                        @if (_savingFlags)
-                        {
-                            <div role="status" aria-live="polite"><OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["UserHandoverSaving"]</OmniText></div>
-                        }
+                        <OmniSwitch TValue="bool" Value="@_model.IsActive" ValueExpression="@(() => _model.IsActive)" ValueChanged="@OnActiveChangedAsync" Class="@(_savingFlags ? "iam-autosave-busy" : null)">@L["Active"]</OmniSwitch>
+                        <OmniSwitch TValue="bool" Value="@_model.MustChangePassword" ValueExpression="@(() => _model.MustChangePassword)" ValueChanged="@OnMustChangePasswordChangedAsync" Class="@(_savingFlags ? "iam-autosave-busy" : null)">@L["MustChangePassword"]</OmniSwitch>
                     </OmniStack>
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniTemplateForm></div>
                 </OmniCard>
-            </OmniTabsItem>
+            </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="roles" Title="@L["Roles"]">
-                <OmniCard Class="iam-detail-card iam-role-assignment-card">
+            <OmniTabsItem Key="roles" Title="@L["Roles"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon><ChildContent>
+                @* R-14: the two cards are separated by this stack's gap, not by a margin of their own. *@
+                <OmniStack>
+                <OmniCard Class="@("iam-detail-card iam-role-assignment-card" + (_savingRoles ? " iam-autosave-busy" : ""))">
                     <RoleAssignmentPicker SelectedRoles="@_model.Roles"
-                        SelectedRolesChanged="@OnRolesChangedAsync" Disabled="@_savingRoles" />
-                    @if (_savingRoles || _rolesSaved)
-                    {
-                        <div class="iam-role-autosave-status" aria-live="polite">
-                            <OmniIcon Name="@MaterialIconMap.Resolve(_savingRoles ? "sync" : "check_circle")" />
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">
-                                @(_savingRoles ? L["Saving"] : L["Saved"])
-                            </OmniText>
-                        </div>
-                    }
+                        SelectedRolesChanged="@OnRolesChangedAsync"
+                        SelectedOrganizationRoles="@_model.OrganizationRoles"
+                        SelectedOrganizationRolesChanged="@OnOrganizationRolesChangedAsync" Disabled="@_savingRoles" />
                 </OmniCard>
 
-                <OmniCard Class="iam-detail-card omni-u-mt-md">
-                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="omni-u-mb-sm">
+
+                <OmniCard Class="iam-detail-card">
+                    @* R-14: the title and the grid are separated by this stack's gap, not by a margin. *@
+                    <OmniStack>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
                         <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["EffectivePermissions"]</OmniText>
                         @* No Refresh, a change to users, roles or organizations reloads them. *@
                     </OmniStack>
@@ -123,7 +85,7 @@ else
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="EffectivePermissionDto" Property="Permission" Title="@L["Permission"]" Width="7.5rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@PlainText">
                                         <Template Context="perm">
-                                            <OmniBadge Fill="OmniFill.Solid" Tone="@GetPermissionBadgeStyle(perm.Permission)">@L[perm.Permission.ToString()]</OmniBadge>
+                                            <OmniBadge Icon="@(BadgeIcon.For(GetPermissionBadgeStyle(perm.Permission)))" Fill="OmniFill.Solid" Tone="@GetPermissionBadgeStyle(perm.Permission)">@L[perm.Permission.ToString()]</OmniBadge>
                                         </Template>
                                     </OmniDataGridColumn>
                                     <OmniDataGridColumn TItem="EffectivePermissionDto" Property="GrantedByRole"
@@ -132,10 +94,12 @@ else
                             </OmniDataGrid>
                         }
                     }
+                    </OmniStack>
                 </OmniCard>
-            </OmniTabsItem>
+                </OmniStack>
+            </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="organizations" Title="@L["Organizations"]">
+            <OmniTabsItem Key="organizations" Title="@L["Organizations"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("apartment")" /></Icon><ChildContent>
                 <OmniCard Class="iam-detail-card">
                 @if (_loadingOrgs)
                 {
@@ -143,7 +107,9 @@ else
                 }
                 else
                 {
-                    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.End" Gap="OmniSpacing.Small" Class="omni-u-mb-md omni-u-mt-sm">
+                    @* R-14: the add row and the grid are separated by this stack's gap, not by margins. *@
+                    <OmniStack>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.End" Gap="OmniSpacing.Small">
                         <OmniFormField Label="@L["Organization"]" For="oe-formfield-pages-users-useredit-1">
                             <OmniDropDown Id="oe-formfield-pages-users-useredit-1" TValue="int?" Options="@(_availableOrgs.ToOptions(item => (int?)item.Id, item => item.Name))"
                                 @bind-Value="_selectedOrgId" Filterable="true" AllowEmpty="true" Placeholder="@L["SelectOrganization"]" />
@@ -182,11 +148,12 @@ else
                             </Columns>
                         </OmniDataGrid>
                     }
+                    </OmniStack>
                 }
                 </OmniCard>
-            </OmniTabsItem>
+            </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="security" Title="@L["Security"]">
+            <OmniTabsItem Key="security" Title="@L["Security"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("security")" /></Icon><ChildContent>
                 @* R-5: the security panels are OE tiles of one OmniTileGrid (same width, same height). *@
                 <OmniTileGrid Columns="2">
                 <OmniCard Class="iam-detail-card">
@@ -207,6 +174,21 @@ else
                         <OmniIcon Name="@MaterialIconMap.Resolve(PasswordMeetsRules ? "check_circle" : "info")" Class="@(PasswordMeetsRules ? "omni-u-text-success" : "omni-u-text-muted")" />
                         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="@(PasswordMeetsRules ? "omni-u-text-success" : "omni-u-text-muted")">@L["PasswordMinLength"]</OmniText>
                     </OmniStack>
+                    @* R-14: or let the person choose it, from a new link sent to their address. *@
+                    <OmniStack Gap="OmniSpacing.Small" Class="omni-u-mt-sm user-password-link">
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["SendPasswordLinkHelp"]</OmniText>
+                        <div>
+                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnSendPasswordLink" Class="@("user-send-password-link" + (_sendingLink ? " btn-busy" : null))" Busy="@(_sendingLink)"><Icon><OmniIcon Name="OmniIconName.PaperPlaneRight" /></Icon><ChildContent><span>@L["SendPasswordLink"]</span></ChildContent></OmniButton>
+                        </div>
+                        @if (_linkResult is { } linkResult)
+                        {
+                            <PasswordLinkMailAlert Result="@linkResult" />
+                        }
+                        @if (!string.IsNullOrEmpty(_linkError))
+                        {
+                            <OmniAlert Severity="OmniSeverity.Danger" Class="user-password-link-error"><ChildContent>@_linkError</ChildContent></OmniAlert>
+                        }
+                    </OmniStack>
                 </OmniCard>
 
                 @if (_user is not null)
@@ -216,7 +198,7 @@ else
                         <OmniStack Gap="OmniSpacing.Small">
                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted detail-label">@L["TotpEnabled"]</OmniText>
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@(_user.TotpEnabled ? OmniTone.Success : OmniTone.Neutral)">@(_user.TotpEnabled ? L["Enabled"] : L["Disabled"])</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(_user.TotpEnabled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(_user.TotpEnabled ? OmniTone.Success : OmniTone.Neutral)">@(_user.TotpEnabled ? L["Enabled"] : L["Disabled"])</OmniBadge>
                             </OmniStack>
                             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">
                                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted detail-label">@L["Created"]</OmniText>
@@ -230,18 +212,18 @@ else
                     </OmniCard>
                 }
                 </OmniTileGrid>
-            </OmniTabsItem>
+            </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="pipelines" Title="@L["OwnedPipelines"]">
+            <OmniTabsItem Key="pipelines" Title="@L["OwnedPipelines"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("account_tree")" /></Icon><ChildContent>
                 @if (_user is not null)
                 {
                     <UserOwnedPipelines Username="@_user.Username" />
                 }
-            </OmniTabsItem>
+            </ChildContent></OmniTabsItem>
 
-            <OmniTabsItem Key="audit" Title="@L["AuditTrail"]">
+            <OmniTabsItem Key="audit" Title="@L["AuditTrail"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("history")" /></Icon><ChildContent>
                 <EntityAuditTrail EntityType="User" EntityId="@Id!.Value" />
-            </OmniTabsItem>
+            </ChildContent></OmniTabsItem>
         </Tabs>
     </UrlSyncedTabs>
 }

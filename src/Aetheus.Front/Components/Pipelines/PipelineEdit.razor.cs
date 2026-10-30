@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Pipelines;
 
 public partial class PipelineEdit : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -25,6 +26,7 @@ public partial class PipelineEdit : IAsyncDisposable
 
     [SupplyParameterFromQuery] public int? ProjectId { get; set; }
     [SupplyParameterFromQuery] public int? ServerId { get; set; }
+    [SupplyParameterFromQuery(Name = LocalReturnUrl.Parameter)] public string? ReturnUrl { get; set; }
     [SupplyParameterFromQuery] public int? EnvironmentId { get; set; }
     [SupplyParameterFromQuery] public int? ProjectServerId { get; set; }
     [SupplyParameterFromQuery(Name = "templateId")] public int? TemplateId { get; set; }
@@ -33,6 +35,8 @@ public partial class PipelineEdit : IAsyncDisposable
     private PipelineDefinitionLiveSync? _definitionSync;
     private bool _changedElsewhere;
     private UpdatePipelineRequest? _lastSubmitted;
+    // The repository file the review dialog showed when the save replaces lines Aetheus had not seen.
+    private string? _confirmedRepositoryYamlSha256;
     private PipelineSourceDto? _source;
     private List<string> _sourceBranches = [];
     private PipelineModel _model = new();
@@ -41,7 +45,7 @@ public partial class PipelineEdit : IAsyncDisposable
     private Aetheus.Front.Components.Shared.AetheusDataGrid<PipelineRunDto>? _runsGrid;
     private int _runsTotalCount;
     private int _runsPage = 1;
-    private int _runsPageSize = 25;
+    private int _runsPageSize = PipelineRunsSummary.SummaryPageSize;
 
     /// <summary>Runs tab tiles, from the first block of runs: the grid scrolls virtually.</summary>
     private PipelineRunsSummary RunsSummary => PipelineRunsSummary.Create(_firstRunsPage);
@@ -58,6 +62,7 @@ public partial class PipelineEdit : IAsyncDisposable
     private bool _saving;
     private bool _loading;
     private bool _notFound;
+    private bool _forbidden;
     private bool _deleting;
     private bool _validating;
     private bool? _yamlValid;
@@ -142,17 +147,6 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private string TemplateParameterValue(string name) => _templateParameters.GetValue(name);
 
-    /// <summary>The id of a template parameter's control, named by the label of its field.</summary>
-    internal static string TemplateParameterControlId(string parameterName) => $"tpl-param-{parameterName}";
-
-    /// <summary>The id of a template parameter's OE field; the "?" of its Help carries <c>{id}-help-content</c>.</summary>
-    internal static string TemplateParameterFieldId(string parameterName) => $"{TemplateParameterControlId(parameterName)}-field";
-
-    /// <summary>The id of a template parameter's description behind the "?" of its field, named by the
-    /// control's <c>aria-describedby</c>; <c>null</c> without a description.</summary>
-    internal static string? TemplateParameterDescriptionId(string parameterName, string? description) =>
-        string.IsNullOrWhiteSpace(description) ? null : $"{TemplateParameterFieldId(parameterName)}-help-content";
-
     private void OnExtractTemplate() => Nav.NavigateTo($"/pipelines/{Id}/template/extract");
     private void OnPromoteTemplate() => Nav.NavigateTo($"/pipelines/{Id}/template/promote");
     private void OnUpdateTemplate()
@@ -193,10 +187,12 @@ public partial class PipelineEdit : IAsyncDisposable
     }
 
     /// <summary>R-34: the page of a pipeline that no longer exists, a state of its own and not a failure.</summary>
-    private void ShowNotFound()
+    /// <summary>With <paramref name="forbidden"/>, the pipeline exists but the API refuses it to the caller: access denied.</summary>
+    private void ShowNotFound(bool forbidden = false)
     {
         _pipeline = null;
-        _notFound = true;
+        _notFound = !forbidden;
+        _forbidden = forbidden;
         _loading = false;
     }
 
@@ -214,6 +210,7 @@ public partial class PipelineEdit : IAsyncDisposable
         _deleting = false;
         _changedElsewhere = false;
         _notFound = false;
+        _forbidden = false;
         _pipeline = null;
         _source = null;
         _sourceBranches = [];
@@ -244,22 +241,24 @@ public partial class PipelineEdit : IAsyncDisposable
         var restored = PageState.TryRestore<PipelinePageState>(address, out var state);
         if (restored) ApplyPageState(state);
         _loading = !restored;
-        var pipelineTask = Api.Pipelines.GetPipelineAsync(Id!.Value);
+        var lookupTask = Api.Pipelines.LookUpPipelineAsync(Id!.Value);
         var runsTask = Api.Pipelines.GetPipelineRunsPagedAsync(Id.Value, 1, _runsPageSize);
         var projectsTask = Api.Projects.GetAllProjectsAsync();
         var sourceTask = Api.Pipelines.GetPipelineSourceAsync(Id.Value);
         var templatesTask = LoadTemplatesSafeAsync();
         var siblings = Task.WhenAll(runsTask, projectsTask, sourceTask, templatesTask);
-        var found = await pipelineTask;
+        var (found, forbidden) = await lookupTask;
         if (found is null)
         {
             // R-34: a pipeline that no longer exists (deleted, or a wrong address) is a page of its own,
             // not a failure. The requests started beside it answer 404 for it as well: they are
-            // awaited only so that nothing is left unobserved, their outcome is of no use.
+            // awaited only so that nothing is left unobserved, their outcome is of no use. A refusal
+            // (another organization's pipeline, which the route check cannot tell from the caller's grants
+            // alone) ends the same way, as the access-denied state and never as an exception.
             await siblings.ContinueWith(static _ => { }, TaskScheduler.Default);
             if (generation != _loadGeneration) return;
             PageState.Forget<PipelinePageState>(address);
-            ShowNotFound();
+            ShowNotFound(forbidden);
             return;
         }
         await siblings;
@@ -416,11 +415,15 @@ public partial class PipelineEdit : IAsyncDisposable
             }
             else
             {
-                _lastSubmitted = _model.ToUpdateRequest();
-                var outcome = await Api.Pipelines.UpdatePipelineAsync(Id!.Value, _lastSubmitted);
+                var submitted = _model.ToUpdateRequest() with { ConfirmedRepositoryYamlSha256 = _confirmedRepositoryYamlSha256 };
+                _lastSubmitted = submitted;
+                var outcome = await Api.Pipelines.UpdatePipelineAsync(Id!.Value, submitted);
                 HandleSaveOutcome(outcome, "PipelineSaved", "Saved", updated =>
                 {
                     _pipeline = updated;
+                    // An unedited definition is replaced by the repository's own file: the page shows it.
+                    _model.YamlDefinition = updated.YamlDefinition;
+                    _lastSubmitted = submitted with { YamlDefinition = updated.YamlDefinition };
                     _savedYaml = _model.YamlDefinition;
                     _savedSourceBranch = _model.SourceBranch;
                     _ = RefreshSourceAsync();
@@ -435,19 +438,11 @@ public partial class PipelineEdit : IAsyncDisposable
 
     private async Task<bool> ConfirmSaveAsync()
     {
-        var result = await Dialog.OpenAsync<PipelineSaveDialog>(
-            L["ReviewPipelineChange"].Value,
-            new Dictionary<string, object?>
-            {
-                { "SavedYaml", _savedYaml },
-                { "DraftYaml", _model.YamlDefinition },
-                { "Branches", _sourceBranches },
-                { "SourceBranch", _model.SourceBranch }
-            },
-            new OmniDialogOptions { Width = "900px", Height = "720px", AutoFocusFirstElement = false });
-
-        if (result is not PipelineSaveDecision decision) return false;
+        var decision = await PipelineSaveDialog.ReviewAsync(
+            Dialog, L["ReviewPipelineChange"].Value, Id ?? 0, _model, _savedYaml, _sourceBranches);
+        if (decision is null) return false;
         _model.SourceBranch = decision.SourceBranch;
+        _confirmedRepositoryYamlSha256 = decision.ConfirmedRepositoryYamlSha256;
         return true;
     }
 
@@ -533,11 +528,12 @@ public partial class PipelineEdit : IAsyncDisposable
     private async Task OnRefresh()
     {
         if (_isNew || Id is null || _deleting) return;
-        _pipeline = await Api.Pipelines.GetPipelineAsync(Id.Value);
+        var (pipeline, forbidden) = await Api.Pipelines.LookUpPipelineAsync(Id.Value);
+        _pipeline = pipeline;
         _changedElsewhere = false;
         if (_pipeline is null)
         {
-            ShowNotFound(); // deleted elsewhere while this page was open
+            ShowNotFound(forbidden); // deleted elsewhere, or the access withdrawn, while this page was open
             return;
         }
         await RefreshRunsAsync();
@@ -624,10 +620,10 @@ public partial class PipelineEdit : IAsyncDisposable
     private async Task ReloadRunsAsync()
     {
         if (Id is null || _deleting) return;
-        var pipeline = await Api.Pipelines.GetPipelineAsync(Id.Value);
+        var (pipeline, forbidden) = await Api.Pipelines.LookUpPipelineAsync(Id.Value);
         if (pipeline is null)
         {
-            ShowNotFound(); // deleted elsewhere while this page was open: the runs go with it
+            ShowNotFound(forbidden); // deleted elsewhere, or the access withdrawn: the runs go with it
             StateHasChanged();
             return;
         }
@@ -647,7 +643,7 @@ public partial class PipelineEdit : IAsyncDisposable
     /// wording, the toasts and the forbidden case behave identically wherever a run is cancelled.</summary>
     private async Task OnCancelRunAsync(PipelineRunDto run)
     {
-        var coordinator = new PipelineRunCommandCoordinator(Api, Dialog, Toast, L, Js);
+        var coordinator = new PipelineRunCommandCoordinator(Api, Dialog, Toast, L, Js, Veil);
         if (!await coordinator.ConfirmCancellationAsync()) return;
         await coordinator.CancelAsync(run);
         await ReloadRunsAsync();
@@ -696,6 +692,8 @@ public partial class PipelineEdit : IAsyncDisposable
         // runs, and each one reloaded this page from a pipeline that no longer exists, leaving the page
         // on a deleted pipeline instead of going back to the list.
         _deleting = true;
+        // R-98: the veil shows before the deletion runs, so the page never looks idle while it does.
+        StateHasChanged();
         await StopLiveUpdatesAsync();
         var status = await Api.Pipelines.DeletePipelineAsync(Id!.Value);
         if (!status.Success && !status.NotFound)
@@ -708,6 +706,6 @@ public partial class PipelineEdit : IAsyncDisposable
         Cache.InvalidatePrefix("pipelines:");
         PageState.Forget<PipelinePageState>($"pipelines/{Id}");
         Toast.Success("Deleted", "Deleted");
-        Nav.NavigateTo("/pipelines");
+        Nav.NavigateTo(PipelineRunPresentation.DeletedPipelineHref(ProjectId, ServerId, ReturnUrl));
     }
 }

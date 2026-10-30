@@ -5,13 +5,19 @@
 @* Recette R-29 (after R-44, R-45): the page's main action sits in the page header, on the title line, with its
    menu beside it. STD-BTN detection 11: Apply visible, the other actions in the menu. *@
 <SectionContent SectionName="@PageHeaderActions.SectionName">
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ApplyAsync" Disabled="@(!CanApply)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["PatchApply"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ApplyAsync" Disabled="@(!CanApply || !CanUpgrade)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["PatchApply"]</span></ChildContent></OmniButton>
     <OmniOverflowMenu Label="@L["MoreActions"]">
         <OmniMenuItem OnClick="@CheckAsync" Disabled="@_busy"><Icon><OmniIcon Name="OmniIconName.Search" /></Icon><ChildContent>@L["PatchCheck"]</ChildContent></OmniMenuItem>
+        @if (!CanApply && CanEnableComponent)
+        {
+            @* R1-5: the component is enabled from here, in the dialog of the server menu, never with a command on the host. *@
+            <OmniMenuItem OnClick="@OpenCapabilitiesAsync" Class="patch-enable-component"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent>@L["PatchEnableComponent"]</ChildContent></OmniMenuItem>
+        }
     </OmniOverflowMenu>
 </SectionContent>
 
 <OmniStack Gap="OmniSpacing.Large">
+    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" SettleOnHeartbeat="true" OnSettled="@(() => LoadAsync(live: true))" />
 
     @if (_loading)
     {
@@ -33,8 +39,8 @@
     else
     {
         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center">
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(_status.PendingTotal > 0 ? OmniTone.Warning : OmniTone.Success)">@string.Format(L["PatchPendingCount"], _status.PendingTotal)</OmniBadge>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@SecurityBadgeStyle">@string.Format(L["PatchSecurityCount"], _status.PendingSecurity)</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="@(_status.PendingTotal > 0 ? OmniTone.Warning : OmniTone.Success)">@string.Format(L["PatchPendingCount"], _status.PendingTotal)</NumberBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="@SecurityBadgeStyle">@string.Format(L["PatchSecurityCount"], _status.PendingSecurity)</NumberBadge>
             @if (_status.CheckedAt is not null)
             {
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted">@string.Format(L["PatchCheckedAt"], _status.CheckedAt.Value.ToString("g"))</OmniText>
@@ -43,13 +49,9 @@
 
         @if (!CanApply)
         {
-            @* R1-5: the component is enabled from here, in the dialog of the server menu, never with a command on the host. *@
+            @* The component is enabled from the page header's menu (R-109, rule 1 of R-30). *@
             <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small" Class="patch-apply-disabled">
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["PatchApplyDisabledHint"]</OmniText>
-                @if (CanEnableComponent)
-                {
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OpenCapabilitiesAsync" Class="patch-enable-component"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><span>@L["PatchEnableComponent"]</span></ChildContent></OmniButton>
-                }
             </OmniStack>
         }
 
@@ -69,7 +71,7 @@
                         <Template Context="u">
                             @if (u.IsSecurity)
                             {
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@L["PatchSecurityYes"]</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Danger))" Fill="OmniFill.Solid" Tone="OmniTone.Danger">@L["PatchSecurityYes"]</OmniBadge>
                             }
                         </Template>
                     </OmniDataGridColumn>

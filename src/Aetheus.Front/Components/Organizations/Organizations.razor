@@ -4,23 +4,27 @@
 <PageTitle>@L["Organizations"] - Aetheus</PageTitle>
 
 <div class="iam-page iam-list-page">
-    <OmniPageHeader Title="@L["Organizations"]" Class="iam-page-header" Subtitle="@Breadcrumb.Subtitle(L["OrganizationManagement"])">
+    <OmniPageHeader Title="@L["Organizations"]" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("apartment")" /></Icon>
         <Badges>
         </Badges>
         <ActionsContent>
+        @* Creating and deleting an organization stays the site Admin's (owner decision 2026-10-28). *@
+        @if (Auth.IsAdmin)
+        {
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewOrganization"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        }
         </ActionsContent>
     </OmniPageHeader>
 
-    <AdminIdentityNav ActiveSection="organizations" />
+    <AdminIdentityNav ActiveSection="organizations" OrganizationChanged="@OnOrganizationChangedAsync" />
 
     <div class="iam-grid-surface">
         <AetheusDataGrid @ref="_grid" TItem="OrganizationDto" Data="@_items" Count="@_totalCount"
             PageSize="20" IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync"
             Virtualize="@AetheusGrid.RemoteVirtualization"
             VirtualData="@(() => new OmniDataGridResult<OrganizationDto>(_items, _totalCount))"
-            FullHeight="true" RowClick="@(org => OpenDetail(org))">
+            MinHeight="0" FullHeight="true" RowClick="@(org => OpenDetail(org))">
             <Columns>
                 <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="OrganizationDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                     <Template Context="org">
@@ -30,16 +34,20 @@
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="OrganizationDto" Property="Slug" Title="@L["Slug"]" Filterable="true" >
-                    <Template Context="org"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@org.Slug</OmniBadge></Template>
+                    <Template Context="org"><OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@org.Slug</OmniBadge></Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="OrganizationDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="240px" Filterable="true" />
                 <OmniDataGridColumn TItem="OrganizationDto" Property="MemberCount" Title="@L["Members"]" Width="140px" Filterable="true" FilterOperator="OmniDataGridFilterOperator.Equals" />
                 <OmniDataGridColumn TItem="OrganizationDto" Property="ProjectCount" Title="@L["Projects"]" Width="140px" Filterable="true" FilterOperator="OmniDataGridFilterOperator.Equals" />
+                <OmniDataGridColumn TItem="OrganizationDto" Property="UpdatedAt" Title="@L["LastModified"]" FormatString="{0:g}" Width="190px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
                 <OmniDataGridColumn TItem="OrganizationDto" Title="@L["Actions"]" Width="110px" TextAlign="OmniAlignment.Center" Sortable="false" Filterable="false" >
                     <Template Context="org">
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => OpenDetail(org))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
-                            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(org))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                            @if (Auth.IsAdmin)
+                            {
+                                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(org))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
+                            }
                         </span>
                     </Template>
                 </OmniDataGridColumn>

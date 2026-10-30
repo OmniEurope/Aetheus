@@ -16,6 +16,7 @@ else if (_commit is { } commit)
         ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("commit")" /></Icon>
     </OmniPageHeader>
+    <OmniStack>
     <OmniAlert Severity="OmniSeverity.Info" Class="commit-outside-repositories">
         <Icon><OmniIcon Name="OmniIconName.Info" /></Icon>
         <ChildContent>
@@ -26,7 +27,7 @@ else if (_commit is { } commit)
             }
         </ChildContent>
     </OmniAlert>
-    <OmniCard Class="omni-u-mt-md">
+    <OmniCard>
         <OmniStack Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Span" Class="text-mono" title="@commit.Sha">@commit.Sha</OmniText>
             @if (!string.IsNullOrWhiteSpace(commit.Message))
@@ -39,6 +40,7 @@ else if (_commit is { } commit)
             }
         </OmniStack>
     </OmniCard>
+    </OmniStack>
 }
 else
 {

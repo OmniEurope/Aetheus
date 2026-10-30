@@ -102,19 +102,6 @@ window.monacoInterop = {
         releaseMonacoFrame(elementId, 'dispose');
     },
 
-    initDiffEditor: async function (elementId, originalContent, modifiedContent, isDark) {
-        const editor = await createMonacoFrame(elementId);
-        if (editor) await editor.initDiffEditor('monaco-root', originalContent, modifiedContent, isDark);
-    },
-
-    updateDiffEditor: function (elementId, originalContent, modifiedContent) {
-        getMonacoFrame(elementId).updateDiffEditor('monaco-root', originalContent, modifiedContent);
-    },
-
-    disposeDiffEditor: function (elementId) {
-        releaseMonacoFrame(elementId, 'disposeDiffEditor');
-    },
-
     initReadOnly: async function (elementId, content, language, isDark, lineNumber) {
         const editor = await createMonacoFrame(elementId);
         if (editor) await editor.initReadOnly('monaco-root', content, language, isDark, lineNumber);

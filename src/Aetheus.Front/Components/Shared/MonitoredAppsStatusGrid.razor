@@ -23,7 +23,7 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="CurrentStatus" Title="@L["Status"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
             <Template Context="app">
-                <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@HealthBadge(app.CurrentStatus)">@L[$"AppHealth{app.CurrentStatus}"]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(HealthBadge(app.CurrentStatus)))" Fill="OmniFill.Solid" Tone="@HealthBadge(app.CurrentStatus)">@L[$"AppHealth{app.CurrentStatus}"]</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="OnlineVisitorCount" Title="@L["CurrentVisitors"]" Width="11rem"
@@ -36,7 +36,9 @@
                 }
             </Template>
         </OmniDataGridColumn>
-        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
+        <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" >
+            <Template Context="app"><EntityNameLink Kind="EntityNameKind.Project" Id="app.ProjectId" Name="@app.ProjectName" /></Template>
+        </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MonitoredAppStatusDto" Property="LastStatusChangeAt" Title="@L["Since"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
     </Columns>
 </OmniDataGrid>

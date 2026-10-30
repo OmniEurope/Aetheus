@@ -13,11 +13,11 @@
             {
                 <div class="run-preflight-check">
                     <OmniIcon Name="@MaterialIconMap.Resolve(check.Satisfied ? "check_circle" : "cancel")" Class="@(check.Satisfied ? "run-preflight-ok" : "run-preflight-ko")" />
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@check.Kind</OmniBadge>
-                    <span class="run-preflight-subject">@check.Subject</span>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@KindText(check.Kind)</OmniBadge>
+                    <span class="run-preflight-subject">@LaunchProblemText.DescribeStored(check.Subject, L)</span>
                     @if (check.Detail is { Length: > 0 } detail)
                     {
-                        <span class="run-preflight-detail">@detail</span>
+                        <span class="run-preflight-detail">@LaunchProblemText.DescribeStored(detail, L)</span>
                     }
                 </div>
             }

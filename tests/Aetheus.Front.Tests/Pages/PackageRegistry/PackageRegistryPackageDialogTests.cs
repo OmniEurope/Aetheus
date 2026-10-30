@@ -89,6 +89,24 @@ public sealed class PackageRegistryPackageDialogTests : BunitContext
         });
     }
 
+    // R-58: the anonymous download switch shows the package state and saves the opposite on click.
+    [Fact]
+    public void AnonymousDownloadSwitch_SendsTheToggleRequest_ForThatPackage()
+    {
+        var cut = RenderWithVersion(deprecated: false);
+        var toggle = cut.Find("button[role=switch]");
+        Assert.Equal("false", toggle.GetAttribute("aria-checked"));
+
+        toggle.Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var put = Assert.Single(_handler.RequestDetails, request => request.Method == "PUT");
+            Assert.EndsWith("api/package-registry/7/anonymous-download", put.Url);
+            Assert.Contains("\"allowAnonymousDownload\":true", put.Body, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
     [Fact]
     public void DeprecatedVersion_ShowsABadge_AndOffersToRemoveTheDeprecation()
     {

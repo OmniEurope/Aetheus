@@ -14,8 +14,10 @@ public interface IPipelineMigrationGateRepository
     Task<bool> EnvironmentExistsAsync(int environmentId, CancellationToken ct = default);
 
     /// <summary>
-    /// The latest verdict of a migrate step that ran on one of the environment's servers; null when none did.
-    /// The environment is reached through the server the step ran on, since a run records no environment.
+    /// The latest verdict of a migrate step that ran on one of the environment's servers, in a run of a pipeline of the
+    /// environment's own project (or owned by the environment); null when none did. The environment is reached through
+    /// the server the step ran on, since a run records no environment, and the run's pipeline excludes the deployments
+    /// of other projects that share the server.
     /// </summary>
     Task<PipelineMigrationGateVerdict?> FindLatestForEnvironmentAsync(int environmentId, CancellationToken ct = default);
 

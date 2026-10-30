@@ -5,7 +5,8 @@
 <UrlSyncedTabs Slugs="@TabSlugs">
     <Tabs>
         <OmniTabsItem Key="essential" Title="@L["OverviewTabEssential"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent>
-        <OmniCard Class="omni-u-mb-lg">
+<OmniStack>
+        <OmniCard>
             <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-md">@L["Essentials"]</OmniText>
             <div class="essentials-grid">
                 <div class="essential-item">
@@ -13,7 +14,7 @@
                     <div class="essential-text">
                         <span class="essential-label">@L["Status"]</span>
                         <span class="essential-value">
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.Status == ServerStatus.Online ? OmniTone.Success : Server.Status == ServerStatus.Offline ? OmniTone.Danger : OmniTone.Neutral)">@L.Localize(Server.Status)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Server.Status == ServerStatus.Online ? OmniTone.Success : Server.Status == ServerStatus.Offline ? OmniTone.Danger : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Server.Status == ServerStatus.Online ? OmniTone.Success : Server.Status == ServerStatus.Offline ? OmniTone.Danger : OmniTone.Neutral)">@L.Localize(Server.Status)</OmniBadge>
                         </span>
                         <ServerReachabilityBadge Server="Server" ShowDetail="true" />
                     </div>
@@ -23,7 +24,7 @@
                     <div class="essential-text">
                         <span class="essential-label">@L["Type"]</span>
                         <span class="essential-value">
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@ServerTypeHelper.GetBadgeStyle(Server.Type)">@L.Localize(Server.Type)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(ServerTypeHelper.GetBadgeStyle(Server.Type)))" Fill="OmniFill.Solid" Tone="@ServerTypeHelper.GetBadgeStyle(Server.Type)">@L.Localize(Server.Type)</OmniBadge>
                         </span>
                     </div>
                 </div>
@@ -69,7 +70,7 @@
                         }
                         else if (agentUpdate.Failed)
                         {
-                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="agent-update-overview-state" role="alert">@(string.IsNullOrWhiteSpace(agentUpdate.FailureDiagnostic) ? L["AgentUpdateFailed"].Value : string.Format(L["AgentUpdateFailedWithReason"], agentUpdate.FailureDiagnostic))</OmniText>
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="agent-update-overview-state" role="alert">@(string.IsNullOrWhiteSpace(agentUpdate.FailureDiagnostic) ? L["AgentUpdateFailed"].Value : string.Format(L["AgentUpdateFailedWithReason"], AgentUpdateDiagnosticText.Localize(agentUpdate.FailureCode, agentUpdate.FailureDiagnostic, L)))</OmniText>
                         }
                     </div>
                 </div>
@@ -81,7 +82,7 @@
                             @(Server.AgentInstalledAt is { } iat ? RelativeTime.FormatAgo(L, iat) : "-")
                             @if (Server.AgentInstalledAt is { } iat2 && ((iat2.Kind == DateTimeKind.Utc ? DateTime.UtcNow : DateTime.Now) - iat2).TotalDays > 90)
                             {
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="badge-xs">@L["Stale"]</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" Class="badge-xs">@L["Stale"]</OmniBadge>
                             }
                         </span>
                     </div>
@@ -113,7 +114,7 @@
                 <OmniRow Gap="OmniSpacing.XSmall" Class="omni-u-mt-md">
                     @foreach (var tag in Server.Tags)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
                     }
                 </OmniRow>
             }
@@ -121,7 +122,7 @@
 
         @* Live metrics tiles - placed directly under Essentials so the at-a-glance health
            numbers sit above the (less frequently touched) runner / isolation posture cards. *@
-        <OmniTileGrid Columns="5" Class="omni-u-mb-lg metric-tile-grid">
+        <OmniTileGrid Columns="5" Class="metric-tile-grid">
             <OmniCard>
                 <HeartbeatPulse Server="Server" LastUpdated="LastUpdated" />
             </OmniCard>
@@ -150,7 +151,10 @@
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="metric-value">@DisplayFormatting.SizeFromMo(Server.MemoryUsedMb) / @DisplayFormatting.SizeFromMo(Server.MemoryTotalMb)</OmniHeading>
                     <OmniProgressBar Value="@Server.MemoryUsedMb" Maximum="@Math.Max(1, Server.MemoryTotalMb)" ShowValue="false"
                         Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.MemoryUsedMb, Server.MemoryTotalMb))}")" />
-                    <OmniText Element="OmniTextElement.Small" Tone="@OomKillTone" Class="omni-u-m-0">@OomKillText</OmniText>
+                    @if (Server.OomKillsSinceBoot > 0)
+                    {
+                        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Danger" Class="omni-u-m-0">@OomKillText</OmniText>
+                    }
                 }
                 else if (MetricsLoadCompleted)
                 {
@@ -169,10 +173,6 @@
                     <OmniHeading Level="OmniHeadingLevel.H5" Class="metric-value">@ServerDisksCard.FreeOfTotal(Server.DiskUsedGb, Server.DiskTotalGb, L)</OmniHeading>
                     <OmniProgressBar Value="@Server.DiskUsedGb" Maximum="@Math.Max(1, Server.DiskTotalGb)" ShowValue="false"
                         Class="@($"metric-bar metric-bar-thin {MetricThresholdHelper.BarClass(MetricThresholdHelper.Percent(Server.DiskUsedGb, Server.DiskTotalGb))}")" />
-                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                        <OmniText Element="OmniTextElement.Small" Tone="@InodeTone" Class="omni-u-m-0">@InodeText</OmniText>
-                        <FileCountHelp />
-                    </OmniStack>
                 }
                 else if (MetricsLoadCompleted)
                 {
@@ -191,20 +191,22 @@
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Running"]</OmniText>
             </OmniCard>
         </OmniTileGrid>
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="storage" Title="@L["OverviewTabStorage"]"><Icon><OmniIcon Name="OmniIconName.HardDrive" /></Icon><ChildContent>
+<OmniStack>
         @if (MetricsReceived)
         {
             <ServerDisksCard Server="Server" />
         }
-        <OmniCard Class="omni-u-mb-lg storage-overview-card">
+        <OmniCard Class="storage-overview-card">
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                 <OmniIcon Name="OmniIconName.HardDrive" Class="omni-u-text-muted" />
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["StorageDiagnostics"]</OmniText>
                 @if (StorageCollected)
                 {
-                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.StorageDiagnostics.DryRun ? OmniTone.Warning : OmniTone.Success)">@(Server.StorageDiagnostics.DryRun ? L["DryRun"] : L["CleanupApplyMode"])</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(Server.StorageDiagnostics.DryRun ? OmniTone.Warning : OmniTone.Success))" Fill="OmniFill.Solid" Tone="@(Server.StorageDiagnostics.DryRun ? OmniTone.Warning : OmniTone.Success)">@(Server.StorageDiagnostics.DryRun ? L["DryRun"] : L["CleanupApplyMode"])</OmniBadge>
                 }
             </OmniStack>
             @if (!StorageCollected && Metrics.Count == 0)
@@ -247,19 +249,21 @@
                 </OmniText>
             }
         </OmniCard>
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="runner" Title="@L["OverviewTabRunner"]"><Icon><OmniIcon Name="OmniIconName.Wrench" /></Icon><ChildContent>
+<OmniStack>
         @* Pipeline runner + Container isolation, side by side as two equal-height tiles.
            Both are secure-by-default posture cards: visible to all readers (transparency) but
            only flipped by Server.Admin; enabling either is confirmed inline before it takes effect. *@
-        <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mb-lg">
+        <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
                 <OmniCard Class="overview-feature-card">
                     <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Medium">
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center">
                             <OmniIcon Name="@MaterialIconMap.Resolve(Server.PipelineRunnerEnabled == true ? "play_circle" : "pause_circle")" Class="@(Server.PipelineRunnerEnabled == true ? "pipeline-runner-icon-on" : "pipeline-runner-icon-off")" />
                             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["PipelineRunner"]</OmniText>
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.PipelineRunnerEnabled == true ? OmniTone.Success : OmniTone.Neutral)">@(Server.PipelineRunnerEnabled == true ? L["Enabled"] : L["Disabled"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Server.PipelineRunnerEnabled == true ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Server.PipelineRunnerEnabled == true ? OmniTone.Success : OmniTone.Neutral)">@(Server.PipelineRunnerEnabled == true ? L["Enabled"] : L["Disabled"])</OmniBadge>
                         </OmniStack>
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">
                             @(Server.PipelineRunnerEnabled == true ? L["PipelineRunnerEnabledHint"] : L["PipelineRunnerDisabledHint"])
@@ -270,7 +274,7 @@
                                      title="@L["PipelineToolchainHint"]">
                             <OmniIcon Name="@MaterialIconMap.Resolve(PipelineRunnerAvailable == true ? "build" : PipelineRunnerAvailable == false ? "build_circle" : "help")" Class="omni-u-text-muted" />
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["PipelineToolchain"]</OmniText>
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(PipelineRunnerAvailable == true ? OmniTone.Accent : PipelineRunnerAvailable == false ? OmniTone.Warning : OmniTone.Neutral)">@(PipelineRunnerAvailable == true ? L["ToolchainInstalled"] : PipelineRunnerAvailable == false ? L["ToolchainMissing"] : L["ToolchainUnknown"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.Of(PipelineRunnerAvailable == true ? OmniIconName.Check : PipelineRunnerAvailable == false ? OmniIconName.Warning : OmniIconName.Question))" Fill="OmniFill.Solid" Tone="@(PipelineRunnerAvailable == true ? OmniTone.Accent : PipelineRunnerAvailable == false ? OmniTone.Warning : OmniTone.Neutral)">@(PipelineRunnerAvailable == true ? L["ToolchainInstalled"] : PipelineRunnerAvailable == false ? L["ToolchainMissing"] : L["ToolchainUnknown"])</OmniBadge>
                         </OmniStack>
                         @* DPB7: surface the deploy-target capability (DeploymentTargetAvailable) on the detail
                            overview too, not just the servers list - mirrors the list badge. Capability-only
@@ -279,7 +283,7 @@
                                      title="@L["DeploymentTargetHint"]">
                             <OmniIcon Name="@MaterialIconMap.Resolve(Server.DeploymentTargetAvailable == true ? "cloud_upload" : "cloud_off")" Class="omni-u-text-muted" />
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["DeploymentTarget"]</OmniText>
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.DeploymentTargetAvailable == true ? OmniTone.Accent : OmniTone.Neutral)">@(Server.DeploymentTargetAvailable == true ? L["DeploymentTargetBadge"] : L["DeploymentTargetUnavailable"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Server.DeploymentTargetAvailable == true ? OmniTone.Accent : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Server.DeploymentTargetAvailable == true ? OmniTone.Accent : OmniTone.Neutral)">@(Server.DeploymentTargetAvailable == true ? L["DeploymentTargetBadge"] : L["DeploymentTargetUnavailable"])</OmniBadge>
                         </OmniStack>
                         @* S-TECH-CDUI: surface the agent's capability diagnostics (a drop-in unreadable, a sudo probe
                            that failed) so an operator sees WHY a capability is OFF, without SSHing to the box. *@
@@ -311,7 +315,7 @@
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Medium" Align="OmniAlignment.Center">
                             <OmniIcon Name="@MaterialIconMap.Resolve(Server.DockerAvailable ? "verified" : "block")" Class="@(Server.DockerAvailable ? "pipeline-runner-icon-on" : "pipeline-runner-icon-off")" />
                             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0 flex-1">@L["ContainerIsolation"]</OmniText>
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.RequireContainerIsolation ? OmniTone.Warning : OmniTone.Neutral)">@(Server.RequireContainerIsolation ? L["ContainersOnly"] : L["ContainersOptional"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.Of(Server.RequireContainerIsolation ? OmniIconName.Lock : OmniIconName.LockOpen))" Fill="OmniFill.Solid" Tone="@(Server.RequireContainerIsolation ? OmniTone.Warning : OmniTone.Neutral)">@(Server.RequireContainerIsolation ? L["ContainersOnly"] : L["ContainersOptional"])</OmniBadge>
                         </OmniStack>
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted omni-u-m-0">
                             @(Server.DockerAvailable ? L["DockerAvailableHint"] : L["DockerUnavailableHint"])
@@ -319,7 +323,7 @@
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.ExtraLarge" Align="OmniAlignment.Center">
                             <OmniIcon Name="@MaterialIconMap.Resolve(Server.DockerAvailable ? "deployed_code" : "block")" Class="omni-u-text-muted" />
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0">@L["ContainerIsolation"]</OmniText>
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@(Server.DockerAvailable ? OmniTone.Accent : OmniTone.Neutral)">@(Server.DockerAvailable ? L["DockerReady"] : L["DockerMissing"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Server.DockerAvailable ? OmniTone.Accent : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Server.DockerAvailable ? OmniTone.Accent : OmniTone.Neutral)">@(Server.DockerAvailable ? L["DockerReady"] : L["DockerMissing"])</OmniBadge>
                         </OmniStack>
                         @if (CanAdmin)
                         {
@@ -329,7 +333,7 @@
                 </OmniCard>
         </OmniTileGrid>
 
-        <OmniCard Class="omni-u-mb-lg">
+        <OmniCard>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                 <OmniIcon Name="OmniIconName.ShieldCheck" Class="omni-u-text-muted" />
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["AnalysisScannerCapabilities"]</OmniText>
@@ -342,22 +346,26 @@
             {
                     <OmniDataGrid Items="@Server.ScannerCapabilities" ExportTitle="@ExportContext.Title(L["AnalysisScannerCapabilities"])" ExportFields="@ExportContext.Fields()" TItem="string" Class="analysis-table" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
                     <Columns>
-                        <OmniDataGridColumn Frozen="true" TItem="string" Key="ScannerState" ExportValue="@ScannerStateExport" Title="@L["Status"]" Width="9rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@ScannerStates" FormatFilterValue="@ScannerStateText" FilterPredicate="@MatchesScannerState"><Template Context="diagnostic"><OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@ScannerDiagnosticStyle(diagnostic)">@ScannerDiagnosticState(diagnostic)</OmniBadge></Template></OmniDataGridColumn>
+                        <OmniDataGridColumn Frozen="true" TItem="string" Key="ScannerState" ExportValue="@ScannerStateExport" Title="@L["Status"]" Width="9rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@ScannerStates" FormatFilterValue="@ScannerStateText" FilterPredicate="@MatchesScannerState"><Template Context="diagnostic"><OmniBadge Icon="@(BadgeIcon.ForState(ScannerDiagnosticStyle(diagnostic)))" Fill="OmniFill.Solid" Tone="@ScannerDiagnosticStyle(diagnostic)">@ScannerDiagnosticState(diagnostic)</OmniBadge></Template></OmniDataGridColumn>
                         <OmniDataGridColumn TItem="string" ExportValue="@ScannerDetailsExport" Title="@L["Details"]" Sortable="false"><Template Context="diagnostic">@diagnostic</Template></OmniDataGridColumn>
                     </Columns>
                 </OmniDataGrid>
             }
         </OmniCard>
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="ssh" Title="@L["OverviewTabSsh"]"><Icon><OmniIcon Name="OmniIconName.Key" /></Icon><ChildContent>
+<OmniStack>
         @* PLAN-010 lot 1: SSH configuration watch. *@
         <ServerSshConfigCard Status="@Server.SshConfig" />
+</OmniStack>
         </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="tasks" Title="@L["OverviewTabTasks"]"><Icon><OmniIcon Name="OmniIconName.Document" /></Icon><ChildContent>
+<OmniStack>
         @* H / E2: fill the bottom of the overview with the server's most recent tasks (was empty space). *@
-        <OmniCard Class="omni-u-mb-lg">
+        <OmniCard>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                 <OmniIcon Name="OmniIconName.Document" Class="omni-u-text-muted" />
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["RecentTasks"]</OmniText>
@@ -372,7 +380,7 @@
                     @foreach (var task in Server.RecentTasks.Take(5))
                     {
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="task-row">
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)">@L.Localize(task.Status)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)))" Fill="OmniFill.Solid" Tone="@Aetheus.Front.Components.Tasks.TaskListView.GetTaskBadge(task.Status)">@L.Localize(task.Status)</OmniBadge>
                             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0 omni-u-grow">@task.Name</OmniText>
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"
                                 title="@task.CreatedAt.ToString("F")">@RelativeTime.FormatAgo(L, task.CreatedAt)</OmniText>
@@ -381,6 +389,7 @@
                 </OmniStack>
             }
         </OmniCard>
+</OmniStack>
         </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>

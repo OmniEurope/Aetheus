@@ -1,0 +1,14 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@namespace Aetheus.Front.Components.Shared
+
+@* The name of a server, project, pipeline, environment, library, vault or organization shown anywhere in the app
+   links to the page of that entity (recette R-118, rule 13 of R-30). In a grid whose row opens a page, the click is
+   isolated so the link does not also trigger the row. Without an id (or without a name) the name stays plain text. *@
+@if (Id is { } id && !string.IsNullOrWhiteSpace(Name))
+{
+    <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true"><OmniLink Href="@Href(Kind, id)">@Name</OmniLink></span>
+}
+else
+{
+    @Name
+}

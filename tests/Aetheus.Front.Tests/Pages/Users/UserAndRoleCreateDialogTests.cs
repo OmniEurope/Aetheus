@@ -6,15 +6,8 @@ namespace Aetheus.Front.Tests.Pages.Users;
 
 public class UserAndRoleCreateDialogTests : BunitContext
 {
-    public UserAndRoleCreateDialogTests() => BunitTestHelper.RegisterServices(this, authenticated: true, isAdmin: true);
-
-    [Fact]
-    public void UserCreateDialog_Renders_FormWithRoles()
-    {
-        var cut = Render<UserCreateDialog>(p => p.Add(c => c.AvailableRoles, ["Admin", "Operator"]));
-
-        Assert.NotEmpty(cut.FindAll("input"));
-    }
+    public UserAndRoleCreateDialogTests() =>
+        BunitTestHelper.RegisterServices(this, authenticated: true, isAdmin: true).SetOrganizations();
 
     [Fact]
     public void RoleCreateDialog_Renders_Form()

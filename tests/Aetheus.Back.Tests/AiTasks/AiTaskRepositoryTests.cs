@@ -466,6 +466,8 @@ public sealed class AiTaskRepositoryTests : IDisposable
     [Fact]
     public async Task ResolveExecutionServerAsync_PicksTheOnlineRunnerOfTheProject()
     {
+        // The project row exists (its servers are those of its own organization, RBAC audit finding 2).
+        _db.Projects.Add(new Project { Id = 10, Name = "aetheus", OrganizationId = 0 });
         _db.Servers.AddRange(
             new Server { Id = 1, Name = "offline-runner", Status = ServerStatus.Offline, PipelineRunnerEnabled = true },
             new Server { Id = 2, Name = "online-plain", Status = ServerStatus.Online },

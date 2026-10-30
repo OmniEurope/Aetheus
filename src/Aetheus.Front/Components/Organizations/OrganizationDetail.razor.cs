@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Organizations;
 public partial class OrganizationDetail : IAsyncDisposable
 {
     [Parameter] public int Id { get; set; }
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -13,6 +14,16 @@ public partial class OrganizationDetail : IAsyncDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private NotifyHelper Notify { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
+    [Inject] private Aetheus.Front.Components.Shared.PermissionService Permissions { get; set; } = default!;
+
+    // Owner decision 2026-10-28: an organization's administrator opens its organization's members tab only;
+    // the other tabs (and the live feed of the admin hub) stay the site Admin's.
+    private string[] TabSlugs => Auth.IsAdmin
+        ? ["general", "members", "projects", "quality-gates", "audit"]
+        : ["members"];
+    // S2: an organization's administrator names the user to add by exact username or e-mail address.
+    private string? _newUserLogin;
+    private bool CanAddMember => Auth.IsAdmin ? _newUserId is not null : !string.IsNullOrWhiteSpace(_newUserLogin);
 
     private OrganizationDetailDto? _org;
     private int? _loadedId;
@@ -49,12 +60,14 @@ public partial class OrganizationDetail : IAsyncDisposable
         [System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 2)]
         public string Name { get; set; } = string.Empty;
 
-        [System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 2)]
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
         [System.ComponentModel.DataAnnotations.RegularExpression("^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", ErrorMessage = "SlugFormatError")]
         public string Slug { get; set; } = string.Empty;
 
         [System.ComponentModel.DataAnnotations.StringLength(500)]
         public string Description { get; set; } = string.Empty;
+
+        public bool AutoCreateDevelopBranch { get; set; }
     }
 
     private List<RoleOption> _roleOptions => new()
@@ -77,12 +90,14 @@ public partial class OrganizationDetail : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Auth.IsAdmin)
+        if (!Auth.IsAdmin && !Permissions.Can(PermissionKeys.OrganizationMembersManage))
         {
             Nav.NavigateTo("/");
             return;
         }
         _authorized = true;
+        if (!Auth.IsAdmin)
+            return;
 
         try
         {
@@ -103,7 +118,8 @@ public partial class OrganizationDetail : IAsyncDisposable
 
     private bool IsGeneralTabDirty() =>
         _org is not null
-        && (_general.Name != _org.Name || _general.Slug != _org.Slug || _general.Description != _org.Description);
+        && (_general.Name != _org.Name || _general.Slug != _org.Slug || _general.Description != _org.Description
+            || _general.AutoCreateDevelopBranch != _org.AutoCreateDevelopBranch);
 
     private bool IsProjectsTabDirty() =>
         _org is not null
@@ -164,13 +180,14 @@ public partial class OrganizationDetail : IAsyncDisposable
                 return;
             }
 
-            var projects = await LoadProjectsOrEmptyAsync();
+            var projects = Auth.IsAdmin ? await LoadProjectsOrEmptyAsync() : [];
             if (Id != id) return;
             _allProjects = projects;
 
             _general.Name = organization.Name;
             _general.Slug = organization.Slug;
             _general.Description = organization.Description;
+            _general.AutoCreateDevelopBranch = organization.AutoCreateDevelopBranch;
             Breadcrumb.Set(
                 new BreadcrumbItem(L["Administration"], "/admin"),
                 new BreadcrumbItem(L["Organizations"], "/admin/organizations"),
@@ -188,6 +205,12 @@ public partial class OrganizationDetail : IAsyncDisposable
             nameof(UserDto.Username), cancellationToken: cancellationToken);
         foreach (var user in result.Items) _userNames[user.Id] = user.Username;
         return result.Items.Select(user => new OmniOption<int?>(user.Id, user.Username)).ToArray();
+    }
+
+    /// <summary>The account page is the site Admin's.</summary>
+    private void OpenMember(OrganizationMemberDto member)
+    {
+        if (Auth.IsAdmin) Nav.NavigateTo($"/users/{member.UserId}");
     }
 
     private string FormatUser(int? userId) =>
@@ -208,7 +231,8 @@ public partial class OrganizationDetail : IAsyncDisposable
             {
                 Name = _general.Name,
                 Slug = _general.Slug,
-                Description = _general.Description
+                Description = _general.Description,
+                AutoCreateDevelopBranch = _general.AutoCreateDevelopBranch
             });
             if (updated is not null)
             {
@@ -233,25 +257,26 @@ public partial class OrganizationDetail : IAsyncDisposable
             L["Delete"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
-        if (await Api.Servers.DeleteOrganizationAsync(Id))
+        await Veil.RunAsync(async () =>
         {
-            Notify.Success("Deleted", "Deleted");
-            Nav.NavigateTo("/admin/organizations");
-        }
-        else
-        {
-            Notify.Error("Error", "DeleteFailed");
-        }
+            if (await Api.Servers.DeleteOrganizationAsync(Id))
+            {
+                Notify.Success("Deleted", "Deleted");
+                Nav.NavigateTo("/admin/organizations");
+            }
+            else
+            {
+                Notify.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private async Task OnAddMember()
     {
-        if (_newUserId is null) return;
-        var member = await Api.Servers.AddOrganizationMemberAsync(Id, new AddOrganizationMemberRequest
-        {
-            UserId = _newUserId.Value,
-            Role = _newUserRole
-        });
+        if (!CanAddMember) return;
+        var member = await Api.Servers.AddOrganizationMemberAsync(Id, Auth.IsAdmin
+            ? new AddOrganizationMemberRequest { UserId = _newUserId!.Value, Role = _newUserRole }
+            : new AddOrganizationMemberRequest { UserLogin = _newUserLogin!.Trim(), Role = _newUserRole });
         if (member is not null && _org is not null)
         {
             var existingIndex = _org.Members.FindIndex(existing => existing.Id == member.Id);
@@ -260,6 +285,7 @@ public partial class OrganizationDetail : IAsyncDisposable
             else
                 _org.Members.Add(member);
             _newUserId = null;
+            _newUserLogin = null;
             Notify.Success(L["MemberAdded"]);
         }
         else
@@ -268,8 +294,21 @@ public partial class OrganizationDetail : IAsyncDisposable
         }
     }
 
+    /// <summary>M6: the last Owner (Organization Admin) is never removed nor demoted; the backend refuses
+    /// it too (409), the page says why first.</summary>
+    private bool IsLastOwner(OrganizationMemberDto member) =>
+        member.Role == OrganizationRole.Owner
+        && _org is not null
+        && _org.Members.Count(item => item.Role == OrganizationRole.Owner) <= 1;
+
     private async Task OnChangeMemberRole(OrganizationMemberDto member, OrganizationRole role)
     {
+        if (role != OrganizationRole.Owner && IsLastOwner(member))
+        {
+            Notify.Error("Error", "OrganizationLastOwner");
+            StateHasChanged();
+            return;
+        }
         var updated = await Api.Servers.UpdateOrganizationMemberAsync(Id, member.Id,
             new UpdateOrganizationMemberRequest { Role = role });
         if (updated is not null && _org is not null)
@@ -286,20 +325,28 @@ public partial class OrganizationDetail : IAsyncDisposable
 
     private async Task OnRemoveMember(OrganizationMemberDto member)
     {
+        if (IsLastOwner(member))
+        {
+            Notify.Error("Error", "OrganizationLastOwner");
+            return;
+        }
         var confirmed = await Dialog.Confirm(
             string.Format(L["ConfirmRemoveMember"], member.Username),
             L["Remove"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Remove"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
-        if (await Api.Servers.RemoveOrganizationMemberAsync(Id, member.Id) && _org is not null)
+        await Veil.RunAsync(async () =>
         {
-            _org.Members.Remove(member);
-            Notify.Success("Deleted", "Saved");
-        }
-        else
-        {
-            Notify.Error("Error", "DeleteFailed");
-        }
+            if (await Api.Servers.RemoveOrganizationMemberAsync(Id, member.Id) && _org is not null)
+            {
+                _org.Members.Remove(member);
+                Notify.Success("Deleted", "Saved");
+            }
+            else
+            {
+                Notify.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private async Task OnProjectsChangedAsync(IEnumerable<int> projectIds)

@@ -5,7 +5,8 @@
 @implements IDisposable
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Aetheus.Front.Resources.AppStrings> L
 
-<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["Apache"] - Aetheus</PageTitle>
+@* R-120: the installed version is part of the title. *@
+<PageTitle>@(Loader?.Server?.Name ?? L["Server"]) - @L["Apache"]@(string.IsNullOrWhiteSpace(Loader?.Server?.Apache?.Version) ? "" : " " + Loader?.Server?.Apache?.Version?.Trim()) - Aetheus</PageTitle>
 
 @if (Loader?.Server is not null)
 {

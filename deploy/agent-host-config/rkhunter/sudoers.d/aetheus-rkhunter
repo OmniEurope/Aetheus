@@ -4,13 +4,16 @@
 # 1. Run scan (rkhunter --check needs root to read /var/lib/rkhunter/db + scan certain paths).
 # 2. Update signature DB (rkhunter --update fetches new mirror data, writes /var/lib/rkhunter).
 # 3. Refresh baseline (rkhunter --propupd recomputes file checksums after legitimate upgrades).
+# 4. Set the warning recipient (MAIL-ON-WARNING in /etc/rkhunter.conf, recette R-119): the address travels on
+#    stdin, never on the command line, and the helper re-validates it.
 # Each entry is the root-owned helper with one fixed word; the helper runs the fixed rkhunter argv.
 # noexec is intentionally omitted (ADR-019 vetted-helper exception): rkhunter is a shell script that
 # must exec grep/tr/cut/id, and under noexec every scan died on "Permission denied" (recette R3-36).
 Cmnd_Alias AETHEUS_RKHUNTER_MANAGE = \
     #{RKHUNTER_HELPER_PATH}# check, \
     #{RKHUNTER_HELPER_PATH}# update, \
-    #{RKHUNTER_HELPER_PATH}# propupd
+    #{RKHUNTER_HELPER_PATH}# propupd, \
+    #{RKHUNTER_HELPER_PATH}# mail-on-warning
 
 Defaults!AETHEUS_RKHUNTER_MANAGE timestamp_timeout=0
 Defaults!AETHEUS_RKHUNTER_MANAGE env_reset

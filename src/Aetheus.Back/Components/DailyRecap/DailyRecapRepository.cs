@@ -40,10 +40,10 @@ internal sealed class DailyRecapRepository(AppDbContext db) : IDailyRecapReposit
 
     public Task<List<string>> GetActiveAdministratorEmailsAsync(CancellationToken ct = default) =>
         db.Users.AsNoTracking()
-            .Where(user => user.IsActive && user.Email != null && user.Email != ""
+            .Where(user => user.IsActive && user.Email != ""
                 && user.UserRoles.Any(link => link.Role.Name == AdministratorRole))
             .OrderBy(user => user.Username)
-            .Select(user => user.Email!)
+            .Select(user => user.Email)
             .ToListAsync(ct);
 
     public Task<List<RecapPipelineRun>> GetParentRunsCompletedAsync(

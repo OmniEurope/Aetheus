@@ -83,7 +83,6 @@ function yamlCompletions(model, position, suggestions) {
 window.monacoInterop = {
     _editors: {},
     _disposables: {},
-    _diffEditors: {},
 
     init: async function (elementId, yamlContent, dotNetRef, isDark) {
         await this._ensureMonacoLoaded();
@@ -262,54 +261,6 @@ window.monacoInterop = {
         const editor = this._editors[elementId];
         if (editor) {
             editor.getAction('editor.action.formatDocument')?.run();
-        }
-    },
-
-    initDiffEditor: async function (elementId, originalContent, modifiedContent, isDark) {
-        await this._ensureMonacoLoaded();
-
-        const container = document.getElementById(elementId);
-        if (!container) return;
-
-        const originalModel = monaco.editor.createModel(originalContent || '', 'yaml');
-        const modifiedModel = monaco.editor.createModel(modifiedContent || '', 'yaml');
-
-        const diffEditor = monaco.editor.createDiffEditor(container, {
-            theme: isDark ? 'vs-dark' : 'vs',
-            automaticLayout: true,
-            readOnly: true,
-            renderSideBySide: true,
-            scrollBeyondLastLine: false,
-            fontSize: 14,
-            fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
-            minimap: { enabled: false },
-            scrollbar: {
-                verticalScrollbarSize: 10,
-                horizontalScrollbarSize: 10,
-                useShadows: false
-            }
-        });
-
-        diffEditor.setModel({ original: originalModel, modified: modifiedModel });
-        this._diffEditors[elementId] = { editor: diffEditor, originalModel, modifiedModel };
-    },
-
-    updateDiffEditor: function (elementId, originalContent, modifiedContent) {
-        const entry = this._diffEditors[elementId];
-        if (!entry) return;
-
-        entry.originalModel.setValue(originalContent || '');
-        entry.modifiedModel.setValue(modifiedContent || '');
-    },
-
-    disposeDiffEditor: function (elementId) {
-        const entry = this._diffEditors[elementId];
-        if (entry) {
-            entry.editor.setModel(null);
-            entry.editor.dispose();
-            entry.originalModel.dispose();
-            entry.modifiedModel.dispose();
-            delete this._diffEditors[elementId];
         }
     },
 

@@ -10,7 +10,7 @@
     <Badges>
         @if (_endpoints.Count > 0)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["EndpointsCount"], _endpoints.Count)</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["EndpointsCount"], _endpoints.Count)</NumberBadge>
         }
     </Badges>
     <ActionsContent>
@@ -32,9 +32,10 @@ else if (_endpoints.Count == 0)
 }
 else
 {
+    <OmniStack>
     @foreach (var group in FilteredGroups)
     {
-        <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-lg omni-u-mb-sm">@group.Key</OmniHeading>
+        <OmniHeading Level="OmniHeadingLevel.H5">@group.Key</OmniHeading>
         <OmniCard Class="omni-u-p-0">
             @foreach (var ep in group)
             {
@@ -49,4 +50,5 @@ else
             }
         </OmniCard>
     }
+    </OmniStack>
 }

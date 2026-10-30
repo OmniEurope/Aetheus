@@ -46,6 +46,36 @@ public partial class ReleasePickerGrid
     private Task PickCardAsync(string? version) =>
         version is null ? Task.CompletedTask : Pick.InvokeAsync(version);
 
+    // The row of the field's version, selected like the card (R-58). The list is rebuilt whenever the
+    // field's version changes, which is what makes the grid take it as its selection.
+    private IReadOnlyList<ReleaseDto> _selected = [];
+    private string? _selectedFor;
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(_selectedFor, SelectedVersion, StringComparison.Ordinal)) return;
+        _selectedFor = SelectedVersion;
+        _selected = SelectedVersion is null
+            ? []
+            : Releases.Where(release => string.Equals(release.Version, SelectedVersion, StringComparison.Ordinal)).ToList();
+    }
+
+    /// <summary>A row clicked (or its box ticked) hands its version to the field, which comes back as
+    /// <see cref="SelectedVersion"/>. Clearing the box of the chosen row would leave the field with a
+    /// version no row shows, so the selection is put back instead.</summary>
+    private async Task SelectRowsAsync(IReadOnlyList<ReleaseDto> rows)
+    {
+        var chosen = rows.LastOrDefault(release => !string.Equals(release.Version, SelectedVersion, StringComparison.Ordinal));
+        if (chosen is null)
+        {
+            _selected = [.. _selected];
+            return;
+        }
+
+        _selected = [chosen];
+        await Pick.InvokeAsync(chosen.Version);
+    }
+
     /// <summary>The grid's window (or, in a host without virtualization, its page) is cut from the loaded
     /// list here, after its sort and filters (a wrapper grid always asks through LoadData), so the header
     /// affordances act on every release, not on the rows on screen.</summary>

@@ -59,20 +59,31 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                     <div class="project-card-heading">
                         <a href="@($"/projects/{project.Id}")" class="project-card-name"
                             @onclick:stopPropagation="true">@project.Name</a>
+                        @if (project.DeletionRequestedAt is not null)
+                        {
+                            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" data-testid="project-deletion-pending">@L["ProjectDeletionPending"]</OmniBadge>
+                        }
                     </div>
                     @if (!Permissions.CanWrite(ResourceType.Project, project.Id))
                     {
                         <OmniIcon Name="OmniIconName.Lock" Class="omni-u-text-muted icon-xs-app" title="@L["Read"]" />
                     }
-                    <span class="project-card-action" @onclick:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
-                    </span>
+                    @if (project.DeletionRequestedAt is null)
+                    {
+                        <span class="project-card-action" @onclick:stopPropagation="true">
+                            <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
+                        </span>
+                    }
                 </div>
 
+                @* R-8: a project whose deletion is to be finished keeps its name and the badge only; no data block
+                   (description, production, grade, last commit, last run, tags) applies to it any more. *@
+                @if (project.DeletionRequestedAt is null)
+                {
                 @if (!string.IsNullOrWhiteSpace(project.Description))
                 {
-                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted project-card-desc">
-                        @TruncateText(project.Description, 120)
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted project-card-desc" title="@project.Description">
+                        @project.Description
                     </OmniText>
                 }
 
@@ -82,7 +93,7 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                 <div class="project-production">
                     <div class="project-production-row">
                         <span class="project-production-label">@L["Production"]</span>
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(ProductionStatusTone(project.ProductionStatus)))" Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
                     </div>
                     <div class="project-production-row">
                         <a href="@($"/projects/{project.Id}/quality")" class="project-gate-summary"
@@ -137,21 +148,22 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                         <div class="project-activity-content">
                             @if (project.LastRunId.HasValue)
                             {
+                                @* R-27: three lines, each on one line (ellipsis, full text in the tooltip): badge and run
+                                   number, pipeline name, then the step of a run in progress or the date. *@
                                 <div class="project-activity-run">
                                     @if (project.LastRunStatus is { } runStatus)
                                     {
                                         <PipelineRunStatusBadge Status="runStatus" />
                                     }
                                     <a href="@($"/pipelines/runs/{project.LastRunId}")" class="project-activity-link"
-                                        @onclick:stopPropagation="true">
-                                        #@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])
-                                    </a>
+                                        @onclick:stopPropagation="true">#@project.LastRunId</a>
                                 </div>
+                                <span class="project-activity-line project-activity-ellipsis" title="@(project.LastRunName ?? L["PipelineRun"])">@(project.LastRunName ?? L["PipelineRun"])</span>
                                 @if (project.LastRunIsActive && !string.IsNullOrWhiteSpace(project.LastRunCurrentStep))
                                 {
-                                    <span class="project-activity-line" title="@project.LastRunCurrentStep">@project.LastRunCurrentStep</span>
+                                    <span class="project-activity-line project-activity-ellipsis" title="@project.LastRunCurrentStep">@project.LastRunCurrentStep</span>
                                 }
-                                @if (project.LastRunAt.HasValue)
+                                else if (project.LastRunAt.HasValue)
                                 {
                                     <span class="project-activity-date"><OmniRelativeTime Value="@AsOffset(project.LastRunAt.Value)" /></span>
                                 }
@@ -169,13 +181,14 @@ else if (_viewMode == ProjectViewMode.Comfortable)
                     <OmniRow Gap="OmniSpacing.XSmall" Class="project-card-tags">
                         @foreach (var tag in project.Tags.Take(4))
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
                         }
                         @if (project.Tags.Count > 4)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@($"+{project.Tags.Count - 4}")</OmniBadge>
+                            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@($"+{project.Tags.Count - 4}")</NumberBadge>
                         }
                     </OmniRow>
+                }
                 }
             </OmniCard>
             </div>
@@ -199,16 +212,29 @@ else
                 @onclick="@(() => OpenProject(project.Id))"
                 @onkeydown="@((KeyboardEventArgs args) => OnProjectKeyDown(args, project.Id))">
                 <div class="project-dense-project">
-                    <span @onclick:stopPropagation="true">
-                        <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
-                    </span>
+                    @if (project.DeletionRequestedAt is null)
+                    {
+                        <span @onclick:stopPropagation="true">
+                            <OmniButton Variant="OmniButtonVariant.Ghost" OnClick="@(() => ToggleFavoriteAsync(project))" Class="@(_favoriteProjectIds.Contains(project.Id) ? "project-favorite active" : "project-favorite")" title="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" Label="@(_favoriteProjectIds.Contains(project.Id) ? L["RemoveFromFavorites"] : L["AddToFavorites"])" aria-pressed="@_favoriteProjectIds.Contains(project.Id)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_favoriteProjectIds.Contains(project.Id) ? "star" : "star_border"))" /></Icon></OmniButton>
+                        </span>
+                    }
                     <div>
                         <a href="@($"/projects/{project.Id}")" @onclick:stopPropagation="true">@project.Name</a>
-                        <span class="project-dense-description">@TruncateText(project.Description, 64)</span>
+                        @if (project.DeletionRequestedAt is not null)
+                        {
+                            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" data-testid="project-deletion-pending">@L["ProjectDeletionPending"]</OmniBadge>
+                        }
+                        @if (project.DeletionRequestedAt is null)
+                        {
+                            <span class="project-dense-description" title="@project.Description">@TruncateText(project.Description, 64)</span>
+                        }
                     </div>
                 </div>
+                @* R-8: a project whose deletion is to be finished shows its name and the badge only. *@
+                @if (project.DeletionRequestedAt is null)
+                {
                 <div>
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(ProductionStatusTone(project.ProductionStatus)))" Fill="OmniFill.Solid" Tone="@ProductionStatusTone(project.ProductionStatus)" data-testid="project-production-status">@L[$"Production{project.ProductionStatus}"]</OmniBadge>
                 </div>
                 <div>
                     <a href="@($"/projects/{project.Id}/quality")"
@@ -243,7 +269,8 @@ else
                             {
                                 <PipelineRunStatusBadge Status="denseStatus" />
                             }
-                            <a href="@($"/pipelines/runs/{project.LastRunId}")" @onclick:stopPropagation="true">
+                            <a href="@($"/pipelines/runs/{project.LastRunId}")" @onclick:stopPropagation="true"
+                               title="#@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])">
                                 #@project.LastRunId · @(project.LastRunName ?? L["PipelineRun"])
                             </a>
                         </div>
@@ -274,6 +301,7 @@ else
                         <span class="project-activity-empty">-</span>
                     }
                 </div>
+                }
             </div>
         }
     </div>

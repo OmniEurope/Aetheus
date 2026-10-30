@@ -2,6 +2,7 @@
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Data.Entities;
+using Aetheus.Back.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -54,5 +55,41 @@ public class PipelineRunPreparationExternalGitTests
         Assert.Contains(externalDefinition ? "dotnet test" : "dotnet build", result.YamlSnapshot, StringComparison.Ordinal);
         await gitCli.Received(1).ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>());
         await gitCli.Received(1).ResolveBranchCommitAsync(url, configuredBranch, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Recette R-49: the real preparation, the real template resolver and the real parser. A YAML
+    /// with an unquoted " : " is refused with a BadRequestException (HTTP 400 through the middleware, and the
+    /// controller does not catch it) whose message names the line and the column, not only the scanner's
+    /// sentence.</summary>
+    [Fact]
+    public async Task PrepareRunAsync_YamlThatIsNotYaml_IsRefusedWithTheLineAndColumn()
+    {
+        const string url = "https://github.com/example/OmniEurope.Blazor.git";
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        var repo = Substitute.For<IPipelineRepository>();
+        var gitCli = Substitute.For<IGitCliService>();
+        var pipeline = new Pipeline
+        {
+            Id = 3,
+            ProjectId = 7,
+            Project = new Project { Id = 7, RepositoryUrl = url, DefaultBranch = "develop" },
+            Name = "aetheus-deploy-prod",
+            YamlDefinition = "name: aetheus-deploy-prod\nstages: []\n"
+        };
+        repo.FindPipelineAsync(3, Arg.Any<CancellationToken>()).Returns(pipeline);
+        gitCli.ResolveBranchCommitAsync(url, "develop", Arg.Any<CancellationToken>())
+            .Returns(new GitRemoteBranch("develop", commit));
+        gitCli.ReadPipelineYamlAsync(url, commit, pipeline.Name, Arg.Any<CancellationToken>())
+            .Returns("name: aetheus-deploy-prod\ntrigger: manual\nparameters:\n  - name: scope\n    description: Diagnostic : liste\nstages: []\n");
+        var sut = new PipelineRunPreparationService(
+            repo, Substitute.For<IPipelineGitService>(), new PipelineTemplateResolver(repo),
+            Substitute.For<IPipelineRunParameterResolver>(), gitCli, Substitute.For<IPipelineWorkspaceSourceResolver>(),
+            new ConfigurationBuilder().Build(), NullLogger<PipelineRunPreparationService>.Instance);
+
+        var refusal = await Assert.ThrowsAsync<BadRequestException>(
+            () => sut.PrepareRunAsync(3, null, null, null, TestContext.Current.CancellationToken));
+
+        Assert.Contains("line 5, column", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("found invalid mapping", refusal.Message, StringComparison.Ordinal);
     }
 }

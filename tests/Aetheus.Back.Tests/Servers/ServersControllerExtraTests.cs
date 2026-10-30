@@ -35,9 +35,13 @@ public class ServersControllerExtraTests
         };
     }
 
-    private void Allow(bool value) =>
+    private void Allow(bool value)
+    {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int>(),
             Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(value);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<string>(), Arg.Any<int?>(),
+            Arg.Any<CancellationToken>()).Returns(value);
+    }
 
     [Fact]
     public async Task SetPipelineRunner_Forbidden_ReturnsForbid()

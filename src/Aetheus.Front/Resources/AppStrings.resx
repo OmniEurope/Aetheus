@@ -31,8 +31,13 @@
   <data name="Login" xml:space="preserve"><value>Login</value></data>
   <data name="PublicDemo" xml:space="preserve"><value>Public demo</value></data>
   <data name="PublicDemoFillForm" xml:space="preserve"><value>Fill in the form</value></data>
+  <data name="PublicDemoResetNotice" xml:space="preserve"><value>The demo data is reset every evening.</value></data>
   <data name="Logout" xml:space="preserve"><value>Logout</value></data>
   <data name="Username" xml:space="preserve"><value>Username</value></data>
+  <data name="LoginEmail" xml:space="preserve"><value>E-mail address</value></data>
+  <data name="EmailRequired" xml:space="preserve"><value>The e-mail address is required.</value></data>
+  <data name="EmailInvalid" xml:space="preserve"><value>Enter a valid e-mail address.</value></data>
+  <data name="UserEmailInUse" xml:space="preserve"><value>This e-mail address is already used by another account.</value></data>
   <data name="About" xml:space="preserve"><value>About</value></data>
   <data name="AboutAetheus" xml:space="preserve"><value>About Aetheus</value></data>
   <data name="Password" xml:space="preserve"><value>Password</value></data>
@@ -224,6 +229,7 @@
   <data name="DeletePipelineConfirm" xml:space="preserve"><value>Are you sure you want to delete this pipeline?</value></data>
   <data name="PipelineSaved" xml:space="preserve"><value>Pipeline updated.</value></data>
   <data name="PipelineTriggered" xml:space="preserve"><value>Pipeline triggered.</value></data>
+  <data name="PipelineLaunching" xml:space="preserve"><value>Starting the run...</value></data>
   <data name="PipelineRunFailed" xml:space="preserve"><value>Pipeline run failed.</value></data>
   <data name="PipelineRunForbidden" xml:space="preserve"><value>Not authorized: you need admin rights on the pipeline's target server(s).</value></data>
   <data name="PipelineRunFailedNoReason" xml:space="preserve"><value>The run could not be started. Check that the target server/agent is online and the pipeline configuration is valid.</value></data>
@@ -237,9 +243,14 @@
   <data name="RerunFailedSteps" xml:space="preserve"><value>Retry failed</value></data>
   <data name="RunAnyway" xml:space="preserve"><value>Run anyway</value></data>
   <data name="PreflightNoAgentTitle" xml:space="preserve"><value>No online agent</value></data>
+  <data name="ProjectValuesToFill" xml:space="preserve"><value>Values to fill before the pipelines can run</value></data>
+  <data name="PreflightNoServerTitle" xml:space="preserve"><value>No server chosen</value></data>
+  <data name="PreflightChooseServer" xml:space="preserve"><value>Choose the server</value></data>
   <data name="PreflightSessionExpired" xml:space="preserve"><value>Your session has expired. Sign in again, then retry the run.</value></data>
   <data name="PreflightForbidden" xml:space="preserve"><value>You do not have permission to run this pipeline.</value></data>
   <data name="PreflightServerError" xml:space="preserve"><value>The server could not complete the preflight check. Try again shortly.</value></data>
+  <data name="RunParametersReadFailed" xml:space="preserve"><value>The server could not read the parameters of this pipeline, so the run was not started. Try again shortly.</value></data>
+  <data name="RunParametersServerUnreachable" xml:space="preserve"><value>The server could not be reached, so the run was not started. Check your connection, then try again.</value></data>
   <data name="NoRunsYet" xml:space="preserve"><value>No runs yet. Click "Run" to trigger the first execution.</value></data>
   <data name="NoPipelinesFound" xml:space="preserve"><value>No pipelines.</value></data>
   <data name="Duration" xml:space="preserve"><value>Duration</value></data>
@@ -343,9 +354,12 @@
   <data name="Used" xml:space="preserve"><value>Used</value></data>
   <data name="Available" xml:space="preserve"><value>Available</value></data>
   <data name="Expires" xml:space="preserve"><value>Expires</value></data>
-  <data name="InvalidCredentials" xml:space="preserve"><value>Invalid username or password.</value></data>
+  <data name="InvalidCredentials" xml:space="preserve"><value>Invalid e-mail address or password.</value></data>
   <data name="ForgotPassword" xml:space="preserve"><value>Forgot password?</value></data>
-  <data name="ForgotPasswordHint" xml:space="preserve"><value>There is no self-service reset. Ask an administrator to reset your password from the Users page.</value></data>
+  <data name="ForgotPasswordHint" xml:space="preserve"><value>Type the e-mail address you sign in with: a link to choose a new password will be sent to it, valid for one hour.</value></data>
+  <data name="ForgotPasswordSend" xml:space="preserve"><value>Send the link</value></data>
+  <data name="ForgotPasswordSent" xml:space="preserve"><value>If an active account uses this address, a link to choose a new password has just been sent to it. It is valid for one hour. Check your spam folder if it does not arrive.</value></data>
+  <data name="ForgotPasswordRefused" xml:space="preserve"><value>The request was not accepted (too many requests, or the address is not valid). Try again in a few minutes.</value></data>
   <data name="Server" xml:space="preserve"><value>Server</value></data>
   <data name="Executor" xml:space="preserve"><value>Executor</value></data>
   <data name="Exit" xml:space="preserve"><value>Exit</value></data>
@@ -373,7 +387,7 @@
   <data name="RepositoryUrl" xml:space="preserve"><value>Repository URL</value></data>
   <data name="TagsCommaSeparated" xml:space="preserve"><value>Tags (comma-separated)</value></data>
   <data name="ProjectCreated" xml:space="preserve"><value>Project created.</value></data>
-  <data name="StayHere" xml:space="preserve"><value>Stay here</value></data>
+  <data name="OpenProject" xml:space="preserve"><value>Open project</value></data>
   <data name="ProjectUpdated" xml:space="preserve"><value>Project updated.</value></data>
   <data name="PipelineCreated" xml:space="preserve"><value>Pipeline created.</value></data>
   <data name="Saved" xml:space="preserve"><value>Saved</value></data>
@@ -398,9 +412,10 @@
   <data name="GitStatusUnknown" xml:space="preserve"><value>Unknown status ({0})</value></data>
   <data name="InstallCommandCopied" xml:space="preserve"><value>Install command copied.</value></data>
   <data name="GridLoadFailed" xml:space="preserve"><value>Failed to load data. The server may be unreachable.</value></data>
-  <data name="UpstreamLineage" xml:space="preserve"><value>Cascade lineage</value></data>
   <data name="ParentPipeline" xml:space="preserve"><value>Parent pipeline</value></data>
   <data name="RunLineage" xml:space="preserve"><value>Lineage</value></data>
+  <data name="RunDeployedAddress" xml:space="preserve"><value>Deployed at</value></data>
+  <data name="RunDeployedApi" xml:space="preserve"><value>API</value></data>
   <data name="RunLiveUpdates" xml:space="preserve"><value>Live updates</value></data>
   <data name="RunTiming" xml:space="preserve"><value>Timing</value></data>
   <data name="RunTileCount" xml:space="preserve"><value>Count</value></data>
@@ -408,9 +423,7 @@
   <data name="RunLaunchedAutomatically" xml:space="preserve"><value>Automatic</value></data>
   <data name="RunStarted" xml:space="preserve"><value>Started</value></data>
   <data name="RunFollowUps" xml:space="preserve"><value>Runs launched after this one</value></data>
-  <data name="RunTriggeredByUpstream" xml:space="preserve"><value>Triggered by {0}</value></data>
   <data name="UpstreamChainDepth" xml:space="preserve"><value>chain · depth {0}</value></data>
-  <data name="UpstreamChainDepthHint" xml:space="preserve"><value>Number of upstream pipelines in this cascade chain.</value></data>
   <data name="Retention:LogDays" xml:space="preserve"><value>System log retention (days)</value></data>
   <data name="ConnectionLost" xml:space="preserve"><value>Connection lost</value></data>
   <data name="ConnectionLostDescription" xml:space="preserve"><value>The connection to the server was lost. Trying to reconnect automatically.</value></data>
@@ -461,6 +474,8 @@
   <data name="ResourceUnusedHint" xml:space="preserve"><value>No pipeline definition or application the instance knows of reads this. A mention in a definition does not prove a run reads a value, and a pipeline kept outside the instance is not seen.</value></data>
   <data name="ResourceUsageRestrictedPipeline" xml:space="preserve"><value>A pipeline you cannot read</value></data>
   <data name="ResourceUsageWebAnalytics" xml:space="preserve"><value>{0} (web analytics)</value></data>
+  <data name="ResourceUsageDialogTitle" xml:space="preserve"><value>Used by</value></data>
+  <data name="ResourceUsageCountLabel" xml:space="preserve"><value>{0} users, show the list</value></data>
   <data name="VaultCreated" xml:space="preserve"><value>Vault created.</value></data>
   <data name="VaultSaved" xml:space="preserve"><value>Vault updated.</value></data>
   <data name="DeleteVaultConfirm" xml:space="preserve"><value>Are you sure you want to delete this vault?</value></data>
@@ -495,6 +510,20 @@
   <data name="Reject" xml:space="preserve"><value>Reject</value></data>
   <data name="ApprovalDecisionFailed" xml:space="preserve"><value>The approval decision was not applied.</value></data>
   <data name="ApprovalDecisionFailedStatus" xml:space="preserve"><value>The server answered {0} without giving a reason.</value></data>
+  <data name="ApprovalLinkTitle" xml:space="preserve"><value>Approval</value></data>
+  <data name="ApprovalLinkRunCrumb" xml:space="preserve"><value>Run #{0}</value></data>
+  <data name="ApprovalLinkUnavailableTitle" xml:space="preserve"><value>Approval unavailable</value></data>
+  <data name="ApprovalLinkUnavailable" xml:space="preserve"><value>This approval does not exist for this run, or you cannot read this pipeline.</value></data>
+  <data name="ApprovalLinkApproved" xml:space="preserve"><value>Approval recorded: the run resumes.</value></data>
+  <data name="ApprovalLinkRejected" xml:space="preserve"><value>Rejection recorded: the run stops.</value></data>
+  <data name="ApprovalLinkAlreadyDecided" xml:space="preserve"><value>This approval no longer awaits a decision</value></data>
+  <data name="ApprovalLinkStage" xml:space="preserve"><value>Stage {0}</value></data>
+  <data name="ApprovalLinkStageEnvironment" xml:space="preserve"><value>Stage {0}, environment {1}</value></data>
+  <data name="ApprovalLinkStatusPending" xml:space="preserve"><value>Awaiting decision</value></data>
+  <data name="ApprovalLinkStatusApproved" xml:space="preserve"><value>Approved</value></data>
+  <data name="ApprovalLinkStatusRejected" xml:space="preserve"><value>Rejected</value></data>
+  <data name="ApprovalLinkStatusTimedOut" xml:space="preserve"><value>Expired</value></data>
+  <data name="ApprovalLinkDecidedBy" xml:space="preserve"><value>{0} by {1} on {2}</value></data>
   <data name="SecretUpdated" xml:space="preserve"><value>Secret updated.</value></data>
   <data name="SecretRotated" xml:space="preserve"><value>Secret rotated.</value></data>
   <data name="RotateSecretConfirm" xml:space="preserve"><value>Rotate the value of secret '{0}'? A new version will be recorded.</value></data>
@@ -579,8 +608,8 @@
   <data name="VarsCount" xml:space="preserve"><value>Variables ({0})</value></data>
   <data name="Versions" xml:space="preserve"><value>Versions</value></data>
   <data name="WarningsCount" xml:space="preserve"><value>Warnings ({0})</value></data>
-  <data name="RunNoticeBaselineAbsent" xml:space="preserve"><value>First release of this project: no earlier version exists to compare with or to test a rollback. These checks are skipped for this run.</value></data>
-  <data name="RunNoticeBaselineAbsentHelp" xml:space="preserve"><value>The baseline is the last version already deployed: it is used to compare the result of the run and to test a rollback. This project has no earlier release yet, so nothing was restored. Consequence: the Baseline step and the restore of the previous version in QA are skipped for this run. Harmless for a first release; to watch from the next one.</value></data>
+  <data name="RunNoticeBaselineAbsent" xml:space="preserve"><value>No release of another commit has been deployed: there is nothing to compare with or to restore to test a rollback. These checks are skipped for this run.</value></data>
+  <data name="RunNoticeBaselineAbsentHelp" xml:space="preserve"><value>The baseline is the last release deployed (or since superseded) whose artifact comes from another commit than the one tested: it is used to compare the result of the run and to test a rollback. None exists yet: a release that was only published, whose deployment failed, or a release of the same commit does not count. Consequence: the Baseline step and the restore of the previous version in QA are skipped for this run. They come back as soon as a release of another commit has been deployed.</value></data>
   <data name="RunNoticeResumeWindowExpired" xml:space="preserve"><value>No resume was asked for before the deadline: the run ended with the previous version still in service, and this release was not recorded as deployed.</value></data>
   <data name="RunAwaitingResumeTitle" xml:space="preserve"><value>Deployment rolled back, waiting for a resume</value></data>
   <data name="RunAwaitingResumeDetail" xml:space="preserve"><value>The confirmation was not given in time: the deployment went back to the previous version, which is still in service. Resume replays the switch with the same build and opens a new confirmation window. Without a resume or a cancellation before {0}, the run ends and this release is not recorded as deployed.</value></data>
@@ -767,6 +796,7 @@
   <data name="StepStopAgentSessionReplaced" xml:space="preserve"><value>The agent's session was replaced while the step was running (the agent or its server restarted). The step is not replayed automatically.</value></data>
   <data name="StepStopInfrastructureMismatch" xml:space="preserve"><value>The server cannot run this step: its environment or configuration does not match what the step needs.</value></data>
   <data name="StepStopToolError" xml:space="preserve"><value>A tool of the step failed or could not run.</value></data>
+  <data name="StepStopConfigurationIncomplete" xml:space="preserve"><value>A value the step needs is missing or empty. It is not a server problem: define each variable named below in a variable library, a vault or an environment.</value></data>
   <data name="StepStopBuildFailed" xml:space="preserve"><value>The build failed.</value></data>
   <data name="StepStopTestsFailed" xml:space="preserve"><value>Tests failed.</value></data>
   <data name="StepStopAgentIncompatible" xml:space="preserve"><value>The server's agent cannot run this step: its version or one of its capabilities is missing.</value></data>
@@ -849,6 +879,18 @@
   <data name="AgentUpdateFailed" xml:space="preserve"><value>Agent update failed</value></data>
   <data name="AgentUpdateInProgressTo" xml:space="preserve"><value>Update in progress to {0}</value></data>
   <data name="AgentUpdateFailedWithReason" xml:space="preserve"><value>Agent update failed: {0}</value></data>
+  <data name="AgentUpdateDiag_ManifestInvalid" xml:space="preserve"><value>The release manifest is invalid.</value></data>
+  <data name="AgentUpdateDiag_QualifiedManifestRequired" xml:space="preserve"><value>A qualified release is required for this update.</value></data>
+  <data name="AgentUpdateDiag_DownloadFailed" xml:space="preserve"><value>Downloading the new version failed.</value></data>
+  <data name="AgentUpdateDiag_ExtractionFailed" xml:space="preserve"><value>The new version&apos;s archive could not be extracted.</value></data>
+  <data name="AgentUpdateDiag_PayloadInvalid" xml:space="preserve"><value>The staged files of the new version are invalid.</value></data>
+  <data name="AgentUpdateDiag_CapabilityRequestRefused" xml:space="preserve"><value>The server refused the request for new permissions.</value></data>
+  <data name="AgentUpdateDiag_PostureSupervisorMissing" xml:space="preserve"><value>The Linux integration upgrade supervisor is missing or obsolete.</value></data>
+  <data name="AgentUpdateDiag_ConfirmationTimeout" xml:space="preserve"><value>The agent did not confirm its new version before the deadline.</value></data>
+  <data name="AgentUpdateDiag_TaskTimeout" xml:space="preserve"><value>The update task did not reach handoff before its deadline.</value></data>
+  <data name="AgentUpdateDiag_WrongVersion" xml:space="preserve"><value>Expected version {0}, received {1}.</value></data>
+  <data name="AgentUpdateDiag_UnsupportedProtocol" xml:space="preserve"><value>Unsupported agent protocol: {0}.</value></data>
+  <data name="AgentUpdateDiag_MissingCapabilities" xml:space="preserve"><value>Missing expected capabilities: {0}.</value></data>
   <data name="AgentUpdateCheckingHint" xml:space="preserve"><value>No news from the update for a while, checking its actual state…</value></data>
   <data name="AgentUpdateRestartingHint" xml:space="preserve"><value>Waiting for the agent to come back online…</value></data>
   <data name="AgentUpdateDoneHint" xml:space="preserve"><value>Agent restarted on v{0}.</value></data>
@@ -965,7 +1007,6 @@
   <data name="TasksPlanned" xml:space="preserve"><value>Preview - {0} task(s) planned</value></data>
   <data name="ConfigExported" xml:space="preserve"><value>Configuration exported successfully.</value></data>
   <data name="ConfigExportFailed" xml:space="preserve"><value>Failed to export configuration.</value></data>
-  <data name="ConfigCopied" xml:space="preserve"><value>Copied to clipboard.</value></data>
   <data name="ConfigPreviewFailed" xml:space="preserve"><value>Failed to generate preview.</value></data>
   <data name="ConfigDeploySuccess" xml:space="preserve"><value>{0} task(s) created for deployment.</value></data>
   <data name="ConfigDeployFailed" xml:space="preserve"><value>Failed to deploy configuration.</value></data>
@@ -981,6 +1022,7 @@
   <data name="MainNavigation" xml:space="preserve"><value>Main navigation</value></data>
   <data name="SaveFailed" xml:space="preserve"><value>Save failed. Please try again.</value></data>
   <data name="DeleteFailed" xml:space="preserve"><value>Delete failed. Please try again.</value></data>
+  <data name="OrganizationLastOwner" xml:space="preserve"><value>An organization keeps at least one Owner (Organization Admin): promote another member first.</value></data>
   <data name="ValidationError" xml:space="preserve"><value>Validation Error</value></data>
   <data name="SecretFieldsRequired" xml:space="preserve"><value>Both key and value are required.</value></data>
   <data name="Timestamp" xml:space="preserve"><value>Timestamp</value></data>
@@ -996,7 +1038,10 @@
   <data name="AuditAction_Created" xml:space="preserve"><value>Created</value></data>
   <data name="AuditAction_Updated" xml:space="preserve"><value>Updated</value></data>
   <data name="AuditAction_Deleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="AuditAction_DeletionPendingCleanup" xml:space="preserve"><value>Project deletion waiting for its cleanup</value></data>
+  <data name="AuditAction_ServerResourcesRemovalQueued" xml:space="preserve"><value>Server resources removal started</value></data>
   <data name="AuditAction_NextReleaseNumberSet" xml:space="preserve"><value>Next release number set</value></data>
+  <data name="AuditAction_ProductionServerAttached" xml:space="preserve"><value>Production server attached</value></data>
   <data name="AuditAction_ProductionEnvSampleRepaired" xml:space="preserve"><value>Production environment sample corrected</value></data>
   <data name="AuditAction_TaskRefusedAgentIncompatible" xml:space="preserve"><value>Task refused: incompatible agent</value></data>
   <data name="Enum_ReleaseStatus_Detected" xml:space="preserve"><value>Detected</value></data>
@@ -1203,6 +1248,7 @@
   <data name="RoleAdminDescription" xml:space="preserve"><value>Full access</value></data>
   <data name="RoleReaderDescription" xml:space="preserve"><value>Read access to all resources</value></data>
   <data name="RoleContributorDescription" xml:space="preserve"><value>Read and write access to all resources</value></data>
+  <data name="RoleOrganizationAdminDescription" xml:space="preserve"><value>Full access to the resources of its organization, and management of its members</value></data>
   <data name="NewDashboardNamePrompt" xml:space="preserve"><value>Enter a name for the new dashboard:</value></data>
   <data name="Validation_Required" xml:space="preserve"><value>The {0} field is required.</value></data>
   <data name="Validation_MaxLength" xml:space="preserve"><value>The field {0} must have a maximum length of {1} characters.</value></data>
@@ -1236,14 +1282,12 @@
   <data name="Sites" xml:space="preserve"><value>Sites</value></data>
   <data name="SitesEnabled" xml:space="preserve"><value>Sites enabled</value></data>
   <data name="SitesDisabled" xml:space="preserve"><value>Sites disabled</value></data>
-  <data name="FilterSites" xml:space="preserve"><value>Filter sites...</value></data>
   <data name="ApacheCollectionDegraded" xml:space="preserve"><value>Apache data may be incomplete</value></data>
   <data name="ApacheCollectionDegradedHint" xml:space="preserve"><value>The agent could not fully read the Apache configuration, so the sites and modules below may be empty or out of date - they are not a reliable picture of the server.</value></data>
   <data name="ServerName" xml:space="preserve"><value>Server Name</value></data>
   <data name="EditConfig" xml:space="preserve"><value>Configure</value></data>
   <data name="LoadingConfig" xml:space="preserve"><value>Loading configuration...</value></data>
   <data name="Modules" xml:space="preserve"><value>Modules</value></data>
-  <data name="FilterModules" xml:space="preserve"><value>Filter modules...</value></data>
   <data name="DisableModule" xml:space="preserve"><value>Disable Module</value></data>
   <data name="ConfirmDisableModule" xml:space="preserve"><value>Are you sure you want to disable module {0}?</value></data>
   <data name="FollowLogs" xml:space="preserve"><value>Follow</value></data>
@@ -1288,11 +1332,11 @@
   <data name="ReleaseGateRejected" xml:space="preserve"><value>Rejected</value></data>
   <data name="ReleaseGateWarningRejected" xml:space="preserve"><value>The Gate rejected this release. You can still deploy it, but make sure it is the one you want.</value></data>
   <data name="ReleaseGateWarningGradeF" xml:space="preserve"><value>This release graded F. You can still deploy it, but make sure it is the one you want.</value></data>
-  <data name="Redeploy" xml:space="preserve"><value>Redeploy</value></data>
-  <data name="RedeployConfirm" xml:space="preserve"><value>Redeploy {0}, the release deployed before the current one? The deployment pipeline runs with its gate and approval.</value></data>
+  <data name="Redeploy" xml:space="preserve"><value>Redeploy this version</value></data>
+  <data name="NoDeployPipelineFound" xml:space="preserve"><value>This project has no deployment pipeline that takes a version.</value></data>
   <data name="RevertToPrevious" xml:space="preserve"><value>Return to N-1</value></data>
   <data name="RevertToPreviousConfirm" xml:space="preserve"><value>Put traffic back on the release deployed before {0}? The previous colour is still running: nothing is rebuilt or migrated, and the same action returns to {0}.</value></data>
-  <data name="RedeployUnavailable" xml:space="preserve"><value>Cannot be redeployed from here: no sealed assurance contract, no retained artifacts, or no deployment pipeline taking a candidate version.</value></data>
+  <data name="RedeployNoArtifact" xml:space="preserve"><value>This version can no longer be redeployed: its artifacts are no longer kept.</value></data>
   <data name="PreflightRecordTitle" xml:space="preserve"><value>Verified before this run started</value></data>
   <data name="RunWaitingTitle" xml:space="preserve"><value>This run is waiting</value></data>
   <data name="RunWaitingSince" xml:space="preserve"><value>waiting for</value></data>
@@ -1354,9 +1398,11 @@
   <data name="NoRecentCommits" xml:space="preserve"><value>No recent commits.</value></data>
   <data name="Certbot" xml:space="preserve"><value>Certbot</value></data>
   <data name="Certificates" xml:space="preserve"><value>Certificates</value></data>
-  <data name="CertificateCount" xml:space="preserve"><value>{0} certificate(s)</value></data>
   <data name="CertName" xml:space="preserve"><value>Certificate Name</value></data>
   <data name="Domains" xml:space="preserve"><value>Domains</value></data>
+  <data name="CertbotDomainsBadge" xml:space="preserve"><value>{0} domains</value></data>
+  <data name="CertbotDomainsBadgeLabel" xml:space="preserve"><value>{0} domains, show the list</value></data>
+  <data name="CertbotDomainsDialogTitle" xml:space="preserve"><value>Domains of {0}</value></data>
   <data name="Expiry" xml:space="preserve"><value>Expiry</value></data>
   <data name="ExpiringSoon" xml:space="preserve"><value>Expiring Soon</value></data>
   <data name="Renew" xml:space="preserve"><value>Renew</value></data>
@@ -1386,7 +1432,6 @@
   <data name="NewCertificate" xml:space="preserve"><value>New Certificate</value></data>
   <data name="UseWebroot" xml:space="preserve"><value>Use Webroot</value></data>
   <data name="WebrootPath" xml:space="preserve"><value>Webroot Path</value></data>
-  <data name="FilterCertificates" xml:space="preserve"><value>Filter certificates...</value></data>
   <data name="ServiceStatusRunning" xml:space="preserve"><value>Running</value></data>
   <data name="ServiceStatusStopped" xml:space="preserve"><value>Stopped</value></data>
   <data name="ServiceStatusFailed" xml:space="preserve"><value>Failed</value></data>
@@ -1463,6 +1508,7 @@
   <data name="Unknown" xml:space="preserve"><value>Unknown</value></data>
   <data name="RkhunterStatusClean" xml:space="preserve"><value>Clean</value></data>
   <data name="RkhunterStatusUnknown" xml:space="preserve"><value>Unknown status ({0})</value></data>
+  <data name="RkhunterStatusNone" xml:space="preserve"><value>No scan yet</value></data>
   <data name="TargetBranch" xml:space="preserve"><value>Target Branch</value></data>
   <data name="MergeConfirm" xml:space="preserve"><value>Are you sure you want to merge PR #{0}?</value></data>
   <data name="CloseConfirm" xml:space="preserve"><value>Are you sure you want to close PR #{0}?</value></data>
@@ -1504,7 +1550,6 @@
   <data name="PermissionLevel" xml:space="preserve"><value>Permission level</value></data>
   <data name="EffectivePermissions" xml:space="preserve"><value>Effective Permissions</value></data>
   <data name="NoPermissionsAssigned" xml:space="preserve"><value>No permissions assigned</value></data>
-  <data name="RoleAssignmentHint" xml:space="preserve"><value>Search and page through all roles without loading the complete collection.</value></data>
   <data name="SearchRoles" xml:space="preserve"><value>Search roles...</value></data>
   <data name="AssignedRolesOnly" xml:space="preserve"><value>Assigned only</value></data>
   <data name="SelectedRoles" xml:space="preserve"><value>Selected roles</value></data>
@@ -1512,6 +1557,7 @@
   <data name="GrantedByRole" xml:space="preserve"><value>Granted by</value></data>
   <data name="AgentPool" xml:space="preserve"><value>Agent Pool</value></data>
   <data name="ServiceConnection" xml:space="preserve"><value>Service Connection</value></data>
+  <data name="PipelineTemplate" xml:space="preserve"><value>Pipeline template</value></data>
   <data name="ServiceConnections" xml:space="preserve"><value>Service Connections</value></data>
   <data name="ConnectionStatus" xml:space="preserve"><value>Status</value></data>
   <data name="TestConnection" xml:space="preserve"><value>Test</value></data>
@@ -1646,6 +1692,12 @@
   <data name="Unban" xml:space="preserve"><value>Unban</value></data>
   <data name="ConfirmUnban" xml:space="preserve"><value>Remove ban #{0}?</value></data>
   <data name="PortsentrySetup" xml:space="preserve"><value>Install</value></data>
+  <data name="PortsentryMode_tcp" xml:space="preserve"><value>Classic TCP detection</value></data>
+  <data name="PortsentryMode_udp" xml:space="preserve"><value>Classic UDP detection</value></data>
+  <data name="PortsentryMode_stcp" xml:space="preserve"><value>Stealth TCP detection</value></data>
+  <data name="PortsentryMode_sudp" xml:space="preserve"><value>Stealth UDP detection</value></data>
+  <data name="PortsentryMode_atcp" xml:space="preserve"><value>Advanced TCP detection</value></data>
+  <data name="PortsentryMode_audp" xml:space="preserve"><value>Advanced UDP detection</value></data>
   <data name="Mode" xml:space="preserve"><value>Mode</value></data>
   <data name="BlockedIps" xml:space="preserve"><value>blocked IPs</value></data>
   <data name="BlockedAt" xml:space="preserve"><value>Blocked At</value></data>
@@ -1721,6 +1773,7 @@
   <data name="Organizations" xml:space="preserve"><value>Organizations</value></data>
   <data name="OrganizationManagement" xml:space="preserve"><value>Organization Management</value></data>
   <data name="ActiveOrganization" xml:space="preserve"><value>Active organization</value></data>
+  <data name="AppMenuOfUser" xml:space="preserve"><value>{0}, application menu</value></data>
   <data name="AllOrganizations" xml:space="preserve"><value>All organizations</value></data>
   <data name="NewOrganization" xml:space="preserve"><value>New Organization</value></data>
   <data name="EditOrganization" xml:space="preserve"><value>Edit Organization</value></data>
@@ -2061,10 +2114,7 @@
   <data name="AppHealthNeverProbed" xml:space="preserve"><value>Never probed</value></data>
   <data name="AppThrottled" xml:space="preserve"><value>Throttled</value></data>
   <data name="AppThrottledHint" xml:space="preserve"><value>This app's telemetry is being capped by ingestion limits (dropped data points).</value></data>
-  <data name="MonitoredAppOverview" xml:space="preserve"><value>Application overview</value></data>
-  <data name="MonitoredAppNotFound" xml:space="preserve"><value>Monitored application not found</value></data>
   <data name="LastChecked" xml:space="preserve"><value>Last checked</value></data>
-  <data name="BackToMonitoring" xml:space="preserve"><value>Back to monitoring</value></data>
   <data name="Telemetry" xml:space="preserve"><value>Telemetry</value></data>
   <data name="Metrics" xml:space="preserve"><value>Metrics</value></data>
   <data name="Visitors" xml:space="preserve"><value>Visitors</value></data>
@@ -2128,6 +2178,10 @@
   <data name="ReviewPipelineChange" xml:space="preserve"><value>Review pipeline change</value></data>
   <data name="CommitBranch" xml:space="preserve"><value>Commit branch</value></data>
   <data name="PipelineSaveCommitPreview" xml:space="preserve"><value>Saving commits this definition to the selected branch before updating the pipeline.</value></data>
+  <data name="PipelineSaveRepositoryLoading" xml:space="preserve"><value>Reading the definition file in the repository...</value></data>
+  <data name="PipelineSaveRepositoryUnreadable" xml:space="preserve"><value>The definition file in the repository could not be read. If it changed since Aetheus last synced it, the save is refused rather than overwriting it.</value></data>
+  <data name="PipelineSaveRepositoryFileKept" xml:space="preserve"><value>The definition is not edited: the file in the repository on this branch is kept as it is and no commit is made. Aetheus replaces its own copy with the repository file and saves the settings only.</value></data>
+  <data name="PipelineSaveRepositoryChanged" xml:space="preserve"><value>The file in the repository changed since Aetheus last synced it. The comparison below is against that current file: saving replaces it with your definition.</value></data>
   <data name="RunWithOptions" xml:space="preserve"><value>Options</value></data>
   <data name="AvailableReleases" xml:space="preserve"><value>Available releases</value></data>
   <data name="AvailableReleasesClickToFill" xml:space="preserve"><value>Available releases (click to fill the version)</value></data>
@@ -2265,6 +2319,11 @@
   <data name="Deprecation" xml:space="preserve"><value>Deprecation</value></data>
   <data name="PackageVersionDeprecated" xml:space="preserve"><value>Deprecated</value></data>
   <data name="PackageVersionNotDeprecated" xml:space="preserve"><value>Not deprecated</value></data>
+  <data name="AnonymousDownload" xml:space="preserve"><value>Anonymous download</value></data>
+  <data name="AnonymousDownloadDescription" xml:space="preserve"><value>Lets a client without a token read this package (version list, metadata, archive), for example a deploy image build on an agent. Publishing stays reserved to administrators.</value></data>
+  <data name="AnonymousDownloadAllowed" xml:space="preserve"><value>Public</value></data>
+  <data name="AnonymousDownloadOff" xml:space="preserve"><value>Token required</value></data>
+  <data name="PackageAccess" xml:space="preserve"><value>Access</value></data>
   <data name="PackageRegistryAddresses" xml:space="preserve"><value>Addresses</value></data>
   <data name="NoWebAnalyticsDataYet" xml:space="preserve"><value>No audience data yet</value></data>
   <data name="UniqueVisitorsThisWeek" xml:space="preserve"><value>Unique visitors this week</value></data>
@@ -2278,8 +2337,7 @@
   <data name="P95BrowserNavigationDuration" xml:space="preserve"><value>P95 browser navigation</value></data>
   <data name="BrowserErrorsLast30Days" xml:space="preserve"><value>Browser errors (30 days)</value></data>
   <data name="LastAnalyticsIngest" xml:space="preserve"><value>Last event received: {0}</value></data>
-  <data name="NoAnalyticsIngestYet" xml:space="preserve"><value>No event has been received yet.</value></data>
-  <data name="AudienceDailyTitle" xml:space="preserve"><value>Daily audience over the last 30 days</value></data>
+  <data name="AudienceDailyTitle" xml:space="preserve"><value>Daily audience, one week at a time</value></data>
   <data name="AudienceDailyCaption" xml:space="preserve"><value>Line: unique visitors per day. Columns: pages viewed per day. UTC days, both on the same count axis.</value></data>
   <data name="AudienceDailyValueAxis" xml:space="preserve"><value>Count per day</value></data>
   <data name="AudienceDailyCategoryAxis" xml:space="preserve"><value>Day (UTC, MM-DD)</value></data>
@@ -2311,6 +2369,7 @@
   <data name="EmptyEnvironmentsHint" xml:space="preserve"><value>Create an environment to group deployment targets and approvals.</value></data>
   <data name="EmptyMonitoredAppsHint" xml:space="preserve"><value>Add an application to monitor its availability and response time.</value></data>
   <data name="NoProjectServers" xml:space="preserve"><value>No server is attached to this project.</value></data>
+  <data name="ProjectServerViaEnvironment" xml:space="preserve"><value>via the environment {0}</value></data>
   <data name="EmptyProjectServersHint" xml:space="preserve"><value>Attach an agent server or declare an external host.</value></data>
   <data name="AddServer" xml:space="preserve"><value>Add a server</value></data>
   <data name="ProjectGettingStartedTitle" xml:space="preserve"><value>Get this project ready</value></data>
@@ -2426,7 +2485,8 @@
   <data name="AnalysisGlobalGrade" xml:space="preserve"><value>Global application grade</value></data>
   <data name="ProjectGradeLatestCandidate" xml:space="preserve"><value>Grade of the latest candidate (run #{0})</value></data>
   <data name="AnalysisGradeNotConfigured" xml:space="preserve"><value>No A–F grading profile is configured yet.</value></data>
-  <data name="AnalysisGradeIncomplete" xml:space="preserve"><value>Required evidence is incomplete; no misleading grade is shown.</value></data>
+  <data name="AnalysisGradeNoMeasure" xml:space="preserve"><value>No measure yet</value></data>
+  <data name="AnalysisGradePartial" xml:space="preserve"><value>Grade computed on the measures available: {0} required measure(s) not measured, see the detail below.</value></data>
   <data name="AnalysisGateIncompleteTitle" xml:space="preserve"><value>Analysis gate incomplete</value></data>
   <data name="AnalysisGateIncompleteDetail" xml:space="preserve"><value>Evidence could not be loaded for pipeline run(s) {0}. The displayed gate is incomplete and must not be treated as passed.</value></data>
   <data name="UserRolesSavedPermissionRefreshUnauthorized" xml:space="preserve"><value>Roles were saved, but your effective permissions could not be refreshed because your session must be renewed.</value></data>
@@ -2445,6 +2505,7 @@
   <data name="AnalysisCriterionDuplication" xml:space="preserve"><value>The share of duplicated code lines. The lower, the better.</value></data>
   <data name="AnalysisCriterionCycles" xml:space="preserve"><value>The number of dependency cycles between projects. Each cycle makes the code harder to change; zero is the goal.</value></data>
   <data name="AnalysisCriterionVulnerabilities" xml:space="preserve"><value>The number of open vulnerabilities of this severity. The fewer, the better.</value></data>
+  <data name="AnalysisCriterionSeverityFindings" xml:space="preserve"><value>The number of open findings of this severity. The fewer, the better: a single open finding already costs the A.</value></data>
   <data name="AnalysisCriterionFindings" xml:space="preserve"><value>The number of open findings, weighted by severity: the more serious, the more it counts. Findings that were decided (accepted, false positive, mitigated) do not count.</value></data>
   <data name="AnalysisCriterionGeneric" xml:space="preserve"><value>A measure graded against the thresholds of the project's grading policy.</value></data>
   <data name="AnalysisGradeThresholdsHigher" xml:space="preserve"><value>Thresholds, higher is better: {0}</value></data>
@@ -2456,6 +2517,13 @@
   <data name="AnalysisCriticalVulnerabilities" xml:space="preserve"><value>Critical vulnerabilities</value></data>
   <data name="AnalysisHighVulnerabilities" xml:space="preserve"><value>High-severity vulnerabilities</value></data>
   <data name="AnalysisMediumVulnerabilities" xml:space="preserve"><value>Medium-severity vulnerabilities</value></data>
+  <data name="AnalysisLowVulnerabilities" xml:space="preserve"><value>Low-severity vulnerabilities</value></data>
+  <data name="AnalysisInfoFindings" xml:space="preserve"><value>Informational findings</value></data>
+  <data name="AnalysisArchitectureCritical" xml:space="preserve"><value>Critical architecture findings</value></data>
+  <data name="AnalysisArchitectureHigh" xml:space="preserve"><value>High-severity architecture findings</value></data>
+  <data name="AnalysisArchitectureMedium" xml:space="preserve"><value>Medium-severity architecture findings</value></data>
+  <data name="AnalysisArchitectureLow" xml:space="preserve"><value>Low-severity architecture findings</value></data>
+  <data name="AnalysisArchitectureInfo" xml:space="preserve"><value>Informational architecture findings</value></data>
   <data name="AnalysisOpenFindingCount" xml:space="preserve"><value>Open findings</value></data>
   <data name="AnalysisCriticalFindingNotDeliverable" xml:space="preserve"><value>An open critical finding gives F: not deliverable.</value></data>
   <data name="AnalysisTestedLines" xml:space="preserve"><value>Lines covered by tests</value></data>
@@ -2467,7 +2535,6 @@
   <data name="AnalysisCrapExplanation" xml:space="preserve"><value>Risk indicator combining code complexity and insufficient test coverage; lower is better.</value></data>
   <data name="AnalysisAdvisory" xml:space="preserve"><value>Advisory</value></data>
   <data name="AnalysisDistanceToGrade" xml:space="preserve"><value>{0} to reach grade {1}</value></data>
-  <data name="Incomplete" xml:space="preserve"><value>Incomplete</value></data>
   <data name="Performance" xml:space="preserve"><value>Performance</value></data>
   <data name="GitPatchTruncated" xml:space="preserve"><value>This patch was truncated to keep the page responsive.</value></data>
   <data name="GitMergeDiffFirstParent" xml:space="preserve"><value>This merge commit diff is compared with its first parent.</value></data>
@@ -2546,8 +2613,6 @@
   <data name="FileCountLine" xml:space="preserve"><value>Number of files: {0} of {1} ({2}% used)</value></data>
   <data name="FileCountHelp" xml:space="preserve"><value>A disk can be full of small files even when space is free: every file takes one entry of a table of fixed size, and nothing can be written once that table is full.</value></data>
   <data name="OomKillsSinceBoot" xml:space="preserve"><value>Out-of-memory kills since boot: {0}</value></data>
-  <data name="OomKillsUnknown" xml:space="preserve"><value>Out-of-memory kills: unknown</value></data>
-  <data name="OomKillsNotApplicable" xml:space="preserve"><value>Out-of-memory kills: not applicable</value></data>
   <data name="PipelineCatalogTab" xml:space="preserve"><value>Catalog</value></data>
   <data name="PipelineView" xml:space="preserve"><value>Pipelines view</value></data>
   <data name="PipelineNeverRun" xml:space="preserve"><value>Never run</value></data>
@@ -2557,13 +2622,10 @@
   <data name="AnalysisGateShowDecided" xml:space="preserve"><value>Show the {0} findings already decided on</value></data>
   <data name="AnalysisGateFindings" xml:space="preserve"><value>Findings</value></data>
   <data name="AnalysisGateNewFindings" xml:space="preserve"><value>New findings</value></data>
-  <data name="AnalysisGateLine" xml:space="preserve"><value>Line</value></data>
   <data name="AnalysisGateNewBadge" xml:space="preserve"><value>New</value></data>
   <data name="AnalysisGateOpenFinding" xml:space="preserve"><value>Open finding details</value></data>
-  <data name="AnalysisFindingsReport" xml:space="preserve"><value>Findings report</value></data>
   <data name="AnalysisNoFindings" xml:space="preserve"><value>No findings</value></data>
   <data name="AnalysisNoFindingsDescription" xml:space="preserve"><value>The gate did not report any finding for this run.</value></data>
-  <data name="AnalysisFindingsReportDescription" xml:space="preserve"><value>A readable report grouped by analysis category and ordered by severity.</value></data>
   <data name="AnalysisGateStatusPassed" xml:space="preserve"><value>Passed</value></data>
   <data name="AnalysisGateStatusWarning" xml:space="preserve"><value>Warning</value></data>
   <data name="AnalysisGateStatusBlocked" xml:space="preserve"><value>Rejected</value></data>
@@ -2572,6 +2634,14 @@
   <data name="GateRejectedGeneric" xml:space="preserve"><value>The Gate is rejected: at least one blocking rule is crossed (see the findings below).</value></data>
   <data name="GateRejectedGradeNote" xml:space="preserve"><value>The Gate grade only covers the required domains: it does not say whether a blocking rule is crossed. For a candidate, this rejection counts as F in its sealed contract.</value></data>
   <data name="GateDomainNotRequired" xml:space="preserve"><value>Not required for the grade</value></data>
+  <data name="GradeMeasureNotCounted" xml:space="preserve"><value>Not counted in the grade</value></data>
+  <data name="GradeMeasureNotMeasured" xml:space="preserve"><value>Not measured</value></data>
+  <data name="GradeMeasureRejected" xml:space="preserve"><value>Rule rejected</value></data>
+  <data name="AnalysisGradingBlock" xml:space="preserve"><value>Grading block (analysis_grading)</value></data>
+  <data name="GradeMeasureMissingStep" xml:space="preserve"><value>Evidence expected from the step:</value></data>
+  <data name="GradeMeasureMissingDetail" xml:space="preserve"><value>The grade requires this measure and no evidence was published for it in this run. The grade is the one of the measures available; it takes this one into account as soon as its evidence is published.</value></data>
+  <data name="GateFindingsByDomain" xml:space="preserve"><value>of which</value></data>
+  <data name="GateFindingsInDomain" xml:space="preserve"><value>in</value></data>
   <data name="AnalysisGateStatusError" xml:space="preserve"><value>Error</value></data>
   <data name="AnalysisSeverityNone" xml:space="preserve"><value>None</value></data>
   <data name="AnalysisSeverityInfo" xml:space="preserve"><value>Info</value></data>
@@ -2588,7 +2658,6 @@
   <data name="AnalysisBulkAiPromptTitle" xml:space="preserve"><value>Findings to remediate</value></data>
   <data name="AnalysisBulkAiPromptCount" xml:space="preserve"><value>Findings included</value></data>
   <data name="DownloadMarkdown" xml:space="preserve"><value>Download .md</value></data>
-  <data name="AnalysisPromptSource" xml:space="preserve"><value>Markdown source</value></data>
   <data name="AnalysisPromptPreview" xml:space="preserve"><value>Preview</value></data>
   <data name="AnalysisAiPromptTitle" xml:space="preserve"><value>Finding to remediate</value></data>
   <data name="AnalysisAiPromptContext" xml:space="preserve"><value>Context</value></data>
@@ -2603,6 +2672,9 @@
   <data name="AnalysisFindingStatusMitigated" xml:space="preserve"><value>Mitigated</value></data>
   <data name="TaskNotFound" xml:space="preserve"><value>Task not found.</value></data>
   <data name="TemplateNotFound" xml:space="preserve"><value>Template not found.</value></data>
+  <data name="SharedTemplate" xml:space="preserve"><value>Shared</value></data>
+  <data name="SharedTemplateReadOnlyNote" xml:space="preserve"><value>This is a shared template, shipped by the platform for every organization. You can read it and use it, but only a site administrator can change it.</value></data>
+  <data name="ReadOnlyTemplateNote" xml:space="preserve"><value>You do not have the right to change this template. You can read it and use it.</value></data>
   <data name="PromoteUnavailable" xml:space="preserve"><value>This pipeline is not linked to a template, so there is no version to publish.</value></data>
   <data name="FleetUpdateUnavailable" xml:space="preserve"><value>This template version is not available for this pipeline.</value></data>
   <data name="FailureReason" xml:space="preserve"><value>Failure reason</value></data>
@@ -2741,7 +2813,20 @@
   <data name="AuditAction_Merged" xml:space="preserve"><value>Merged</value></data>
   <data name="AuditAction_Moved" xml:space="preserve"><value>Moved</value></data>
   <data name="AuditAction_PasswordChanged" xml:space="preserve"><value>Password changed</value></data>
+  <data name="AuditAction_PasswordSet" xml:space="preserve"><value>Password chosen from a mailed link</value></data>
+  <data name="AuditAction_WelcomeMailSent" xml:space="preserve"><value>Welcome mail sent</value></data>
+  <data name="AuditAction_PasswordLinkSent" xml:space="preserve"><value>Password link sent by an administrator</value></data>
+  <data name="AuditAction_PasswordLinkNotSent" xml:space="preserve"><value>Password link not sent</value></data>
+  <data name="AuditAction_PasswordLinkRefused.RateLimited" xml:space="preserve"><value>Password link refused (too many within the hour)</value></data>
+  <data name="AuditAction_PasswordResetMailSent" xml:space="preserve"><value>Forgotten-password mail sent</value></data>
+  <data name="AuditAction_PasswordResetMailNotSent" xml:space="preserve"><value>Forgotten-password mail not sent</value></data>
+  <data name="AuditAction_PasswordResetRequested.NoAccount" xml:space="preserve"><value>Forgotten password asked for an address no active account holds</value></data>
+  <data name="AuditAction_PasswordResetRequested.RateLimited" xml:space="preserve"><value>Forgotten password refused (too many within the hour)</value></data>
   <data name="AuditAction_PasswordReset" xml:space="preserve"><value>Password reset</value></data>
+  <data name="AuditAction_SiteAdminGranted" xml:space="preserve"><value>Site Admin role granted</value></data>
+  <data name="AuditAction_SiteAdminMailSent" xml:space="preserve"><value>Site administrator mail sent</value></data>
+  <data name="AuditAction_SiteAdminMailNotSent" xml:space="preserve"><value>Site administrator mail not sent</value></data>
+  <data name="AuditAction_SiteAdminBootstrapLocked" xml:space="preserve"><value>Administrator bootstrap locked (an administrator already exists)</value></data>
   <data name="AuditAction_PipelineCheckpointReused" xml:space="preserve"><value>Pipeline checkpoint reused</value></data>
   <data name="AuditAction_PipelineRunnerDisabled" xml:space="preserve"><value>Pipeline runner disabled</value></data>
   <data name="AuditAction_PipelineRunnerEnabled" xml:space="preserve"><value>Pipeline runner enabled</value></data>
@@ -2850,6 +2935,12 @@
   <data name="SelectPipelineProject" xml:space="preserve"><value>Select the project that will own the generated pipelines.</value></data>
   <data name="PipelinePrefix" xml:space="preserve"><value>Pipeline prefix</value></data>
   <data name="PipelinePrefixHint" xml:space="preserve"><value>The wizard uses this stable prefix for names and cross-pipeline references.</value></data>
+  <data name="PipelineSourceBranch" xml:space="preserve"><value>Source branch</value></data>
+  <data name="PipelineSourceBranchHint" xml:space="preserve"><value>The branch every pipeline created here reads when it runs: develop when the repository has it, otherwise its default branch.</value></data>
+  <data name="PipelineSourceBranchMissing" xml:space="preserve"><value>This project has no default branch and its repository, if it has one, lists no branch yet: the pipelines will be created without a source branch. Set the project's default branch or push a first commit to its repository, then come back here.</value></data>
+  <data name="OrganizationAutoCreateDevelopBranch" xml:space="preserve"><value>Develop branch</value></data>
+  <data name="OrganizationAutoCreateDevelopBranchOption" xml:space="preserve"><value>Create a develop branch in new repositories</value></data>
+  <data name="OrganizationAutoCreateDevelopBranchHelp" xml:space="preserve"><value>When the internal repository of a project of this organization receives its first commit, a develop branch is created from its default branch. A repository that already has a develop branch is left as it is. Off by default.</value></data>
   <data name="PipelineSetupStartFrom" xml:space="preserve"><value>Start from</value></data>
   <data name="PipelineSetupStartTemplates" xml:space="preserve"><value>New pipelines from the templates</value></data>
   <data name="PipelineSetupStartExistingProject" xml:space="preserve"><value>The pipelines of an existing project</value></data>
@@ -2908,6 +2999,15 @@
   <data name="PipelineStack" xml:space="preserve"><value>Technology</value></data>
   <data name="PipelineStackHint" xml:space="preserve"><value>Decides the web analytics package of the package set. Only .NET is supported today.</value></data>
   <data name="PipelineStackDotNet" xml:space="preserve"><value>.NET</value></data>
+  <data name="PipelineQualityLanguages" xml:space="preserve"><value>Languages the quality pipeline analyses</value></data>
+  <data name="PipelineLanguageDotNetHint" xml:space="preserve"><value>Measures the complexity of the C# code and resolves the .NET SDK the repository pins.</value></data>
+  <data name="PipelineLanguagePythonHint" xml:space="preserve"><value>Lints the Python files with Ruff.</value></data>
+  <data name="PipelineLanguageJavaHint" xml:space="preserve"><value>Checks the Java files with PMD.</value></data>
+  <data name="PipelineSetupRunDeployAfterCandidate" xml:space="preserve"><value>Run the deployment after the candidate</value></data>
+  <data name="PipelineSetupRunDeployAfterCandidateHint" xml:space="preserve"><value>A candidate that succeeds starts the production deployment with the release it published. The deployment keeps its own approvals.</value></data>
+  <data name="PipelineSetupDeployChain" xml:space="preserve"><value>Candidate and deployment</value></data>
+  <data name="PipelineQualityLanguagesUncertain" xml:space="preserve"><value>The repository could not be read completely, so the languages it holds are not certain. Only .NET is ticked: confirm which languages to keep.</value></data>
+  <data name="PipelineSetupQualityTemplateUnreadable" xml:space="preserve"><value>The quality template '{0}' (version {1}) could not be read, so its Lint source stage cannot be written without its unused step. Nothing was created.</value></data>
   <data name="Frontend" xml:space="preserve"><value>Frontend</value></data>
   <data name="Database" xml:space="preserve"><value>Database</value></data>
   <data name="FrontendPipelineHint" xml:space="preserve"><value>Build and validate a browser or UI application.</value></data>
@@ -2915,7 +3015,7 @@
   <data name="DatabasePipelineHint" xml:space="preserve"><value>Include schema migration and compatibility checks.</value></data>
   <data name="SelectPipelineCapabilities" xml:space="preserve"><value>Select the assurance and delivery capabilities to generate.</value></data>
   <data name="CiPipelineHint" xml:space="preserve"><value>Compile, test and produce immutable artifacts.</value></data>
-  <data name="QualityPipelineHint" xml:space="preserve"><value>Coverage and lint from the commands declared in the pipeline, C#, Python and Java analysis, graded A to F.</value></data>
+  <data name="QualityPipelineHint" xml:space="preserve"><value>Coverage from the commands declared in the pipeline, C#, Python and Java analysis, graded A to F.</value></data>
   <data name="SecurityPipelineHint" xml:space="preserve"><value>Secrets, code (SAST), dependencies and infrastructure files, graded A to F.</value></data>
   <data name="QaPipelineHint" xml:space="preserve"><value>Disposable environment and dynamic validation.</value></data>
   <data name="Candidate" xml:space="preserve"><value>Candidate</value></data>
@@ -2933,6 +3033,11 @@
   <data name="PipelinesCreated" xml:space="preserve"><value>{0} pipelines created.</value></data>
   <data name="ProductionValuesPending" xml:space="preserve"><value>Production values to fill</value></data>
   <data name="ProductionValuesPendingDetail" xml:space="preserve"><value>The production pipeline reads these entries, still empty in the prod library or vault: {0}. Fill them before the first deployment.</value></data>
+  <data name="QaNoComposeFile" xml:space="preserve"><value>QA without a Compose file</value></data>
+  <data name="QaNoComposeFileDetail" xml:space="preserve"><value>No Compose file was found in the repository, so the QA pipeline was created without COMPOSE_FILE: it will deploy no disposable environment and validate nothing against a running application. Add the Compose file to the repository, then set COMPOSE_FILE in the QA pipeline.</value></data>
+  <data name="ProductionNotPrepared" xml:space="preserve"><value>Production not prepared</value></data>
+  <data name="ProductionNotPreparedDetail" xml:space="preserve"><value>The repository holds no commit that could be read, so the production pipeline was created without its Compose file, its variables, its ports and its Apache files. Its first deployment will stop on what is missing. Push the code of the project, then delete this pipeline and run the wizard again with only the production deployment ticked.</value></data>
+  <data name="ProductionNoComposeDetail" xml:space="preserve"><value>No Compose file was found in the repository, so the production pipeline was created without its variables, its ports and its Apache files. Add the Compose file to the repository, then delete this pipeline and run the wizard again with only the production deployment ticked.</value></data>
   <data name="PreflightBlockedSummary" xml:space="preserve"><value>{0} stage(s) cannot run: no agent matches their target.</value></data>
   <data name="PreflightUnknownReason" xml:space="preserve"><value>Unspecified reason.</value></data>
   <data name="PreflightFixEnvironmentHint" xml:space="preserve"><value>Often the environment has no server attached.</value></data>
@@ -2940,14 +3045,15 @@
   <data name="PreflightFixServerHint" xml:space="preserve"><value>Check that the target agent is online.</value></data>
   <data name="PreflightFixServerAction" xml:space="preserve"><value>Open servers</value></data>
   <data name="PreflightEmptyParameterCause" xml:space="preserve"><value>No server is chosen: the parameter "{0}" is empty.</value></data>
-  <data name="PreflightEmptyParameterHint" xml:space="preserve"><value>Choose the server in the launch parameters, or set the project's production server. If you launch anyway, the first available agent is used.</value></data>
   <data name="PreflightCauseAgent" xml:space="preserve"><value>No online agent matches "{0}".</value></data>
+  <data name="PreflightCauseAnyAgent" xml:space="preserve"><value>No agent is online to run a stage that names no agent.</value></data>
   <data name="PreflightCausePool" xml:space="preserve"><value>No online agent in the pool "{0}".</value></data>
   <data name="PreflightCauseEnvironment" xml:space="preserve"><value>No online server is attached to the environment "{0}".</value></data>
   <data name="PreflightAffectedStages" xml:space="preserve"><value>{0} affected stage(s)</value></data>
   <data name="LatestGrade" xml:space="preserve"><value>Latest grade</value></data>
   <data name="SuccessRate" xml:space="preserve"><value>Success rate</value></data>
   <data name="AverageDuration" xml:space="preserve"><value>Average duration</value></data>
+  <data name="AverageSuccessDuration" xml:space="preserve"><value>Average duration of successes</value></data>
   <data name="LastSuccess" xml:space="preserve"><value>Last success</value></data>
   <data name="NotAvailableShort" xml:space="preserve"><value>N/A</value></data>
   <data name="Latest" xml:space="preserve">
@@ -3091,6 +3197,33 @@
   <data name="PortAllocateKeysRequired" xml:space="preserve">
     <value>Name at least one key.</value>
   </data>
+  <data name="PortPresetEmpty" xml:space="preserve">
+    <value>Empty PORT_ keys of this library</value>
+  </data>
+  <data name="PortPresetSimple" xml:space="preserve">
+    <value>Simple (PORT_FRONT, PORT_BACK)</value>
+  </data>
+  <data name="PortPresetBlueGreen" xml:space="preserve">
+    <value>Blue-green (four keys)</value>
+  </data>
+  <data name="PortPresetFree" xml:space="preserve">
+    <value>Free list</value>
+  </data>
+  <data name="PortAllocateKeysWillBeCreated" xml:space="preserve">
+    <value>These keys do not exist in the library, they will be created: {0}.</value>
+  </data>
+  <data name="PortAllocateKeysWillBeFilled" xml:space="preserve">
+    <value>These keys exist and are empty, they will be filled: {0}.</value>
+  </data>
+  <data name="PortAllocateKeysHaveValue" xml:space="preserve">
+    <value>These keys already hold a value and would not be overwritten: {0}. Empty them first, or take them off the list.</value>
+  </data>
+  <data name="PortAllocateRow" xml:space="preserve">
+    <value>Allocate a port</value>
+  </data>
+  <data name="PortAllocatedKey" xml:space="preserve">
+    <value>{0} = {1}</value>
+  </data>
   <data name="PortCheckLibraryHint" xml:space="preserve">
     <value>Checks this library's PORT_ entries against the registry and the last host scan.</value>
   </data>
@@ -3215,7 +3348,6 @@
   <data name="PerformanceP95" xml:space="preserve"><value>p95</value></data>
   <data name="PerformanceP99" xml:space="preserve"><value>p99</value></data>
   <data name="PerformanceThisBrowser" xml:space="preserve"><value>This browser</value></data>
-  <data name="PerformanceThisBrowserHint" xml:space="preserve"><value>The slowest API calls of this session, as this browser waited for them: network and server together.</value></data>
   <data name="PerformanceNoSamples" xml:space="preserve"><value>No measurement yet.</value></data>
   <data name="PerformanceWindow" xml:space="preserve"><value>Since {0}; 24 hours at most, the window restarts with the instance.</value></data>
   <data name="PerformanceTileRequests" xml:space="preserve"><value>Measured requests</value></data>
@@ -3270,7 +3402,7 @@
   <data name="Detect" xml:space="preserve"><value>Detect</value></data>
   <data name="Scan" xml:space="preserve"><value>Scan</value></data>
   <data name="Flush" xml:space="preserve"><value>Flush</value></data>
-  <data name="RunInProgress" xml:space="preserve"><value>Run in progress</value></data>
+  <data name="RunInProgress" xml:space="preserve"><value>Running</value></data>
   <data name="SessionEnd_refresh_unknown" xml:space="preserve"><value>Reason: the session is no longer known to the server.</value></data>
   <data name="SessionEnd_refresh_replay" xml:space="preserve"><value>Reason: an already-renewed session was reused, all sessions were closed.</value></data>
   <data name="SessionEnd_refresh_expired" xml:space="preserve"><value>Reason: the session reached its maximum lifetime.</value></data>
@@ -3431,6 +3563,7 @@
   <data name="RunIdTile" xml:space="preserve"><value>Run ID</value></data>
   <data name="GateFirstCauseBlockingTests" xml:space="preserve"><value>blocking tests failed</value></data>
   <data name="GateGradeSetBy" xml:space="preserve"><value>Set by:</value></data>
+  <data name="GateGradePartialNotQualifying" xml:space="preserve"><value>A partial grade does not qualify the release: its deployment then asks for the extra approval.</value></data>
   <data name="MailStackManagedServiceHint" xml:space="preserve"><value>Part of the mail stack Aetheus manages: reinstall or remove it whole from the Mail page.</value></data>
   <data name="ServerTaskRequested" xml:space="preserve"><value>requested from the server…</value></data>
   <data name="ServerTaskQueued" xml:space="preserve"><value>waiting for the agent</value></data>
@@ -3443,6 +3576,7 @@
   <data name="DurationMs" xml:space="preserve"><value>Duration (ms)</value></data>
   <data name="ApacheBlocks" xml:space="preserve"><value>Blocks</value></data>
   <data name="ApacheDeleteSiteItem" xml:space="preserve"><value>Delete {0}</value></data>
+  <data name="ApacheModuleEssential" xml:space="preserve"><value>Essential</value></data>
   <data name="ApacheDeleteSiteTitle" xml:space="preserve"><value>Delete the site</value></data>
   <data name="ApacheDeleteSiteConfirm" xml:space="preserve"><value>Delete the file {0} from sites-available? The site is disabled: Apache no longer loads it. The file is removed from the server, and put back if Apache rejects the configuration without it.</value></data>
   <data name="NotificationOptions" xml:space="preserve"><value>Options</value><comment>same in both languages</comment></data>
@@ -3494,6 +3628,7 @@
   <data name="NotificationEvent_app_metric_threshold" xml:space="preserve"><value>Application metric threshold crossed</value></data>
   <data name="NotificationEvent_alert_triggered" xml:space="preserve"><value>Server alert triggered</value></data>
   <data name="NotificationEvent_certbot_renewal_check_failed" xml:space="preserve"><value>Certificate renewal check failed</value></data>
+  <data name="NotificationEvent_certbot_certificate_expiring" xml:space="preserve"><value>Certificate approaching expiry</value></data>
   <data name="NotificationEvent_SecretExpiring" xml:space="preserve"><value>Secret expiring</value></data>
   <data name="ComplexityAxisTitle" xml:space="preserve"><value>CC / CRAP</value></data>
   <data name="AnalyticsAllowedOriginsPlaceholder" xml:space="preserve"><value>https://example.com</value></data>
@@ -3713,7 +3848,6 @@
   <data name="ProjectDeletionIrreversible" xml:space="preserve"><value>This cannot be undone</value></data>
   <data name="ProjectDeletionIntro" xml:space="preserve"><value>Deleting the project also deletes everything that belongs to it:</value></data>
   <data name="ProjectDeletionNothingElse" xml:space="preserve"><value>The project holds nothing else: only the project itself will be deleted.</value></data>
-  <data name="ProjectDeletionKeptOutside" xml:space="preserve"><value>Servers stay registered (only their link to the project goes), and backup archives stay on their hosts.</value></data>
   <data name="ProjectDeletionActiveRuns" xml:space="preserve"><value>{0} pipeline run(s) of this project are in progress. Cancel them or wait for them to end before deleting the project.</value></data>
   <data name="ProjectDeletionTypeName" xml:space="preserve"><value>Type the project name ({0}) to confirm</value></data>
   <data name="Enum_ProjectDeletionItemKind_Pipelines" xml:space="preserve"><value>Pipelines</value></data>
@@ -3743,6 +3877,67 @@
   <data name="Enum_ProjectDeletionItemKind_WorkItems" xml:space="preserve"><value>Work items</value></data>
   <data name="Enum_ProjectDeletionItemKind_TestSuites" xml:space="preserve"><value>Test suites</value></data>
   <data name="Enum_ProjectDeletionItemKind_AiTasks" xml:space="preserve"><value>AI tasks</value></data>
+  <data name="ProjectDeletionTypeNameHelp" xml:space="preserve"><value>Delete stays disabled until the name is typed exactly, so a project is never deleted by a slip.</value></data>
+  <data name="ProjectDeletionOnServers" xml:space="preserve"><value>On the servers</value></data>
+  <data name="ProjectDeletionServerOffline" xml:space="preserve"><value>The server is offline: what the project deployed on it cannot be read nor removed, and stays in place.</value></data>
+  <data name="ProjectDeletionServerAgentTooOld" xml:space="preserve"><value>The agent of this server is too old to list and remove what the project deployed: update it, or what is there stays in place.</value></data>
+  <data name="ProjectDeletionServerReading" xml:space="preserve"><value>The agent is reading what the project deployed...</value></data>
+  <data name="ProjectDeletionServerNotAsked" xml:space="preserve"><value>The agent of this server could not be asked: what the project deployed there is unknown.</value></data>
+  <data name="ProjectDeletionServerNothing" xml:space="preserve"><value>Nothing of the project was found on this server.</value></data>
+  <data name="ProjectDeletionEnvironment" xml:space="preserve"><value>Environment</value></data>
+  <data name="ProjectDeletionProjectWide" xml:space="preserve"><value>Whole project</value></data>
+  <data name="ProjectDeletionServerUnreadable" xml:space="preserve"><value>Could not be read, so may stay behind</value></data>
+  <data name="ProjectDeletionServerFailed" xml:space="preserve"><value>The agent reported a failure</value></data>
+  <data name="ProjectDeletionServerRequestFailed" xml:space="preserve"><value>The request to the agents was refused: nothing was removed on the servers.</value></data>
+  <data name="ProjectDeletionVolumesAcknowledge" xml:space="preserve"><value>I understand that the listed Docker volumes hold the project's data and that it will be lost.</value></data>
+  <data name="ProjectDeletionNoAnswer" xml:space="preserve"><value>The agent did not answer in time.</value></data>
+  <data name="ProjectDeletionDiscoveryStarted" xml:space="preserve"><value>The agents of {0} server(s) are reading what the project deployed.</value></data>
+  <data name="ProjectDeletionRemovalStarted" xml:space="preserve"><value>Removal started on {0} server(s).</value></data>
+  <data name="Enum_ProjectServerResourceKind_Container" xml:space="preserve"><value>Containers</value></data>
+  <data name="Enum_ProjectServerResourceKind_Volume" xml:space="preserve"><value>Docker volumes (data)</value></data>
+  <data name="Enum_ProjectServerResourceKind_Network" xml:space="preserve"><value>Networks</value></data>
+  <data name="Enum_ProjectServerResourceKind_VirtualHost" xml:space="preserve"><value>Apache virtual hosts</value></data>
+  <data name="Enum_ProjectServerResourceKind_Certificate" xml:space="preserve"><value>Certificates</value></data>
+  <data name="Enum_ProjectServerResourceKind_StateDirectory" xml:space="preserve"><value>State directories</value></data>
+  <data name="Enum_ProjectServerResourceKind_BackupArchives" xml:space="preserve"><value>Backup archives</value></data>
+  <data name="Enum_ProjectServerResourceKind_Image" xml:space="preserve"><value>Docker images</value></data>
+  <data name="Enum_ProjectServerResourceKind_UpstreamConfiguration" xml:space="preserve"><value>Apache upstream file (blue-green)</value></data>
+  <data name="Enum_ProjectServerResourceKind_DeploymentDirectory" xml:space="preserve"><value>Deployment directories (repository copy)</value></data>
+  <data name="Enum_ProjectServerResourceOutcome_Found" xml:space="preserve"><value>Found</value></data>
+  <data name="Enum_ProjectServerResourceOutcome_Removed" xml:space="preserve"><value>Removed</value></data>
+  <data name="Enum_ProjectServerResourceOutcome_Absent" xml:space="preserve"><value>Already gone</value></data>
+  <data name="Enum_ProjectServerResourceOutcome_Failed" xml:space="preserve"><value>Failed</value></data>
+  <data name="Enum_ProjectServerResourceOutcome_NotListed" xml:space="preserve"><value>Not listed, left in place</value></data>
+  <data name="Enum_ProjectDeletionRefusal_InvalidName" xml:space="preserve"><value>invalid name</value></data>
+  <data name="Enum_ProjectDeletionRefusal_OutsideProjectBase" xml:space="preserve"><value>outside the project's own folders</value></data>
+  <data name="Enum_ProjectDeletionRefusal_UnresolvedReference" xml:space="preserve"><value>unresolved variable</value></data>
+  <data name="Enum_ProjectDeletionRefusal_SharedWithAnotherProject" xml:space="preserve"><value>also used by another project</value></data>
+  <data name="Enum_ProjectDeletionRefusal_NoServer" xml:space="preserve"><value>no server in this environment</value></data>
+  <data name="Enum_ProjectDeletionRefusal_NotNamedAfterProject" xml:space="preserve"><value>not named after the project</value></data>
+  <data name="Enum_ProjectDeletionRefusal_ReservedForControlPlane" xml:space="preserve"><value>reserved for Aetheus itself (aetheus, aetheus-...): never removed</value></data>
+  <data name="Enum_ProjectDeletionRefusal_ControlPlaneHost" xml:space="preserve"><value>public address of Aetheus itself: never removed</value></data>
+  <data name="ProjectDeletionServerNoWriteAccess" xml:space="preserve"><value>Not removed: no write access on this server.</value></data>
+  <data name="ProjectDeletionServerMissingCapabilities" xml:space="preserve"><value>The agent of this server cannot remove everything: {0} missing. What it covers stays in place.</value></data>
+  <data name="ProjectDeletionPending" xml:space="preserve"><value>Deletion to finish</value></data>
+  <data name="ProjectDeletionPendingIntro" xml:space="preserve"><value>The project is deleted, but what is listed under "Not deleted" is still on its servers. It can no longer be used and stays in the projects list: open it to relaunch the cleanup. It disappears once everything is removed.</value></data>
+  <data name="ProjectDeletionResumeIntro" xml:space="preserve"><value>This project is deleted, but resources it deployed are still on its servers. Relaunch the cleanup: the project disappears once everything is removed.</value></data>
+  <data name="ProjectDeletionRelaunch" xml:space="preserve"><value>Relaunch</value></data>
+  <data name="ProjectDeletionDoneTitle" xml:space="preserve"><value>Project deleted</value></data>
+  <data name="ProjectDeletionDone" xml:space="preserve"><value>The project and everything it deployed on its servers are deleted.</value></data>
+  <data name="ProjectDeletionReportDeleted" xml:space="preserve"><value>Deleted</value></data>
+  <data name="ProjectDeletionReportNotDeleted" xml:space="preserve"><value>Not deleted</value></data>
+  <data name="ProjectDeletionReportNothing" xml:space="preserve"><value>Nothing</value></data>
+  <data name="ProjectDeletionReportItem" xml:space="preserve"><value>Item</value></data>
+  <data name="ProjectDeletionReportPlace" xml:space="preserve"><value>Where</value></data>
+  <data name="ProjectDeletionReportDetail" xml:space="preserve"><value>Detail</value></data>
+  <data name="ProjectDeletionReportReason" xml:space="preserve"><value>Reason</value></data>
+  <data name="ProjectDeletionPlaceAetheus" xml:space="preserve"><value>Aetheus</value></data>
+  <data name="ProjectDeletionAetheusData" xml:space="preserve"><value>The project&apos;s Aetheus data</value></data>
+  <data name="ProjectDeletionAetheusDataKept" xml:space="preserve"><value>Kept until the servers are cleaned, so the cleanup can be relaunched.</value></data>
+  <data name="ProjectDeletionServerEverything" xml:space="preserve"><value>Everything the project deployed there</value></data>
+  <data name="ProjectDeletionNotRemoved" xml:space="preserve"><value>Not removed by the agent.</value></data>
+  <data name="ProjectDeletionShowMore" xml:space="preserve"><value>Show more</value></data>
+  <data name="ProjectDeletionRefusedSentence" xml:space="preserve"><value>Some values of the project&apos;s libraries do not name a resource Aetheus can safely remove: what they name stays in place.</value></data>
   <data name="SetUpNewProjectPipelinesConfirm" xml:space="preserve"><value>Project "{0}" created. Set up its pipelines now? The wizard checks the repository, the runner, the environments, the libraries and the adapter scripts, and links to the page that fixes each missing one.</value></data>
   <data name="SetUpPipelines" xml:space="preserve"><value>Set up pipelines</value></data>
   <data name="QaExtended" xml:space="preserve"><value>Extended QA</value></data>
@@ -3874,7 +4069,6 @@
   <data name="DataRetentionDefaultValue" xml:space="preserve"><value>Default: {0}</value></data>
   <data name="NotificationEvent_project_storage_quota" xml:space="preserve"><value>Project storage budget reached</value></data>
   <data name="ProjectStorage" xml:space="preserve"><value>Storage per project</value></data>
-  <data name="ProjectStorageEmpty" xml:space="preserve"><value>No project yet.</value></data>
   <data name="ProjectStorageUsed" xml:space="preserve"><value>Used</value></data>
   <data name="ProjectStorageBudget" xml:space="preserve"><value>Budget</value></data>
   <data name="ProjectStorageShare" xml:space="preserve"><value>Share</value></data>
@@ -4007,6 +4201,22 @@
   <data name="DailyRecapRemoveRecipient" xml:space="preserve"><value>Remove {0}</value></data>
   <data name="DailyRecapRecipientsEmpty" xml:space="preserve"><value>No recipient yet.</value></data>
   <data name="DailyRecapRecipientDuplicate" xml:space="preserve"><value>{0} is already in the list.</value></data>
+  <data name="CertificateAlertsTab" xml:space="preserve"><value>Certificate alerts</value></data>
+  <data name="CertificateAlertsTitle" xml:space="preserve"><value>Certificate expiry alerts</value></data>
+  <data name="CertificateAlertsDescription" xml:space="preserve"><value>An alert is raised once for each certificate that reaches one of these delays before its expiry. The notification rules choose the channel.</value></data>
+  <data name="CertificateAlertsAddLabel" xml:space="preserve"><value>Add an alert</value></data>
+  <data name="CertificateAlertsAddHelp" xml:space="preserve"><value>A number of days before the expiry of a certificate, from 1 to 365. The longest delay is also the one from which the Certbot page marks a certificate as expiring soon.</value></data>
+  <data name="CertificateAlertsDaysPlaceholder" xml:space="preserve"><value>Days</value></data>
+  <data name="CertificateAlertsAdd" xml:space="preserve"><value>Add</value></data>
+  <data name="CertificateAlertsLeadOne" xml:space="preserve"><value>{0} day before expiry</value></data>
+  <data name="CertificateAlertsLeadMany" xml:space="preserve"><value>{0} days before expiry</value></data>
+  <data name="CertificateAlertsRemove" xml:space="preserve"><value>Remove: {0}</value></data>
+  <data name="CertificateAlertsEmpty" xml:space="preserve"><value>No alert: the expiry of certificates is not announced.</value></data>
+  <data name="CertificateAlertsDaysRequired" xml:space="preserve"><value>Enter a number of days.</value></data>
+  <data name="CertificateAlertsDaysRange" xml:space="preserve"><value>Enter a number of days from {0} to {1}.</value></data>
+  <data name="CertificateAlertsDaysDuplicate" xml:space="preserve"><value>{0} days is already in the list.</value></data>
+  <data name="CertificateAlertsTooMany" xml:space="preserve"><value>At most {0} alerts can be listed.</value></data>
+  <data name="CertificateAlertsSaved" xml:space="preserve"><value>Certificate alert settings saved.</value></data>
   <data name="DailyRecapRecipientsRequired" xml:space="preserve"><value>Add at least one recipient, or switch the recap off.</value></data>
   <data name="DailyRecapNextRecipients" xml:space="preserve"><value>The next recap goes to: {0}.</value></data>
   <data name="DailyRecapNextRecipientsNone" xml:space="preserve"><value>The next recap has no recipient: add one and save.</value></data>
@@ -4057,7 +4267,6 @@
   <data name="MailboxSelectMessage" xml:space="preserve"><value>Select a message to read it.</value></data>
   <data name="MailboxNoMessages" xml:space="preserve"><value>No message in this folder.</value></data>
   <data name="MailboxNoFolders" xml:space="preserve"><value>No folder.</value></data>
-  <data name="MailboxBackToMail" xml:space="preserve"><value>Mail</value></data>
   <data name="MailboxUnread" xml:space="preserve"><value>Unread</value></data>
   <data name="MailClientHelpTitle" xml:space="preserve"><value>Connect a mail client</value></data>
   <data name="MailClientHelpButton" xml:space="preserve"><value>Mail client</value></data>
@@ -4244,6 +4453,28 @@
   <data name="MailVariable_ChannelName_Help" xml:space="preserve"><value>The name of the tested notification channel.</value></data>
   <data name="Enum_MailTemplateKind_NotificationEvent" xml:space="preserve"><value>Event notification</value></data>
   <data name="Enum_MailTemplateKind_DailyRecap" xml:space="preserve"><value>Daily recap</value></data>
+  <data name="Enum_MailTemplateKind_UserWelcome" xml:space="preserve"><value>Welcome (choose the password)</value></data>
+  <data name="Enum_MailTemplateKind_PasswordReset" xml:space="preserve"><value>Forgotten password</value></data>
+  <data name="Enum_MailTemplateKind_SiteAdminGranted" xml:space="preserve"><value>Site Admin role granted</value></data>
+  <data name="UserCreatePasswordByMail" xml:space="preserve"><value>No password to type: a mail sent to this address invites the person to choose theirs.</value></data>
+  <data name="UserCreatedNamed" xml:space="preserve"><value>The account {0} is created.</value></data>
+  <data name="UserCreatedWelcomeSent" xml:space="preserve"><value>Account created. The welcome mail was sent to {0}.</value></data>
+  <data name="OpenUser" xml:space="preserve"><value>Open the user</value></data>
+  <data name="BackToUsers" xml:space="preserve"><value>Back to users</value></data>
+  <data name="BuiltInRoleReadOnly" xml:space="preserve"><value>Built-in role: it cannot be changed.</value></data>
+  <data name="WelcomeMailUnknown" xml:space="preserve"><value>The server did not say what became of the welcome mail.</value></data>
+  <data name="PasswordLinkMailSent" xml:space="preserve"><value>A link to choose the password was sent to {0}.</value></data>
+  <data name="PasswordLinkMailNoSender" xml:space="preserve"><value>No mail was sent to {0}: no e-mail sender is set up yet. Prepare the platform mailbox in the platform settings (E-mail tab).</value></data>
+  <data name="PasswordLinkMailNoPublicAddress" xml:space="preserve"><value>No mail was sent to {0}: the public address of the application is not configured, so the mail could not link to the password page.</value></data>
+  <data name="PasswordLinkMailFailed" xml:space="preserve"><value>The mail to {0} did not leave: the mail server did not accept it. The details are in the server log.</value></data>
+  <data name="SendPasswordLink" xml:space="preserve"><value>Send a new link</value></data>
+  <data name="SendPasswordLinkHelp" xml:space="preserve"><value>Or send the person a link to choose their password themselves (valid 7 days; earlier unused links stop working).</value></data>
+  <data name="SendPasswordLinkTooMany" xml:space="preserve"><value>Too many links were sent to this account within the hour; nothing was sent.</value></data>
+  <data name="SendPasswordLinkRefused" xml:space="preserve"><value>No link was sent: the account is inactive, or the request was refused.</value></data>
+  <data name="PasswordSetupTitle" xml:space="preserve"><value>Choose your password</value></data>
+  <data name="PasswordSetupIntro" xml:space="preserve"><value>Choose the password of your account. You will then sign in with your e-mail address.</value></data>
+  <data name="PasswordSetupInvalidLink" xml:space="preserve"><value>This link is not valid: it was already used or it expired. Ask for a new one with "Forgot password?" on the sign-in page.</value></data>
+  <data name="PasswordSetupDone" xml:space="preserve"><value>Password saved. Sign in with your e-mail address.</value></data>
   <data name="MailVariable_Event" xml:space="preserve"><value>Event</value></data>
   <data name="MailVariable_Event_Help" xml:space="preserve"><value>What happened, in words, for example "Pipeline failed".</value></data>
   <data name="MailVariable_Summary" xml:space="preserve"><value>Event and subject</value></data>
@@ -4278,6 +4509,20 @@
   <data name="MailVariable_Tiles_Help" xml:space="preserve"><value>The coloured tiles of the day's key figures.</value></data>
   <data name="MailVariable_Sections" xml:space="preserve"><value>Sections</value></data>
   <data name="MailVariable_Sections_Help" xml:space="preserve"><value>The recap's sections (pipelines, servers, releases...), their items and status badges.</value></data>
+  <data name="MailVariable_ApprovalActions" xml:space="preserve"><value>Approval buttons</value></data>
+  <data name="MailVariable_ApprovalActions_Help" xml:space="preserve"><value>The Approve and Reject buttons of an approval request; empty for any other event.</value></data>
+  <data name="MailVariable_UserName" xml:space="preserve"><value>User name</value></data>
+  <data name="MailVariable_UserName_Help" xml:space="preserve"><value>The name of the person the mail is addressed to.</value></data>
+  <data name="MailVariable_SignInEmail" xml:space="preserve"><value>Sign-in e-mail</value></data>
+  <data name="MailVariable_SignInEmail_Help" xml:space="preserve"><value>The e-mail address the person signs in with.</value></data>
+  <data name="MailVariable_SetPasswordUrl" xml:space="preserve"><value>Password link</value></data>
+  <data name="MailVariable_SetPasswordUrl_Help" xml:space="preserve"><value>The personal link that opens the page where the person chooses a password.</value></data>
+  <data name="MailVariable_ValidDays" xml:space="preserve"><value>Validity in days</value></data>
+  <data name="MailVariable_ValidDays_Help" xml:space="preserve"><value>The number of days the password link stays valid.</value></data>
+  <data name="MailVariable_ValidMinutes" xml:space="preserve"><value>Validity in minutes</value></data>
+  <data name="MailVariable_ValidMinutes_Help" xml:space="preserve"><value>The number of minutes the password link stays valid.</value></data>
+  <data name="MailVariable_SignInUrl" xml:space="preserve"><value>Sign-in page</value></data>
+  <data name="MailVariable_SignInUrl_Help" xml:space="preserve"><value>The address of the sign-in page; empty when no web address is configured.</value></data>
   <data name="MigrationGateTitle" xml:space="preserve"><value>Expand/contract migration gate</value></data>
   <data name="Enum_MigrationGateOutcome_NoPending" xml:space="preserve"><value>Nothing pending</value></data>
   <data name="Enum_MigrationGateOutcome_InitialCreation" xml:space="preserve"><value>Initial creation</value></data>
@@ -4306,7 +4551,6 @@
   <data name="SchemaPendingAppliedIn" xml:space="preserve"><value>{0} was applied by release {1}</value></data>
   <data name="EnvironmentSchemaTrackingTitle" xml:space="preserve"><value>Database expand/contract tracking</value></data>
   <data name="EnvironmentSchemaLastGateRun" xml:space="preserve"><value>Last gate verdict: run #{0}</value></data>
-  <data name="EnvironmentSchemaNoGate" xml:space="preserve"><value>No migration gate verdict is recorded for this environment yet.</value></data>
   <data name="MigrationGateSummaryNoPending" xml:space="preserve"><value>The schema was already current; no migration was run.</value></data>
   <data name="MigrationGateSummaryInitialCreation" xml:space="preserve"><value>{0} migration(s) created the schema; no live colour to stay compatible with.</value></data>
   <data name="MigrationGateSummaryCompatible" xml:space="preserve"><value>{0} pending migration(s), all expand-compatible: the previous colour kept serving.</value></data>
@@ -4418,12 +4662,16 @@
   <data name="PipelineSetupProdComposeFile" xml:space="preserve"><value>Compose file</value></data>
   <data name="PipelineSetupProdComposeFileHelp" xml:space="preserve"><value>The file the production deployment starts. Several were found: the one that looks like production is proposed.</value></data>
   <data name="PipelineSetupProdStrategy" xml:space="preserve"><value>Strategy</value></data>
-  <data name="PipelineSetupProdBlueGreen" xml:space="preserve"><value>Blue-green (the Compose file declares blue and green ports)</value></data>
+  <data name="PipelineSetupProdStrategyHelp" xml:space="preserve"><value>Blue-green starts the new version beside the running one, then moves the traffic to it and keeps the previous one in reserve. Replacement stops the running services and starts the new ones in their place.</value></data>
+  <data name="PipelineSetupProdBlueGreen" xml:space="preserve"><value>Blue-green (recommended)</value></data>
   <data name="PipelineSetupProdReplace" xml:space="preserve"><value>Replacement of the running services</value></data>
+  <data name="PipelineSetupProdBlueGreenMismatch" xml:space="preserve"><value>The Compose file does not read the blue and green ports. The setup reserves the four colour ports (PORT_FRONT_BLUE, PORT_FRONT_GREEN, PORT_BACK_BLUE, PORT_BACK_GREEN), and the file has to read them before the first deployment: adapt it in the project.</value></data>
+  <data name="PipelineSetupProdReplaceMismatch" xml:space="preserve"><value>The Compose file reads blue and green ports, not the published ones. The setup reserves PORT_FRONT and PORT_BACK, and the file has to read them before the first deployment: adapt it in the project.</value></data>
   <data name="PipelineSetupProdServer" xml:space="preserve"><value>Production server</value></data>
   <data name="PipelineSetupProdServerHelp" xml:space="preserve"><value>The server the pipeline deploys to, among the project&apos;s servers.</value></data>
+  <data name="PipelineSetupProdServerCandidateHelp" xml:space="preserve"><value>The project has no server yet: the one chosen among the servers you administer is attached to it when the pipelines are created, and its ports are reserved there.</value></data>
   <data name="PipelineSetupProdServerChoose" xml:space="preserve"><value>Choose a server</value></data>
-  <data name="PipelineSetupProdNoServer" xml:space="preserve"><value>The project has no production server: the ports stay empty, to allocate from the library page.</value></data>
+  <data name="PipelineSetupProdNoServer" xml:space="preserve"><value>The project has no production server and you administer none: the ports stay empty, to allocate from the library page.</value></data>
   <data name="PipelineSetupProdConfigRepo" xml:space="preserve"><value>Configuration repository</value></data>
   <data name="PipelineSetupProdConfigRepoNew" xml:space="preserve"><value>Created with the pipelines: Apache virtual hosts and environment sample, versioned and without any value</value></data>
   <data name="PipelineSetupProdConfigRepoExisting" xml:space="preserve"><value>{0}: Apache virtual hosts and environment sample, versioned and without any value</value></data>
@@ -4456,4 +4704,285 @@
   <data name="AlertMetric_SudoersDrift" xml:space="preserve"><value>Sudo configuration drift</value></data>
   <data name="AlertMetric_SshConfigChange" xml:space="preserve"><value>SSH configuration changed</value></data>
   <data name="AlertMetric_DockerContainerRisk" xml:space="preserve"><value>Docker container risk</value></data>
+  <data name="DockerContainerState_created" xml:space="preserve"><value>Created</value></data>
+  <data name="DockerContainerState_running" xml:space="preserve"><value>Running</value></data>
+  <data name="DockerContainerState_paused" xml:space="preserve"><value>Paused</value></data>
+  <data name="DockerContainerState_restarting" xml:space="preserve"><value>Restarting</value></data>
+  <data name="DockerContainerState_removing" xml:space="preserve"><value>Removing</value></data>
+  <data name="DockerContainerState_exited" xml:space="preserve"><value>Exited</value></data>
+  <data name="DockerContainerState_dead" xml:space="preserve"><value>Dead</value></data>
+  <data name="DockerStatusCreated" xml:space="preserve"><value>Created</value></data>
+  <data name="DockerStatusDead" xml:space="preserve"><value>Dead</value></data>
+  <data name="DockerStatusPaused" xml:space="preserve"><value>Paused</value></data>
+  <data name="DockerStatusRemoving" xml:space="preserve"><value>Removal in progress</value></data>
+  <data name="DockerStatusUp" xml:space="preserve"><value>Up for {0}</value></data>
+  <data name="DockerStatusExited" xml:space="preserve"><value>Exited (code {0}) {1} ago</value></data>
+  <data name="DockerStatusRestarting" xml:space="preserve"><value>Restarting (code {0}) {1} ago</value></data>
+  <data name="DockerStatusHealthy" xml:space="preserve"><value>healthy</value></data>
+  <data name="DockerStatusUnhealthy" xml:space="preserve"><value>unhealthy</value></data>
+  <data name="DockerStatusHealthStarting" xml:space="preserve"><value>health check starting</value></data>
+  <data name="DockerStatusPausedFlag" xml:space="preserve"><value>paused</value></data>
+  <data name="DockerDurationLessThanSecond" xml:space="preserve"><value>less than a second</value></data>
+  <data name="DockerDurationAboutMinute" xml:space="preserve"><value>about a minute</value></data>
+  <data name="DockerDurationAboutHour" xml:space="preserve"><value>about an hour</value></data>
+  <data name="DockerDuration_second" xml:space="preserve"><value>{0} second</value></data>
+  <data name="DockerDuration_seconds" xml:space="preserve"><value>{0} seconds</value></data>
+  <data name="DockerDuration_minute" xml:space="preserve"><value>{0} minute</value></data>
+  <data name="DockerDuration_minutes" xml:space="preserve"><value>{0} minutes</value></data>
+  <data name="DockerDuration_hour" xml:space="preserve"><value>{0} hour</value></data>
+  <data name="DockerDuration_hours" xml:space="preserve"><value>{0} hours</value></data>
+  <data name="DockerDuration_day" xml:space="preserve"><value>{0} day</value></data>
+  <data name="DockerDuration_days" xml:space="preserve"><value>{0} days</value></data>
+  <data name="DockerDuration_week" xml:space="preserve"><value>{0} week</value></data>
+  <data name="DockerDuration_weeks" xml:space="preserve"><value>{0} weeks</value></data>
+  <data name="DockerDuration_month" xml:space="preserve"><value>{0} month</value></data>
+  <data name="DockerDuration_months" xml:space="preserve"><value>{0} months</value></data>
+  <data name="DockerDuration_year" xml:space="preserve"><value>{0} year</value></data>
+  <data name="DockerDuration_years" xml:space="preserve"><value>{0} years</value></data>
+  <data name="DockerComposeState_running" xml:space="preserve"><value>running</value></data>
+  <data name="DockerComposeState_exited" xml:space="preserve"><value>exited</value></data>
+  <data name="DockerComposeState_restarting" xml:space="preserve"><value>restarting</value></data>
+  <data name="DockerComposeState_paused" xml:space="preserve"><value>paused</value></data>
+  <data name="DockerComposeState_created" xml:space="preserve"><value>created</value></data>
+  <data name="DockerComposeState_dead" xml:space="preserve"><value>dead</value></data>
+  <data name="DockerComposeState_removing" xml:space="preserve"><value>removing</value></data>
+  <data name="Enum_GitProviderType_GitHub" xml:space="preserve"><value>GitHub</value></data>
+  <data name="Enum_GitProviderType_GitLab" xml:space="preserve"><value>GitLab</value></data>
+  <data name="Enum_GitProviderType_Gitea" xml:space="preserve"><value>Gitea</value></data>
+  <data name="Enum_GitProviderType_AetheusGit" xml:space="preserve"><value>Aetheus Git</value></data>
+  <data name="Enum_GitAuthType_HttpsToken" xml:space="preserve"><value>HTTPS token</value></data>
+  <data name="Enum_GitAuthType_Ssh" xml:space="preserve"><value>SSH</value></data>
+  <data name="PreflightKind_runner" xml:space="preserve"><value>Runner</value></data>
+  <data name="PreflightKind_environment" xml:space="preserve"><value>Environment</value></data>
+  <data name="PreflightKind_pipeline-reference" xml:space="preserve"><value>Pipeline reference</value></data>
+  <data name="PreflightKind_ports" xml:space="preserve"><value>Ports</value></data>
+  <data name="PreflightKind_child-pipeline" xml:space="preserve"><value>Child pipeline</value></data>
+  <data name="PreflightKind_scanner-manifest" xml:space="preserve"><value>Scanner manifest</value></data>
+  <data name="PreflightKind_release-artifact" xml:space="preserve"><value>Release artifact</value></data>
+  <data name="PreflightKind_ai-profile" xml:space="preserve"><value>AI profile</value></data>
+  <data name="PreflightKind_library" xml:space="preserve"><value>Variable library</value></data>
+  <data name="PreflightKind_vault" xml:space="preserve"><value>Vault</value></data>
+  <data name="PreflightKind_capability" xml:space="preserve"><value>Capability</value></data>
+  <data name="AnalysisTicketHeading" xml:space="preserve"><value>Analysis finding #{0}</value></data>
+  <data name="AnalysisTicketRuleLine" xml:space="preserve"><value>Rule: {0}</value></data>
+  <data name="AnalysisTicketFingerprintLine" xml:space="preserve"><value>Fingerprint: {0}</value></data>
+  <data name="LaunchProblemInChain" xml:space="preserve"><value>{chain}: {problem}</value></data>
+  <data name="LaunchProblem_EmptyTargetParameter" xml:space="preserve"><value>Stage &apos;{stage}&apos;: parameter &apos;{parameter}&apos; is empty, so no server is chosen for it. Choose a value for &apos;{parameter}&apos; before launching.</value></data>
+  <data name="LaunchProblem_NoRunnerForStage" xml:space="preserve"><value>Stage &apos;{stage}&apos;: no online pipeline runner is available in the organization (requested {selector}).</value></data>
+  <data name="LaunchProblem_NoDeployTargetForStage" xml:space="preserve"><value>Deploy stage &apos;{stage}&apos;: no online deployment-capable agent is available (requested {selector}). Install an agent with --module deployment, or target a host that has the deployment capability.</value></data>
+  <data name="LaunchProblem_RunnerCannotTakeStage" xml:space="preserve"><value>Stage &apos;{stage}&apos;: no configured runner can take it ({runners}). It needs an agent on protocol {minimum} to {maximum} that advertises {capability}, otherwise the stage waits forever. Update or reinstall the agent from its server page.</value></data>
+  <data name="LaunchProblem_DeployTargetCannotTakeStage" xml:space="preserve"><value>Stage &apos;{stage}&apos;: no configured deployment target can take it ({runners}). It needs an agent on protocol {minimum} to {maximum} that advertises {capability}, otherwise the stage waits forever. Update or reinstall the agent from its server page.</value></data>
+  <data name="LaunchProblem_EnvironmentCheckRefuses" xml:space="preserve"><value>Stage(s) {stages}: a required check on environment &apos;{environment}&apos; refuses the run. Fix the check before launching. It is evaluated again when the stage starts.</value></data>
+  <data name="LaunchProblem_DuplicateDeploymentTarget" xml:space="preserve"><value>Duplicate deployment target &apos;{app}&apos; on {target}: stage &apos;{firstStage}&apos;, step &apos;{firstStep}&apos; and stage &apos;{secondStage}&apos;, step &apos;{secondStep}&apos;. Override the inherited step by giving it the same name, or remove one deployment.</value></data>
+  <data name="LaunchProblem_StepPipelineMissing" xml:space="preserve"><value>Stage &apos;{stage}&apos;: step &apos;{step}&apos; names pipeline &apos;{pipeline}&apos;, which does not exist in this project.</value></data>
+  <data name="LaunchProblem_ArtifactSourcePipelineMissing" xml:space="preserve"><value>Stage &apos;{stage}&apos;: step &apos;{step}&apos; restores artifacts from pipeline &apos;{pipeline}&apos;, which does not exist in this project.</value></data>
+  <data name="LaunchProblem_StepPipelineKnownLater" xml:space="preserve"><value>Stage &apos;{stage}&apos;: step &apos;{step}&apos; names pipeline &apos;{pipeline}&apos;, whose value is only known once the run is under way. Its existence is checked when the step runs.</value></data>
+  <data name="LaunchProblem_ArtifactSourcePipelineKnownLater" xml:space="preserve"><value>Stage &apos;{stage}&apos;: step &apos;{step}&apos; restores artifacts from pipeline &apos;{pipeline}&apos;, whose value is only known once the run is under way. Its existence is checked when the step runs.</value></data>
+  <data name="LaunchProblem_OnSuccessPipelineMissing" xml:space="preserve"><value>on_success names pipeline &apos;{pipeline}&apos;, which does not exist in this project.</value></data>
+  <data name="LaunchProblem_ChildPipelineNoDefinition" xml:space="preserve"><value>The pipeline has no definition.</value></data>
+  <data name="LaunchProblem_ChildPipelineDefinitionUnresolvable" xml:space="preserve"><value>Its definition cannot be resolved: {detail}</value></data>
+  <data name="LaunchProblem_ChildPipelineVariablesRefused" xml:space="preserve"><value>Its variables cannot be resolved: {detail}</value></data>
+  <data name="LaunchProblem_UnsupportedStageCondition" xml:space="preserve"><value>Stage &apos;{stage}&apos;: condition &apos;{condition}&apos; is not supported. A condition is exactly one of always(), succeeded(), failed(), cancelled(), eq(variables[&apos;NAME&apos;], &apos;value&apos;), ne(variables[&apos;NAME&apos;], &apos;value&apos;) or contains(variables[&apos;NAME&apos;], &apos;value&apos;).</value></data>
+  <data name="LaunchProblem_UnsupportedJobCondition" xml:space="preserve"><value>Job &apos;{job}&apos; in stage &apos;{stage}&apos;: condition &apos;{condition}&apos; is not supported. A condition is exactly one of always(), succeeded(), failed(), cancelled(), eq(variables[&apos;NAME&apos;], &apos;value&apos;), ne(variables[&apos;NAME&apos;], &apos;value&apos;) or contains(variables[&apos;NAME&apos;], &apos;value&apos;).</value></data>
+  <data name="LaunchProblem_UnsupportedStepCondition" xml:space="preserve"><value>Step &apos;{step}&apos; in stage &apos;{stage}&apos;: condition &apos;{condition}&apos; is not supported. A condition is exactly one of always(), succeeded(), failed(), cancelled(), eq(variables[&apos;NAME&apos;], &apos;value&apos;), ne(variables[&apos;NAME&apos;], &apos;value&apos;) or contains(variables[&apos;NAME&apos;], &apos;value&apos;).</value></data>
+  <data name="LaunchProblem_ConfigTemplateUndefinedVariables" xml:space="preserve"><value>Configuration template &apos;{path}&apos; (used by steps {steps}) uses variable(s) {variables} that nothing in this run defines. Add them to a Variable Library the pipeline lists, or remove them from the template.</value></data>
+  <data name="LaunchProblem_ConfigTemplateMissingInConfigRepository" xml:space="preserve"><value>Configuration template &apos;{path}&apos; (used by steps {steps}) was found neither in the project&apos;s configuration repository nor at commit {commit} of its source. Prepare the production deployment from the pipeline setup wizard, which creates it, before launching.</value></data>
+  <data name="LaunchProblem_ConfigTemplateMissingAtCommit" xml:space="preserve"><value>Configuration template &apos;{path}&apos; (used by steps {steps}) was not found at commit {commit} of the project&apos;s source.</value></data>
+  <data name="LaunchProblem_ConfigTemplateMissingInConfigRepositoryMayRun" xml:space="preserve"><value>Configuration template &apos;{path}&apos; (used by steps {steps}) was found neither in the project&apos;s configuration repository nor at commit {commit} of its source. The condition of the step depends on a value only known once the run is under way, so the run is not refused.</value></data>
+  <data name="LaunchProblem_ConfigTemplateMissingAtCommitMayRun" xml:space="preserve"><value>Configuration template &apos;{path}&apos; (used by steps {steps}) was not found at commit {commit} of the project&apos;s source. The condition of the step depends on a value only known once the run is under way, so the run is not refused.</value></data>
+  <data name="LaunchProblem_ReleaseArtifactInvalidSha256" xml:space="preserve"><value>Stage &apos;{stage}&apos;, step &apos;{step}&apos; of pipeline &apos;{pipeline}&apos;: the retained artifact &apos;{artifact}&apos; of release &apos;{release}&apos; has no valid SHA-256, so the restore would be refused. Republish the release that carries it.</value></data>
+  <data name="LaunchProblem_ReleaseArtifactNotRetained" xml:space="preserve"><value>Stage &apos;{stage}&apos;, step &apos;{step}&apos; of pipeline &apos;{pipeline}&apos;: release &apos;{release}&apos; has no retained artifact &apos;{artifact}&apos; in this project. The step would fail. Deploy or publish a release that retains this artifact before launching.</value></data>
+  <data name="LaunchProblem_ReleaseArtifactRequiredByContract" xml:space="preserve"><value>Stage &apos;{stage}&apos;, step &apos;{step}&apos; of pipeline &apos;{pipeline}&apos;: release &apos;{release}&apos; has no retained artifact &apos;{artifact}&apos; in this project. allow_missing does not apply: the retained release was sealed with a contract that requires it. The step would fail. Deploy or publish a release that retains this artifact before launching.</value></data>
+  <data name="LaunchProblem_ReleaseArtifactPayloadMissing" xml:space="preserve"><value>Stage &apos;{stage}&apos;, step &apos;{step}&apos; of pipeline &apos;{pipeline}&apos;: release &apos;{release}&apos; resolves to artifact #{artifactId} &apos;{artifact}&apos;, whose payload file is missing from the artifact storage, so the restore would fail with a 404 during the run. allow_missing does not apply: the release exists, only its file is gone. Deploy again a release that retains this artifact, or restore the file in the artifact storage, before launching.</value></data>
+  <data name="LaunchProblem_ReleaseVersionArtifactPayloadMissing" xml:space="preserve"><value>Stage &apos;{stage}&apos;, step &apos;{step}&apos; of pipeline &apos;{pipeline}&apos;: release &apos;{release}&apos; (version {version}) resolves to artifact #{artifactId} &apos;{artifact}&apos;, whose payload file is missing from the artifact storage, so the restore would fail with a 404 during the run. allow_missing does not apply: the release exists, only its file is gone. Deploy again a release that retains this artifact, or restore the file in the artifact storage, before launching.</value></data>
+  <data name="LaunchProblem_RequiredLibraryMissing" xml:space="preserve"><value>Variable library &apos;{library}&apos; is required by this pipeline and does not exist here. Create it with the entries the pipeline reads, then launch.</value></data>
+  <data name="LaunchProblem_RequiredVaultMissing" xml:space="preserve"><value>Vault &apos;{vault}&apos; is required by this pipeline and does not exist here. Create it and add the secrets the pipeline reads, then launch.</value></data>
+  <data name="LaunchProblem_RequiredEnvironmentMissing" xml:space="preserve"><value>Environment &apos;{environment}&apos; is required by this pipeline and does not exist here.</value></data>
+  <data name="LaunchProblem_RequiredCapabilityUnknown" xml:space="preserve"><value>Capability &apos;{capability}&apos; is not one this control plane can verify (known: {known}).</value></data>
+  <data name="LaunchProblem_RequiredDockerMissing" xml:space="preserve"><value>No enrolled runner reports Docker available.</value></data>
+  <data name="LaunchProblem_PortRegisteredToAnother" xml:space="preserve"><value>Port {port} on server &apos;{server}&apos; is already registered to &apos;{owner}&apos; (declared {declaredAt}). Choose another port or release that reservation before deploying.</value></data>
+  <data name="LaunchProblem_PortSeenListening" xml:space="preserve"><value>Port {port} on server &apos;{server}&apos; was seen listening, held by &apos;{owner}&apos;, and no project declared it. The deployment will fail to bind it unless that listener is stopped. Set &apos;observed_port_policy: error&apos; to refuse the launch, or &apos;ignore&apos; to stop reporting it.</value></data>
+  <data name="LaunchProblem_AiStepNoOrganization" xml:space="preserve"><value>AI step &apos;{step}&apos; in stage &apos;{stage}&apos;: the pipeline belongs to no organization, so no AI runner profile can be resolved.</value></data>
+  <data name="LaunchProblem_AiStepProfileUnusable" xml:space="preserve"><value>AI step &apos;{step}&apos; in stage &apos;{stage}&apos;: no AI runner profile of the organization can run it. {detail}</value></data>
+  <data name="LaunchProblem_AdvisoryAiStepNoOrganization" xml:space="preserve"><value>AI step &apos;{step}&apos; in stage &apos;{stage}&apos;: the pipeline belongs to no organization, so no AI runner profile can be resolved. The advisory step will be recorded as not run; the run is not blocked.</value></data>
+  <data name="LaunchProblem_AdvisoryAiStepProfileUnusable" xml:space="preserve"><value>AI step &apos;{step}&apos; in stage &apos;{stage}&apos;: no AI runner profile of the organization can run it. {detail} The advisory step will be recorded as not run; the run is not blocked.</value></data>
+  <data name="LaunchProblem_ScannerManifestNotReported" xml:space="preserve"><value>Scanner steps of stage(s) {stages} of pipeline &apos;{pipeline}&apos; need an agent reporting scanner manifest {expected}, and no eligible runner reports it ({runners}). The run would fail at its first scanner step. Update the agent from its server page, then launch again.</value></data>
+  <data name="LaunchProblem_UnresolvedVariables" xml:space="preserve"><value>Pipeline variable(s) {names} could not be resolved. A host- or environment-dependent value must come from a Variable Library listed under variable_libraries: check that the library exists, that this project can use it, and that it carries the entry.</value></data>
+  <data name="LaunchProblem_EmptyLibraryEntries" xml:space="preserve"><value>Variable library entries {entries} are empty and must be filled in before this pipeline can run. A copied library is created with empty values: enter them in the Variable Library. An entry that may stay empty is written $(NAME:-) in the pipeline.</value></data>
+  <data name="LaunchProblem_EmptyVaultSecrets" xml:space="preserve"><value>Vault secrets {secrets} are empty and must be filled in before this pipeline can run. A copied vault is created with empty values: enter them in the Vault.</value></data>
+  <data name="LaunchProblem_EmptyLibraryEntriesAndVaultSecrets" xml:space="preserve"><value>Empty values must be filled in before this pipeline can run: variable library entries {entries}, vault secrets {secrets}. A copied library or vault is created with empty values: enter them in the Variable Library or the Vault. An entry that may stay empty is written $(NAME:-) in the pipeline.</value></data>
+  <data name="LaunchProblem_IdempotencyKeyTooLong" xml:space="preserve"><value>Idempotency key cannot exceed {max} characters.</value></data>
+  <data name="LaunchProblem_ParameterReservedName" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; uses a reserved system variable name.</value></data>
+  <data name="LaunchProblem_ParameterUnknown" xml:space="preserve"><value>Unknown parameter &apos;{parameter}&apos;.</value></data>
+  <data name="LaunchProblem_ParameterRequired" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; is required.</value></data>
+  <data name="LaunchProblem_ParameterNotNumber" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; must be a number (got &apos;{value}&apos;).</value></data>
+  <data name="LaunchProblem_ParameterNotBoolean" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; must be &apos;true&apos; or &apos;false&apos; (got &apos;{value}&apos;).</value></data>
+  <data name="LaunchProblem_ParameterNotInChoices" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; must be one of: {choices} (got &apos;{value}&apos;).</value></data>
+  <data name="LaunchProblem_ParameterDeclaredTwice" xml:space="preserve"><value>Parameter &apos;{parameter}&apos; is declared more than once.</value></data>
+  <data name="LaunchProblem_ReleaseNumberModeInvalid" xml:space="preserve"><value>`release_number:` accepts only `allocate` (each run takes the project&apos;s next release number).</value></data>
+  <data name="LaunchProblem_TemplateResolvedYamlTooLong" xml:space="preserve"><value>Resolved pipeline YAML exceeds the {limit} character safety limit.</value></data>
+  <data name="LaunchProblem_TemplateInheritanceTooDeep" xml:space="preserve"><value>Pipeline template inheritance exceeds the maximum depth of {limit}.</value></data>
+  <data name="LaunchProblem_TemplateNotFound" xml:space="preserve"><value>Pipeline template &apos;{template}&apos; was not found in organization {organization}.</value></data>
+  <data name="LaunchProblem_TemplateCyclic" xml:space="preserve"><value>Cyclic template inheritance detected at &apos;{template}&apos;.</value></data>
+  <data name="LaunchProblem_TemplateVersionMissing" xml:space="preserve"><value>Pipeline template version &apos;{template}&apos; does not exist.</value></data>
+  <data name="LaunchProblem_TemplateParameterUnresolved" xml:space="preserve"><value>Pipeline template parameter &apos;{parameter}&apos; could not be resolved.</value></data>
+  <data name="LaunchProblem_TemplateReferenceInvalid" xml:space="preserve"><value>Invalid pinned pipeline template reference &apos;{reference}&apos;. Expected name@N.</value></data>
+  <data name="LaunchProblem_PipelineYamlEmpty" xml:space="preserve"><value>The pipeline YAML is empty.</value></data>
+  <data name="LaunchProblem_PipelineYamlInvalid" xml:space="preserve"><value>The pipeline YAML is invalid: {detail}</value></data>
+  <data name="LaunchProblem_ResolvedPipelineYamlEmpty" xml:space="preserve"><value>The resolved pipeline YAML is empty.</value></data>
+  <data name="LaunchProblem_ResolvedPipelineYamlInvalid" xml:space="preserve"><value>The resolved pipeline YAML is invalid: {detail}</value></data>
+  <data name="LaunchProblem_TemplateYamlEmpty" xml:space="preserve"><value>The template &apos;{template}&apos; YAML is empty.</value></data>
+  <data name="LaunchProblem_TemplateYamlInvalid" xml:space="preserve"><value>The template &apos;{template}&apos; YAML is invalid: {detail}</value></data>
+  <data name="LaunchProblem_ProblemsTogether" xml:space="preserve"><value>{detail}</value></data>
+  <data name="LaunchProblem_ChildRunWarning" xml:space="preserve"><value>Stage &apos;{stage}&apos; (run #{run}): {detail}</value></data>
+  <data name="LaunchProblem_RunWarning_QaE2eCommandMissing" xml:space="preserve"><value>No browser end-to-end command is declared (APPLICATION_QA_E2E_COMMANDS): the browser tests were not run against the deployed version.</value></data>
+  <data name="LaunchProblem_RunWarning_QaComposeFileEmpty" xml:space="preserve"><value>No QA environment was deployed (COMPOSE_FILE is empty in this pipeline): nothing was validated against a running application. Only the project&apos;s QA commands ran.</value></data>
+  <data name="LaunchProblem_CheckpointReused" xml:space="preserve"><value>Checkpoint reused: pipeline &apos;{pipeline}&apos;, run #{run}, {artifacts} verified artifact(s), source run #{source}.</value></data>
+  <data name="LaunchProblem_AiStepFallback" xml:space="preserve"><value>AI step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StageConfirmationRejected" xml:space="preserve"><value>Stage &apos;{stage}&apos; was not confirmed (rejected); the stage fails and the run&apos;s failure handlers run.</value></data>
+  <data name="LaunchProblem_StageConfirmationTimedOut" xml:space="preserve"><value>Stage &apos;{stage}&apos; was not confirmed (timed out); the stage fails and the run&apos;s failure handlers run.</value></data>
+  <data name="LaunchProblem_LaunchSetupFailed" xml:space="preserve"><value>The run could not be launched: {detail}</value></data>
+  <data name="LaunchProblem_LaunchRefused" xml:space="preserve"><value>The automated launch ({source}) was refused: {detail}</value></data>
+  <data name="LaunchProblem_LaunchRefusedRepeated" xml:space="preserve"><value>Refused {count} times, last at {last}</value></data>
+  <data name="LaunchProblem_VariableLibraryNotFound" xml:space="preserve"><value>Variable library &apos;{library}&apos; not found.</value></data>
+  <data name="LaunchProblem_BlueGreenComposeEnvNotForwarded" xml:space="preserve"><value>Blue-green step &apos;{step}&apos;: compose_env did not forward {variables}, which this run does not define at this point.</value></data>
+  <data name="LaunchProblem_StepFailedRestoreArtifacts" xml:space="preserve"><value>Restore-artifacts step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedRestoreBackup" xml:space="preserve"><value>Restore-backup step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedAdvanceBranch" xml:space="preserve"><value>Advance branch step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedDeploy" xml:space="preserve"><value>Deploy step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedScanner" xml:space="preserve"><value>Scanner step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedRelease" xml:space="preserve"><value>Release step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedTrigger" xml:space="preserve"><value>Trigger step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedApacheProxy" xml:space="preserve"><value>Apache-proxy step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedApacheConfig" xml:space="preserve"><value>Apache-config step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedCertbot" xml:space="preserve"><value>Certbot step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedSmoke" xml:space="preserve"><value>Smoke step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_StepFailedBlueGreen" xml:space="preserve"><value>Blue-green step &apos;{step}&apos;: {detail}</value></data>
+  <data name="LaunchProblem_UnknownProperty" xml:space="preserve"><value>Unknown property &apos;{property}&apos; under {path} will be ignored.</value></data>
+  <data name="LaunchProblem_UnknownPropertyAtTopLevel" xml:space="preserve"><value>Unknown top-level property &apos;{property}&apos; will be ignored.</value></data>
+  <data name="LaunchProblem_UnknownPropertyNearMiss" xml:space="preserve"><value>Unknown property &apos;{property}&apos;: did you mean &apos;{suggestion}&apos;? A misspelled key would be ignored.</value></data>
+  <data name="LaunchProblem_OnSuccessFollowUpNotStarted" xml:space="preserve"><value>The on_success follow-up &apos;{target}&apos; was not started: {detail}</value></data>
+  <data name="LaunchProblem_OnSuccessFollowUpsNotStarted" xml:space="preserve"><value>The on_success follow-ups were not started: {detail}</value></data>
+  <data name="LaunchProblem_DownstreamSnapshotUnparsable" xml:space="preserve"><value>The upstream run&apos;s YAML snapshot cannot be parsed, so its on_success list is unknown: {detail}</value></data>
+  <data name="LaunchProblem_DownstreamNoProject" xml:space="preserve"><value>The upstream pipeline belongs to no project, and on_success targets are resolved inside a project.</value></data>
+  <data name="LaunchProblem_DownstreamTargetMissing" xml:space="preserve"><value>No pipeline named &apos;{pipeline}&apos; exists in project {project}.</value></data>
+  <data name="LaunchProblem_DownstreamCycle" xml:space="preserve"><value>Pipeline {pipeline} is already in the upstream chain [{upstream}], cycle refused.</value></data>
+  <data name="LaunchProblem_DownstreamDepthLimit" xml:space="preserve"><value>The upstream chain depth {depth} reached the limit {limit}.</value></data>
+  <data name="LaunchProblem_DownstreamLaunchRefused" xml:space="preserve"><value>The launch was refused: {detail}</value></data>
+  <data name="LaunchProblem_DownstreamNoReason" xml:space="preserve"><value>No reason was given.</value></data>
+  <data name="LaunchProblem_DownstreamNotStarted" xml:space="preserve"><value>{detail}</value></data>
+  <data name="LaunchProblem_ChainedPipelineGone" xml:space="preserve"><value>Pipeline {pipeline} no longer exists.</value></data>
+  <data name="LaunchProblem_ChainedPipelineNoOwner" xml:space="preserve"><value>Pipeline &apos;{pipeline}&apos; has no owner, so an automated run cannot be authorized (re-save it as an authorized user).</value></data>
+  <data name="LaunchProblem_ChainedOwnerLacksServerAdmin" xml:space="preserve"><value>Owner &apos;{owner}&apos; of pipeline &apos;{pipeline}&apos; lacks Server.Admin on target server {server}.</value></data>
+  <data name="LaunchProblem_ChainedDefinitionNotPrepared" xml:space="preserve"><value>Its definition cannot be prepared: {detail}</value></data>
+  <data name="LaunchProblem_ChainedLaunchReturnedNoRun" xml:space="preserve"><value>The launch returned no run.</value></data>
+  <data name="LaunchProblem_RunStoppedStageNotDispatched" xml:space="preserve"><value>The run was stopped: its next stage could not be dispatched. {detail}</value></data>
+  <data name="LaunchProblem_RunStoppedStageNotDispatchedCleanupRefused" xml:space="preserve"><value>The run was stopped: its next stage could not be dispatched. {detail} The workspace cleanup was not run: it needs the same variables.</value></data>
+  <data name="LaunchProblem_ArtifactCollectionFailed" xml:space="preserve"><value>Artifact collection did not succeed: the run cannot publish its declared artifact.</value></data>
+  <data name="LaunchProblem_ArtifactProducerUnavailable" xml:space="preserve"><value>Stage &apos;{stage}&apos; declares artifacts, but its producer runner (server {server}) is offline or no longer eligible, so they cannot be collected.</value></data>
+  <data name="LaunchProblem_SystemCleanupAwaitsRunner" xml:space="preserve"><value>System cleanup is queued for the original affinity runner; its workspace requires reconciliation when that runner returns online.</value></data>
+  <data name="DashboardNoOrganization" xml:space="preserve"><value>You are not a member of any organization yet.</value></data>
+  <data name="RoleAssignmentNoOrganization" xml:space="preserve"><value>No organization exists yet: only the site-wide Admin role can be given.</value></data>
+  <data name="DashboardNothingToShowHint" xml:space="preserve"><value>You belong to no organization and have no notification. An administrator gives you access by adding you to an organization.</value></data>
+  <data name="DashboardNothingToShow" xml:space="preserve"><value>Nothing to show yet</value></data>
+  <data name="DashboardNoReadableResources" xml:space="preserve"><value>Your role in this organization lets you see no server, project or pipeline yet.</value></data>
+  <data name="PipelineFillValueTitle" xml:space="preserve"><value>Fill {0}</value></data>
+  <data name="PipelineFillLibraryIntro" xml:space="preserve"><value>Type the value of {0} in the library {1}. The pipelines of the project read it from there; you can change it later on the library page.</value></data>
+  <data name="PipelineFillVaultIntro" xml:space="preserve"><value>Type the secret {0} of the vault {1}. It is stored encrypted and never shown again; you can rotate it later on the vault page.</value></data>
+  <data name="PipelineFillValueHelp" xml:space="preserve"><value>Validating saves the value in place and keeps you in the wizard; the item then counts as filled.</value></data>
+  <data name="PipelineFillValidate" xml:space="preserve"><value>Validate</value></data>
+  <data name="GateOverrideTitle" xml:space="preserve"><value>Deploy despite the quality gate?</value></data>
+  <data name="GateOverrideIntro" xml:space="preserve"><value>The quality gate has reservations about this release. Its artifacts are kept, so it can still be deployed:</value></data>
+  <data name="GateOverrideRecorded" xml:space="preserve"><value>Deploying anyway is recorded on the run and in the audit log. The approvals of the pipeline still apply.</value></data>
+  <data name="GateOverrideConfirm" xml:space="preserve"><value>Deploy</value></data>
+  <data name="GateWarningNoGrade" xml:space="preserve"><value>No grade: the release has no sealed assurance grade.</value></data>
+  <data name="GateWarningBelowMinimum" xml:space="preserve"><value>Grade {0}, below the deployment threshold {1}.</value></data>
+  <data name="GateWarningGradedF" xml:space="preserve"><value>The release is graded F.</value></data>
+  <data name="GateWarningRejected" xml:space="preserve"><value>The quality gate rejected this release.</value></data>
+  <data name="GateWarningNoVerdict" xml:space="preserve"><value>The quality gate gave no verdict on this release.</value></data>
+  <data name="GateWarningBlockingTests" xml:space="preserve"><value>{0} blocking test(s) failed.</value></data>
+  <data name="GateWarningSecurityFindings" xml:space="preserve"><value>Security problem: {0} security finding(s) still open.</value></data>
+  <data name="GateOverrideRunBadge" xml:space="preserve"><value>Despite the quality gate</value></data>
+  <data name="GateOverrideRunNote" xml:space="preserve"><value>Deployed despite the quality gate by {0}, {1}: {2}</value></data>
+  <data name="GateOverrideRunNoReason" xml:space="preserve"><value>no reservation at the launch</value></data>
+  <data name="LaunchProblem_GateOverrideNotADeployment" xml:space="preserve"><value>The quality gate can only be overridden for a deployment pipeline of a project launched with a release version.</value></data>
+  <data name="LaunchProblem_GateOverrideReleaseUnknown" xml:space="preserve"><value>Release {release} does not exist in this project, so it cannot be deployed.</value></data>
+  <data name="LaunchProblem_GateOverrideNoArtifact" xml:space="preserve"><value>Release {release} keeps no artifact, so it cannot be deployed, even despite the quality gate.</value></data>
+  <data name="AuditAction_PipelineRunGateOverridden" xml:space="preserve"><value>Deployed despite the quality gate</value></data>
+  <data name="LastActivity" xml:space="preserve"><value>Last activity</value></data>
+  <data name="CannotDeactivateYourself" xml:space="preserve"><value>You cannot deactivate your own account.</value></data>
+  <data name="UserActivated" xml:space="preserve"><value>User activated.</value></data>
+  <data name="UserDeactivated" xml:space="preserve"><value>User deactivated.</value></data>
+  <data name="CreatedOn" xml:space="preserve"><value>Created on</value></data>
+  <data name="RolePermissionKeys" xml:space="preserve"><value>Permissions by area</value></data>
+  <data name="PermissionKeysIntro" xml:space="preserve"><value>Tick what the role may do on every resource of the organization it is held for. Edit implies view and manage implies edit; the per-resource grants of the matrix tab are kept.</value></data>
+  <data name="PermissionKeysAdminIntro" xml:space="preserve"><value>The Admin role holds every permission on every organization; its permissions cannot be changed.</value></data>
+  <data name="PermissionDefault" xml:space="preserve"><value>default</value></data>
+  <data name="PermissionArea_project" xml:space="preserve"><value>Projects</value></data>
+  <data name="PermissionArea_pipeline" xml:space="preserve"><value>Pipelines</value></data>
+  <data name="PermissionArea_release" xml:space="preserve"><value>Releases</value></data>
+  <data name="PermissionArea_environment" xml:space="preserve"><value>Environments</value></data>
+  <data name="PermissionArea_variables" xml:space="preserve"><value>Variable libraries</value></data>
+  <data name="PermissionArea_vault" xml:space="preserve"><value>Vaults</value></data>
+  <data name="PermissionArea_server" xml:space="preserve"><value>Servers</value></data>
+  <data name="PermissionArea_connection" xml:space="preserve"><value>Service connections</value></data>
+  <data name="PermissionArea_org" xml:space="preserve"><value>Organization</value></data>
+  <data name="PermissionAreaDescription_project" xml:space="preserve"><value>Projects and their settings.</value></data>
+  <data name="PermissionAreaDescription_pipeline" xml:space="preserve"><value>Pipelines, their runs and approvals, and pipeline templates.</value></data>
+  <data name="PermissionAreaDescription_release" xml:space="preserve"><value>Releases, their rollback and their recorded status.</value></data>
+  <data name="PermissionAreaDescription_environment" xml:space="preserve"><value>Deployment environments.</value></data>
+  <data name="PermissionAreaDescription_variables" xml:space="preserve"><value>Variable libraries and their entries.</value></data>
+  <data name="PermissionAreaDescription_vault" xml:space="preserve"><value>Vaults and their secrets.</value></data>
+  <data name="PermissionAreaDescription_server" xml:space="preserve"><value>Servers and the sensitive operations on them.</value></data>
+  <data name="PermissionAreaDescription_connection" xml:space="preserve"><value>Connections to external services.</value></data>
+  <data name="PermissionAreaDescription_org" xml:space="preserve"><value>The organization itself.</value></data>
+  <data name="PermissionKey_project.view" xml:space="preserve"><value>View projects</value></data>
+  <data name="PermissionKey_project.edit" xml:space="preserve"><value>Edit projects</value></data>
+  <data name="PermissionKey_project.manage" xml:space="preserve"><value>Manage projects (delete, administer)</value></data>
+  <data name="PermissionKey_pipeline.view" xml:space="preserve"><value>View pipelines and runs</value></data>
+  <data name="PermissionKey_pipeline.edit" xml:space="preserve"><value>Edit pipelines</value></data>
+  <data name="PermissionKey_pipeline.manage" xml:space="preserve"><value>Manage pipelines (delete, administer)</value></data>
+  <data name="PermissionKey_pipeline.run" xml:space="preserve"><value>Run, rerun, resume, retry or cancel a run</value></data>
+  <data name="PermissionKey_pipeline.approval.decide" xml:space="preserve"><value>Decide approvals (also requires administering the project or environment)</value></data>
+  <data name="PermissionKey_pipeline.template.view" xml:space="preserve"><value>View pipeline templates</value></data>
+  <data name="PermissionKey_pipeline.template.edit" xml:space="preserve"><value>Edit pipeline templates</value></data>
+  <data name="PermissionKey_pipeline.template.manage" xml:space="preserve"><value>Manage pipeline templates</value></data>
+  <data name="PermissionKey_release.view" xml:space="preserve"><value>View releases</value></data>
+  <data name="PermissionKey_release.edit" xml:space="preserve"><value>Edit releases (build, promote)</value></data>
+  <data name="PermissionKey_release.manage" xml:space="preserve"><value>Manage releases</value></data>
+  <data name="PermissionKey_release.rollback" xml:space="preserve"><value>Roll a release back (also requires editing the project)</value></data>
+  <data name="PermissionKey_release.status.restore" xml:space="preserve"><value>Correct a release's status (also requires administering the project)</value></data>
+  <data name="PermissionKey_environment.view" xml:space="preserve"><value>View environments</value></data>
+  <data name="PermissionKey_environment.edit" xml:space="preserve"><value>Edit environments</value></data>
+  <data name="PermissionKey_environment.manage" xml:space="preserve"><value>Manage environments</value></data>
+  <data name="PermissionKey_variables.view" xml:space="preserve"><value>View variable libraries</value></data>
+  <data name="PermissionKey_variables.edit" xml:space="preserve"><value>Edit variable libraries</value></data>
+  <data name="PermissionKey_variables.manage" xml:space="preserve"><value>Manage variable libraries</value></data>
+  <data name="PermissionKey_vault.view" xml:space="preserve"><value>View vaults (secret names only)</value></data>
+  <data name="PermissionKey_vault.edit" xml:space="preserve"><value>Edit vaults and their secrets</value></data>
+  <data name="PermissionKey_vault.manage" xml:space="preserve"><value>Manage vaults</value></data>
+  <data name="PermissionKey_vault.secret.reveal" xml:space="preserve"><value>Reveal a secret's value in clear</value></data>
+  <data name="PermissionKey_server.view" xml:space="preserve"><value>View servers</value></data>
+  <data name="PermissionKey_server.edit" xml:space="preserve"><value>Edit servers</value></data>
+  <data name="PermissionKey_server.manage" xml:space="preserve"><value>Manage servers (retire, agent, deployments)</value></data>
+  <data name="PermissionKey_server.services.control" xml:space="preserve"><value>Start, stop, install or uninstall services</value></data>
+  <data name="PermissionKey_server.firewall.manage" xml:space="preserve"><value>Change the firewall</value></data>
+  <data name="PermissionKey_server.system.upgrade" xml:space="preserve"><value>Upgrade the system</value></data>
+  <data name="PermissionKey_server.ports.reserve" xml:space="preserve"><value>Reserve ports</value></data>
+  <data name="PermissionKey_server.docker.container.env.view" xml:space="preserve"><value>View Docker container environment variables</value></data>
+  <data name="PermissionKey_server.mailbox.read" xml:space="preserve"><value>Read the server's mailboxes</value></data>
+  <data name="PermissionKey_server.mailbox.manage" xml:space="preserve"><value>Send, delete and file mail in the server's mailboxes</value></data>
+  <data name="PermissionKey_connection.view" xml:space="preserve"><value>View service connections</value></data>
+  <data name="PermissionKey_connection.edit" xml:space="preserve"><value>Edit service connections</value></data>
+  <data name="PermissionKey_connection.manage" xml:space="preserve"><value>Manage service connections</value></data>
+  <data name="PermissionKey_org.members.manage" xml:space="preserve"><value>Manage the organization's members</value></data>
+  <data name="PermissionKey_org.roles.manage" xml:space="preserve"><value>Manage the organization's roles</value></data>
+  <data name="PermissionKey_org.mailtemplates.manage" xml:space="preserve"><value>Manage the organization's mail templates</value></data>
+  <data name="AdminScopeOrganization" xml:space="preserve"><value>Organization</value></data>
+  <data name="AdminScopeOrganizationHelp" xml:space="preserve"><value>The organization whose users, roles and mail templates these pages show.</value></data>
+  <data name="AdminScopeAllOrganizations" xml:space="preserve"><value>All my organizations</value></data>
+  <data name="MailTemplatesPlatform" xml:space="preserve"><value>Platform (every organization)</value></data>
+  <data name="RoleEveryOrganization" xml:space="preserve"><value>Every organization</value></data>
+  <data name="OrganizationMemberLogin" xml:space="preserve"><value>Username or e-mail</value></data>
+  <data name="OrganizationMemberLoginHelp" xml:space="preserve"><value>The exact username or e-mail address of the account to add.</value></data>
 </root>

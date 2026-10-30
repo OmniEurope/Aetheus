@@ -12,10 +12,12 @@ public partial class ServerFirewallSection
 
     [Parameter] public EventCallback OnRefreshRequested { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
 
     private ServerFirewallDto? _firewall;
     private bool _loading = true;
@@ -52,6 +54,9 @@ public partial class ServerFirewallSection
     }
 
     private bool CanManage => FirewallManagementAvailable == true;
+
+    // R-11: changing the firewall is a named permission (server.firewall.manage), an Organization Admin's by default.
+    private bool CanEdit => CanManage && Permissions.Can(PermissionKeys.ServerFirewallManage, ServerId);
 
     private OmniDataGrid<FirewallRuleDto>? _grid;
 
@@ -101,9 +106,12 @@ public partial class ServerFirewallSection
         StateHasChanged();
     }
 
+    // R-119: the task the rules of this page queue is followed, and the section is veiled until it ends.
+    private ServerTaskFollower? _follower;
+
     private Task SubmitRuleAsync(NewRuleModel rule) => rule.Action == FirewallRuleAction.Allow
-        ? RunAsync(() => Api.Security.FirewallAllowAsync(ServerId, BuildRequest()), "FirewallRuleQueued")
-        : RunAsync(() => Api.Security.FirewallDenyAsync(ServerId, BuildRequest()), "FirewallRuleQueued");
+        ? RunAsync(() => Api.Security.FirewallAllowAsync(ServerId, BuildRequest()), "FirewallRuleQueued", $"{L["FirewallAllow"]} {_rule.Port}/{_rule.Protocol}")
+        : RunAsync(() => Api.Security.FirewallDenyAsync(ServerId, BuildRequest()), "FirewallRuleQueued", $"{L["FirewallDeny"]} {_rule.Port}/{_rule.Protocol}");
 
     private string LocalizeAction(string action) => action.ToLowerInvariant() switch
     {
@@ -120,7 +128,7 @@ public partial class ServerFirewallSection
                 new OmniConfirmOptions { Destructive = true, OkButtonText = L["FirewallDisable"].Value, CancelButtonText = L["GoBack"].Value });
             if (confirmed != true) return;
         }
-        await RunAsync(() => Api.Security.FirewallToggleAsync(ServerId, enable), enable ? "FirewallEnableQueued" : "FirewallDisableQueued");
+        await Veil.RunAsync(() => RunAsync(() => Api.Security.FirewallToggleAsync(ServerId, enable), enable ? "FirewallEnableQueued" : "FirewallDisableQueued", $"{L["FirewallTitle"]}: {L[enable ? "FirewallEnable" : "FirewallDisable"]}"));
     }
 
     private async Task DeleteRuleAsync(FirewallRuleDto rule)
@@ -136,12 +144,12 @@ public partial class ServerFirewallSection
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await RunAsync(() => Api.Security.FirewallDeleteRuleAsync(ServerId, new FirewallRuleRequest
+        await Veil.RunAsync(() => RunAsync(() => Api.Security.FirewallDeleteRuleAsync(ServerId, new FirewallRuleRequest
         {
             Port = rule.Port ?? 0,
             Protocol = rule.Protocol,
             Source = string.Equals(rule.Source, "Anywhere", StringComparison.OrdinalIgnoreCase) ? "any" : rule.Source
-        }), "FirewallRuleQueued");
+        }), "FirewallRuleQueued", $"{L["Delete"]} {rule.Raw}"));
     }
 
     private FirewallRuleRequest BuildRequest() => new()
@@ -151,14 +159,17 @@ public partial class ServerFirewallSection
         Source = string.IsNullOrWhiteSpace(_rule.Source) ? "any" : _rule.Source.Trim()
     };
 
-    private async Task RunAsync(Func<Task<int?>> action, string successKey)
+    private async Task RunAsync(Func<Task<int?>> action, string successKey, string followTitle)
     {
         _busy = true;
         try
         {
             var taskId = await action();
-            if (taskId is not null)
+            if (taskId is { } queued)
+            {
+                _follower?.Follow(followTitle, queued);
                 Toast.Success(successKey, successKey);
+            }
             else
                 Toast.Error("FirewallActionFailed", "FirewallActionFailed");
         }

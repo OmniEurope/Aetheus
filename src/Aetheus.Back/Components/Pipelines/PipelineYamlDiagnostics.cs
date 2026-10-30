@@ -32,22 +32,62 @@ internal static class PipelineYamlDiagnostics
     /// `requries`). Those are typos, not keys of a newer backend, and skipping them would silently drop
     /// the guard they spell, so they refuse the definition (session challenge 2026-10-01).
     /// </summary>
-    public static List<string> NearMissKeyErrors(string yaml, ILogger logger)
+    public static List<string> NearMissKeyErrors(string yaml, ILogger logger) =>
+        [.. NearMissKeyProblems(yaml, logger).Select(problem => problem.English)];
+
+    /// <summary><see cref="NearMissKeyErrors"/> with each refusal as a <see cref="PipelineProblem"/>.</summary>
+    public static List<PipelineProblem> NearMissKeyProblems(string yaml, ILogger logger)
     {
         var unknown = new List<(string Key, string Context, IReadOnlyDictionary<string, Type> Known)>();
         Walk(yaml, logger, (key, context, known) => unknown.Add((key, context, known)));
-        var errors = new List<string>();
+        var errors = new List<PipelineProblem>();
         foreach (var (key, context, known) in unknown)
         {
             var closest = known.Keys.FirstOrDefault(candidate => IsNearMiss(key, candidate));
             if (closest is not null)
-                errors.Add($"Unknown {context} property '{key}': did you mean '{closest}'? A misspelled key would be ignored.");
+                errors.Add(PipelineProblem.Of(
+                    PipelineProblemCodes.UnknownPropertyNearMiss,
+                    $"Unknown {context} property '{key}': did you mean '{closest}'? A misspelled key would be ignored.",
+                    ("property", key), ("path", context == "top-level" ? string.Empty : YamlPath(context)), ("suggestion", closest)));
         }
         return errors;
     }
 
     public static void AppendUnknownPropertyWarnings(string yaml, List<string> warnings, ILogger logger) =>
         Walk(yaml, logger, (key, context, _) => warnings.Add($"Unknown {context} property '{key}' will be ignored."));
+
+    /// <summary>The unknown-key warnings of <paramref name="yaml"/> as stored problems (what a run records): the
+    /// level of the key (<c>top-level</c>, <c>stage 'x'</c>, <c>job</c>, <c>step</c>), the keys leading to it, and
+    /// the key itself, which the front says in the user's language.</summary>
+    public static List<string> UnknownPropertyStoredWarnings(string yaml, ILogger logger)
+    {
+        var warnings = new List<string>();
+        Walk(yaml, logger, (key, context, _) => warnings.Add(UnknownPropertyProblem(key, context).ToStored()));
+        return warnings;
+    }
+
+    private static PipelineProblem UnknownPropertyProblem(string key, string context)
+    {
+        var english = $"Unknown {context} property '{key}' will be ignored.";
+        if (context == "top-level")
+            return PipelineProblem.Of(PipelineProblemCodes.UnknownPropertyAtTopLevel, english, ("property", key));
+        return PipelineProblem.Of(PipelineProblemCodes.UnknownProperty, english, ("property", key), ("path", YamlPath(context)));
+    }
+
+    /// <summary>Where the key sits, in the YAML's own words (<c>stages[build] &gt; isolation</c>): the
+    /// <c>top-level &gt;</c> prefix goes, and a stage, a job and a step read as the key that holds them.</summary>
+    private static string YamlPath(string context)
+    {
+        const string topLevel = "top-level > ";
+        if (context.StartsWith(topLevel, StringComparison.Ordinal)) return context[topLevel.Length..];
+        if (context.StartsWith("stage '", StringComparison.Ordinal))
+        {
+            var close = context.IndexOf('\'', "stage '".Length);
+            var name = close < 0 ? context["stage '".Length..] : context["stage '".Length..close];
+            return $"stages[{name}]" + (close < 0 ? string.Empty : context[(close + 1)..]);
+        }
+        return context switch { "job" => "jobs", "step" => "steps", _ => context };
+    }
 
     private static void Walk(string yaml, ILogger logger, Action<string, string, IReadOnlyDictionary<string, Type>> onUnknown)
     {

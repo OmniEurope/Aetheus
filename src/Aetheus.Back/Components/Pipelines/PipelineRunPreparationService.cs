@@ -65,6 +65,11 @@ public sealed class PipelineRunPreparationService(
         var selectedBranch = SelectBranch(sourceBranch, mirroredDefinition, pipeline);
         var effectiveProjectId = pipeline.ProjectId
             ?? await repo.GetPipelineProjectIdAsync(pipeline, ct).ConfigureAwait(false);
+        // Recette R-51 (ADR-058): a deleted project waiting for its server cleanup must not deploy again what
+        // the cleanup removes.
+        if (effectiveProjectId is { } projectId && await repo.IsProjectDeletionPendingAsync(projectId, ct).ConfigureAwait(false))
+            throw new ConflictException(
+                $"Pipeline '{pipeline.Name}' belongs to a deleted project that waits for its server cleanup: it can no longer run.");
         var source = await ResolvePipelineSourceAsync(pipeline, effectiveProjectId, selectedBranch, ct).ConfigureAwait(false);
         var (branch, commitHash) = await PinRevisionAsync(pipeline, source, selectedBranch, commitOverride, ct)
             .ConfigureAwait(false);
@@ -72,12 +77,14 @@ public sealed class PipelineRunPreparationService(
         var definitionYaml = await ResolveDefinitionYamlAsync(
             pipeline, effectiveProjectId, branch, commitHash, yamlOverride, source is null, ct).ConfigureAwait(false);
         // Keys this backend does not know are skipped by the parser; the run says so.
-        var definitionWarnings = PipelineYamlDiagnostics.UnknownPropertyWarnings(definitionYaml, logger);
+        var definitionWarnings = PipelineYamlDiagnostics.UnknownPropertyStoredWarnings(definitionYaml, logger);
         RejectNearMissKeys(definitionYaml);
         var organizationId = await repo.GetPipelineOrganizationIdAsync(id, ct).ConfigureAwait(false);
         var resolution = await templateResolver.ResolveAsync(definitionYaml, organizationId ?? 0, parameters: null, ct)
             .ConfigureAwait(false);
-        var definition = resolution.Definition;
+        // R-63: the production environment's server is the default of the deployment's server, when the YAML names none.
+        var definition = await PipelineProductionServerDefault.ApplyAsync(repo, resolution.Definition, effectiveProjectId, ct)
+            .ConfigureAwait(false);
         var effectiveStages = YamlParsingHelper.FlattenJobs(definition);
         ValidatePreparedDefinition(definition, effectiveStages);
         var targetIds = await parameterResolver.ResolveCandidateTargetServerIdsAsync(
@@ -154,9 +161,9 @@ public sealed class PipelineRunPreparationService(
     /// <summary>A misspelled known key (a guard such as approval_timeout_minutes) is refused, never skipped.</summary>
     private void RejectNearMissKeys(string definitionYaml)
     {
-        var nearMissKeys = PipelineYamlDiagnostics.NearMissKeyErrors(definitionYaml, logger);
+        var nearMissKeys = PipelineYamlDiagnostics.NearMissKeyProblems(definitionYaml, logger);
         if (nearMissKeys.Count > 0)
-            throw new BadRequestException(string.Join(" ", nearMissKeys));
+            throw PipelineProblem.Refusal(nearMissKeys);
     }
 
     /// <summary>A source block separates the definition repository and revision from the
@@ -208,7 +215,9 @@ public sealed class PipelineRunPreparationService(
         var organizationId = await repo.GetPipelineOrganizationIdAsync(pipelineId, ct).ConfigureAwait(false) ?? 0;
         var resolution = await templateResolver.ResolveAsync(yaml, organizationId, parameters: null, ct)
             .ConfigureAwait(false);
-        var definition = resolution.Definition;
+        // R-63: the production environment's server is the default of the deployment's server, when the YAML names none.
+        var definition = await PipelineProductionServerDefault.ApplyAsync(repo, resolution.Definition, pipeline.ProjectId, ct)
+            .ConfigureAwait(false);
 
         return definition.Parameters
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))

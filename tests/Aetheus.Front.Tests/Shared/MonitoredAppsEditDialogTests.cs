@@ -38,11 +38,13 @@ public sealed class MonitoredAppsEditDialogTests : BunitContext
     [Fact]
     public async Task ASavedNewApplication_ReloadsTheList()
     {
-        var cut = RenderLoaded();
+        // Add sits in the project header (R-109), so the list is rendered next to the header outlet the project layout gives it.
+        var cut = this.RenderWithPageHeader<MonitoredAppsList>(parameters => parameters.Add(list => list.ProjectId, 1));
+        cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
         var before = AppReads();
         _dialogs.OpenResult = true;
 
-        await cut.FindAll("button").First(button => button.TextContent.Contains("AddMonitoredApp", StringComparison.Ordinal)).ClickAsync(new());
+        await cut.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Contains("AddMonitoredApp", StringComparison.Ordinal)).ClickAsync(new());
 
         Assert.Equal(typeof(MonitoredAppFormDialog), _dialogs.LastComponent);
         Assert.Equal("AddMonitoredApp", _dialogs.LastTitle);

@@ -68,7 +68,7 @@ public sealed class PipelineHostOperationTaskFactory(
         MarkSystemStepFailed(
             stepRun, TaskFailureCodes.ToolError, reason, timeProvider.GetUtcNow().UtcDateTime);
         await repo.AppendRunWarningsAsync(
-            runId, [$"{operation} step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            runId, [PipelineStepFailureWarning.HostOperation(operation, stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private async Task<ImmutableProjectRun?> ResolveImmutableProjectRunAsync(
@@ -478,13 +478,17 @@ public sealed class PipelineHostOperationTaskFactory(
             await FailAsync(bindingError).ConfigureAwait(false);
             return;
         }
-        await BlueGreenRunOwnership.StampAsync(binding!.Variables, runId, resourceLocks, ct).ConfigureAwait(false);
+        await BlueGreenRunOwnership.StampAsync(
+            binding!.Variables, runId, resourceLocks,
+            BlueGreenRunOwnership.MayUndoAnotherRun(operation) ? repo.GetAllActiveRunIdsAsync : null, ct).ConfigureAwait(false);
         // Bluegreen-up refuses a compose_env name the run does not define, so a rollback that finds
         // one undefined belongs to a run that never started a colour, let alone switched one. The
         // agent's rollback says there is nothing to undo; a run warning about variables it does not
         // need would only repeat the failure that stopped the run in other words.
         if (binding!.SkippedComposeEnv.Count > 0 && operation != OperationKind.BlueGreenRollback)
-            await repo.AppendRunWarningsAsync(runId, [$"Blue-green step '{stepRun.StepName}': compose_env did not forward {string.Join(", ", binding.SkippedComposeEnv)}, which this run does not define at this point."], ct).ConfigureAwait(false);
+            await repo.AppendRunWarningsAsync(
+                runId, [PipelineStepFailureWarning.ComposeEnvNotForwarded(stepRun.StepName, binding.SkippedComposeEnv)], ct)
+                .ConfigureAwait(false);
 
         stepRun.ServerId = legServer.Id;
         var task = new ServerTask

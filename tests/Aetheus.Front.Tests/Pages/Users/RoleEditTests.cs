@@ -35,6 +35,8 @@ public class RoleEditTests : BunitContext
     {
         _handler.SetJsonResponse($"api/roles/{id}", MakeRole(id));
         _handler.SetJsonResponse($"api/roles/{id}/permissions", true);
+        // R-11: a saved matrix reloads the role's named permissions.
+        _handler.SetJsonResponse($"api/roles/{id}/permission-keys", new List<string> { PermissionKeys.ProjectView });
         _handler.SetJsonResponse("api/roles", new RoleDto { Id = id, Name = "Admin", Description = "Updated" });
         return Render<RoleEdit>(p => p.Add(x => x.Id, id));
     }
@@ -273,6 +275,7 @@ public class RoleEditTests : BunitContext
             ]
         });
         _handler.SetResponse(HttpMethod.Put, "api/roles/1/permissions", System.Net.HttpStatusCode.NoContent);
+        _handler.SetJsonResponse("api/roles/1/permission-keys", new List<string>());
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForAssertion(() => Assert.Equal("Admin",
             (string)typeof(RoleEdit).GetField("_name", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!));

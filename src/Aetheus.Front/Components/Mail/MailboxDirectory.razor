@@ -9,14 +9,16 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("inbox")" /></Icon>
 </OmniPageHeader>
 
-<AetheusDataGrid @ref="_grid" TItem="MailboxDirectoryEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
+<AetheusDataGrid FullHeight="true" @ref="_grid" TItem="MailboxDirectoryEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
     LoadData="@LoadAsync" KeyProperty="AccountId" PageSize="25" ExportRead="@ReadExportAsync" ExportName="@L["MailboxDirectory"]"
     AllowSorting="true" EmptyText="@L["MailboxDirectoryEmpty"]" RowClick="@Open" Class="mailbox-directory"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<MailboxDirectoryEntryDto>(_items, _total))">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="MailboxDirectoryEntryDto" Property="Email" Title="@L["Email"]" Filterable="true" />
-        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="ServerName" Title="@L["Server"]" Filterable="false" />
+        <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="ServerName" Title="@L["Server"]" Filterable="false" >
+            <Template Context="m"><EntityNameLink Kind="EntityNameKind.Server" Id="m.ServerId" Name="@m.ServerName" /></Template>
+        </OmniDataGridColumn>
         <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Property="Domain" Title="@L["MailboxDirectoryDomain"]" Width="200px" Sortable="false" Filterable="false" />
         <OmniDataGridColumn TItem="MailboxDirectoryEntryDto" Title="@L["Quota"]" Width="160px" Sortable="false" Filterable="false">
             <Template Context="entry">

@@ -151,7 +151,7 @@ public sealed class PipelineArtifactTaskFactory(
         stepRun.ServerId = server.Id;
         MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
         await repo.AppendRunWarningsAsync(
-            runId, [$"Restore-artifacts step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            runId, [PipelineStepFailureWarning.RestoreArtifacts(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private async Task CompleteMissingRestoreArtifactAsync(
@@ -430,7 +430,8 @@ public sealed class PipelineArtifactTaskFactory(
             var now = timeProvider.GetUtcNow().UtcDateTime;
             stepRun.ServerId = legServer.Id;
             MarkSystemStepFailed(stepRun, TaskFailureCodes.ToolError, reason, now);
-            await repo.AppendRunWarningsAsync(runId, [$"Restore-backup step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            await repo.AppendRunWarningsAsync(
+                runId, [PipelineStepFailureWarning.RestoreBackup(stepRun.StepName, reason)], ct).ConfigureAwait(false);
         }
 
         var selector = PipelineCommandBuilder.Substitute(stepDef.BackupRun ?? string.Empty, legVars);

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using System.Globalization;
 using Aetheus.Back.Configuration;
 using Aetheus.Back.Data.Entities;
 using Microsoft.Extensions.Caching.Memory;
@@ -437,11 +438,16 @@ public class VaultService(IVaultRepository repo, IEncryptionService encryption, 
 
     private static string BuildNamesCacheKey(int? projectId, List<int>? accessibleIds)
     {
-        var pid = projectId?.ToString() ?? "all";
+        var pid = projectId?.ToString(CultureInfo.InvariantCulture) ?? "all";
         var generation = Volatile.Read(ref s_namesGeneration);
-        if (accessibleIds is null or [])
-            return $"{VaultNamesCachePrefix}{generation}:{pid}";
-        return $"{VaultNamesCachePrefix}{generation}:{pid}:{string.Join(',', accessibleIds.Order())}";
+        // Null (unrestricted, site Admin) and an empty list (nothing readable) never share a key: the
+        // empty caller would otherwise read the Admin's cached list (RBAC audit, finding 5).
+        return accessibleIds switch
+        {
+            null => $"{VaultNamesCachePrefix}{generation}:{pid}:unrestricted",
+            [] => $"{VaultNamesCachePrefix}{generation}:{pid}:none",
+            _ => $"{VaultNamesCachePrefix}{generation}:{pid}:{string.Join(',', accessibleIds.Order())}"
+        };
     }
 
     private static void InvalidateNamesCache() => Interlocked.Increment(ref s_namesGeneration);

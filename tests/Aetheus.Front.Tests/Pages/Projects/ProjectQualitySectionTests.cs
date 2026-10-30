@@ -105,6 +105,9 @@ public class ProjectQualitySectionTests : BunitContext
         Assert.NotEmpty(cut.FindAll(".grade-badge.analysis-grade-letter"));
         Assert.Contains("AnalysisDuplicatedCode", cut.Markup);
         Assert.DoesNotContain(">grade.duplication<", cut.Markup);
+        // R-32: the tiles sit on a row of their own, as wide as the card, never squeezed beside the letter.
+        Assert.Empty(cut.FindAll(".analysis-grade-primary .analysis-grade-meta-tiles"));
+        Assert.NotEmpty(cut.FindAll(".analysis-grade-overview > .analysis-grade-meta-tiles, .analysis-grade-overview .omni-card__body > .analysis-grade-meta-tiles"));
         // Display the first eight commit characters in a tile.
         var commit = cut.FindAll(".analysis-grade-meta-tiles .omni-stat-tile")
             .Single(tile => tile.QuerySelector(".omni-stat-tile__label")!.TextContent.Trim() == "Commit");
@@ -112,6 +115,55 @@ public class ProjectQualitySectionTests : BunitContext
         // Omit limiting-domain prose and the required, complete and freshness line.
         Assert.DoesNotContain("AnalysisLimitingDomain", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("AnalysisFreshness", cut.Markup, StringComparison.Ordinal);
+    }
+
+    // Recettes R-73 and R-74: a grade is never "incomplete". A grade computed on part of its measures says so and how many
+    // are missing; a project nothing measured yet says there is no measure, never "incomplete".
+    [Theory]
+    [InlineData(false, "quality-grade-partial")]
+    [InlineData(true, "quality-grade-no-measure")]
+    public void TheHeadline_SaysPartialOrNoMeasure_NeverIncomplete(bool nothingMeasured, string expectedTestId)
+    {
+        _handler.SetJsonResponse("api/pipelines/projects/6/quality-trend", new ProjectQualityTrendDto());
+        MockAnalysisEndpoints(6);
+        _handler.SetJsonResponse("api/analysis/projects/6/summary", new AnalysisProjectSummaryDto
+        {
+            Grade = new AnalysisGradeSummaryDto
+            {
+                OverallGrade = nothingMeasured ? null : AnalysisGrade.B,
+                Completeness = AnalysisGradeCompleteness.Incomplete,
+                Domains =
+                [
+                    new AnalysisGradeDomainDto
+                    {
+                        Domain = AnalysisGradeDomain.Architecture,
+                        Grade = nothingMeasured ? null : AnalysisGrade.B,
+                        Required = true,
+                        Completeness = AnalysisGradeCompleteness.Incomplete,
+                        Measures =
+                        [
+                            new AnalysisGradeMeasureDto
+                            {
+                                Key = "grade.architecture.medium", Domain = AnalysisGradeDomain.Architecture, Required = true,
+                                Observed = !nothingMeasured, ObservedValue = nothingMeasured ? null : 2,
+                                Grade = nothingMeasured ? null : AnalysisGrade.B, Severity = AnalysisSeverity.Medium
+                            },
+                            new AnalysisGradeMeasureDto
+                            {
+                                Key = "grade.coverage.line", Domain = AnalysisGradeDomain.Architecture, Required = true, Observed = false,
+                                ProducerStep = "Publish coverage evidence"
+                            }
+                        ]
+                    }
+                ]
+            }
+        });
+
+        var cut = Render<ProjectQualitySection>(parameters => parameters.Add(component => component.ProjectId, 6));
+
+        cut.WaitForState(() => cut.Markup.Contains("AnalysisGlobalGrade"));
+        Assert.NotNull(cut.Find($"[data-testid='{expectedTestId}']"));
+        Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,7 +239,7 @@ public class ProjectQualitySectionTests : BunitContext
         cut.WaitForState(() => cut.Markup.Contains("AnalysisCrapAverage", StringComparison.Ordinal));
         var combined = Assert.Single(cut.FindAll(".analysis-grade-domain"), element =>
             element.TextContent.Contains("AnalysisCodeQualityAndTests", StringComparison.Ordinal));
-        Assert.Contains("omni-badge--warning", combined.InnerHtml, StringComparison.Ordinal);
+        Assert.Contains("grade-badge--c", combined.InnerHtml, StringComparison.Ordinal);
         Assert.Contains("AnalysisTestedLines", combined.TextContent);
         Assert.Contains("75", combined.TextContent);
         Assert.Contains("%", combined.TextContent);
@@ -403,71 +455,26 @@ public class ProjectQualitySectionTests : BunitContext
             request.Url.Contains("api/analysis/projects/2/summary", StringComparison.Ordinal)));
     }
 
+    /// <summary>R-34: no "Export all" button under the findings grid; the grid's own MD button stays.</summary>
     [Fact]
-    public async Task ExportAllAiPrompt_LoadsEveryFilteredPage_AndDownloadsOneMarkdownFile()
+    public void FindingsTab_HasNoExportAllButtonBelowTheGrid()
     {
         const int projectId = 6;
         _handler.SetJsonResponse($"api/pipelines/projects/{projectId}/quality-trend", new ProjectQualityTrendDto());
         _handler.SetJsonResponse($"api/analysis/projects/{projectId}/summary", new AnalysisProjectSummaryDto());
         _handler.SetJsonResponse(
             $"api/analysis/projects/{projectId}/findings?page=1&pageSize=25&status=Open",
-            new PaginatedResult<AnalysisFindingDto>
-            {
-                Items = [Finding(1, "Grid finding")],
-                TotalCount = 201,
-                Page = 1,
-                PageSize = 25
-            });
-        _handler.SetJsonResponse(
-            $"api/analysis/projects/{projectId}/findings?page=1&pageSize=200&status=Open",
-            new PaginatedResult<AnalysisFindingDto>
-            {
-                Items = Enumerable.Range(1, 200).Select(id => Finding(id, $"Finding {id}")).ToList(),
-                TotalCount = 201,
-                Page = 1,
-                PageSize = 200
-            });
-        _handler.SetJsonResponse(
-            $"api/analysis/projects/{projectId}/findings?page=2&pageSize=200&status=Open",
-            new PaginatedResult<AnalysisFindingDto>
-            {
-                Items = [Finding(201, "Final finding")],
-                TotalCount = 201,
-                Page = 2,
-                PageSize = 200
-            });
+            new PaginatedResult<AnalysisFindingDto> { Items = [Finding(1, "Grid finding")], TotalCount = 1, Page = 1, PageSize = 25 });
         var navigation = Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo(navigation.GetUriWithQueryParameter("tab", "findings"));
-        var menu = new Aetheus.Front.Components.Shared.ProjectSectionMenu();
         var cut = Render<ProjectQualitySection>(parameters => parameters
             .Add(component => component.ProjectId, projectId)
-            .AddCascadingValue(menu));
-        // Place the enabled Markdown export button below the findings table once findings are
-        // counted.
-        cut.WaitForState(() => cut.FindAll("button.analysis-findings-export-button:not([disabled])").Count == 1);
-        var export = cut.Find("button.analysis-findings-export-button");
-        Assert.Contains("AnalysisExportAllAiPrompt", export.TextContent, StringComparison.Ordinal);
-        Assert.Contains("omni-button--primary", export.ClassName, StringComparison.Ordinal);
-        Assert.Empty(menu.Actions);
-        var grid = cut.Find(".analysis-table");
-        Assert.Contains("aetheus-grid-fullheight", grid.ClassList);
-        Assert.True(grid.CompareDocumentPosition(export).HasFlag(AngleSharp.Dom.DocumentPositions.Following));
+            .AddCascadingValue(new Aetheus.Front.Components.Shared.ProjectSectionMenu()));
 
-        await cut.InvokeAsync(() => export.Click());
+        cut.WaitForState(() => cut.FindAll(".analysis-table").Count == 1);
 
-        cut.WaitForAssertion(() => Assert.Contains(
-            JSInterop.Invocations,
-            invocation => invocation.Identifier == "downloadFile"));
-        Assert.Contains(_handler.Requests, request => request.Url.Contains(
-            $"api/analysis/projects/{projectId}/findings?page=2&pageSize=200&status=Open",
-            StringComparison.Ordinal));
-        var download = Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "downloadFile");
-        var markdown = Assert.IsType<string>(download.Arguments[1]);
-        // "<project>-findings-<date>.md"; the project is not loaded here, so its id stands in.
-        Assert.Matches(@"^project-6-findings-\d{4}-\d{2}-\d{2}\.md$", Assert.IsType<string>(download.Arguments[0]));
-        Assert.Contains("Finding 1", markdown);
-        Assert.Contains("Final finding", markdown);
-        Assert.Contains("AnalysisBulkAiPromptCount: 201", markdown);
+        Assert.Empty(cut.FindAll(".analysis-findings-export"));
+        Assert.DoesNotContain("AnalysisExportAllAiPrompt", cut.Markup, StringComparison.Ordinal);
     }
 
     /// <summary>The overview tab adds nothing to the header menu (Follow and Edit only).</summary>

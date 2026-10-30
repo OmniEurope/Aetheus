@@ -358,7 +358,7 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         {
             await Page.SetViewportSizeAsync(viewport.Width, viewport.Height);
             await Page.GotoAsync($"{FrontendUrl}/login", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-            await Expect(Page.Locator("#Username")).ToBeVisibleAsync();
+            await Expect(Page.Locator("#Email")).ToBeVisibleAsync();
             var widths = await Page.EvaluateAsync<int[]>(
                 "() => [document.documentElement.scrollWidth, window.innerWidth]");
             Assert.That(widths[0], Is.LessThanOrEqualTo(widths[1]),
@@ -461,7 +461,7 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
                         // The context is already signed in, and /login sends a signed-in user away: sign in again
                         // only when the session was really lost.
                         await NavigateToAsync("");
-                        if (await Page.Locator("#Username").CountAsync() > 0)
+                        if (await Page.Locator("#Email").CountAsync() > 0)
                             await LoginAsync(force: true);
                     }
                     catch (Exception recoveryException) when (
@@ -486,29 +486,73 @@ public sealed class ResponsiveLayoutTests : E2ETestBase
         Assert.That(failures, Is.Empty, () => string.Join(Environment.NewLine, failures));
     }
 
+    /// <summary>
+    /// One wait of the audit. A wait that times out says which wait it was and what the page showed at that
+    /// moment (loaders, busy grids, drawer), so that a route that never settles names what held it.
+    /// </summary>
+    private async Task StepAsync(string step, Func<Task> wait)
+    {
+        try
+        {
+            await wait();
+        }
+        catch (PlaywrightException exception) when (exception.Message.Contains("Timeout", StringComparison.Ordinal))
+        {
+            string state;
+            try
+            {
+                state = await Page.EvaluateAsync<string>("""
+                    () => JSON.stringify({
+                        url: location.href,
+                        loaders: [...document.querySelectorAll('.aetheus-loader')].map(element => {
+                            const rect = element.getBoundingClientRect();
+                            return `${element.className} ${Math.round(rect.width)}x${Math.round(rect.height)} ${getComputedStyle(element).visibility}`;
+                        }),
+                        busyGrids: [...document.querySelectorAll(".omni-data-grid[aria-busy='true']")].map(element => {
+                            const rect = element.getBoundingClientRect();
+                            const table = element.querySelector('table.omni-data-grid__table');
+                            return `${element.className} ${Math.round(rect.width)}x${Math.round(rect.height)} display=${getComputedStyle(element).display}`
+                                + ` sized=${table?.hasAttribute('data-omni-sized')} headed=${table?.hasAttribute('data-omni-headed')}`;
+                        }),
+                        drawer: document.querySelector('.omni-sidebar')?.className ?? 'none',
+                        backdrop: document.querySelectorAll('.omni-sidebar__backdrop').length
+                    })
+                    """);
+            }
+            catch (PlaywrightException stateException)
+            {
+                state = $"page state unavailable: {stateException.Message}";
+            }
+            throw new PlaywrightException($"Wait '{step}' did not settle. {exception.Message} Page: {state}", exception);
+        }
+    }
+
     private async Task AuditMobilePathAsync(string path, int viewportWidth, int viewportHeight, bool fullLoad)
     {
         await Page.SetViewportSizeAsync(viewportWidth, viewportHeight);
-        if (fullLoad)
-            await NavigateToAsync(path);
-        else
-            await NavigateInsideTheApplicationAsync(path);
-        await WaitForNoSpinnerAsync();
-        await Page.WaitForSelectorAsync(".omni-sidebar__backdrop", new()
+        await StepAsync("navigation to the route", async () =>
+        {
+            if (fullLoad)
+                await NavigateToAsync(path);
+            else
+                await NavigateInsideTheApplicationAsync(path);
+        });
+        await StepAsync("no visible page loader", WaitForNoSpinnerAsync);
+        await StepAsync("drawer backdrop gone", () => Page.WaitForSelectorAsync(".omni-sidebar__backdrop", new()
         {
             State = WaitForSelectorState.Detached,
             Timeout = 5000
-        });
-        await Page.WaitForFunctionAsync("""
+        }));
+        await StepAsync("drawer collapsed", () => Page.WaitForFunctionAsync("""
             () => (document.querySelector('.omni-sidebar')?.getBoundingClientRect().width ?? 0) <= 1
-            """, null, new() { Timeout = 5000 });
-        await Page.WaitForFunctionAsync("""
+            """, null, new() { Timeout = 5000 }));
+        await StepAsync("no visible busy grid", () => Page.WaitForFunctionAsync("""
             () => [...document.querySelectorAll(".omni-data-grid[aria-busy='true']")]
                 .every(element => {
                     const style = getComputedStyle(element);
                     return style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0';
                 })
-            """, null, new() { Timeout = 30000 });
+            """, null, new() { Timeout = 30000 }));
 
         var collapsedSidebarState = await Page.Locator(".omni-sidebar").EvaluateAsync<string[]>("""
             element => {

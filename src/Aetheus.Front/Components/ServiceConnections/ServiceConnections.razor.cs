@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.ServiceConnections;
 
 public partial class ServiceConnections : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -184,12 +185,12 @@ public partial class ServiceConnections : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Settings.DeleteServiceConnectionAsync(connection.Id),
             "Deleted",
             async () => { _testResults.Remove(connection.Id); await ReloadGridAsync(); },
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
     private static OmniTone StatusBadge(ServiceConnectionTestStatus status) => status switch

@@ -55,6 +55,10 @@ public sealed record AnalysisRunGateDto
     /// mitigated, fixed since). They are left out of <see cref="FindingCount"/> and <see
     /// cref="NewFindingCount"/>; the list carries them, hidden until asked for.</summary>
     public int DecidedFindingCount { get; init; }
+
+    /// <summary>Recette R-74: the open findings behind <see cref="FindingCount"/> by category (only the categories
+    /// that have some), so the tab can say how many sit in a domain the grade does not count.</summary>
+    public IReadOnlyList<AnalysisRunGateCategoryCountDto> OpenFindingCounts { get; init; } = [];
     public int ComponentCount { get; init; }
     public int MetricCount { get; init; }
     public int BlockerCount { get; init; }
@@ -64,6 +68,13 @@ public sealed record AnalysisRunGateDto
     public IReadOnlyList<AnalysisRunGateReportDto> Reports { get; init; } = [];
     public IReadOnlyList<AnalysisRunGateFindingDto> Findings { get; init; } = [];
     public IReadOnlyList<AnalysisRunGateViolationDto> Violations { get; init; } = [];
+}
+
+/// <summary>The number of open findings of one category on a run.</summary>
+public sealed record AnalysisRunGateCategoryCountDto
+{
+    public AnalysisCategory Category { get; init; }
+    public int Count { get; init; }
 }
 
 public sealed record AnalysisRunGateViolationDto
@@ -323,6 +334,10 @@ public sealed record AnalysisRunFindingsPageDto
     public int OpenCount { get; init; }
     public int NewOpenCount { get; init; }
     public int DecidedCount { get; init; }
+
+    /// <summary>Recette R-74: the open findings of the whole set by category, each counted once, so the Gate tab can
+    /// say how many of them sit in a domain the grade does not count.</summary>
+    public IReadOnlyList<AnalysisRunGateCategoryCountDto> OpenCountsByCategory { get; init; } = [];
 }
 
 public sealed record AnalysisPortfolioPaginationRequest : PaginationRequest

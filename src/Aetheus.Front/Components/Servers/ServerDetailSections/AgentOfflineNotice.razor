@@ -3,5 +3,5 @@
 @* SITE-OFFLINE-001: said once above a module section's actions, which stay disabled meanwhile. *@
 @if (AgentOfflineGuard.IsOffline(Server))
 {
-    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["TaskAgentOffline"]" Class="omni-u-mb-sm agent-offline-notice">@L["AgentOfflineActionBlocked"]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Warning" Title="@L["TaskAgentOffline"]" Class="agent-offline-notice">@L["AgentOfflineActionBlocked"]</OmniAlert>
 }

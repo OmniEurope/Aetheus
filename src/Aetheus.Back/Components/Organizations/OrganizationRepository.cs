@@ -7,9 +7,12 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
 {
     public async Task<(List<Organization> Items, int Total)> GetPagedAsync(
         string? search, int page, int pageSize, string? sortBy, bool sortDescending, CancellationToken ct,
-        IReadOnlyList<GridFilter>? filters = null)
+        IReadOnlyList<GridFilter>? filters = null, IReadOnlyList<int>? organizationIds = null)
     {
         var query = db.Organizations.AsNoTracking().AsQueryable();
+        // An organization's administrator lists only the organizations it administers.
+        if (organizationIds is not null)
+            query = query.Where(o => organizationIds.Contains(o.Id));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var pattern = $"%{search.Trim()}%";
@@ -51,6 +54,17 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
             _ => query.OrderBy(o => o.Name).ThenBy(o => o.Id)
         };
 
+    public async Task<List<(int Id, string Name)>> GetNamesAsync(IReadOnlyList<int>? organizationIds, CancellationToken ct)
+    {
+        var query = db.Organizations.AsNoTracking();
+        if (organizationIds is not null)
+            query = query.Where(o => organizationIds.Contains(o.Id));
+        var rows = await query.OrderBy(o => o.Name).ThenBy(o => o.Id)
+            .Select(o => new { o.Id, o.Name })
+            .ToListAsync(ct).ConfigureAwait(false);
+        return rows.Select(row => (row.Id, row.Name)).ToList();
+    }
+
     public Task<Organization?> GetByIdAsync(int id, CancellationToken ct) =>
         db.Organizations.FirstOrDefaultAsync(o => o.Id == id, ct);
 
@@ -81,7 +95,19 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
         return true;
     }
 
-    public Task SaveChangesAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+    /// <summary>Saves; a concurrent request that already added the same member or role (unique index)
+    /// makes this one a 409, never a 500.</summary>
+    public async Task SaveChangesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (Aetheus.Back.Services.OrganizationRoleAssignmentRepository.IsUniqueViolation(exception))
+        {
+            throw new ConflictException("This organization's members changed at the same time; reload and try again.");
+        }
+    }
 
     public Task<OrganizationMember?> GetMemberAsync(int organizationId, int userId, CancellationToken ct) =>
         db.OrganizationMembers.FirstOrDefaultAsync(m => m.OrganizationId == organizationId && m.UserId == userId, ct);
@@ -105,8 +131,29 @@ public class OrganizationRepository(AppDbContext db) : IOrganizationRepository
         return true;
     }
 
+    // RBAC audit, finding 7: a deactivated account is never found to be added, so it reads exactly like an
+    // unknown one.
     public Task<User?> GetUserByIdAsync(int userId, CancellationToken ct) =>
-        db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
+
+    public async Task<User?> GetUserByLoginAsync(string login, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(login);
+        // An e-mail address is matched whatever its case (stored normalized, PLAN-003 P3-2), and wins over a
+        // username equal to it: the Organization Admin who types an address means its owner, not whoever
+        // registered it as a login.
+        var email = UserEmail.Normalize(login);
+        var candidates = await db.Users
+            .Where(u => u.IsActive && (u.Username == login || (email != null && u.Email == email)))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return candidates.FirstOrDefault(u => email is not null && string.Equals(u.Email, email, StringComparison.Ordinal))
+            ?? candidates.FirstOrDefault(u => string.Equals(u.Username, login, StringComparison.Ordinal));
+    }
+
+    public Task<int> CountOwnersAsync(int organizationId, CancellationToken ct) =>
+        db.OrganizationMembers.CountAsync(
+            m => m.OrganizationId == organizationId && m.Role == Aetheus.Shared.Components.Shared.OrganizationRole.Owner, ct);
 
     public Task<OrganizationMember?> GetMemberWithUserByIdAsync(int memberId, int organizationId, CancellationToken ct) =>
         db.OrganizationMembers

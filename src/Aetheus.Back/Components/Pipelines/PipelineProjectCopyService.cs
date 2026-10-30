@@ -118,14 +118,13 @@ public sealed class PipelineProjectCopyService(
     private async Task<(List<string> Libraries, List<string> Vaults)> CollectReferencedResourcesAsync(
         IEnumerable<(int Id, string Name, string Yaml)> sources,
         int sourceProjectId,
+        string? sourceSlug,
         CancellationToken ct)
     {
         var libraryNames = new List<string>();
         var vaultNames = new List<string>();
         // R3-67: a template's `${{ project.slug }}.share` is, for the source pipeline, the source
         // project's library.
-        var sourceSlug = await PipelineProjectResourceNames
-            .FindSlugAsync(pipelines, sourceProjectId, ct).ConfigureAwait(false);
         foreach (var source in sources)
         {
             var validation = await pipelineService.ValidateYamlStrictAsync(
@@ -161,14 +160,20 @@ public sealed class PipelineProjectCopyService(
             .Select(existing => existing.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        var (libraryNames, vaultNames) = await CollectReferencedResourcesAsync(sources, request.SourceProjectId, ct).ConfigureAwait(false);
+        // R-86: a library or vault named after the source project's slug (`w7.share`) is copied under the
+        // target project's slug, the name the copied pipelines read (`${{ project.slug }}.share`).
+        var slugs = new ProjectSlugPair(
+            await PipelineProjectResourceNames.FindSlugAsync(pipelines, request.SourceProjectId, ct).ConfigureAwait(false),
+            await PipelineProjectResourceNames.FindSlugAsync(pipelines, request.TargetProjectId, ct).ConfigureAwait(false));
+        var (libraryNames, vaultNames) = await CollectReferencedResourcesAsync(
+            sources, request.SourceProjectId, slugs.Source, ct).ConfigureAwait(false);
 
         var plan = new CopyPlan();
         foreach (var name in libraryNames.Distinct(StringComparer.OrdinalIgnoreCase))
-            if (await PlanLibraryAsync(name, request, readableLibraryIds, ct).ConfigureAwait(false) is { } library)
+            if (await PlanLibraryAsync(name, request, slugs, readableLibraryIds, ct).ConfigureAwait(false) is { } library)
                 plan.Libraries.Add(new PlannedResource(library));
         foreach (var name in vaultNames.Distinct(StringComparer.OrdinalIgnoreCase))
-            if (await PlanVaultAsync(name, request, readableVaultIds, ct).ConfigureAwait(false) is { } vault)
+            if (await PlanVaultAsync(name, request, slugs, readableVaultIds, ct).ConfigureAwait(false) is { } vault)
                 plan.Vaults.Add(new PlannedResource(vault));
 
         var renames = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -181,7 +186,9 @@ public sealed class PipelineProjectCopyService(
         foreach (var source in sources)
         {
             var newName = renames[source.Name];
-            var (yaml, issues) = PipelineCopyAdapter.Adapt(source.Yaml, renames, request.SourcePrefix, request.Prefix, copiedNames);
+            var (adapted, issues) = PipelineCopyAdapter.Adapt(source.Yaml, renames, request.SourcePrefix, request.Prefix, copiedNames);
+            // R-76: the copy reads the target project's branch, not the one its source project worked on.
+            var yaml = PipelineCopySourceBranch.Rewrite(adapted, request.TargetBranch);
             var item = new PlannedPipeline(source.Id, source.Name, newName, yaml) { Issues = issues };
             if (!taken.Add(newName))
             {
@@ -228,7 +235,7 @@ public sealed class PipelineProjectCopyService(
     /// names of its variables. A library the source project does not own is not copied: the target's
     /// readiness verdict will name it if the copies need it.</summary>
     private async Task<PipelineCopyResourceDto?> PlanLibraryAsync(
-        string name, PipelineProjectCopyRequest request, List<int>? readableIds, CancellationToken ct)
+        string name, PipelineProjectCopyRequest request, ProjectSlugPair slugs, List<int>? readableIds, CancellationToken ct)
     {
         var source = (await libraries.GetLibrariesAsync(request.SourceProjectId,
                 request: new PaginationRequest { Page = 1, PageSize = SearchPageSize, Search = name },
@@ -237,7 +244,8 @@ public sealed class PipelineProjectCopyService(
                 && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
         if (source is null) return null;
 
-        var newName = PipelineCopyAdapter.NewResourceName(source.Name, request.SourcePrefix, request.Prefix);
+        var newName = PipelineCopyAdapter.NewResourceName(
+            source.Name, request.SourcePrefix, request.Prefix, slugs.Source, slugs.Target);
         var exists = (await libraries.GetLibrariesAsync(request.TargetProjectId,
                 request: new PaginationRequest { Page = 1, PageSize = SearchPageSize, Search = newName },
                 ct: ct).ConfigureAwait(false)).Items
@@ -252,7 +260,7 @@ public sealed class PipelineProjectCopyService(
     /// <summary>Same as <see cref="PlanLibraryAsync"/> for a vault: secret names only, the export
     /// used never carries a value.</summary>
     private async Task<PipelineCopyResourceDto?> PlanVaultAsync(
-        string name, PipelineProjectCopyRequest request, List<int>? readableIds, CancellationToken ct)
+        string name, PipelineProjectCopyRequest request, ProjectSlugPair slugs, List<int>? readableIds, CancellationToken ct)
     {
         var source = (await vaults.GetVaultsAsync(request.SourceProjectId,
                 request: new PaginationRequest { Page = 1, PageSize = SearchPageSize, Search = name },
@@ -261,7 +269,8 @@ public sealed class PipelineProjectCopyService(
                 && string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
         if (source is null) return null;
 
-        var newName = PipelineCopyAdapter.NewResourceName(source.Name, request.SourcePrefix, request.Prefix);
+        var newName = PipelineCopyAdapter.NewResourceName(
+            source.Name, request.SourcePrefix, request.Prefix, slugs.Source, slugs.Target);
         var exists = (await vaults.GetVaultsAsync(request.TargetProjectId,
                 request: new PaginationRequest { Page = 1, PageSize = SearchPageSize, Search = newName },
                 ct: ct).ConfigureAwait(false)).Items
@@ -275,6 +284,9 @@ public sealed class PipelineProjectCopyService(
     // English: backend-generated strings follow the product default language (F-036).
     private static string StructureDescription(string sourceName) =>
         $"Copied from '{sourceName}' of another project by the setup wizard: names only, the values are empty. Fill them in.";
+
+    /// <summary>The slugs of the two projects, as <see cref="PipelineProjectResourceNames.FindSlugAsync"/> finds them.</summary>
+    private readonly record struct ProjectSlugPair(string? Source, string? Target);
 
     private sealed class CopyPlan
     {

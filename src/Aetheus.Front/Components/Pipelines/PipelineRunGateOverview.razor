@@ -8,12 +8,12 @@
            PipelineRunGatePresentation.ShowsStatusWord for the blocked and error cases. *@
         @if (PipelineRunGatePresentation.ShowsStatusWord(Gate))
         {
-            <OmniFactTileRow Term="@L["Status"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent><OmniBadge Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge></ChildContent></OmniFactTileRow>
+            <OmniFactTileRow Term="@L["Status"]"><Icon><OmniIcon Name="OmniIconName.Info" /></Icon><ChildContent><OmniBadge Icon="@(BadgeIcon.ForState(PipelineRunGatePresentation.GateStyle(Gate.Status)))" Fill="OmniFill.Solid" Tone="@PipelineRunGatePresentation.GateStyle(Gate.Status)">@L[PipelineRunGatePresentation.StatusKey(Gate.Status)]</OmniBadge></ChildContent></OmniFactTileRow>
         }
         @if (PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is { } grade)
         {
             <OmniFactTileRow Term="@L["GateGrade"]"><Icon><OmniIcon Name="OmniIconName.ShieldCheck" /></Icon><ChildContent><GradeBadge Value="@grade" Title="@L["GateGrade"]" Class="pipeline-gate-grade-badge" /></ChildContent></OmniFactTileRow>
         }
-        <OmniFactTileRow Term="@L["AnalysisGateFindings"]"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent>@Gate.FindingCount</ChildContent></OmniFactTileRow>
+        <OmniFactTileRow Term="@L["AnalysisGateFindings"]"><Icon><OmniIcon Name="OmniIconName.ListChecks" /></Icon><ChildContent>@(Gate.FindingCount + BlockingTestCount)</ChildContent></OmniFactTileRow>
     </ChildContent>
 </OmniFactTile>

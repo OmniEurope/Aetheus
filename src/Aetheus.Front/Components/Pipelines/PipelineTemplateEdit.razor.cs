@@ -24,6 +24,10 @@ public partial class PipelineTemplateEdit
     private int? _loadedId = int.MinValue;
     private bool _isNew => Id is null or 0;
 
+    // The server computes CanEdit (Write on the template, a site Admin for a shared delivery template): the
+    // page reads such a template, it never offers the save the server would answer with 403.
+    private bool _readOnly => !_isNew && _template is { CanEdit: false };
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id) return;
@@ -79,7 +83,7 @@ public partial class PipelineTemplateEdit
 
     private async Task OnSubmitAsync()
     {
-        if (_saving) return;
+        if (_saving || _readOnly) return;
         _saving = true;
         try
         {

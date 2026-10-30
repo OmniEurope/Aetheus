@@ -43,8 +43,8 @@ public sealed record ReleaseDto
     /// <summary>This is the release deployed just before the one production runs.</summary>
     public bool IsPreviousDeployment { get; init; }
     /// <summary>The pipeline that deployed the live release, set only when this previous deployment can
-    /// be redeployed by it: it declares a <c>candidateVersion</c> and this release has a sealed grade and
-    /// retained artifacts. Null otherwise, including for a release-fast release with no seal.</summary>
+    /// be redeployed by it: it declares a <c>candidateVersion</c> and this release has retained artifacts
+    /// (R-72: a missing grade is confirmed at the launch, it no longer withholds the pipeline). Null otherwise.</summary>
     public int? RedeployPipelineId { get; init; }
     /// <summary>On the live release, identifies the pipeline that restores traffic to the reserved
     /// colour. Null when no rollback pipeline or previous deployment exists.</summary>

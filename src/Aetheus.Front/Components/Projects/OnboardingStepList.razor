@@ -7,6 +7,11 @@
             <OmniHeading Level="OmniHeadingLevel.H5">@Title</OmniHeading>
             <OmniText Class="project-onboarding-copy">@Description</OmniText>
         </div>
+        @if (OnDone.HasDelegate)
+        {
+            @* R71: the last display of a finished checklist can be dismissed for good. *@
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnDone" Class="project-onboarding-done" data-testid="onboarding-done"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@L["Done"]</span></ChildContent></OmniButton>
+        }
     </div>
     <div class="onboarding-steps-scroll" role="region" aria-label="@Title" tabindex="0">
         <table class="onboarding-steps">
@@ -41,7 +46,7 @@
                             }
                         </td>
                         <td>
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@StateBadgeVariant(step.State)">@StateText(step.State)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(StateBadgeVariant(step.State)))" Fill="OmniFill.Solid" Tone="@StateBadgeVariant(step.State)">@StateText(step.State)</OmniBadge>
                         </td>
                         <td class="onboarding-step-action">
                             @if (step.State != OnboardingStepState.Blocked

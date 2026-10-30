@@ -22,11 +22,11 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
 {
     private const string AdminPassword = "Integr@tion-Test-Admin-Pwd-2026";
 
-    private static async Task<LoginResponse> LoginAsync(HttpClient client, string username, string password, string? totpCode = null)
+    private static async Task<LoginResponse> LoginAsync(HttpClient client, string email, string password, string? totpCode = null)
     {
         var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = email,
             Password = password,
             TotpCode = totpCode
         });
@@ -56,7 +56,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         using var client = factory.CreateClient();
 
         // Create a fresh user (don't pollute the admin account with TOTP)
-        var adminLogin = await LoginAsync(client, "admin", AdminPassword);
+        var adminLogin = await LoginAsync(client, IntegrationAuth.AdminEmail, AdminPassword);
         SetBearer(client, adminLogin.Token);
 
         var username = $"totp-user-{Guid.NewGuid():N}";
@@ -64,16 +64,17 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         var createResp = await client.PostAsJsonAsync("/api/users", new CreateUserRequest
         {
             Username = username,
-            Password = password,
-            Roles = ["Reader"],
-            // D1: a flagged account only reaches the password change; this one tests TOTP.
-            MustChangePassword = false
+            Email = $"{username}@example.com",
+            OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(client, "Reader")
         }, cancellationToken: TestContext.Current.CancellationToken);
         createResp.EnsureSuccessStatusCode();
+        // D1: a flagged account only reaches the password change; this one tests TOTP.
+        var createdId = (await createResp.Content.ReadFromJsonAsync<UserDto>(IntegrationJsonOptions.Default, TestContext.Current.CancellationToken))!.Id;
+        await IntegrationUsers.SetPasswordAsync(factory.Services, createdId, password);
 
         // Login as the new user
         client.DefaultRequestHeaders.Authorization = null;
-        var userLogin = await LoginAsync(client, username, password);
+        var userLogin = await LoginAsync(client, $"{username}@example.com", password);
         SetBearer(client, userLogin.Token);
 
         // Step 1: Setup TOTP - get the shared key
@@ -98,7 +99,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         client.DefaultRequestHeaders.Authorization = null;
         var noCodeResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password
         }, cancellationToken: TestContext.Current.CancellationToken);
         noCodeResp.EnsureSuccessStatusCode();
@@ -110,7 +111,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         // Step 4: Login with an invalid TOTP code must be rejected.
         var badCodeResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password,
             TotpCode = "0000000"
         }, cancellationToken: TestContext.Current.CancellationToken);
@@ -119,7 +120,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         // A syntactically valid code well outside the ±1-step acceptance window must also fail.
         var expiredCodeResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password,
             TotpCode = GenerateTotpCode(setup.SharedKey, DateTime.UtcNow.AddMinutes(-2))
         }, cancellationToken: TestContext.Current.CancellationToken);
@@ -129,7 +130,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         var validCode = GenerateTotpCode(setup.SharedKey);
         var withCodeResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password,
             TotpCode = validCode
         }, cancellationToken: TestContext.Current.CancellationToken);
@@ -142,7 +143,7 @@ public sealed class TotpIntegrationTests(PostgresFixture fixture)
         var recoveryCode = setup.RecoveryCodes[0];
         var recoveryResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = username,
+            Email = $"{username}@example.com",
             Password = password,
             RecoveryCode = recoveryCode
         }, cancellationToken: TestContext.Current.CancellationToken);

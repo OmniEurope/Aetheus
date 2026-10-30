@@ -34,4 +34,12 @@ public interface IPipelineApprovalRepository
 
     /// <summary>Returns the parent pipeline id for an approval, or null if the approval does not exist.</summary>
     Task<int?> GetPipelineIdForApprovalAsync(int approvalId, CancellationToken ct = default);
+
+    /// <summary>What an approval gates: its pipeline, the project that pipeline belongs to (directly or
+    /// through its environment or project server) and the environment the approval was asked for. Null
+    /// when the approval does not exist.</summary>
+    Task<PipelineApprovalScope?> GetApprovalScopeAsync(int approvalId, CancellationToken ct = default);
 }
+
+/// <summary>Who may decide an approval is read from these (RBAC audit, finding 11).</summary>
+public sealed record PipelineApprovalScope(int PipelineId, int? ProjectId, int? EnvironmentId);

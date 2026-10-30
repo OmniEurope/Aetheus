@@ -25,6 +25,13 @@ public partial class ServerReachabilityBadge
             ? Server.ExternalProbe
             : ServerReachability.NotProbed;
 
+    private OmniIconName StatusIcon => Effective switch
+    {
+        ServerReachability.HostReachable => OmniIconName.PlugsConnected,
+        ServerReachability.HostUnreachable => OmniIconName.Offline,
+        _ => OmniIconName.Question
+    };
+
     private OmniTone Tone => Effective switch
     {
         ServerReachability.HostReachable => OmniTone.Warning,

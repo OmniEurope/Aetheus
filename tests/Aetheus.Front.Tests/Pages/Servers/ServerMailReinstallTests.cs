@@ -194,7 +194,9 @@ public sealed class ServerMailReinstallTests : BunitContext
         // While the stack is erased, one banner and no button.
         Assert.Null(HeaderButton("MailReinstall"));
         Assert.Contains("MailReinstallRunning", cut.Find(".mail-reinstall-running").TextContent, StringComparison.Ordinal);
-        Assert.Single(cut.FindAll(".mail-reinstall-running .mail-reinstall-running__indicator"));
+        // Recette R-116: the banner wears the busy veil, no loader sits inside it.
+        Assert.Contains("omni-busy", cut.Find(".mail-reinstall-running").ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".mail-reinstall-running .aetheus-loader-logo"));
 
         var section = cut.Instance;
         await cut.InvokeAsync(() => section.HandleTaskCompletedAsync(

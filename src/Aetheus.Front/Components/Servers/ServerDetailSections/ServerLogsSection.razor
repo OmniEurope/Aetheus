@@ -1,9 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* The virtualized log grid sends sort and header filters on each paged request so they apply to
    all server logs. *@
+<OmniStack>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadFailed"]
     </OmniAlert>
 }
@@ -20,7 +21,7 @@
         <OmniDataGridColumn TItem="TaskLogDto" Property="Level" Title="@L["Level"]" Width="6.25rem"
             Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@LevelText">
             <Template Context="log">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L.Localize(log.Level)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(GetLevelBadge(log.Level)))" Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L.Localize(log.Level)</OmniBadge>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Truncate="true" Title="@L["Message"]" Filterable="true">
@@ -30,3 +31,4 @@
         </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

@@ -22,10 +22,11 @@ else
     <OmniPageHeader Title="@Short(_detail.Commit.Sha)" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("commit")" /></Icon>
         <Badges>
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@_detail.Commit.AuthorName</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.User))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@_detail.Commit.AuthorName</OmniBadge>
         </Badges>
     </OmniPageHeader>
 
+    <OmniStack>
     <OmniCard Class="git-commit-summary">
         <div class="git-commit-summary-content">
             <div class="git-commit-overview">
@@ -80,25 +81,25 @@ else
 
     @if (_detail.Commit.ParentShas.Count > 1)
     {
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-md omni-u-mb-sm">
+        <OmniAlert Severity="OmniSeverity.Info">
             @L["GitMergeDiffFirstParent"]
         </OmniAlert>
     }
 
     @if (_detail.Diff.IsTruncated)
     {
-        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-md omni-u-mb-sm">
+        <OmniAlert Severity="OmniSeverity.Warning">
             @L["GitPatchTruncated"]
         </OmniAlert>
     }
 
     @if (_detail.Diff.FileDiffs.Count == 0)
     {
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-md">@L["NoFileChanges"]</OmniAlert>
+        <OmniAlert Severity="OmniSeverity.Info">@L["NoFileChanges"]</OmniAlert>
     }
     else
     {
-        <div class="git-diff-workspace omni-u-mt-md">
+        <div class="git-diff-workspace">
             <aside class="git-file-browser" aria-label="@L["FilesChanged"]">
                 <div class="git-file-browser-header">
                     <div class="git-file-browser-title">
@@ -136,12 +137,13 @@ else
                         <div class="git-focused-diff-title">
                             <code title="@_selectedFile.Path">@_selectedFile.Path</code>
                             <div>
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@StatusBadge(_selectedFile.Status)">@LocalizeStatus(_selectedFile.Status)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(StatusBadge(_selectedFile.Status)))" Fill="OmniFill.Solid" Tone="@StatusBadge(_selectedFile.Status)">@LocalizeStatus(_selectedFile.Status)</OmniBadge>
                                 <span class="diff-file-stat-add">+@_selectedFile.Additions</span>
                                 <span class="diff-file-stat-del">-@_selectedFile.Deletions</span>
                             </div>
                         </div>
-                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ToggleDiff" Class="git-diff-toggle" Label="@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])" aria-expanded="@(!_diffCollapsed ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_diffCollapsed ? "expand_more" : "expand_less"))" /></Icon><ChildContent><span>@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])</span></ChildContent></OmniButton>
+                        @* A show/hide toggle of the diff, not an action of the page: grey, not the main blue (R-109). *@
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ToggleDiff" Class="git-diff-toggle" Label="@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])" aria-expanded="@(!_diffCollapsed ? "true" : "false")"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_diffCollapsed ? "expand_more" : "expand_less"))" /></Icon><ChildContent><span>@(_diffCollapsed ? L["ShowDiff"] : L["HideDiff"])</span></ChildContent></OmniButton>
                     </div>
                     @if (!_diffCollapsed)
                     {
@@ -167,4 +169,5 @@ else
             </section>
         </div>
     }
+    </OmniStack>
 }

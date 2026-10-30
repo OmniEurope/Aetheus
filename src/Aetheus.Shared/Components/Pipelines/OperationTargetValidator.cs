@@ -149,6 +149,10 @@ public static partial class OperationTargetValidator
     [GeneratedRegex(@"^[a-fA-F0-9]{12,64}$")]
     public static partial Regex DockerContainerIdRegex();
 
+    // R-119: what a Docker prune covers, each at most once and in this order.
+    [GeneratedRegex(@"^(containers(,images)?(,volumes)?|images(,volumes)?|volumes)\z")]
+    private static partial Regex DockerPruneTargetsRegex();
+
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9_.\-@]{0,63}$")]
     public static partial Regex ServiceNameRegex();
 
@@ -158,6 +162,11 @@ public static partial class OperationTargetValidator
 
     [GeneratedRegex(@"^/(?!.*\.\.)[a-zA-Z0-9._/-]{1,255}$")]
     public static partial Regex ApacheDocumentRootRegex();
+
+    // R-119: an Apache module as a2enmod names it (proxy_http, php8.2): no path separator, no leading dash. The
+    // root-owned aetheus-apache-module helper applies the same rule again.
+    [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}\z")]
+    public static partial Regex ApacheModuleNameRegex();
 
     [GeneratedRegex(@"^[^\x00-\x1f]+$")]
     public static partial Regex TeamspeakQueryRegex();
@@ -181,6 +190,10 @@ public static partial class OperationTargetValidator
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$")]
     public static partial Regex CertbotCertNameRegex();
 
+    // Recette R-97: the project id a project resources task acts for.
+    [GeneratedRegex(@"^[1-9][0-9]{0,9}\z")]
+    private static partial Regex ProjectIdRegex();
+
     public static bool IsValid(OperationKind kind, string? target)
     {
         if (kind == OperationKind.AgentSelfUpdate)
@@ -195,20 +208,27 @@ public static partial class OperationTargetValidator
             ?? false;
     }
 
+    // The rule a Docker operation's target follows; null for any other kind.
+    private static Regex? DockerTargetPattern(OperationKind kind) => kind switch
+    {
+        _ when s_dockerTargets.Contains(kind) => DockerTargetRegex(),
+        OperationKind.DockerRemoveImage or OperationKind.DockerBuildImage => DockerTargetRegex(),
+        OperationKind.DockerComposeUp or OperationKind.DockerComposeProjectUp
+            or OperationKind.DockerComposeProjectDown or OperationKind.DockerComposeProjectRestart => ComposeProjectRegex(),
+        OperationKind.DockerExecScript or OperationKind.DockerRemoveContainer
+            or OperationKind.DockerUpdateResources => DockerContainerIdRegex(),
+        OperationKind.DockerPrune => DockerPruneTargetsRegex(),
+        _ => null
+    };
+
     private static bool? ValidateSystemTarget(OperationKind kind, string target)
     {
         if (kind == OperationKind.None)
             return false;
         if (s_uncheckedTargets.Contains(kind))
             return true;
-        if (s_dockerTargets.Contains(kind))
-            return DockerTargetRegex().IsMatch(target);
-        if (kind == OperationKind.DockerComposeUp)
-            return ComposeProjectRegex().IsMatch(target);
-        if (kind == OperationKind.DockerExecScript)
-            return DockerContainerIdRegex().IsMatch(target);
-        if (kind == OperationKind.DockerBuildImage)
-            return DockerTargetRegex().IsMatch(target);
+        if (DockerTargetPattern(kind) is { } dockerPattern)
+            return dockerPattern.IsMatch(target);
         if (s_serviceTargets.Contains(kind))
             return ServiceNameRegex().IsMatch(target);
         if (kind == OperationKind.ServiceInstall)
@@ -221,6 +241,8 @@ public static partial class OperationTargetValidator
             return int.TryParse(target, out var port) && port is >= 1 and <= 65535;
         if (kind == OperationKind.FirewallSetEnabled)
             return target is "enable" or "disable";
+        if (kind is OperationKind.ProjectResourcesDiscover or OperationKind.ProjectResourcesRemove)
+            return ProjectIdRegex().IsMatch(target);
         return null;
     }
 
@@ -236,6 +258,10 @@ public static partial class OperationTargetValidator
             return ApacheDocumentRootRegex().IsMatch(target);
         if (kind == OperationKind.ApacheApplyConfigSet)
             return target == "config-set";
+        if (kind is OperationKind.ApacheEnableModule or OperationKind.ApacheDisableModule)
+            return ApacheModuleNameRegex().IsMatch(target);
+        if (kind == OperationKind.RkhunterSetup)
+            return target == "-";
         if (kind == OperationKind.CertbotObtain)
             return MailValidation.IsValidDomainName(target);
         if (s_certificateTargets.Contains(kind))
@@ -283,7 +309,8 @@ public static partial class OperationTargetValidator
             return TeamspeakQueryRegex().IsMatch(target);
         if (s_teamspeakPathTargets.Contains(kind))
             return TeamspeakInstallPathRegex().IsMatch(target);
-        if (kind == OperationKind.TeamspeakGracefulRestart)
+        if (kind is OperationKind.TeamspeakGracefulRestart or OperationKind.TeamspeakStart
+            or OperationKind.TeamspeakStop or OperationKind.TeamspeakRestart)
             return target == "-";
         if (s_cronTargets.Contains(kind))
             return CronValidation.IsValidIdentifier(target);

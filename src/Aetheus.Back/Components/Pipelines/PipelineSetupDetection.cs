@@ -44,12 +44,15 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
         var needsCompose = defaults.Contains(DeployProdCommands);
 
         bool? solution = null, tests = null, compose = null, docker = null;
+        (bool? DotNet, bool? Python, bool? Java) languages = (null, null, null);
         if (repositoryId is { } id && branch is not null)
         {
             var probe = new PipelineSetupRepositoryProbe(git, logger, id, branch);
             if (needsSolution) solution = await probe.HasSolutionAsync(ct).ConfigureAwait(false);
             if (needsTests) tests = await probe.HasRunnableTestProjectAsync(ct).ConfigureAwait(false);
             if (needsCompose) compose = await probe.HasComposeFileAsync(ct).ConfigureAwait(false);
+            // R-105: the quality pipeline's languages, to leave out the steps of the ones the project does not use.
+            if (defaults.Contains(QualityCommands)) languages = await probe.FindLanguagesAsync(ct).ConfigureAwait(false);
         }
 
         if (needsCompose)
@@ -70,7 +73,10 @@ internal sealed class PipelineSetupDetection(IPipelineRepository pipelines, IGit
             HasDotNetSolution = solution,
             HasDotNetTestProject = tests,
             HasComposeFile = compose,
-            HasDockerRunner = docker
+            HasDockerRunner = docker,
+            HasDotNetProject = languages.DotNet,
+            HasPython = languages.Python,
+            HasJava = languages.Java
         };
     }
 

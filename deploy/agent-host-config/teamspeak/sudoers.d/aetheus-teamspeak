@@ -6,3 +6,19 @@ Defaults!AETHEUS_TEAMSPEAK timestamp_timeout=0
 Defaults!AETHEUS_TEAMSPEAK env_reset
 Defaults!AETHEUS_TEAMSPEAK secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
 #{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_TEAMSPEAK
+
+# Start, stop and restart the installed TeamSpeak unit (recette R-119): teamspeak3.service is the unit the
+# setup helper installs, teamspeak.service the one a manual install commonly uses. Exact argv, no wildcard,
+# noexec kept: systemctl only talks to systemd over D-Bus.
+Cmnd_Alias AETHEUS_TEAMSPEAK_SERVICE = \
+    /bin/systemctl start teamspeak3.service, \
+    /bin/systemctl stop teamspeak3.service, \
+    /bin/systemctl restart teamspeak3.service, \
+    /bin/systemctl start teamspeak.service, \
+    /bin/systemctl stop teamspeak.service, \
+    /bin/systemctl restart teamspeak.service
+Defaults!AETHEUS_TEAMSPEAK_SERVICE noexec
+Defaults!AETHEUS_TEAMSPEAK_SERVICE timestamp_timeout=0
+Defaults!AETHEUS_TEAMSPEAK_SERVICE env_reset
+Defaults!AETHEUS_TEAMSPEAK_SERVICE secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+#{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_TEAMSPEAK_SERVICE

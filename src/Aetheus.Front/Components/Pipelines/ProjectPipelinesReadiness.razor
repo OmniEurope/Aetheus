@@ -1,19 +1,20 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* On the project's pipelines page, what is not configured and would make a run fail, each with its
    fix. Nothing is drawn when nothing is found or the verdict could not be read. The branch the files
-   were checked on is an information tooltip next to the heading (R-15), not a sentence of the page. *@
-@if (_readiness is { Checks.Count: > 0 } readiness)
+   were checked on is an information tooltip next to the heading (R-15), not a sentence of the page.
+   On the overview (EmptyValuesOnly, R-68) only the values still to fill are drawn. *@
+@if (_readiness is not null && Checks.Count > 0)
 {
     <section class="project-pipelines-readiness" data-testid="project-pipelines-readiness">
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-                <OmniHeading Level="OmniHeadingLevel.H5">@L[readiness.HasBlocking ? "ProjectPipelinesNotReady" : "ProjectPipelinesToVerify"]</OmniHeading>
-                @if (readiness.RepositoryInspected && !string.IsNullOrWhiteSpace(readiness.InspectedBranch))
+                <OmniHeading Level="OmniHeadingLevel.H5">@L[TitleKey]</OmniHeading>
+                @if (!EmptyValuesOnly && _readiness.RepositoryInspected && !string.IsNullOrWhiteSpace(_readiness.InspectedBranch))
                 {
-                    <PipelineInfoTip Text="@string.Format(L["PipelineSetupReadinessCheckedOn"], readiness.InspectedBranch)" />
+                    <PipelineInfoTip Text="@string.Format(L["PipelineSetupReadinessCheckedOn"], _readiness.InspectedBranch)" />
                 }
             </OmniStack>
-            <PipelineReadinessChecks Checks="@readiness.Checks" ProjectId="@ProjectId"
+            <PipelineReadinessChecks Checks="@Checks" ProjectId="@ProjectId"
                                      ReturnUrl="@ReturnUrl" OnChanged="@LoadAsync" />
         </OmniStack>
     </section>

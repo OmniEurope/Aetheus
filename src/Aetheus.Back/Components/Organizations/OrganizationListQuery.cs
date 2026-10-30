@@ -13,5 +13,6 @@ internal static class OrganizationListQuery
         .Text("slug", o => o.Slug)
         .Text("description", o => o.Description)
         .Number("memberCount", o => o.Members.Count)
-        .Number("projectCount", o => o.Projects.Count);
+        .Number("projectCount", o => o.Projects.Count)
+        .Date("updatedAt", o => o.UpdatedAt);
 }

@@ -27,6 +27,26 @@ public class ContactAgentDialogTests : BunitContext
         Assert.Contains(_handler.Requests, r => r.Url.Contains("api/servers/1/contact"));
     }
 
+    /// <summary>Recette R-116: while the attempts run, OE's busy veil lies over their lines; no loader is added.</summary>
+    [Fact]
+    public void WhileTheAttemptsRun_TheirLinesAreVeiled_AndNoLoaderIsAdded()
+    {
+        var contact = new TaskCompletionSource<ContactAgentResultDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _handler.SetAsyncJsonResponse(HttpMethod.Post, "api/servers/1/contact", _ => contact.Task);
+        _handler.SetAsyncJsonResponse(HttpMethod.Get, "api/servers/1/contact", _ => contact.Task);
+
+        var cut = Render<ContactAgentDialog>(p => p
+            .Add(x => x.ServerId, 1)
+            .Add(x => x.ServerName, "TestServer"));
+
+        cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=contact-agent-running]").GetAttribute("aria-busy")));
+        Assert.Contains("omni-busy", cut.Find("[data-testid=contact-agent-running]").ClassName, StringComparison.Ordinal);
+        Assert.Empty(cut.FindAll(".aetheus-loader-logo"));
+
+        contact.SetResult(new ContactAgentResultDto { Reachable = true });
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=contact-agent-running]")));
+    }
+
     [Fact]
     public void FormatSeconds_UnderMinute()
     {

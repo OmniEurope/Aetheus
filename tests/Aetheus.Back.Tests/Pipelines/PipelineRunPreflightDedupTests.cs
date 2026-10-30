@@ -61,7 +61,7 @@ public sealed class PipelineRunPreflightDedupTests
         PipelineYamlDefinition definition, IPipelineEnvironmentCheckGuard? checks = null)
         => (await BuildSut(checks ?? Admits(true)).FindBlockingProblemsAsync(
             definition, new Dictionary<string, string>(), organizationId: 3, projectId: 7,
-            CancellationToken.None)).Problems;
+            CancellationToken.None)).Problems.Select(problem => problem.English).ToList();
 
     /// <summary>A registry with nothing to say: these tests are about the OTHER preflight checks, and an
     /// unconfigured substitute would return a null report instead of an empty one.</summary>

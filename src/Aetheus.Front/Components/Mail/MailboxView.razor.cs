@@ -11,6 +11,7 @@ public partial class MailboxView : IDisposable
 {
     private const string Inbox = "INBOX";
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -164,10 +165,14 @@ public partial class MailboxView : IDisposable
                 new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
             if (confirmed != true) return;
         }
-        if (Handle(await Api.Mailbox.DeleteAsync(ServerId, AccountId, _folder, _message.Uid)) is not { } deleted) return;
-        Toast.Success(deleted.Permanent ? "MailboxDeletedPermanently" : "MailboxMovedToTrash");
-        _message = null;
-        await RefreshAsync();
+        var message = _message;
+        await Veil.RunAsync(async () =>
+        {
+            if (Handle(await Api.Mailbox.DeleteAsync(ServerId, AccountId, _folder, message.Uid)) is not { } deleted) return;
+            Toast.Success(deleted.Permanent ? "MailboxDeletedPermanently" : "MailboxMovedToTrash");
+            _message = null;
+            await RefreshAsync();
+        });
     }
 
     internal async Task ComposeAsync(MailboxComposeMode mode)
@@ -225,8 +230,6 @@ public partial class MailboxView : IDisposable
         if (bytes is null) return;
         await Js.InvokeVoidAsync("downloadFileFromBytes", bytes, attachment.FileName, attachment.ContentType);
     }
-
-    internal void BackToMail() => Nav.NavigateTo($"/servers/{ServerId}/mail?tab=accounts");
 
     /// <summary>Recette R3-52: an unread message reads in bold, the open one is highlighted (a background
     /// tint, never a side stripe).</summary>
@@ -297,5 +300,5 @@ public partial class MailboxView : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private void RefreshCanWrite() => _canWrite = Permissions.CanWrite(ResourceType.Server, ServerId);
+    private void RefreshCanWrite() => _canWrite = Permissions.Can(PermissionKeys.ServerMailboxManage, ServerId);
 }

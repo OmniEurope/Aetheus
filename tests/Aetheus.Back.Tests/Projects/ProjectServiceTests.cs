@@ -255,18 +255,29 @@ public class ProjectServiceTests
     public async Task GetProjectServersAsync_ReturnsMappedList()
     {
         _repo.GetProjectServersAsync(1, Arg.Any<CancellationToken>())
-            .Returns([new ProjectServer
-            {
-                Id = 1, ProjectId = 1, Type = ProjectServerType.AgentServer, ServerId = 5,
-                DisplayName = "web-01", Host = "web-01.local",
-                Server = new Server { Id = 5, Name = "web-01", Hostname = "web-01.local", Status = ServerStatus.Online }
-            }]);
+            .Returns([
+                new ProjectServerRow
+                {
+                    Id = 1, ProjectId = 1, Type = ProjectServerType.AgentServer, ServerId = 5,
+                    DisplayName = "web-01", Host = "web-01.local",
+                    ServerName = "web-01", ServerHostname = "web-01.local", ServerStatus = ServerStatus.Online
+                },
+                new ProjectServerRow
+                {
+                    Id = 0, ProjectId = 1, Type = ProjectServerType.AgentServer, ServerId = 6,
+                    DisplayName = "web-02", Host = "web-02.local", ViaEnvironmentId = 3, ViaEnvironmentName = "prod"
+                }
+            ]);
 
         var result = await _sut.GetProjectServersAsync(1, ct: TestContext.Current.CancellationToken);
 
-        Assert.Single(result);
+        Assert.Equal(2, result.Count);
         Assert.Equal("web-01", result[0].DisplayName);
         Assert.Equal(ServerStatus.Online, result[0].ServerStatus);
+        Assert.Null(result[0].ViaEnvironmentName);
+        Assert.Equal(0, result[1].Id);
+        Assert.Equal(3, result[1].ViaEnvironmentId);
+        Assert.Equal("prod", result[1].ViaEnvironmentName);
     }
 
     // --- GetProjectTasksAsync ---

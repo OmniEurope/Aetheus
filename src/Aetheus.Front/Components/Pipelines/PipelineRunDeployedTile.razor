@@ -1,0 +1,18 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-82: where a succeeded deployment run put the application, in a tile of its own. The addresses come from
+   the run detail (PipelineRunDto.DeployedAddress, read by the back end from the variables the deployment was
+   given), never composed here; the tile is absent when the run did not deploy or the address is not known.
+   The links open in a new tab (OmniLink NewTab), so the tile itself is a plain group. *@
+@if (Run.DeployedAddress is { } address)
+{
+    <OmniFactTile Title="@L["RunDeployedAddress"]" Class="run-deployed-tile">
+        <Icon><OmniIcon Name="OmniIconName.Globe" /></Icon>
+        <ChildContent>
+            <OmniFactTileRow Term="@L["Application"]"><Icon><OmniIcon Name="OmniIconName.Globe" /></Icon><ChildContent><OmniLink Href="@address.AppUrl" NewTab="true" Class="run-deployed-app-link">@address.AppUrl</OmniLink></ChildContent></OmniFactTileRow>
+            @if (address.ApiUrl is { Length: > 0 } apiUrl)
+            {
+                <OmniFactTileRow Term="@L["RunDeployedApi"]"><Icon><OmniIcon Name="OmniIconName.Link" /></Icon><ChildContent><OmniLink Href="@apiUrl" NewTab="true" Class="run-deployed-api-link">@apiUrl</OmniLink></ChildContent></OmniFactTileRow>
+            }
+        </ChildContent>
+    </OmniFactTile>
+}

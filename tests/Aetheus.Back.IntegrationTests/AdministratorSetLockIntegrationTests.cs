@@ -52,10 +52,11 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
             TimeProvider.System,
             Substitute.For<IAdminChangeNotifier>(),
             Substitute.For<IUserChangeNotifier>(),
-            Substitute.For<IDomainEventDispatcher>());
+            Substitute.For<IDomainEventDispatcher>(),
+            new OrganizationRoleAssignmentService(new OrganizationRoleAssignmentRepository(db)));
         try
         {
-            return await service.UnassignRoleAsync(userId, roleId, ct);
+            return await service.UnassignRoleAsync(userId, roleId, null, ct);
         }
         catch (BadRequestException)
         {
@@ -75,9 +76,10 @@ public sealed class AdministratorSetLockIntegrationTests(PostgresFixture fixture
         // Only these two may be administrators, or the count would never reach the last one.
         var others = await seed.UserRoles.Where(ur => ur.Role.Name == "Admin").ToListAsync(ct);
         seed.UserRoles.RemoveRange(others);
-        var users = Enumerable.Range(0, 2).Select(_ => new User
+        var users = Enumerable.Range(0, 2).Select(_ => Guid.NewGuid().ToString("N")).Select(id => new User
         {
-            Username = $"admin-{Guid.NewGuid():N}",
+            Username = $"admin-{id}",
+            Email = $"admin-{id}@example.test",
             PasswordHash = "not-used",
             IsActive = true,
             CreatedAt = DateTime.UtcNow,

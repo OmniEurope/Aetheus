@@ -35,8 +35,14 @@ public partial class UserPipelineHandoverDialog
     /// <summary>R1-53: the reason a read or the preview failed; the confirmation stays refused while set.</summary>
     private string? _error;
 
+    /// <summary>The read of the owned pipelines is said only once it has lasted <see cref="LoadingNoticeDelay"/>: a
+    /// quick read showing then removing its line made the dialog jump, which read as a second dialog.</summary>
+    private bool _loadingNoticeDue;
+
+    internal static readonly TimeSpan LoadingNoticeDelay = TimeSpan.FromMilliseconds(400);
+
     /// <summary>R1-53: the visible phase of the dialog while it waits on the API, null when idle.</summary>
-    private string? Phase => _loading ? L["UserHandoverLoadingPipelines"].Value
+    private string? Phase => _loading ? (_loadingNoticeDue ? L["UserHandoverLoadingPipelines"].Value : null)
         : _previewing ? L["UserHandoverCheckingRights"].Value
         : null;
 
@@ -49,6 +55,7 @@ public partial class UserPipelineHandoverDialog
 
     protected override async Task OnInitializedAsync()
     {
+        _ = SayLoadingWhenSlowAsync();
         try
         {
             var owned = Api.Pipelines.GetOwnedPipelinesAsync(Username);
@@ -70,6 +77,14 @@ public partial class UserPipelineHandoverDialog
 
         if (_owned.Count > 0 && _candidates.Any(candidate => candidate.Username == DefaultTarget))
             await OnTargetChangedAsync(DefaultTarget);
+    }
+
+    private async Task SayLoadingWhenSlowAsync()
+    {
+        await Task.Delay(LoadingNoticeDelay);
+        if (!_loading) return;
+        _loadingNoticeDue = true;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnTargetChangedAsync(string? username)

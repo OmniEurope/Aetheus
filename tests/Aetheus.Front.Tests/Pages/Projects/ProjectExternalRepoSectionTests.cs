@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Net;
 using Aetheus.Front.Components.Projects.ProjectDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Projects;
@@ -48,11 +49,12 @@ public class ProjectExternalRepoSectionTests : BunitContext
             MirrorStatus = GitMirrorStatus.Ready
         });
 
-        var cut = Render<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
+        // Sync now sits in the project header (R-109), so the section is rendered next to the header outlet.
+        var cut = this.RenderWithPageHeader<ProjectExternalRepoSection>(p => p.Add(c => c.ProjectId, 1));
 
         cut.WaitForState(() => cut.Markup.Contains("acme"));
         Assert.Contains("Enum_GitMirrorStatus_Ready", cut.Markup);
-        Assert.Contains("SyncNow", cut.Markup);
+        Assert.Contains("SyncNow", cut.Find(".test-outlet").TextContent);
     }
 
     [Fact]

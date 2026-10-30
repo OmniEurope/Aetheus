@@ -34,6 +34,16 @@ public sealed record AnalysisGradeMeasureDto
 
     /// <summary>The open findings behind a finding score, by severity; null for any other rule.</summary>
     public AnalysisGradeFindingCountsDto? FindingCounts { get; init; }
+
+    /// <summary>The name of the pipeline step that publishes the evidence this measure reads (recette R-73,
+    /// R-74), so a required measure nobody observed can say which step did not produce it. Null when the rule
+    /// is not tied to one kind of evidence or the pipeline holds no such step.</summary>
+    [StringLength(300)] public string? ProducerStep { get; init; }
+
+    /// <summary>Why the pipeline's grading validator rejected this rule (or the whole <c>analysis_grading</c>
+    /// block, under the key <c>analysis_grading</c>): such a measure is graded F, observed, so the grade and the
+    /// gate say why instead of going silent. Null for a rule that was graded.</summary>
+    [StringLength(2000)] public string? Rejection { get; init; }
 }
 
 /// <summary>Distinct open findings by severity (an info count includes findings without a severity).</summary>

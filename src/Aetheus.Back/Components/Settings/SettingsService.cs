@@ -36,17 +36,14 @@ public class SettingsService(ISettingsRepository repo, IEncryptionService encryp
         [PipelineRunToEndSetting.Key] = "false"
     };
 
-    internal const string DailyRecapRowPrefix = "DailyRecap:";
-
     public async Task<List<AppSettingDto>> GetSettingsAsync(CancellationToken ct = default)
     {
         var settings = await repo.GetAllSettingsAsync(ct).ConfigureAwait(false);
-        // The e-mail sender has its own tab and endpoint; its rows are not free-form settings. The
-        // daily recap neither (DailyRecapSettingKeys.Prefix, spelled here so Settings does not
-        // depend on that module).
+        // Only the rows UpdateSettingAsync accepts: a row it refuses would show a Save that always fails.
+        // That leaves out the e-mail sender, the daily recap and the certificate alerts (their own tabs and
+        // endpoints), the internal markers (DemoDataSeeded:*, DeliveryTemplates:*) and seed rows no code reads.
         var result = settings
-            .Where(s => !s.Key.StartsWith(EmailSenderSettingKeys.Prefix, StringComparison.Ordinal)
-                && !s.Key.StartsWith(DailyRecapRowPrefix, StringComparison.Ordinal))
+            .Where(s => AllowedSettingKeys.Contains(s.Key))
             .Select(s => new AppSettingDto { Key = s.Key, Value = s.Value }).ToList();
         var present = result.Select(s => s.Key).ToHashSet(StringComparer.Ordinal);
         foreach (var (key, def) in DefaultSettingValues)

@@ -108,6 +108,24 @@ public sealed class PipelineEnvTemplateExposureTests
     }
 
     [Fact]
+    public async Task ASampleNamingSeveralUndefinedVariables_ReportsThemAllAtOnce_AsAConfigurationProblem()
+    {
+        // R-68: W7 met APPNAME, then DB_USER, one deployment attempt each. All are named in the one refusal,
+        // and it is a configuration to complete, not an InfrastructureMismatch (a server problem).
+        var run = await DispatchAsync(
+            Stage("echo $AETHEUS_ENV_FILE_B64"),
+            sample: "SMTP_HOST=#{SMTP_HOST}#\nDB_USER=#{DB_USER}#\nENV=#{DEPLOY_ENV}#\nAPPNAME=#{APPNAME}#\n");
+
+        Assert.True(run.Failed);
+        Assert.Contains("'SMTP_HOST'", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("'DB_USER'", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("'DEPLOY_ENV'", run.FailureReason, StringComparison.Ordinal);
+        Assert.DoesNotContain("'APPNAME'", run.FailureReason, StringComparison.Ordinal);
+        Assert.Contains("library", run.FailureReason, StringComparison.Ordinal);
+        Assert.Equal(Aetheus.Shared.Components.Shared.TaskFailureCodes.ConfigurationIncomplete, run.FailureCode);
+    }
+
+    [Fact]
     public async Task AMissingSample_FailsTheRunAndNamesTheWizard()
     {
         var run = await DispatchAsync(Stage("echo $AETHEUS_ENV_FILE_B64"), sample: null);
@@ -150,7 +168,7 @@ public sealed class PipelineEnvTemplateExposureTests
     }
 
     private sealed record Dispatched(
-        List<ServerTask> Tasks, bool Failed, string? FailureReason)
+        List<ServerTask> Tasks, bool Failed, string? FailureReason, string? FailureCode = null)
     {
         public IEnumerable<string> TaskNames => Tasks.Select(task => task.Name);
 
@@ -198,6 +216,6 @@ public sealed class PipelineEnvTemplateExposureTests
             organizationId: 1, projectId: 2, Substitute.For<IPipelineChildRunLauncher>(),
             TestContext.Current.CancellationToken);
 
-        return new Dispatched(tracked, refusal is not null, refusal?.Reason);
+        return new Dispatched(tracked, refusal is not null, refusal?.Reason, refusal?.FailureCode);
     }
 }

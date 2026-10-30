@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 # Aetheus Agent portsentry unblock helper - root-owned, invoked via
 # /etc/sudoers.d/aetheus-portsentry (NOPASSWD). Removes ONE validated IP from iptables/ip6tables
-# INPUT DROP rules and /etc/hosts.deny. Never evals input.
+# INPUT DROP rules, /etc/hosts.deny and PortSentry's blocked files. Never evals input.
 set -u
 # grep tries each line on its own, so one valid line used to let a multi-line argument through whole
 # (audit DEP-002). A carriage return or line feed refuses the argument before any pattern is tried;
@@ -15,7 +15,7 @@ ip="${1:-}"
 # IPv4 or IPv6: hex digits, dots, colons only - no shell metachars, no spaces.
 one_line "$ip" && printf '%s' "$ip" | grep -Eq '^[0-9a-fA-F.:]{2,45}$' || { echo "invalid ip" >&2; exit 1; }
 
-# Says "unblocked" only once the address is out of the firewall and of /etc/hosts.deny; a real
+# Says "unblocked" only once the address is out of the firewall, /etc/hosts.deny and PortSentry's blocked files; a real
 # failure exits non-zero instead of being masked (audit DEP-006). A rule that is absent is not one.
 failed=0
 
@@ -73,6 +73,80 @@ if [ -f /etc/hosts.deny ]; then
         fi
         rm -f "$tmp"
     fi
+fi
+
+# Drop matching lines from PortSentry's blocked files too (R-119). PortSentry 1.2 lists every host it
+# blocked in one file per mode next to BLOCKED_FILE (<base>.tcp .atcp .stcp .udp .audp .sudp); the
+# agent's collector reads them for the "blocked IPs" list, and PortSentry treats an address still
+# listed there as already blocked, so it would never block it again. Same rules as hosts.deny: the
+# same token-boundary filter, lines are only ever DELETED, a file that cannot be read is kept as is.
+# The base comes from BLOCKED_FILE in portsentry.conf exactly as the collector reads it (first
+# non-empty value, surrounding blanks and quotes trimmed, the Debian default otherwise); the value is
+# data, never run, and is refused unless it names a plain file under PORTSENTRY_BLOCKED_DIR.
+PORTSENTRY_CONF=/etc/portsentry/portsentry.conf
+PORTSENTRY_BLOCKED_DIR=/var/lib/portsentry
+blocked_base="$PORTSENTRY_BLOCKED_DIR/portsentry.blocked"
+base_ok=1
+if [ -e "$PORTSENTRY_CONF" ]; then
+    if ! conf_base="$(sed -n '/^[[:space:]]*BLOCKED_FILE=/{s/^[[:space:]]*BLOCKED_FILE=[[:space:]]*//;s/[[:space:]]*$//;s/^"*//;s/"*$//;/./{p;q;};}' "$PORTSENTRY_CONF")"; then
+        echo "could not read $PORTSENTRY_CONF, PortSentry blocked files left unchanged" >&2
+        base_ok=0
+    elif [ -n "$conf_base" ]; then
+        blocked_base="$conf_base"
+    fi
+fi
+if [ "$base_ok" -eq 1 ]; then
+    case "$blocked_base" in
+        "$PORTSENTRY_BLOCKED_DIR"/*) ;;
+        *) base_ok=0 ;;
+    esac
+    case "$blocked_base" in
+        *[!A-Za-z0-9._/-]*|*/|*//*|*/./*|*/.|*/../*|*/..) base_ok=0 ;;
+    esac
+    [ "$base_ok" -eq 1 ] || echo "BLOCKED_FILE is not a file under $PORTSENTRY_BLOCKED_DIR, refused: PortSentry blocked files left unchanged" >&2
+fi
+if [ "$base_ok" -eq 0 ]; then
+    failed=1
+else
+    esc_ip="$(printf '%s' "$ip" | sed 's/[.]/\\./g')"
+    pattern="(^|[^0-9A-Fa-f.:])${esc_ip}([^0-9A-Fa-f.:]|\$)"
+    lines_removed=0
+    for mode in tcp atcp stcp udp audp sudp; do
+        file="$blocked_base.$mode"
+        [ -e "$file" ] || [ -L "$file" ] || continue
+        if [ -L "$file" ] || [ ! -f "$file" ]; then
+            echo "$file is not a regular file, left unchanged" >&2
+            failed=1
+            continue
+        fi
+        # grep -c answers 1 when no line matches (count 0); 2 means the file could not be read.
+        count="$(grep -cE "$pattern" "$file")"
+        rc=$?
+        if [ "$rc" -gt 1 ]; then
+            echo "could not read $file (grep exit $rc), file left unchanged" >&2
+            failed=1
+            continue
+        fi
+        [ "$count" -gt 0 ] || continue
+        if ! tmp="$(mktemp)"; then
+            echo "could not create a temporary file, $file left unchanged" >&2
+            failed=1
+            continue
+        fi
+        grep -vE "$pattern" "$file" > "$tmp"
+        rc=$?
+        if [ "$rc" -gt 1 ]; then
+            echo "could not read $file (grep exit $rc), file left unchanged" >&2
+            failed=1
+        elif ! cat "$tmp" > "$file"; then
+            echo "could not rewrite $file" >&2
+            failed=1
+        else
+            lines_removed=$((lines_removed + count))
+        fi
+        rm -f "$tmp"
+    done
+    echo "portsentry blocked files: $lines_removed line(s) removed for $ip"
 fi
 [ "$failed" -eq 0 ] || exit 1
 echo "unblocked $ip"

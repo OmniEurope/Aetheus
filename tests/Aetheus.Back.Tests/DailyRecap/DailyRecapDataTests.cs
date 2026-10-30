@@ -189,17 +189,17 @@ public sealed class DailyRecapDataTests : IDisposable
     }
 
     [Fact]
-    public async Task DefaultRecipients_AreTheActiveAdministratorsWithAnAddress()
+    public async Task DefaultRecipients_AreTheActiveAdministrators()
     {
+        // Every account has an e-mail address (NOT NULL since 20261028210000_RequireUserEmail).
         _db.Roles.AddRange(new Role { Id = 1, Name = "Admin" }, new Role { Id = 2, Name = "Viewer" });
         _db.Users.AddRange(
             new User { Id = 1, Username = "alice", Email = "alice@example.org", IsActive = true },
             new User { Id = 2, Username = "bob", Email = "bob@example.org", IsActive = false },
-            new User { Id = 3, Username = "carol", Email = null, IsActive = true },
             new User { Id = 4, Username = "dave", Email = "dave@example.org", IsActive = true });
         _db.UserRoles.AddRange(
             new UserRole { UserId = 1, RoleId = 1 }, new UserRole { UserId = 2, RoleId = 1 },
-            new UserRole { UserId = 3, RoleId = 1 }, new UserRole { UserId = 4, RoleId = 2 });
+            new UserRole { UserId = 4, RoleId = 2 });
         _db.SaveChanges();
 
         Assert.Equal(["alice@example.org"], await _repo.GetActiveAdministratorEmailsAsync(Ct));

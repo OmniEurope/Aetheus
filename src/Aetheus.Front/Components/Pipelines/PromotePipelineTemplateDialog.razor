@@ -11,7 +11,7 @@ else if (_preview is not null)
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniStack Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Strong">@string.Format(L["PromoteTemplateVersion"], _preview.TemplateName, _preview.LatestVersion + 1)</OmniText>
-            <MonacoDiffViewer OriginalValue="@_preview.LatestTemplateYaml" ModifiedValue="@_preview.EffectivePipelineYaml" />
+            <OmniDiffViewer Original="@_preview.LatestTemplateYaml" Modified="@_preview.EffectivePipelineYaml" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
             <OmniFormField For="oe-pages-pipelines-promotepipelinetemplatedialog-1"><LabelContent>@L["ChangelogEntry"]</LabelContent><ChildContent>
                 <OmniTextBox @bind-Value="_model.ChangelogEntry" Id="oe-pages-pipelines-promotepipelinetemplatedialog-1" />
             </ChildContent></OmniFormField>

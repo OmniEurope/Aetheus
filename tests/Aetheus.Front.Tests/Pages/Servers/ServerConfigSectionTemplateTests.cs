@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 
 namespace Aetheus.Front.Tests.Pages.Servers;
@@ -9,6 +10,7 @@ public class ServerConfigSectionTemplateTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
     private readonly BunitTestHelper.TestHandler _handler;
+    private IRenderedComponent<PageHeaderOutletHost>? _host;
 
     public ServerConfigSectionTemplateTests()
     {
@@ -21,18 +23,20 @@ public class ServerConfigSectionTemplateTests : BunitContext
         _handler.SetJsonResponse($"api/servers/{serverId}/configuration/validate", new ServerConfigValidationResult { IsValid = true, Errors = [] });
         _handler.SetJsonResponse($"api/servers/{serverId}/configuration/preview", new ServerConfigPreviewDto { TaskCount = 2, Changes = [] });
         _handler.SetJsonResponse($"api/servers/{serverId}/configuration/deploy", new ServerConfigDeployResultDto { TasksCreated = 2 });
-        return Render<ServerConfigSection>(p => p.Add(x => x.ServerId, serverId));
+        // Export and Import sit in the server page header (R-109), so the section is rendered next to the header outlet.
+        _host = this.RenderWithPageHeader<ServerConfigSection>(p => p.Add(x => x.ServerId, serverId));
+        return _host.FindComponent<ServerConfigSection>();
     }
 
     [Fact]
     public void Renders_WithServerId()
     {
         var cut = RenderSection();
-        // The ServerId parameter is bound and the Export/Import YAML actions render in the section.
+        // The ServerId parameter is bound and the Export/Import YAML actions render in the page header.
         Assert.Equal(10, cut.Instance.ServerId);
-        Assert.Contains("ExportYaml", cut.Markup);
+        Assert.Contains("ExportYaml", _host!.Find(".test-outlet").InnerHtml);
         // Import sits in the "More actions" menu beside Export (STD-BTN detection 11).
-        Assert.NotNull(cut.FindMenuItem("ImportYaml"));
+        Assert.NotNull(_host!.FindMenuItem("ImportYaml"));
     }
 
     [Fact]

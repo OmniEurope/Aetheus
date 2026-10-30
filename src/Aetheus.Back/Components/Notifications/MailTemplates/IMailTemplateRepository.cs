@@ -16,6 +16,20 @@ public interface IMailTemplateRepository
     /// <summary>Removes the template's row; false when there was none.</summary>
     Task<bool> DeleteAsync(MailTemplateKind kind, string language, CancellationToken ct = default);
 
+    /// <summary>The organization's own versions (Administration for organization admins).</summary>
+    Task<List<OrganizationMailTemplate>> ListForOrganizationAsync(int organizationId, CancellationToken ct = default);
+
+    Task<OrganizationMailTemplate?> FindForOrganizationAsync(int organizationId, MailTemplateKind kind, string language, CancellationToken ct = default);
+
+    /// <summary>Writes the organization's own version, adding its row when it does not exist.</summary>
+    Task<OrganizationMailTemplate> UpsertForOrganizationAsync(
+        int organizationId, MailTemplateKind kind, string language, string subject, string body, string? updatedBy, CancellationToken ct = default);
+
+    /// <summary>Removes the organization's own version; false when there was none.</summary>
+    Task<bool> DeleteForOrganizationAsync(int organizationId, MailTemplateKind kind, string language, CancellationToken ct = default);
+
+    Task<bool> OrganizationExistsAsync(int organizationId, CancellationToken ct = default);
+
     /// <summary>
     /// The language and appearance preference values (JSON) of the account with that address, an active
     /// account first; both null when no account has it.

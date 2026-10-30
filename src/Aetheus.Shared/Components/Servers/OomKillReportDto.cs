@@ -45,4 +45,36 @@ public sealed record OomKillVictimDto
     [Required]
     [StringLength(64, MinimumLength = 1)]
     public string Process { get; init; } = string.Empty;
+
+    // Everything below is optional: an older agent does not send it and the backend then words the
+    // alert as before (Kind Unknown, no container, no memory).
+
+    /// <summary>Whether a memory cgroup (a container) or the whole host ran out of memory.</summary>
+    public OomKillKind Kind { get; init; }
+
+    /// <summary>The cgroup of the killed task (<c>task_memcg</c>), e.g. a docker scope.</summary>
+    [StringLength(256)]
+    public string? Cgroup { get; init; }
+
+    /// <summary>The 12-character short id of the docker container whose scope is <see cref="Cgroup"/>;
+    /// null when the cgroup is not a docker scope. The agent does not resolve the name: the backend
+    /// matches it with the containers of the same heartbeat.</summary>
+    [StringLength(64)]
+    public string? ContainerId { get; init; }
+
+    /// <summary>Virtual size of the killed process, in kB (<c>total-vm</c>).</summary>
+    [Range(0, long.MaxValue)]
+    public long? TotalVmKb { get; init; }
+
+    /// <summary>Anonymous resident memory of the killed process, in kB (<c>anon-rss</c>).</summary>
+    [Range(0, long.MaxValue)]
+    public long? AnonRssKb { get; init; }
+
+    /// <summary>File-backed resident memory of the killed process, in kB (<c>file-rss</c>).</summary>
+    [Range(0, long.MaxValue)]
+    public long? FileRssKb { get; init; }
+
+    /// <summary>Shared-memory resident memory of the killed process, in kB (<c>shmem-rss</c>).</summary>
+    [Range(0, long.MaxValue)]
+    public long? ShmemRssKb { get; init; }
 }

@@ -55,6 +55,6 @@ public class OrganizationEditTests : BunitContext
         Assert.Contains("Slug", cut.Markup);
         Assert.Contains("Description", cut.Markup);
         Assert.Contains("Save", cut.Markup);
-        Assert.Contains("Cancel", cut.Markup);
+        Assert.Contains("GoBack", cut.Markup);
     }
 }

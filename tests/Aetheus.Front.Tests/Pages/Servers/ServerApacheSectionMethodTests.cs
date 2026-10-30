@@ -101,57 +101,15 @@ public class ServerApacheSectionMethodTests : BunitContext
         Assert.Equal("/var/www/html", group.DocumentRootsCompact);
     }
 
-    // === FilteredModules ===
+    // === Modules ===
 
     [Fact]
-    public void FilteredModules_NoSearch_ReturnsAll()
+    public void Modules_AreAllGivenToTheGrid_WhichFiltersThemByColumn()
     {
         var cut = RenderSection();
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredModules", Priv)!;
-        var modules = (List<ApacheModuleDto>)prop.GetValue(cut.Instance)!;
+        var prop = typeof(ServerApacheSection).GetProperty("Apache", Priv)!;
+        var modules = ((ApacheDataDto)prop.GetValue(cut.Instance)!).Modules;
         Assert.Equal(3, modules.Count);
-    }
-
-    [Fact]
-    public void FilteredModules_WithSearch_Filters()
-    {
-        var cut = RenderSection();
-        typeof(ServerApacheSection).GetField("_moduleSearch", Priv)!.SetValue(cut.Instance, "ssl");
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredModules", Priv)!;
-        var modules = (List<ApacheModuleDto>)prop.GetValue(cut.Instance)!;
-        Assert.Single(modules);
-        Assert.Equal("mod_ssl", modules[0].Name);
-    }
-
-    // === FilteredVirtualHosts ===
-
-    [Fact]
-    public void FilteredVirtualHosts_NoSearch_ReturnsAll()
-    {
-        var cut = RenderSection();
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredVirtualHosts", Priv)!;
-        var vhosts = (List<ApacheVirtualHostDto>)prop.GetValue(cut.Instance)!;
-        Assert.Equal(3, vhosts.Count);
-    }
-
-    [Fact]
-    public void FilteredVirtualHosts_ByServerName_Filters()
-    {
-        var cut = RenderSection();
-        typeof(ServerApacheSection).GetField("_vhostSearch", Priv)!.SetValue(cut.Instance, "staging");
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredVirtualHosts", Priv)!;
-        var vhosts = (List<ApacheVirtualHostDto>)prop.GetValue(cut.Instance)!;
-        Assert.Single(vhosts);
-    }
-
-    [Fact]
-    public void FilteredVirtualHosts_ByDocumentRoot_Filters()
-    {
-        var cut = RenderSection();
-        typeof(ServerApacheSection).GetField("_vhostSearch", Priv)!.SetValue(cut.Instance, "staging");
-        var prop = typeof(ServerApacheSection).GetProperty("FilteredVirtualHosts", Priv)!;
-        var vhosts = (List<ApacheVirtualHostDto>)prop.GetValue(cut.Instance)!;
-        Assert.All(vhosts, v => Assert.Contains("staging", v.DocumentRoot));
     }
 
     // === ExecuteActionAsync ===

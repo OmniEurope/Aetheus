@@ -60,9 +60,9 @@ public partial class ProjectFormDialog
         if (Project is null) return;
 
         // The dialog counts what goes with the project, asks for its name and deletes it.
+        // The dialog ends on what was deleted and goes back to the projects list itself (recette R-50).
         if (!await ProjectDeleteDialog.OpenAsync(Dialog, L, Project.Id)) return;
         Dialog.Close();
-        Nav.NavigateTo("/projects");
     }
 
 }

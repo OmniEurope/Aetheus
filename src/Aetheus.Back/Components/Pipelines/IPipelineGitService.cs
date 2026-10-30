@@ -90,7 +90,9 @@ public interface IPipelineGitService
     /// <summary>
     /// Copies every pipeline owned by an environment into the project's internal repo
     /// <c>.pipeline/</c> (file name prefixed by the environment), as independent copies. Invoked when
-    /// an environment is linked to a project. Returns the number of definitions written.
+    /// an environment is linked to a project. A file the repository already holds is never overwritten
+    /// (R-95): an identical one is skipped, a different one is kept and logged. Returns the number of
+    /// definitions written.
     /// </summary>
     Task<int> CopyEnvironmentPipelinesToProjectAsync(
         int environmentId, string environmentName, int projectId, string actor, CancellationToken ct = default);

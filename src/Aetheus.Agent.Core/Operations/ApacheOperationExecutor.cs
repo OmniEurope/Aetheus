@@ -45,7 +45,58 @@ public sealed class ApacheOperationExecutor(
         OperationKind.ApacheSaveHtaccess or
         OperationKind.ApacheEnableSite or
         OperationKind.ApacheDisableSite or
-        OperationKind.ApacheDeleteSite;
+        OperationKind.ApacheDeleteSite or
+        OperationKind.ApacheEnableModule or
+        OperationKind.ApacheDisableModule;
+
+    /// <summary>R-119: the root-owned helper that enables or disables a module (a2enmod/a2dismod), checks the
+    /// configuration and restarts Apache, undoing the change when either fails. Rendered by
+    /// <c>install-agent-linux.sh --enable-apache-manage</c> from <c>deploy/agent-host-config/apache/aetheus-apache-module</c>.</summary>
+    internal const string ModuleHelperPath = "/usr/local/lib/aetheus/aetheus-apache-module";
+
+    /// <summary>Runs the module helper through sudo with the module name on stdin; replaceable so the argv and the
+    /// input are asserted without sudo.</summary>
+    internal Func<IReadOnlyList<string>, string, int, Func<string, TaskLogLevel, Task>, CancellationToken, Task<ExecutorResult>>?
+        RunModuleHelperAsync
+    { get; init; }
+
+    private Task<ExecutorResult> RunModuleHelperWithSudoAsync(
+        IReadOnlyList<string> argv, string standardInput, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        var psi = SudoProcessStartInfo.Create();
+        foreach (var argument in argv) psi.ArgumentList.Add(argument);
+        return ProcessRunner.RunAsync(psi, timeoutSeconds, onOutput, logger, ct, standardInput);
+    }
+
+    /// <summary>The exact <c>sudo</c> argv of a module operation, word for word a line of the aetheus-apache grant;
+    /// null for any other kind. The module name is never part of it.</summary>
+    internal static IReadOnlyList<string>? BuildModuleHelperArgv(OperationKind kind) => kind switch
+    {
+        OperationKind.ApacheEnableModule => ["-n", ModuleHelperPath, "enable"],
+        OperationKind.ApacheDisableModule => ["-n", ModuleHelperPath, "disable"],
+        _ => null
+    };
+
+    // R-119: enable or disable a module through the helper. The name is checked against the shared contract here,
+    // and again by the helper, which reads it on stdin.
+    private async Task<ExecutorResult> ExecuteModuleOperationAsync(
+        OperationKind kind, string module, int timeoutSeconds,
+        Func<string, TaskLogLevel, Task> onOutput, CancellationToken ct)
+    {
+        if (await RejectUnsupportedPlatformAsync(onOutput).ConfigureAwait(false))
+            return new ExecutorResult(-1, false);
+        if (!OperationTargetValidator.IsValid(kind, module))
+        {
+            await onOutput($"Invalid Apache module name '{module}'.", TaskLogLevel.Error).ConfigureAwait(false);
+            return new ExecutorResult(-1, false);
+        }
+
+        var argv = BuildModuleHelperArgv(kind)!;
+        var timeout = Math.Clamp(timeoutSeconds, _options.MinTimeoutSeconds, _options.MaxTimeoutSeconds);
+        var run = RunModuleHelperAsync ?? RunModuleHelperWithSudoAsync;
+        return await run(argv, module + "\n", timeout, onOutput, ct).ConfigureAwait(false);
+    }
 
     public Task<ExecutorResult> ExecuteAsync(
         OperationKind kind, string target,
@@ -64,6 +115,8 @@ public sealed class ApacheOperationExecutor(
             return ApplyConfigSetAsync(envVars, timeoutSeconds, onOutput, cancellationToken);
         if (kind is OperationKind.ApacheEnableSite or OperationKind.ApacheDisableSite or OperationKind.ApacheDeleteSite)
             return ExecuteSiteOperationAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
+        if (kind is OperationKind.ApacheEnableModule or OperationKind.ApacheDisableModule)
+            return ExecuteModuleOperationAsync(kind, target, timeoutSeconds, onOutput, cancellationToken);
         // Typed read/write of vhost config and .htaccess (replace the dead cat/printf shell builders).
         // These are pure File read/writes (like SaveConfig) - routed here, not through the no-env overload
         // whose Linux guard would short-circuit them.
@@ -227,8 +280,17 @@ public sealed class ApacheOperationExecutor(
         return psi is null
             ? new ExecutorResult(-1, false)
             : await RunProcessWithLoggerAsync(
-                psi, timeoutSeconds, onOutput, logger, cancellationToken).ConfigureAwait(false);
+                psi, timeoutSeconds,
+                (line, level) => onOutput(line, kind == OperationKind.ApacheTestConfig ? ConfigTestLevel(line, level) : level),
+                logger, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>R-119: <c>apache2ctl configtest</c> prints its verdict "Syntax OK" on stderr, which the process
+    /// runner reports as a warning. A passing check is information, not a warning; every other line keeps its level.</summary>
+    internal static TaskLogLevel ConfigTestLevel(string line, TaskLogLevel level) =>
+        level == TaskLogLevel.Warning && line.Trim().EndsWith("Syntax OK", StringComparison.Ordinal)
+            ? TaskLogLevel.Info
+            : level;
 
     private async Task<bool> RejectUnsupportedPlatformAsync(
         Func<string, TaskLogLevel, Task> onOutput)

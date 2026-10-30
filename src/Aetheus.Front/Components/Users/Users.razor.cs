@@ -13,7 +13,8 @@ public partial class Users : IAsyncDisposable
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private ListCacheService Cache { get; set; } = default!;
-    [Inject] private AdminIdentitySearch Search { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
+    [Inject] private AdministrationScopeService Scope { get; set; } = default!;
 
     private AetheusDataGrid<UserDto>? _grid;
     private List<UserDto> _users = [];
@@ -30,11 +31,16 @@ public partial class Users : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        if (!AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Users"))
+        if (!AdminPageEntry.TryEnter(Auth, Permissions, PermissionKeys.OrganizationMembersManage, Nav, Breadcrumb, L, "Users"))
             return;
 
-        // The search shared with Organizations and Roles, in the section bar.
-        Search.Changed += OnSharedSearchChangedAsync;
+        // The organization switcher's choice filters the list; it is known before the grid asks its first page.
+        await Scope.EnsureLoadedAsync();
+        // An organization's administrator reads its organizations' users, nothing more (owner decision
+        // 2026-10-28): no live feed of every account, no list of the site-wide roles.
+        if (!Auth.IsAdmin)
+            return;
+
         // Realtime: reload the grid whenever any session creates/updates/deletes a user (the creator
         // also receives this broadcast, so the list refreshes even within the acting session). RT4M.
         _adminRt = new AdminEntitySubscription(HubFactory);
@@ -47,7 +53,7 @@ public partial class Users : IAsyncDisposable
             }));
         // Stale-while-revalidate: pre-seed the grid from the cached default view (grid PageSize = 20)
         // so revisiting /admin/users paints instantly; OnLoadData then revalidates in the background.
-        Cache.Seed<PaginatedResult<UserDto>>(CacheKey(1, 20, Search.Search), ApplyUsers);
+        Cache.Seed<PaginatedResult<UserDto>>(CacheKey(1, 20), ApplyUsers);
         // The shared grid requests its first page after its columns are registered.
         await LoadRoleNamesAsync();
     }
@@ -67,8 +73,8 @@ public partial class Users : IAsyncDisposable
 
     // The sort is part of the key: without it two different orders share one cache entry and the
     // second one is served the first one's rows, which looks exactly like a sort that does nothing.
-    private string CacheKey(int page, int pageSize, string? search, string? sortBy = null, bool sortDescending = false) =>
-        $"users:{page}:{pageSize}:{search}:{sortBy}:{sortDescending}:{GridColumnFilters.CacheText(_columnFilters)}";
+    private string CacheKey(int page, int pageSize, string? sortBy = null, bool sortDescending = false) =>
+        $"users:{Scope.SelectedFor(PermissionKeys.OrganizationMembersManage)}:{page}:{pageSize}:{sortBy}:{sortDescending}:{GridColumnFilters.CacheText(_columnFilters)}";
 
     private void ApplyUsers(PaginatedResult<UserDto> result)
     {
@@ -76,13 +82,14 @@ public partial class Users : IAsyncDisposable
         _totalCount = result.TotalCount;
     }
 
-    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// <summary>One page of the export, with the sort and column filters of the
     /// grid.</summary>
     private Task<PaginatedResult<UserDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest(nameof(UserDto.Username));
-        return Api.Auth.GetUsersAsync(page, pageSize, Search.Search, sortBy, sortDescending, args.ToApiFilters());
+        return Api.Auth.GetUsersAsync(page, pageSize, null, sortBy, sortDescending, args.ToApiFilters(),
+            organizationId: Scope.SelectedFor(PermissionKeys.OrganizationMembersManage));
     }
 
     private async Task OnLoadData(GridLoadArgs args)
@@ -93,11 +100,11 @@ public partial class Users : IAsyncDisposable
         // The header filters, applied by the API (and part of the cache key).
         _columnFilters = args.ToApiFilters();
         var filters = _columnFilters;
-        var search = Search.Search;
         var showLoading = _silentRefreshDepth == 0;
+        var organizationId = Scope.SelectedFor(PermissionKeys.OrganizationMembersManage);
         await Cache.RevalidateAsync(
-            CacheKey(page, pageSize, search, sortBy, sortDescending),
-            () => Api.Auth.GetUsersAsync(page, pageSize, search, sortBy, sortDescending, filters),
+            CacheKey(page, pageSize, sortBy, sortDescending),
+            () => Api.Auth.GetUsersAsync(page, pageSize, null, sortBy, sortDescending, filters, organizationId: organizationId),
             ApplyUsers,
             loading =>
             {
@@ -112,15 +119,6 @@ public partial class Users : IAsyncDisposable
         if (_grid is not null) await _grid.Reload();
     }
 
-    private async Task ResetAndReload()
-    {
-        if (_grid is not null) await _grid.GoToPage(0);
-    }
-
-    // Reload page zero explicitly when the search changes, since GoToPage(0) alone does nothing
-    // when already there.
-    private Task OnSharedSearchChangedAsync() => _grid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
-
     private async Task RefreshSilentlyAsync(Func<Task> refresh)
     {
         _silentRefreshDepth++;
@@ -134,15 +132,77 @@ public partial class Users : IAsyncDisposable
         }
     }
 
-    private async Task OnCreate()
-    {
-        var created = await Dialog.OpenAsync<UserCreateDialog>(L["NewUser"],
-            new Dictionary<string, object?>(),
-            new OmniDialogOptions { Width = "560px", CloseDialogOnOverlayClick = false, AutoFocusFirstElement = false });
+    private void OnCreate() => Nav.NavigateTo("/admin/users/new");
 
-        if (created is UserDto)
-            await RefreshSilentlyAsync(ResetAndReload);
+    /// <summary>The account page is the site Admin's; an organization's administrator manages members from its
+    /// organization's page.</summary>
+    private void OnRowClick(UserDto user)
+    {
+        if (Auth.IsAdmin) Nav.NavigateTo($"/users/{user.Id}");
     }
+
+    private Task OnOrganizationChangedAsync() => _grid?.Reload() ?? Task.CompletedTask;
+
+    private bool IsSelf(UserDto user) => Auth.UserId == user.Id;
+
+    // R-25: the row switch saves the account with its other fields unchanged, no confirmation. Switching off
+    // an owner of pipelines opens the handover dialog of the edit page (who takes the pipelines over) and the
+    // same request carries its answer; dismissing it leaves the account active. The server refuses the change
+    // on one's own account.
+    private async Task OnActiveChangedAsync(UserDto user, bool isActive)
+    {
+        if (IsSelf(user) && !isActive)
+            return;
+        UserPipelineHandover? handover = null;
+        if (!isActive)
+        {
+            List<PipelineOwnershipDto> owned;
+            try
+            {
+                owned = await Api.Pipelines.GetOwnedPipelinesAsync(user.Username);
+            }
+            catch (HttpRequestException)
+            {
+                Toast.Error(L["Error"], L["SaveFailed"]);
+                await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+                return;
+            }
+            if (owned.Count > 0)
+            {
+                handover = await AskPipelineHandoverAsync(user.Username);
+                if (handover is null)
+                {
+                    await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+                    return;
+                }
+            }
+        }
+        var request = new UpdateUserRequest
+        {
+            Username = user.Username,
+            Email = user.Email,
+            IsActive = isActive,
+            MustChangePassword = user.MustChangePassword,
+            Roles = user.Roles,
+            TransferPipelinesToUsername = handover?.TransferTo,
+            ForceWithOwnedPipelines = handover?.Force ?? false
+        };
+        var updated = await Api.Auth.UpdateUserAsync(user.Id, request);
+        if (updated is not null)
+            Toast.Success(L["Saved"], isActive ? L["UserActivated"] : L["UserDeactivated"]);
+        else
+            Toast.Error(L["Error"], L["SaveFailed"]);
+        await RefreshSilentlyAsync(() => _grid?.Reload() ?? Task.CompletedTask);
+    }
+
+    private async Task<UserPipelineHandover?> AskPipelineHandoverAsync(string username) =>
+        await Dialog.OpenAsync<UserPipelineHandoverDialog>(L["DeactivateUser"].Value, new Dictionary<string, object?>
+        {
+            [nameof(UserPipelineHandoverDialog.Username)] = username,
+            [nameof(UserPipelineHandoverDialog.Message)] = string.Format(L["DeactivateUserConfirm"].Value, username),
+            [nameof(UserPipelineHandoverDialog.Delete)] = false,
+            [nameof(UserPipelineHandoverDialog.DefaultTarget)] = Auth.Username,
+        }, new OmniDialogOptions { Width = "560px", AutoFocusFirstElement = false }) as UserPipelineHandover;
 
     private async Task OnRolesChanged(UserDto user, object value)
     {
@@ -177,7 +237,6 @@ public partial class Users : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        Search.Changed -= OnSharedSearchChangedAsync;
         if (_adminRt is not null) await _adminRt.DisposeAsync();
     }
 

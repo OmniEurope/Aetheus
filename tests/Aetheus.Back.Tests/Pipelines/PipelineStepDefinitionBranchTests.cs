@@ -53,7 +53,6 @@ public sealed class PipelineStepDefinitionBranchTests
         { "unsafe-file", "AI step 'review' in stage 'Build' has an unsafe prompt_file." },
         { "context", "AI step 'review' in stage 'Build' has invalid context_paths." },
         { "range", "AI step 'review' in stage 'Build' has an empty or oversized git_range." },
-        { "placeholder", "AI step 'review' in stage 'Build': findings_placeholder needs findings: true." },
         { "advisory-gate", "AI step 'review' in stage 'Build' cannot be both advisory and a gate: an advisory verdict blocks nothing." },
     };
 
@@ -68,7 +67,6 @@ public sealed class PipelineStepDefinitionBranchTests
             "unsafe-file" => AiStep(s => s with { Prompt = null, PromptFile = "../outside.md" }),
             "context" => AiStep(s => s with { ContextPaths = ["../secret"] }),
             "range" => AiStep(s => s with { GitRange = new string('a', 5000) }),
-            "placeholder" => AiStep(s => s with { FindingsPlaceholder = true }),
             "advisory-gate" => AiStep(s => s with { Advisory = true, Gate = true }),
             _ => throw new ArgumentOutOfRangeException(nameof(rule)),
         };

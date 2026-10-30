@@ -11,14 +11,13 @@
 </SectionContent>
 @if (_taskId is not null || _outcome is not null)
 {
-    <OmniStack Class="omni-u-mb-lg mail-reinstall">
-        @* During erasure, one progress banner replaces actions and status content; the result
+    <OmniStack Class="mail-reinstall">
+        @* During erasure, one progress banner under OE's busy veil (R-116, no loader) replaces actions and status content; the result
            occupies that position at completion. *@
         @if (_taskId is not null)
         {
-            <OmniAlert Severity="OmniSeverity.Info" Class="mail-reinstall-running">
+            <OmniAlert Severity="OmniSeverity.Info" Class="mail-reinstall-running omni-busy" aria-busy="true">
                 <div class="mail-reinstall-running__line">
-                    <AetheusLoader Size="OmniControlSize.Small" Class="mail-reinstall-running__indicator" />
                     <span>@L["MailReinstallRunning"]</span>
                     <span class="mail-reinstall-running__elapsed">@Elapsed</span>
                 </div>

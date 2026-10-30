@@ -34,7 +34,7 @@ public interface IPipelineChildPipelineResolver
         Pipeline target,
         int? organizationId,
         string childPath,
-        List<string> problems,
+        List<PipelineProblem> problems,
         CancellationToken ct);
 
     /// <summary>The variables the child would run with, or null with a reason appended to
@@ -46,13 +46,14 @@ public interface IPipelineChildPipelineResolver
         IReadOnlyDictionary<string, string> parentVariables,
         int projectId,
         string childPath,
-        List<string> problems,
+        List<PipelineProblem> problems,
         CancellationToken ct);
 }
 
 public sealed class PipelineChildPipelineResolver(
     IPipelineTemplateResolver templateResolver,
-    IPipelineVariableResolver variableResolver) : IPipelineChildPipelineResolver
+    IPipelineVariableResolver variableResolver,
+    IPipelineEnvironmentReader? environments = null) : IPipelineChildPipelineResolver
 {
     /// <summary>How deep the chain of triggered pipelines is followed. Five is well past the deepest
     /// real chain (candidate -> ci/quality/security/qa, then deploy-prod) and bounds a definition that
@@ -93,7 +94,7 @@ public sealed class PipelineChildPipelineResolver(
         Pipeline target,
         int? organizationId,
         string childPath,
-        List<string> problems,
+        List<PipelineProblem> problems,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -101,7 +102,9 @@ public sealed class PipelineChildPipelineResolver(
 
         if (string.IsNullOrWhiteSpace(target.YamlDefinition))
         {
-            problems.Add($"{childPath}: the pipeline has no definition.");
+            problems.Add(PipelineProblem.Of(
+                PipelineProblemCodes.ChildPipelineNoDefinition, $"{childPath}: the pipeline has no definition.",
+                (PipelineProblem.ChainParameter, childPath)));
             return null;
         }
         try
@@ -110,12 +113,18 @@ public sealed class PipelineChildPipelineResolver(
             // a pipeline that extends nothing never reads it.
             var resolution = await templateResolver
                 .ResolveAsync(target.YamlDefinition, organizationId ?? 0, ct: ct).ConfigureAwait(false);
-            return resolution.Definition;
+            // R-63: a pipeline chained from this one (the candidate's deployment) has no parameter of its own at launch: the
+            // production environment's server is its default, as it is when the pipeline is launched itself.
+            return await PipelineProductionServerDefault.ApplyAsync(environments, resolution.Definition, target.ProjectId, ct)
+                .ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is BadRequestException or NotFoundException
                                               or YamlDotNet.Core.YamlException or InvalidOperationException)
         {
-            problems.Add($"{childPath}: its definition cannot be resolved. {exception.Message}");
+            problems.Add(PipelineProblem.Of(
+                PipelineProblemCodes.ChildPipelineDefinitionUnresolvable,
+                $"{childPath}: its definition cannot be resolved. {exception.Message}",
+                (PipelineProblem.ChainParameter, childPath), ("detail", exception.Message)));
             return null;
         }
     }
@@ -127,7 +136,7 @@ public sealed class PipelineChildPipelineResolver(
         IReadOnlyDictionary<string, string> parentVariables,
         int projectId,
         string childPath,
-        List<string> problems,
+        List<PipelineProblem> problems,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(childDefinition);
@@ -154,13 +163,28 @@ public sealed class PipelineChildPipelineResolver(
                 childDefinition, projectId, seed, ct,
                 pipelineId: target.Id, pipelineName: target.Name,
                 enforceResolvedReferences: true).ConfigureAwait(false);
+            // R-23: a stage target built from a parameter (agent: ${{ parameters.deployServer }}) is read in the
+            // ${{ parameters.X }} namespace, as the launch of the child does. Without it the child's runner was looked up
+            // under the expression itself, and a chain to the wizard's deploy-prod was refused for "no online runner".
+            // A parameter the parent forwards is only known at run time: empty, so no target is claimed for it.
+            foreach (var parameter in childDefinition.Parameters.Where(item => !string.IsNullOrWhiteSpace(item.Name)))
+                resolved[PipelineCommandBuilder.ParameterKeyPrefix + parameter.Name] =
+                    reference.ForwardedNames.Contains(parameter.Name, StringComparer.OrdinalIgnoreCase)
+                        ? string.Empty
+                        : parameter.Default ?? string.Empty;
             return resolved;
         }
         catch (BadRequestException exception)
         {
             // The one refusal that pays for this whole traversal: a missing variable-library entry or
             // an unreachable vault, discovered at launch instead of two hours into the chain.
-            problems.Add($"{childPath}: {exception.Message}");
+            // A refusal that states its own code (a missing or empty variable) keeps it, attributed to
+            // the child; any other keeps its English sentence as the detail.
+            problems.Add(exception.Problems is [var stated]
+                ? PipelineProblem.FromDto(stated, exception.Message).InChain(childPath)
+                : PipelineProblem.Of(
+                    PipelineProblemCodes.ChildPipelineVariablesRefused, $"{childPath}: {exception.Message}",
+                    (PipelineProblem.ChainParameter, childPath), ("detail", exception.Message)));
             return null;
         }
     }

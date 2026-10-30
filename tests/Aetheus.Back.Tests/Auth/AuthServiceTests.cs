@@ -27,7 +27,6 @@ public class AuthServiceTests
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Auth:AdminUser"] = "admin",
                 ["Auth:AdminPassword"] = "secret",
                 ["Auth:JwtKey"] = "aetheus-dev-key-minimum-32-bytes!!",
                 ["Auth:ExternalLogin:Enabled"] = "true",
@@ -84,7 +83,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_ValidCredentials_ReturnsToken()
     {
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "admin", Password = "secret" }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "admin@aetheus.local", Password = "secret" }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.False(string.IsNullOrEmpty(result.Token));
@@ -94,7 +93,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_RunScopedBootstrapIdentity_ReturnsTokenWithoutDatabaseMutation()
     {
-        const string username = "deploy-smoke-0123456789abcdef";
+        const string username = "deploy-smoke-0123456789abcdef@bootstrap.invalid";
         var password = new string('p', 64);
         var expiresAt = TimeProvider.System.GetUtcNow().AddMinutes(5);
         _config["Auth:DeploymentBootstrapUser"] = username;
@@ -103,13 +102,13 @@ public class AuthServiceTests
         _repo.AnyUsersExistAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _sut.LoginAsync(
-            new LoginRequest { Username = username, Password = password },
+            new LoginRequest { Email = username, Password = password },
             ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.False(string.IsNullOrEmpty(result.Token));
         Assert.True(result.ExpiresAt <= expiresAt.UtcDateTime);
-        await _repo.Received(1).FindUserWithRolesAsync(username, Arg.Any<CancellationToken>());
+        await _repo.Received(1).FindUserByEmailWithRolesAsync(username, Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().AddUserAsync(Arg.Any<User>(), Arg.Any<CancellationToken>());
     }
 
@@ -124,7 +123,7 @@ public class AuthServiceTests
     public async Task RunScopedBootstrapIdentity_DoesNotBecomeTheAdministratorPassword()
     {
         var deployPassword = new string('d', 48);
-        _config["Auth:DeploymentBootstrapUser"] = "deploy-smoke-separate";
+        _config["Auth:DeploymentBootstrapUser"] = "deploy-smoke-separate@bootstrap.invalid";
         _config["Auth:DeploymentBootstrapPassword"] = deployPassword;
         _config["Auth:DeploymentBootstrapExpiresAtUtc"] =
             TimeProvider.System.GetUtcNow().AddMinutes(5).ToString("O");
@@ -133,13 +132,13 @@ public class AuthServiceTests
         // The persistent pair is untouched by the deployment identity, and still works while the
         // database has no user - which is exactly when DbInitializer is about to seed it.
         var admin = await _sut.LoginAsync(
-            new LoginRequest { Username = "admin", Password = "secret" },
+            new LoginRequest { Email = "admin@aetheus.local", Password = "secret" },
             ct: TestContext.Current.CancellationToken);
         Assert.NotNull(admin);
 
         // And the administrator's name cannot be logged into with the deployment secret.
         var crossed = await _sut.LoginAsync(
-            new LoginRequest { Username = "admin", Password = deployPassword },
+            new LoginRequest { Email = "admin@aetheus.local", Password = deployPassword },
             ct: TestContext.Current.CancellationToken);
         Assert.Null(crossed);
     }
@@ -154,7 +153,7 @@ public class AuthServiceTests
         _repo.AnyUsersExistAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _sut.LoginAsync(
-            new LoginRequest { Username = "admin", Password = "secret" },
+            new LoginRequest { Email = "admin@aetheus.local", Password = "secret" },
             ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -163,14 +162,14 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_ExpiredRunScopedBootstrapIdentity_IsRejectedWhenDatabaseHasUsers()
     {
-        const string username = "deploy-smoke-expired";
+        const string username = "deploy-smoke-expired@bootstrap.invalid";
         _config["Auth:DeploymentBootstrapUser"] = username;
         _config["Auth:DeploymentBootstrapPassword"] = "0123456789abcdef0123456789abcdef";
         _config["Auth:DeploymentBootstrapExpiresAtUtc"] = TimeProvider.System.GetUtcNow().AddMinutes(-1).ToString("O");
         _repo.AnyUsersExistAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _sut.LoginAsync(
-            new LoginRequest { Username = username, Password = _config["Auth:DeploymentBootstrapPassword"]! },
+            new LoginRequest { Email = username, Password = _config["Auth:DeploymentBootstrapPassword"]! },
             ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -179,14 +178,14 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_OverlongRunScopedBootstrapIdentity_IsRejectedWhenDatabaseHasUsers()
     {
-        const string username = "deploy-smoke-overlong";
+        const string username = "deploy-smoke-overlong@bootstrap.invalid";
         _config["Auth:DeploymentBootstrapUser"] = username;
         _config["Auth:DeploymentBootstrapPassword"] = "0123456789abcdef0123456789abcdef";
         _config["Auth:DeploymentBootstrapExpiresAtUtc"] = TimeProvider.System.GetUtcNow().AddMinutes(16).ToString("O");
         _repo.AnyUsersExistAsync(Arg.Any<CancellationToken>()).Returns(true);
 
         var result = await _sut.LoginAsync(
-            new LoginRequest { Username = username, Password = _config["Auth:DeploymentBootstrapPassword"]! },
+            new LoginRequest { Email = username, Password = _config["Auth:DeploymentBootstrapPassword"]! },
             ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -195,7 +194,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InvalidUser_ReturnsNull()
     {
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "wrong", Password = "secret" }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "wrong@example.com", Password = "secret" }, ct: TestContext.Current.CancellationToken);
         Assert.Null(result);
         await _audit.Received(1).LogAsync(
             "LoginFailed.InvalidCredentials", "Authentication", null,
@@ -206,16 +205,17 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InactiveUser_IsRejectedAndAuditedAgainstUser()
     {
-        _repo.FindUserWithRolesAsync("disabled", Arg.Any<CancellationToken>()).Returns(new User
+        _repo.FindUserByEmailWithRolesAsync("disabled@example.com", Arg.Any<CancellationToken>()).Returns(new User
         {
             Id = 42,
             Username = "disabled",
+            Email = "disabled@example.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("secret"),
             IsActive = false
         });
 
         var result = await _sut.LoginAsync(
-            new LoginRequest { Username = "disabled", Password = "secret" },
+            new LoginRequest { Email = "disabled@example.com", Password = "secret" },
             ct: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
@@ -227,7 +227,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_InvalidPassword_ReturnsNull()
     {
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "admin", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "admin@aetheus.local", Password = "wrong" }, ct: TestContext.Current.CancellationToken);
         Assert.Null(result);
     }
 

@@ -18,7 +18,9 @@ agent-update/aetheus-agent-upgrade.path AGENT_UPDATE_REQUEST_FILE
 agent/sudoers.d/aetheus-agent AGENT_USER
 apache/aetheus-apache-configtest
 apache/aetheus-apache-reload
-apache/sudoers.d/aetheus-apache APACHE_CONFIGTEST_HELPER_PATH APACHE_RELOAD_HELPER_PATH AGENT_USER
+apache/aetheus-apache-module
+apache/aetheus-apache-read-site
+apache/sudoers.d/aetheus-apache APACHE_CONFIGTEST_HELPER_PATH APACHE_RELOAD_HELPER_PATH APACHE_MODULE_HELPER_PATH APACHE_READ_SITE_HELPER_PATH AGENT_USER
 certbot/aetheus-certbot-issue ACME_WEBROOT
 certbot/aetheus-acme-webroot.conf
 certbot/local-ssl-site.conf

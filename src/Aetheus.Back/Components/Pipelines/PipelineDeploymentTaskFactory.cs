@@ -89,7 +89,7 @@ public sealed class PipelineDeploymentTaskFactory(
         MarkSystemStepFailed(
             stepRun, TaskFailureCodes.ToolError, reason, timeProvider.GetUtcNow().UtcDateTime);
         await repo.AppendRunWarningsAsync(
-            runId, [$"Deploy step '{stepRun.StepName}': {reason}"], ct).ConfigureAwait(false);
+            runId, [PipelineStepFailureWarning.Deploy(stepRun.StepName, reason)], ct).ConfigureAwait(false);
     }
 
     private async Task<DeploySourceResolution> ResolveDeploySourceAsync(

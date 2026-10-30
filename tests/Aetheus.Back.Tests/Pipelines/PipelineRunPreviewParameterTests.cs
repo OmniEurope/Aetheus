@@ -67,8 +67,9 @@ public class PipelineRunPreviewParameterTests
             Definition(Param("VERSION", required: true)), ref variables);
 
         var warning = Assert.Single(warnings);
-        Assert.StartsWith("Parameter: ", warning, StringComparison.Ordinal);
-        Assert.Contains("VERSION", warning, StringComparison.Ordinal);
+        Assert.Equal("ParameterRequired", StoredProblem.CodeOf(warning));
+        Assert.StartsWith("Parameter: ", StoredProblem.English(warning), StringComparison.Ordinal);
+        Assert.Contains("VERSION", StoredProblem.English(warning), StringComparison.Ordinal);
         Assert.Null(variables);
     }
 

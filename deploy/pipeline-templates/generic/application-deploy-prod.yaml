@@ -51,7 +51,13 @@ parameters:
     description_fr: Nom du serveur du projet sur lequel le déploiement s'exécute.
 variables:
   APPLICATION_CANDIDATE_VERSION: "${{ parameters.candidateVersion }}"
+  # The name the backend reads for the release a run delivers (the `Advance main` stage, ADR-044).
+  AETHEUS_CANDIDATE_VERSION: "${{ parameters.candidateVersion }}"
   APPLICATION_ROLLBACK_ENABLED: "true"
+  # R-28: Verify candidate proves the deploy branch contains the release from the checkout's own history. Its
+  # fallback fetch carries no credential, so on a private repository a depth-1 clone fails as soon as the branch
+  # moved past the candidate commit: the history is cloned deep enough to hold it.
+  AETHEUS_GIT_HISTORY_DEPTH: "1000"
   # Written by the setup wizard from the project's Compose file.
   COMPOSE_FILE: ""
   DEPLOY_STRATEGY: "replace"
@@ -122,7 +128,7 @@ variables:
     # so changing the cap means removing the builder first (docker buildx rm <builder>).
     case "${BUILDX_MAX_PARALLELISM:-}" in
       '') ;;
-      0|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
+      0*|*[!0-9]*) echo "BUILDX_MAX_PARALLELISM must be a positive integer: '$BUILDX_MAX_PARALLELISM'" >&2; exit 2 ;;
     esac
     if test -n "${BUILDX_BUILDER:-}" && ! docker buildx inspect "$BUILDX_BUILDER" --bootstrap >/dev/null 2>&1; then
       case "$BUILDX_BUILDER" in *[!a-zA-Z0-9._-]*) echo "Unsafe Buildx builder name: $BUILDX_BUILDER" >&2; exit 2 ;; esac
@@ -147,7 +153,7 @@ variables:
     docker compose -p "$PROJECT" --env-file "$DEPLOY_ENV_FILE" -f "$COMPOSE_FILE_NAME" ps
   # Hosts are formulas over the library entries, so a domain is written once (ADR-043). HOST_PREFIX is
   # usually empty in production; `:-` says empty is accepted.
-  APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN).$(DOMAIN)"
+  APP_HOST: "$(HOST_PREFIX:-)$(APP_SUBDOMAIN:suffix=.)$(DOMAIN)"
   API_HOST: "$(HOST_PREFIX:-)$(API_SUBDOMAIN).$(DOMAIN)"
   PUBLIC_APP_URL: "https://$(APP_HOST)"
   PUBLIC_API_URL: "https://$(API_HOST)"
@@ -220,7 +226,7 @@ stages:
   # RELEASE_GATE_APPROVAL, `not-required` only for an accepted release graded A to E. Any other value, and its
   # absence (a release that does not exist, a backend that does not write it), asks for the approval: it is never
   # skipped by default. A refusal or an expiry fails the run before the deployment starts.
-  - name: Approuver une release refusée ou notée F
+  - name: Approve a rejected or F-graded release
     group: Deploy
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
@@ -229,8 +235,8 @@ stages:
     condition: "ne(variables['RELEASE_GATE_APPROVAL'], 'not-required')"
     approval_timeout_minutes: 60
     steps:
-      - name: Consigner l'approbation du déploiement à risque
-        shell: echo "Déploiement approuvé de la release $(APPLICATION_CANDIDATE_VERSION) (verdict du Gate $(RELEASE_GATE_STATUS:-inconnu), note $(RELEASE_GATE_GRADE:-inconnue))."
+      - name: Record the approval of the risky deployment
+        shell: echo "Deployment of release $(APPLICATION_CANDIDATE_VERSION) approved (Gate verdict $(RELEASE_GATE_STATUS:-unknown), grade $(RELEASE_GATE_GRADE:-unknown))."
         timeout_seconds: 60
 
   # Blue-green only. Unpacks the sealed source the colours are built from, writes the environment file the native
@@ -241,7 +247,7 @@ stages:
     execution_role: deploy
     agent: "${{ parameters.deployServer }}"
     os: linux
-    depends_on: [Approuver une release refusée ou notée F]
+    depends_on: [Approve a rejected or F-graded release]
     condition: "eq(variables['DEPLOY_STRATEGY'], 'bluegreen')"
     steps:
       - name: Unpack the release and render the environment file
@@ -307,11 +313,22 @@ stages:
             SDK_VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .release-source/global.json | head -n 1)"
             SDK_VERSION="${SDK_VERSION:-none}"
           fi
+          # R-28: the Up stage starts the idle colour with --no-build, so its images must already exist. Both colours
+          # are built here from the sealed source, under the Compose project and with the inputs the native steps
+          # use (BG_COMPOSE_ENV). Docker Compose reads COMPOSE_FILE itself: the subshell drops it so -f is the only file.
+          echo ">>> Building the blue and green images from the sealed source"
+          (
+            export SOURCE_COMMIT="$SOURCE_SHA" DOTNET_SDK_VERSION="$SDK_VERSION" APP_VERSION FRONT_URL API_BASE_URL API_URL
+            BG_FILE=".release-source/$COMPOSE_FILE"
+            unset COMPOSE_FILE
+            docker compose -p "$COMPOSE_PROJECT" --env-file "$STATE_DIR/deploy.env" -f "$BG_FILE" \
+              --profile blue --profile green build
+          ) || fail "The colour images could not be built from the sealed source of release $SOURCE_SHA."
           echo "##aetheus[setvariable name=SOURCE_COMMIT]$SOURCE_SHA"
           echo "##aetheus[setvariable name=DOTNET_SDK_VERSION]$SDK_VERSION"
           echo ">>> Host prepared for release $SOURCE_SHA."
         outputs: [SOURCE_COMMIT, DOTNET_SDK_VERSION]
-        timeout_seconds: 1800
+        timeout_seconds: 3600
 
   # Apply the HTTP virtual hosts and the certificates before the HTTPS ones, so ACME validation can reach each host.
   # The virtual hosts are files of the project's configuration repository; the front's always, the API's when the
@@ -323,12 +340,8 @@ stages:
     os: linux
     depends_on: [Prepare host]
     steps:
-      - name: Let Apache read the ACME challenge directory
-        type: aetheus
-        function: grant-acme-challenge-traversal
-        with:
-          webroot: "$(ACME_WEBROOT)"
-        timeout_seconds: 120
+      # The vhost steps come first (R-82): a missing template is refused at launch, before any stage runs; here it
+      # also stops this stage before the ACME grant.
       - name: Apply the versioned HTTP vhost of the front
         type: apache-config
         condition: "ne(variables['DEPLOY_HAS_API'], 'true')"
@@ -342,6 +355,13 @@ stages:
           "$(APP_HOST).conf": ".pipeline/configs/apache/app-http.conf"
           "$(API_HOST).conf": ".pipeline/configs/apache/api-http.conf"
         timeout_seconds: 600
+      # Only the certificate stage that follows needs the challenge directory to be reachable.
+      - name: Let Apache read the ACME challenge directory
+        type: aetheus
+        function: grant-acme-challenge-traversal
+        with:
+          webroot: "$(ACME_WEBROOT)"
+        timeout_seconds: 120
 
   - name: TLS
     group: Deploy
@@ -438,12 +458,19 @@ stages:
     steps:
       - name: Start and health-gate the idle colour
         type: bluegreen-up
+        # The colour serving before this deployment, `none` for the project's first one: the Rollback stage
+        # reads it to retire a failed first deployment instead of rolling it back to nothing.
+        outputs: [BLUEGREEN_LIVE_COLOR]
         project: "$(BG_PROJECT)"
         state_dir: "$(BG_STATE_DIR)"
         env_file: "$(BG_ENV_FILE)"
         compose_files: "$(BG_COMPOSE_FILES)"
         ports: "$(BG_PORTS)"
         compose_env: "$(BG_COMPOSE_ENV)"
+        # A transaction an earlier, ended run left open is undone before the colour is rebuilt, which puts the
+        # recorded upstream back: the step needs the same targets as the rollback.
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
         timeout_seconds: 3600
 
   - name: Switch
@@ -522,9 +549,27 @@ stages:
     os: linux
     condition: "failed()"
     depends_on: [Commit]
+    # Exactly one of the two steps runs. A deployment that replaced a live colour is rolled back to it. The
+    # project's first deployment (Up published BLUEGREEN_LIVE_COLOR=none) has no colour to return to: the
+    # rollback refuses it, so it is retired, which puts back the recorded upstream, stops the colour and closes
+    # the transaction; left open, it would refuse every later deployment. Up never ran, or failed: the variable is
+    # absent and the rollback says there is nothing to undo.
     steps:
       - name: Restore the previous colour
         type: bluegreen-rollback
+        condition: "ne(variables['BLUEGREEN_LIVE_COLOR'], 'none')"
+        project: "$(BG_PROJECT)"
+        state_dir: "$(BG_STATE_DIR)"
+        env_file: "$(BG_ENV_FILE)"
+        compose_files: "$(BG_COMPOSE_FILES)"
+        ports: "$(BG_PORTS)"
+        compose_env: "$(BG_COMPOSE_ENV)"
+        upstream_conf: "$(BG_UPSTREAM_CONF)"
+        reload_helper: "$(BG_RELOAD_HELPER)"
+        timeout_seconds: 1800
+      - name: Retire the failed first deployment
+        type: bluegreen-retire
+        condition: "eq(variables['BLUEGREEN_LIVE_COLOR'], 'none')"
         project: "$(BG_PROJECT)"
         state_dir: "$(BG_STATE_DIR)"
         env_file: "$(BG_ENV_FILE)"
@@ -553,3 +598,26 @@ stages:
           rm -rf .release-source
           echo ">>> The environment file is erased."
         timeout_seconds: 300
+
+  # R-77: once the release is deployed and the environment file erased, `main` follows production, as in the platform's
+  # own production pipeline (ADR-044): the backend moves the branch onto the commit the deployed candidate was built from
+  # and tags it with the release version, without any credential on the agent. Last stage and only after a run that has
+  # not failed (`succeeded()`), so it never runs after a failed deployment and nothing it does can undo the serving
+  # release (the rollback stage is in front of it and already past). A skipped dependency (Evidence, Commit and Rollback are skipped for the
+  # `replace` strategy) does not hold it back. The step refuses, and says so on the run, a project with no internal
+  # repository holding the commit (an external repository), a strictly protected branch and a tag already on another
+  # commit; that refusal FAILS the run (owner decision 2026-10-28), so a `main` that did not follow production is
+  # never silent. The step reads the release from AETHEUS_CANDIDATE_VERSION.
+  - name: Advance main
+    group: Release
+    execution_role: deploy
+    os: linux
+    depends_on: [Erase environment file]
+    condition: "succeeded()"
+    steps:
+      - name: Advance main onto the deployed candidate commit
+        type: advance-branch
+        branch: main
+        # Tag the deployed commit with its version so the served release remains identifiable.
+        tag: "v$(APPLICATION_CANDIDATE_VERSION)"
+        timeout_seconds: 60

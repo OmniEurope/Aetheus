@@ -46,7 +46,8 @@ public sealed class VaultSecretRoundTripHttpIntegrationTests(PostgresFixture fix
         var vault = await created.Content.ReadFromJsonAsync<VaultDto>(IntegrationJsonOptions.Default, ct);
 
         var writer = await IntegrationUsers.CreateAsync(factory.Services, "vault-writer",
-            [new IntegrationUsers.Grant(ResourceType.Vault, vault!.Id, Permission.Write)]);
+            [new IntegrationUsers.Grant(ResourceType.Vault, vault!.Id, Permission.Write)],
+            permissionKeys: [PermissionKeys.VaultSecretReveal]);
         var reader = await IntegrationUsers.CreateAsync(factory.Services, "vault-reader",
             [new IntegrationUsers.Grant(ResourceType.Vault, vault.Id, Permission.Read)]);
         using var writerClient = await IntegrationUsers.LoginClientAsync(factory, writer.Username);

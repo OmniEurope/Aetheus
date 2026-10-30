@@ -13,6 +13,8 @@ namespace Aetheus.Front.Tests.Pages.Organizations;
 public class OrganizationDetailCoverageTests : BunitContext
 {
     private static readonly BindingFlags Priv = BindingFlags.NonPublic | BindingFlags.Instance;
+    private static readonly MethodInfo ChangeMemberRole = typeof(OrganizationDetail).GetMethod("OnChangeMemberRole", Priv)!;
+    private static readonly FieldInfo OrgField = typeof(OrganizationDetail).GetField("_org", Priv)!;
     private readonly BunitTestHelper.TestHandler _handler;
 
     public OrganizationDetailCoverageTests()
@@ -20,7 +22,7 @@ public class OrganizationDetailCoverageTests : BunitContext
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
     }
 
-    private void SetupOrg()
+    private void SetupOrg(OrganizationRole bobRole = OrganizationRole.Member)
     {
         _handler.SetJsonResponse("api/organizations/1", new OrganizationDetailDto(
             Id: 1,
@@ -32,7 +34,7 @@ public class OrganizationDetailCoverageTests : BunitContext
             Members:
             [
                 new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Owner, DateTime.UtcNow),
-                new OrganizationMemberDto(11, 3, "bob", null, OrganizationRole.Member, DateTime.UtcNow)
+                new OrganizationMemberDto(11, 3, "bob", null, bobRole, DateTime.UtcNow)
             ],
             Projects: [new OrganizationProjectDto(1, "App", ProjectStatus.Active)]
         ));
@@ -104,20 +106,38 @@ public class OrganizationDetailCoverageTests : BunitContext
     // ── OnChangeMemberRole ────────────────────────────────────────────────────
 
     [Fact]
-    public async Task OnChangeMemberRole_Success_UpdatesMember()
+    public async Task OnChangeMemberRole_LastOwner_IsRefusedWithoutRequest()
     {
         SetupOrg();
+        var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
+        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
+
+        var member = new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Owner, DateTime.UtcNow);
+        var method = ChangeMemberRole;
+        await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [member, OrganizationRole.Maintainer])!);
+
+        // M6: alice is the only Owner, so nothing is sent and she stays Owner.
+        Assert.DoesNotContain(_handler.Requests, r => r.Method == "PUT");
+        var org = (OrganizationDetailDto?)OrgField.GetValue(cut.Instance);
+        Assert.Equal(OrganizationRole.Owner, org!.Members.Single(m => m.Id == 10).Role);
+    }
+
+    [Fact]
+    public async Task OnChangeMemberRole_Success_UpdatesMember()
+    {
+        // A second Owner exists, so alice may step down.
+        SetupOrg(bobRole: OrganizationRole.Owner);
         _handler.SetJsonResponse("api/organizations/1/members/10", new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Maintainer, DateTime.UtcNow));
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
         var member = new OrganizationMemberDto(10, 2, "alice", null, OrganizationRole.Owner, DateTime.UtcNow);
-        var method = typeof(OrganizationDetail).GetMethod("OnChangeMemberRole", Priv)!;
+        var method = ChangeMemberRole;
         await cut.InvokeAsync(async () => await (Task)method.Invoke(cut.Instance, [member, OrganizationRole.Maintainer])!);
 
         // The PUT returns the Maintainer member, which replaces member 10 in _org.Members.
         Assert.Contains(_handler.Requests, r => r.Method == "PUT" && r.Url.Contains("api/organizations/1/members/10"));
-        var org = (OrganizationDetailDto?)typeof(OrganizationDetail).GetField("_org", Priv)!.GetValue(cut.Instance);
+        var org = (OrganizationDetailDto?)OrgField.GetValue(cut.Instance);
         Assert.NotNull(org);
         Assert.Equal(OrganizationRole.Maintainer, org.Members.Single(m => m.Id == 10).Role);
     }

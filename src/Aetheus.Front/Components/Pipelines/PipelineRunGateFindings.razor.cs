@@ -55,11 +55,21 @@ public partial class PipelineRunGateFindings : IDisposable
     private bool _showDecided;
 
     /// <summary>How many findings the list holds with the decided ones shown or not, from the gate's counts.</summary>
-    private int ListedCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
+    private int GridCount => _showDecided ? Gate.FindingCount + Gate.DecidedFindingCount : Gate.FindingCount;
+
+    /// <summary>R-36: the findings of the list plus the blocking tests of the seal, which are findings of the gate too.</summary>
+    private int ListedCount => GridCount + BlockingTests.Count;
 
     /// <summary>Whether the grade block draws anything (it needs a grade or a headline grade). Without it the
     /// two key-figure tiles sit in a row at tile size instead of a column stretched over the whole width.</summary>
     private bool HasGradeBlock => Gate.Grade is not null || PipelineRunGatePresentation.HeadlineGrade(Gate, RunGrade) is not null;
+
+    /// <summary>Recette R-74: "dont 3 dans Sécurité, 2 dans Architecture du code", the open findings of the tile by domain,
+    /// so the total and the counts on the grade lines reconcile; null when the gate holds no open finding.</summary>
+    private string? ByDomainDetail => PipelineRunGatePresentation.OpenFindingsByDomain(Gate) is { Count: > 0 } byDomain
+        ? $"{L["GateFindingsByDomain"].Value} " + string.Join(", ", byDomain.Select(item =>
+            $"{item.Count} {L["GateFindingsInDomain"].Value} {AnalysisGradeBreakdown.DomainLabel(L, item.Domain)}"))
+        : null;
 
     private IReadOnlyList<int> EffectiveRunIds => RunIds.Count > 0 ? RunIds : [Gate.PipelineRunId];
 

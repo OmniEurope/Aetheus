@@ -272,11 +272,11 @@ public class ServerService(
         => GetServerNamesAsync(null, ct);
 
     public async Task<PaginatedResult<ProjectDto>> GetServerProjectsAsync(
-        int serverId, PaginationRequest request, CancellationToken ct = default)
+        int serverId, PaginationRequest request, CancellationToken ct = default, List<int>? readableProjectIds = null)
     {
         var (page, pageSize) = request.Normalize();
         var (projects, total) = await repo.GetProjectsForServerPagedAsync(
-            serverId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters).ConfigureAwait(false);
+            serverId, request.Search, page, pageSize, request.SortBy, request.SortDescending, ct, request.Filters, readableProjectIds).ConfigureAwait(false);
         return new PaginatedResult<ProjectDto>
         {
             Items = projects.Select(project => ProjectDtoMapper.ToDto(project)).ToList(),

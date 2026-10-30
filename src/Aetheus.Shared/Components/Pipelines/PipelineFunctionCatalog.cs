@@ -116,6 +116,23 @@ public static class PipelineFunctionCatalog
         ],
         []);
 
+    /// <summary>Reads the .NET runtime an image ships (the shared framework or a self-contained application: every
+    /// <c>Microsoft.NETCore.App</c>, <c>Microsoft.AspNetCore.App</c> and <c>Microsoft.WindowsDesktop.App</c> runtime pack
+    /// listed by a <c>*.deps.json</c> of the image layers) and compares it with Microsoft's official release metadata,
+    /// which lists the CVEs of every security release the day it ships. Trivy answers from GitHub advisories, which lag
+    /// that metadata (recette R-90: the CVEs of .NET 10.0.14 were not reported for an image running 10.0.13).</summary>
+    public static readonly PipelineFunctionDescriptor ScanDotnetRuntimeCve = new(
+        "scan-dotnet-runtime-cve",
+        PipelineFunctionAccess.Build,
+        "Reads the .NET runtime packs of docker-archive images (the *.deps.json of their layers, whiteouts applied), fetches the release metadata of each runtime's channel from Microsoft, and writes a SARIF report with one finding per CVE fixed by a release newer than the installed runtime. An unreachable or malformed metadata source, or an unreadable image, fails the step: it never passes silently.",
+        [
+            new PipelineFunctionParameter("images", Required: true, "Image archive file names (.tar docker-archive), separated by spaces, as prepare-image-inputs unpacked them."),
+            new PipelineFunctionParameter("output", Required: true, "SARIF file to write, relative to the workspace and inside it; its directory is created."),
+            new PipelineFunctionParameter("input", Required: false, "Directory holding the unpacked image archives, relative to the workspace. Defaults to .analysis-image."),
+            new PipelineFunctionParameter("metadata_url", Required: false, "Base URL of the release metadata, one <major>.<minor>/releases.json below it. Defaults to https://dotnetcli.blob.core.windows.net/dotnet/release-metadata.")
+        ],
+        []);
+
     // PLAN-002 lot 1.6, assurance contract.
 
     /// <summary>Refuses a candidate that has no rollback-capable deployed baseline unless the bootstrap
@@ -169,6 +186,23 @@ public static class PipelineFunctionCatalog
             new PipelineFunctionParameter("inapplicable_tests", Required: false, "Comma-separated test names the project cannot produce, sealed as unrequired NotRun. Defaults to AETHEUS_ASSURANCE_INAPPLICABLE_TESTS, else none.")
         ],
         ["CANDIDATE_ASSURANCE_GRADE"]);
+
+    /// <summary>Recette R-23 (W8): the verdict of a candidate whose analyses are graded by their own Quality and
+    /// Security pipelines (the wizard's candidate, <c>application-candidate@4</c>), from the grades those gates
+    /// published (<c>ANALYSIS_QUALITY_GRADE</c>, <c>ANALYSIS_SECURITY_GRADE</c>, handed up by the trigger steps). The
+    /// release step reads both outputs, so the release carries its grade and its deployability.</summary>
+    public static readonly PipelineFunctionDescriptor GradeCandidateFromGates = new(
+        "grade-candidate-from-gates",
+        PipelineFunctionAccess.Build,
+        "Publishes the worst grade of the Quality and Security gates that ran as the candidate's assurance grade, and whether it reaches the deployment threshold. A gate that ran without a grade leaves the candidate ungraded (none) and not deployable; with no gate, both are none.",
+        [
+            new PipelineFunctionParameter("quality_enabled", Required: false, "false when the project has no Quality pipeline. Defaults to APPLICATION_QUALITY_ENABLED; any other value counts the gate."),
+            new PipelineFunctionParameter("security_enabled", Required: false, "false when the project has no Security pipeline. Defaults to APPLICATION_SECURITY_ENABLED; any other value counts the gate."),
+            new PipelineFunctionParameter("quality_grade", Required: false, "Grade of the Quality gate, A to F. Defaults to ANALYSIS_QUALITY_GRADE."),
+            new PipelineFunctionParameter("security_grade", Required: false, "Grade of the Security gate, A to F. Defaults to ANALYSIS_SECURITY_GRADE."),
+            new PipelineFunctionParameter("minimum_grade", Required: false, "Lowest grade a deployable candidate may have, A to F. Defaults to AETHEUS_DEPLOY_MINIMUM_GRADE, else E.")
+        ],
+        ["CANDIDATE_ASSURANCE_GRADE", "CANDIDATE_DEPLOYABLE"]);
 
     /// <summary>Verifies a candidate assurance contract against its artifact: seal, source commit,
     /// evidence hashes, grade consistency and the deployment threshold. Port of
@@ -560,7 +594,7 @@ public static class PipelineFunctionCatalog
     public static readonly PipelineFunctionDescriptor RunQaIntegrationSuite = new(
         "run-qa-integration-suite",
         PipelineFunctionAccess.Build,
-        "Resolves the SDK global.json pins, rebases the static web assets manifest onto the source tree, restores the locked graph when the restored package folder is absent, runs the prebuilt test project (Microsoft.Testing.Platform or VSTest, as the tested global.json selects) into .qa-test-results/<label>/integration.trx, classifies it, records the failed test names and publishes INTEGRATION_SUITE_STATUS (0 clean, 1 findings).",
+        "Resolves the SDK global.json pins, rebases the static web assets manifest onto the source tree, restores the locked graph when the restored package folder is absent, runs the prebuilt test project (Microsoft.Testing.Platform or VSTest, as the tested global.json selects) into .qa-test-results/<label>/integration.trx, classifies it, reruns at most 10 failed tests once into integration-rerun.trx (a test that passes on the rerun is flaky: logged, listed in flaky-tests.txt, no longer a finding), records the tests that failed on both attempts and publishes INTEGRATION_SUITE_STATUS (0 clean, 1 findings).",
         [
             new PipelineFunctionParameter("source_root", Required: true, "Restored source tree to test, relative to the workspace."),
             new PipelineFunctionParameter("label", Required: true, "Result label ([a-zA-Z0-9_-]), the directory under .qa-test-results."),
@@ -592,7 +626,7 @@ public static class PipelineFunctionCatalog
     public static readonly PipelineFunctionDescriptor RunQaE2eSuite = new(
         "run-qa-e2e-suite",
         PipelineFunctionAccess.Build,
-        "Checks the image's revision label, waits for the front container on its network, runs dotnet test of the suite inside the image, copies its results to .qa-test-results/<label>/e2e, classifies the TRX, lists the skipped and failed tests and publishes E2E_SUITE_STATUS (0 clean, 1 findings).",
+        "Checks the image's revision label, waits for the front container on its network, runs dotnet test of the suite inside the image, copies its results to .qa-test-results/<label>/e2e, classifies the TRX, reruns at most 10 failed tests once in the same image into e2e/rerun (a test that passes on the rerun is flaky: logged, listed in flaky-tests.txt, no longer a finding), lists the skipped tests and the tests that failed on both attempts and publishes E2E_SUITE_STATUS (0 clean, 1 findings).",
         [
             new PipelineFunctionParameter("label", Required: true, "Run label ([a-zA-Z0-9_-]), the directory under .qa-test-results and the container names."),
             new PipelineFunctionParameter("front", Required: true, "Front container of the QA stack; its non-backend network is the test network."),
@@ -641,7 +675,7 @@ public static class PipelineFunctionCatalog
         PipelineFunctionAccess.Build,
         "Reads the failed tests of the listed TRX files and failed-tests lists (an absent one is skipped) and, when any of the given statuses is not 0, publishes the first names that fit one line (+N more) under the named variable. Never fails the step.",
         [
-            new PipelineFunctionParameter("variable", Required: true, "Run variable to publish, upper snake case, by convention <GATE>_FAILED_TESTS."),
+            new PipelineFunctionParameter("variable", Required: true, "Run variable to publish, upper snake case, by convention <GATE>_FAILED_TESTS, or <GATE>_FLAKY_TESTS for the flaky-tests.txt a suite rerun wrote (logged as flaky tests)."),
             new PipelineFunctionParameter("sources", Required: true, "TRX files and failed-tests.txt lists, relative to the workspace, separated by spaces."),
             new PipelineFunctionParameter("statuses", Required: false, "Gate statuses the names explain, separated by spaces: nothing is published when every one is 0. Defaults to publishing whenever a failed test is found.")
         ],
@@ -785,7 +819,11 @@ public static class PipelineFunctionCatalog
         VerifyNMinusOneAgentContract, RunQaIntegrationSuite, RunQaDeployedProbes, RunQaE2eSuite,
         RebaseCoverageSources, MergeRoslynSecuritySarif, PublishFailedTests, WriteIntegrationManifest,
         GenerateDeliveryContract, GenerateArtifactProvenance, VerifyReleaseAncestry, PayloadEvidence,
-        RecordNightlyQualification, VerifyPublicDistribution
+        RecordNightlyQualification, VerifyPublicDistribution,
+        // Recette R-23 (W8)
+        GradeCandidateFromGates,
+        // Recette R-90
+        ScanDotnetRuntimeCve
     ];
 
     /// <summary>The function with that exact name, or <c>null</c>. Names are case-sensitive: the YAML

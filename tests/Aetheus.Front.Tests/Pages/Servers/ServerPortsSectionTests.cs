@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Http;
 using Aetheus.Front.Components.Servers.ServerDetailSections;
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +15,7 @@ public class ServerPortsSectionTests : BunitContext
     private static readonly DateTime Declared = new(2026, 9, 1, 10, 0, 0, DateTimeKind.Utc);
 
     private BunitTestHelper.TestHandler? _handler;
+    private IRenderedComponent<PageHeaderOutletHost>? _host;
 
     private static List<PortReservationDto> ThreeReservations() =>
     [
@@ -67,13 +69,15 @@ public class ServerPortsSectionTests : BunitContext
                 {
                     ResourceType = ResourceType.Server, ResourceId = null, Permission = Permission.Read
                 }],
-                isAdmin: false);
+                isAdmin: false, keys: []);
 
-        return Render<ServerPortsSection>(parameters => parameters
+        // The scan sits in the server page header (R-109), so the section is rendered next to the header outlet.
+        _host = this.RenderWithPageHeader<ServerPortsSection>(parameters => parameters
             .Add(c => c.ServerId, 1)
             .Add(c => c.PortsObservedAt, lastScan)
             .Add(c => c.PortObservationAvailable, observationAvailable)
             .Add(c => c.AgentOnline, agentOnline));
+        return _host.FindComponent<ServerPortsSection>();
     }
 
     [Fact]
@@ -316,8 +320,9 @@ public class ServerPortsSectionTests : BunitContext
     {
         var cut = RenderWith(ThreeReservations(), observationAvailable: capability, agentOnline: online);
 
-        Assert.Contains(expectedKey, cut.Markup);
-        var button = cut.Find("button[title]");
+        var header = _host!.Find(".test-outlet");
+        Assert.Contains(expectedKey, header.InnerHtml);
+        var button = header.QuerySelector("button[title]")!;
         Assert.True(button.HasAttribute("disabled"));
     }
 
@@ -326,7 +331,7 @@ public class ServerPortsSectionTests : BunitContext
     {
         var cut = RenderWith(ThreeReservations(), observationAvailable: true, agentOnline: true);
 
-        var button = cut.Find("button[title]");
+        var button = _host!.Find(".test-outlet").QuerySelector("button[title]")!;
         Assert.False(button.HasAttribute("disabled"));
     }
 

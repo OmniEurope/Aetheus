@@ -36,6 +36,23 @@ public class ProjectsController(
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, null, Permission.Write, ct))
             return Forbid();
+        // ADR-059: the project goes to an organization that lets the caller create projects. Without a
+        // named organization, a non-admin's project goes to the one organization that does; with several
+        // the caller must name it. A site Admin's unnamed project goes to the default organization.
+        var organizationId = request.OrganizationId;
+        if (organizationId is null)
+        {
+            if (!User.IsInRole(RoleNames.Admin))
+            {
+                var writable = await authz.GetOrganizationIdsWithPermissionAsync(User, ResourceType.Project, Permission.Write, ct);
+                if (writable.Count != 1)
+                    return BadRequest("Choose the organization the project belongs to.");
+                organizationId = writable[0];
+            }
+        }
+        else if (!await authz.CanCreateInOrganizationAsync(User, ResourceType.Project, organizationId.Value, ct))
+            return Forbid();
+        request = request with { OrganizationId = organizationId };
 
         // The creator follows the new project. An identity without a user row (the deployment
         // identity, NameIdentifier "bootstrap") has no inbox and follows nothing.
@@ -69,18 +86,28 @@ public class ProjectsController(
         return Ok(preview);
     }
 
-    /// <summary>Deletes the project and everything it owns; 409 while one of its runs has not
-    /// ended.</summary>
+    /// <summary>Deletes the project and everything it owns (204) once <paramref name="serverTaskIds"/> (the
+    /// deletion's server discoveries and removals) prove its server resources removed (recette R-97, ADR-058).
+    /// Otherwise the project is marked deleted, waiting for its server cleanup to be relaunched (202, recette
+    /// R-51). 409 while one of its runs has not ended.</summary>
     [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> DeleteProject(int id, CancellationToken ct)
+    public async Task<IActionResult> DeleteProject(
+        int id, [FromQuery] List<int>? serverTaskIds, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Admin, ct))
             return Forbid();
+        if (serverTaskIds is { Count: > ProjectServerResourceLimits.MaxTaskIds })
+            return BadRequest($"At most {ProjectServerResourceLimits.MaxTaskIds} server tasks.");
 
-        var deleted = await projectDeletion.DeleteAsync(id, ct);
-        if (!deleted) return NotFound();
-        return NoContent();
+        return await projectDeletion.DeleteAsync(id, serverTaskIds ?? [], ct) switch
+        {
+            null => NotFound(),
+            ProjectDeletionOutcome.PendingCleanup => StatusCode(StatusCodes.Status202Accepted),
+            _ => NoContent(),
+        };
     }
 
     [HttpGet("{id:int}/servers")]
@@ -97,6 +124,8 @@ public class ProjectsController(
     public async Task<ActionResult<ProjectServerDto>> CreateProjectServer(int id, [FromBody] CreateProjectServerRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Write, ct))
+            return Forbid();
+        if (!await CanLinkServerAsync(id, request.ServerId, ct))
             return Forbid();
 
         var result = await projectService.CreateProjectServerAsync(id, request, ct);
@@ -160,5 +189,17 @@ public class ProjectsController(
             return Forbid();
 
         return Ok(await projectService.GetProjectActivityAsync(id, Math.Clamp(count, 1, 100), ct));
+    }
+
+    /// <summary>R-46: a project links only a server the caller may write to, so a project of one
+    /// organization never reaches (nor deploys to) a server of another. A row without a server (an
+    /// external host) links nothing to authorize; the Project Write gate above still protects it.</summary>
+    private async Task<bool> CanLinkServerAsync(int projectId, int? serverId, CancellationToken ct)
+    {
+        if (serverId is not { } linked) return true;
+        // RBAC audit, finding 6: writing a server is not enough when it sits in another organization than the
+        // project (a caller administering both would otherwise bridge them).
+        return await authz.HasPermissionAsync(User, ResourceType.Server, linked, Permission.Write, ct)
+            && await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.Server, [linked], ct);
     }
 }

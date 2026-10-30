@@ -25,7 +25,7 @@
                     <OmniHeading Level="OmniHeadingLevel.H5">@L["MyNotifications"]</OmniHeading>
                     @if (Feed.UnreadCount > 0)
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@string.Format(L["NotificationUnreadCount"], Feed.UnreadCount)</OmniBadge>
+                        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@string.Format(L["NotificationUnreadCount"], Feed.UnreadCount)</NumberBadge>
                     }
                 </div>
                 @* The recipients of a project event are the project's followers; a user who

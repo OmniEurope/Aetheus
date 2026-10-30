@@ -2,6 +2,7 @@
 @* The initial mail checklist exposes each failure's resolution; delivery testing and secondary
    tools follow below. *@
 @using Microsoft.AspNetCore.Components.Sections
+<OmniStack>
 @* While tasks of this page run, one banner at the top names them; it goes when the last ends. *@
 @if (_running.Count > 0)
 {
@@ -22,11 +23,11 @@
         </OmniOverflowMenu>
     </SectionContent>
 }
-<OmniCard Class="omni-u-mb-lg mail-status">
+<OmniCard Class="mail-status">
     <OmniStack Gap="OmniSpacing.Medium">
         <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["MailStatusTitle"]</OmniHeading>
-            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@(Mail.IsManagedByAetheus ? L["MailManagedByAetheus"] : L["MailAdoptedStack"])</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@(Mail.IsManagedByAetheus ? L["MailManagedByAetheus"] : L["MailAdoptedStack"])</OmniBadge>
             @if (!string.IsNullOrEmpty(Mail.Hostname))
             {
                 <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@L["Hostname"] : @Mail.Hostname</OmniText>
@@ -143,3 +144,4 @@
         }
     </OmniStack>
 </OmniCard>
+</OmniStack>

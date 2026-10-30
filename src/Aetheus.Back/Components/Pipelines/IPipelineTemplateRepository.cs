@@ -37,8 +37,10 @@ public interface IPipelineTemplateRepository : IPipelineUnitOfWork
         int templateId, int page, int pageSize, string? sortBy, bool sortDescending,
         CancellationToken ct = default, IReadOnlyList<GridFilter>? columnFilters = null);
 
+    /// <summary>The YAML of the pipelines of one organization, or of every pipeline when
+    /// <paramref name="organizationId"/> is null (a shared catalog template is extended by all).</summary>
     Task<List<string>> GetPipelineYamlDefinitionsByOrganizationAsync(
-        int organizationId, CancellationToken ct = default);
+        int? organizationId, CancellationToken ct = default);
     Task<List<string>> GetTemplateVersionYamlDefinitionsByOrganizationAsync(
-        int organizationId, int excludedTemplateId, CancellationToken ct = default);
+        int? organizationId, int excludedTemplateId, CancellationToken ct = default);
 }

@@ -73,6 +73,50 @@ public sealed class ProjectPipelinesReadinessTests : BunitContext
         Assert.NotNull(tip.Closest(".omni-tooltip, [tabindex]"));
     }
 
+    /// <summary>R-68: the project's overview lists the values still to fill, and only them, coming back to the overview.</summary>
+    [Fact]
+    public void Overview_ListsTheValuesToFillOnly_AndComesBackToTheOverview()
+    {
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(
+            Blocking(PipelineSetupReadinessKind.MissingAdapterScripts, ".pipeline/scripts/ci.sh"),
+            new PipelineSetupReadinessCheckDto
+            {
+                Kind = PipelineSetupReadinessKind.EmptyLibraryValues,
+                Severity = PipelineSetupReadinessSeverity.Blocking,
+                Items = ["JWT_ISSUER"],
+                EmptyValues = [new PipelineSetupReadinessEmptyValueDto
+                {
+                    OwnerId = 12, OwnerName = "w7.prod", Key = "JWT_ISSUER", PipelineId = 21, PipelineName = "w7-deploy-prod"
+                }]
+            }));
+
+        var cut = Render<ProjectPipelinesReadiness>(parameters => parameters
+            .Add(panel => panel.ProjectId, 5)
+            .Add(panel => panel.EmptyValuesOnly, true));
+
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid='setup-readiness-check']")));
+        Assert.Contains("ProjectValuesToFill", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("JWT_ISSUER", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain(".pipeline/scripts/ci.sh", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains(cut.FindAll("a"), link => (link.GetAttribute("href") ?? string.Empty)
+            .Contains(Uri.EscapeDataString("/projects/5"), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Overview_DrawsNothing_WhenOnlyOtherFindingsExist()
+    {
+        _handler.SetJsonResponse("api/pipelines/setup/project-readiness?projectId=5", Verdict(
+            Blocking(PipelineSetupReadinessKind.MissingAdapterScripts, ".pipeline/scripts/ci.sh")));
+
+        var cut = Render<ProjectPipelinesReadiness>(parameters => parameters
+            .Add(panel => panel.ProjectId, 5)
+            .Add(panel => panel.EmptyValuesOnly, true));
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
+            request.Url.Contains("api/pipelines/setup/project-readiness?projectId=5", StringComparison.Ordinal)));
+        Assert.Empty(cut.FindAll("[data-testid='project-pipelines-readiness']"));
+    }
+
     [Fact]
     public void ProjectPage_DrawsNothing_WhenNothingIsMissing()
     {

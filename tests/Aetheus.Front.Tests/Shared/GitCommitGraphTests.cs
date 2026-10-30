@@ -26,8 +26,9 @@ public class GitCommitGraphTests : BunitContext
         var cut = Render<GitCommitGraph>(p => p.Add(c => c.Commits, Chain()));
 
         Assert.NotEmpty(cut.FindAll("svg"));
-        Assert.Equal(3, cut.FindAll("circle").Count);
-        var edges = cut.FindAll("path");
+        // The graph's own drawing: the icon of a branch badge (R-59) is an svg too, with its own paths.
+        Assert.Equal(3, cut.FindAll("circle").Count(shape => shape.Closest(".omni-badge") is null));
+        var edges = cut.FindAll("path").Where(shape => shape.Closest(".omni-badge") is null).ToList();
         Assert.Equal(3, edges.Count);
         Assert.Contains(edges, edge => edge.GetAttribute("d")!.Contains('C'));
         Assert.Contains("main", cut.Markup);

@@ -169,6 +169,60 @@ public sealed class AlertMailLocalisationTests
         Assert.Contains("Killed for lack of memory: java (pid 4242) and 1 more not named.", html, StringComparison.Ordinal);
     }
 
+    // Figures of the 2026-10-24 production incident; the container name is the one the heartbeat resolved.
+    private const string ContainerLimitPayload = """
+        {"ServerId":5,"ServerName":"vps","Metric":"OomKill","KillCount":1,"Victims":["dotnet (pid 827947)"],
+         "Kills":[{"Process":"dotnet","Pid":827947,"Kind":"Cgroup","Container":"aetheus-back-green","Cgroup":"/system.slice/docker-a1b2c3d4e5f6.scope","AnonRssKb":663552,"FileRssKb":43008,"ShmemRssKb":208896}],
+         "Message":"OOM kill on vps: container memory limit reached (aetheus-back-green): dotnet (pid 827947).","TriggeredAt":"2026-10-24T17:39:34Z"}
+        """;
+
+    [Fact]
+    public void AContainerLimitOomAlert_IsWordedInFrench_WithTheContainerAndTheVictimMemory()
+    {
+        var html = System.Net.WebUtility.HtmlDecode(Html(ContainerLimitPayload, "\"fr-FR\""));
+
+        Assert.Contains(
+            "Limite mémoire du conteneur « aetheus-back-green » atteinte : dotnet (pid 827947) arrêté, 894 Mo occupés (anonyme 648 Mo, fichiers 42 Mo, partagée 204 Mo).",
+            html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Arrêté par manque de mémoire", html, StringComparison.Ordinal);
+        foreach (var english in EnglishSentences) Assert.DoesNotContain(english, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AContainerLimitOomAlert_IsWordedInEnglish_WithTheContainerAndTheVictimMemory()
+    {
+        var html = Html(ContainerLimitPayload, "\"en\"");
+
+        Assert.Contains(
+            "Container memory limit reached (aetheus-back-green): dotnet (pid 827947) killed, 894 MB resident (anon 648 MB, file 42 MB, shmem 204 MB).",
+            html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AGlobalOomAlert_SaysTheServerRanOutOfMemory_AndCountsTheKillsNotDetailed()
+    {
+        const string payload = """
+            {"ServerId":5,"ServerName":"vps","Metric":"OomKill","KillCount":3,"Victims":["stress (pid 4242)"],
+             "Kills":[{"Process":"stress","Pid":4242,"Kind":"Global","Container":null,"Cgroup":"/user.slice","AnonRssKb":2048,"FileRssKb":0,"ShmemRssKb":0}],
+             "Message":"m","TriggeredAt":"2026-10-24T17:39:34Z"}
+            """;
+
+        var html = System.Net.WebUtility.HtmlDecode(Html(payload, "\"fr-FR\""));
+
+        Assert.Contains("Manque de mémoire du serveur : stress (pid 4242) arrêté, 2 Mo occupés (anonyme 2 Mo, fichiers 0 Mo, partagée 0 Mo).", html, StringComparison.Ordinal);
+        Assert.Contains("2 autre(s) arrêt(s) non nommé(s).", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOomAlertFromBeforeTheKinds_KeepsTodaysWording()
+    {
+        const string payload = """{"ServerId":5,"ServerName":"vps","Metric":"OomKill","KillCount":1,"Victims":["stress (pid 4242)"],"Message":"m","TriggeredAt":"2026-10-22T16:07:15Z"}""";
+
+        var html = System.Net.WebUtility.HtmlDecode(Html(payload, "\"fr-FR\""));
+
+        Assert.Contains("Arrêté par manque de mémoire : stress (pid 4242).", html, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AnOomAlert_WithoutNamedVictims_SaysSo()
     {

@@ -67,11 +67,11 @@ public sealed class PipelineRunStatusBadgeTests : BunitContext
     }
 
     [Fact]
-    public void AnUnknownStatus_KeepsTheTextOnlyBadge()
+    public void AnUnknownStatus_CarriesTheQuestionIcon_BecauseATextBadgeAlwaysHasOne()
     {
         var cut = Render<PipelineRunStatusBadge>(parameters => parameters.Add(badge => badge.Status, (PipelineStatus)999));
 
-        Assert.Empty(cut.FindAll(".omni-icon"));
+        Assert.Single(cut.FindAll(".omni-badge .omni-icon"));
         Assert.Single(cut.FindAll(".omni-badge"));
     }
 

@@ -17,7 +17,9 @@
             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0" data-testid="release-picker-hidden">
                 @(_showAll ? L["ReleasePickerShowingAll"] : string.Format(L["ReleasePickerHidden"], HiddenCount))
             </OmniText>
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="ToggleShowAll" data-testid="release-picker-show-all">
+            @* Blue on the user's decision (R-57): a documented exception to "one main action per zone",
+               see ui-patterns.md. *@
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="ToggleShowAll" data-testid="release-picker-show-all">
                 <Icon><OmniIcon Name="@(_showAll ? OmniIconName.EyeSlash : OmniIconName.Eye)" /></Icon>
                 <ChildContent><span>@(_showAll ? L["ReleasePickerShowPublished"] : L["ReleasePickerShowAll"])</span></ChildContent>
             </OmniButton>
@@ -28,13 +30,15 @@
                          Virtualize="@AetheusGrid.RemoteVirtualization"
                          VirtualData="@(() => new OmniDataGridResult<ReleaseDto>(_page, _count))"
                          EmptyText="@L["NoDeployableRelease"]"
-                         RowClick="@(release => Pick.InvokeAsync(release.Version))"
+                         SelectionMode="@(Pick.HasDelegate ? OmniDataGridSelectionMode.Single : OmniDataGridSelectionMode.None)"
+                         AllowRowSelectOnRowClick="@Pick.HasDelegate"
+                         Value="@_selected" ValueChanged="@SelectRowsAsync"
                          class="@(Pick.HasDelegate ? "dashboard-clickable-grid" : null)">
             <Columns>
                 <OmniDataGridColumn Frozen="true" TItem="ReleaseDto" Property="Version" Title="@L["Version"]" Filterable="true" >
                     <Template Context="release"><ShortId Value="@release.Version" Copyable="false" Class="release-version" /></Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="ReleaseDto" Property="CreatedAt" Title="@L["ReleasePickerCreated"]" Width="9rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" >
+                <OmniDataGridColumn TItem="ReleaseDto" Property="CreatedAt" Title="@L["ReleasePickerCreated"]" Width="9rem" Filterable="true" >
                     <Template Context="release">@(release.CreatedAt?.ToLocalTime().ToString("g") ?? "-")</Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ReleaseDto" Property="Status" Title="@L["Status"]" Width="8rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText" >
@@ -47,7 +51,7 @@
                     <Template Context="release">
                         @if (release.PipelineRunStatus is { } runStatus)
                         {
-                            <PipelineRunStatusBadge Width="OmniBadgeWidth.Medium" Status="runStatus" data-testid="release-picker-run-status" />
+                            <PipelineRunStatusBadge Status="runStatus" data-testid="release-picker-run-status" />
                         }
                         else
                         {

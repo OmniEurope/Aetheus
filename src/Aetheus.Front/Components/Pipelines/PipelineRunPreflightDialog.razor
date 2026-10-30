@@ -5,47 +5,60 @@
    Stages are grouped by their reason here: the cause is stated once, the affected stages are listed
    compactly, and each cause carries the action that actually fixes it. *@
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large" Class="preflight-dialog">
-    <OmniAlert Severity="OmniSeverity.Warning">
-        @string.Format(L["PreflightBlockedSummary"], Unresolved.Count)
-    </OmniAlert>
+    @* R-63: stages blocked by an empty server parameter are not "no agent matches": the summary counts the others only. *@
+    @if (NoAgentCount > 0)
+    {
+        <OmniAlert Severity="OmniSeverity.Warning">
+            @string.Format(L["PreflightBlockedSummary"], NoAgentCount)
+        </OmniAlert>
+    }
 
     @foreach (var group in Groups)
     {
         <OmniCard Class="preflight-cause">
-            <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm" data-testid="preflight-cause">@group.Reason</OmniText>
+            @* R-14: the cause, its hint, the folded stages and the fix are separated by this stack's gap, not by margins. *@
+            <OmniStack>
+                <OmniText Element="OmniTextElement.Title" data-testid="preflight-cause">@group.Reason</OmniText>
 
-            @if (group.Hint is { } hint)
-            {
-                <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" Class="omni-u-mb-sm" data-testid="preflight-hint">@hint</OmniText>
-            }
+                @if (group.Hint is { } hint)
+                {
+                    <OmniText Element="OmniTextElement.Caption" Tone="OmniTextTone.Muted" data-testid="preflight-hint">@hint</OmniText>
+                }
 
-            @* The affected stages are the detail, not the message: folded under the cause (R-20). *@
-            <OmniFieldset Collapsible="true" Expanded="false" Class="omni-u-mb-sm" data-testid="preflight-stages">
-                <Legend>@string.Format(L["PreflightAffectedStages"], group.Stages.Count)</Legend>
-                <ChildContent>
-                    <OmniRow Gap="OmniSpacing.ExtraLarge">
-                        @foreach (var stage in group.Stages)
+                @* The affected stages are the detail, not the message: folded under the cause (R-20). *@
+                @if (!group.IsEmptyParameter)
+                {
+                    <OmniFieldset Collapsible="true" Expanded="false" data-testid="preflight-stages">
+                        <Legend>@string.Format(L["PreflightAffectedStages"], group.Stages.Count)</Legend>
+                        <ChildContent>
+                            <OmniRow Gap="OmniSpacing.ExtraLarge">
+                                @foreach (var stage in group.Stages)
+                                {
+                                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@stage</OmniBadge>
+                                }
+                            </OmniRow>
+                        </ChildContent>
+                    </OmniFieldset>
+                }
+
+                @if (group.Remediation is { } fix)
+                {
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniIcon Name="OmniIconName.Wrench" />
+                        @if (fix.Explanation is not null)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@stage</OmniBadge>
+                            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@fix.Explanation</OmniText>
                         }
-                    </OmniRow>
-                </ChildContent>
-            </OmniFieldset>
-
-            @if (group.Remediation is { } fix)
-            {
-                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-                    <OmniIcon Name="OmniIconName.Wrench" />
-                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@fix.Explanation</OmniText>
-                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoAsync(fix.Href))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(fix.ActionIcon)" /></Icon><ChildContent><span>@fix.ActionLabel</span></ChildContent></OmniButton>
-                </OmniStack>
-            }
+                        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => GoAsync(fix.Href))"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(fix.ActionIcon)" /></Icon><ChildContent><span>@fix.ActionLabel</span></ChildContent></OmniButton>
+                    </OmniStack>
+                }
+            </OmniStack>
         </OmniCard>
     }
 
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         @* Icon/style pairs are imposed by the shared semantic family (ButtonFamilyAndGridNavigationAuditTests). *@
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Dialog.Close(true))" title="@L["RunAnyway"]"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Launch"]</span></ChildContent></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(false))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Dialog.Close(false))"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>

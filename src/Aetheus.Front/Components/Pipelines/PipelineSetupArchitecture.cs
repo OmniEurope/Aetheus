@@ -75,10 +75,37 @@ public static class PipelineSetupArchitecture
         _ => "external"
     };
 
+    /// <summary>The application shape in the wizard's address (<c>sameProject=yes|no</c>); null for anything else.</summary>
+    public static bool? ParseSameProject(string? value) => value?.ToLowerInvariant() switch
+    {
+        "yes" => true,
+        "no" => false,
+        _ => null
+    };
+
     public static PipelineArchitecture? FromSlug(string? slug) =>
         Enum.GetValues<PipelineArchitecture>()
             .Cast<PipelineArchitecture?>()
             .FirstOrDefault(value => string.Equals(Slug(value!.Value), slug, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The line the summary shows for the type and its detail: the type, the shape (Full-stack, or front-end and
+    /// back-end apart) and the parts; empty while no type is chosen.</summary>
+    internal static string Summary(
+        IStringLocalizer<AppStrings> localizer, PipelineArchitecture? architecture, bool? sameProject,
+        bool frontend, bool backend, bool database)
+    {
+        if (architecture is not { } chosen) return string.Empty;
+        var parts = Parts(chosen, sameProject, frontend, backend, database);
+        return string.Join(" · ", new[]
+        {
+            localizer[LabelKeys(chosen).Title].Value,
+            chosen == PipelineArchitecture.Application && sameProject is { } fullStack
+                ? localizer[fullStack ? "PipelineShapeFullStack" : "PipelineShapeSeparate"].Value : null,
+            parts.Frontend ? localizer["Frontend"].Value : null,
+            sameProject == false && parts.Backend ? localizer["Backend"].Value : null,
+            parts.Database ? localizer["Database"].Value : null
+        }.Where(value => value is not null));
+    }
 
     /// <summary>The resource keys of the type's title and description.</summary>
     public static (string Title, string Description) LabelKeys(PipelineArchitecture architecture) => architecture switch

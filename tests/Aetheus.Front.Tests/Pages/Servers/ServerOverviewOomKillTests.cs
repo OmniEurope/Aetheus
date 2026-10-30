@@ -40,38 +40,24 @@ public sealed class ServerOverviewOomKillTests : BunitContext
             })
             .Add(x => x.MetricsReceived, true));
 
-    private static AngleSharp.Dom.IElement OomLine(IRenderedComponent<ServerOverviewSection> cut) =>
-        cut.FindAll("small").Single(element => element.TextContent.StartsWith("Out-of-memory kills", StringComparison.Ordinal));
-
-    [Fact]
-    public void NoKill_IsShownMuted()
+    [Theory]
+    [InlineData(0L, "Ubuntu 24.04 LTS")]
+    [InlineData(null, "Ubuntu 24.04 LTS")]
+    [InlineData(null, "Microsoft Windows 11 Pro")]
+    public void R_10_NoKillLine_WhenThereIsNoKill(long? oomKills, string os)
     {
-        var line = OomLine(RenderSection(0));
+        var cut = RenderSection(oomKills, os);
 
-        Assert.Equal("Out-of-memory kills since boot: 0", line.TextContent.Trim());
-        Assert.Contains("omni-text--muted", line.ClassList);
+        Assert.DoesNotContain("Out-of-memory", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
     public void KillsSinceBoot_AreShownInDanger()
     {
-        var line = OomLine(RenderSection(3));
+        var line = RenderSection(3).FindAll("small").Single(element => element.TextContent.StartsWith("Out-of-memory kills", StringComparison.Ordinal));
 
         Assert.Equal("Out-of-memory kills since boot: 3", line.TextContent.Trim());
         Assert.Contains("omni-text--danger", line.ClassList);
-    }
-
-    [Fact]
-    public void UnmeasuredOnLinux_ReadsUnknown_NotZero()
-    {
-        Assert.Equal("Out-of-memory kills: unknown", OomLine(RenderSection(null)).TextContent.Trim());
-    }
-
-    [Fact]
-    public void Windows_ReadsNotApplicable()
-    {
-        Assert.Equal("Out-of-memory kills: not applicable",
-            OomLine(RenderSection(null, "Microsoft Windows 11 Pro")).TextContent.Trim());
     }
 
     private sealed class EnglishResourceLocalizer : IStringLocalizer<AppStrings>

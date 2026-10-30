@@ -10,21 +10,37 @@
     }
     else
     {
-        <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="alloc-server">@L["Server"]</OmniLabel>
-            <OmniDropDown Id="alloc-server" name="alloc-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" Placeholder="@L["Server"]" Class="w-100" />
-        </OmniStack>
+        <OmniFormField Label="@L["Server"]" For="alloc-server" Required="true" Class="omni-u-w-100">
+            <OmniDropDown Id="alloc-server" name="alloc-server" TValue="int?" Options="@(_servers.ToOptions(item => (int?)item.ServerId, item => item.ServerName))" @bind-Value="_serverId" AllowEmpty="true" Placeholder="@L["Server"]" Class="w-100" />
+        </OmniFormField>
 
-        <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="alloc-preset">@L["PortAllocatePreset"]</OmniLabel>
-            <OmniDropDown Id="alloc-preset" name="alloc-preset" TValue="string" Options="@(Presets.ToOptions(item => (string)item, item => item))" @bind-Value="_preset"
+        <OmniFormField Label="@L["PortAllocatePreset"]" For="alloc-preset" Class="omni-u-w-100">
+            <OmniDropDown Id="alloc-preset" name="alloc-preset" TValue="string" Options="@(Presets.ToOptions(item => item, item => PresetLabel(item)))" @bind-Value="_preset"
                 @bind-Value:after="ApplyPreset" Class="w-100" />
-        </OmniStack>
+        </OmniFormField>
 
-        <OmniStack Gap="OmniSpacing.XSmall">
-        <OmniLabel For="alloc-keys">@L["PortAllocateKeys"]</OmniLabel>
+        <OmniFormField Label="@L["PortAllocateKeys"]" For="alloc-keys" Required="true" Class="omni-u-w-100">
             <OmniTextArea Id="alloc-keys" @bind-Value="_keysInput" Rows="4" Class="w-100" />
-        </OmniStack>
+        </OmniFormField>
+
+        @if (_created.Count == 0)
+        {
+            var (toCreate, toFill, taken) = KeyPlan();
+            <OmniStack Gap="OmniSpacing.XSmall">
+                @if (toCreate.Count > 0)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@string.Format(L["PortAllocateKeysWillBeCreated"].Value, string.Join(", ", toCreate))</OmniText>
+                }
+                @if (toFill.Count > 0)
+                {
+                    <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@string.Format(L["PortAllocateKeysWillBeFilled"].Value, string.Join(", ", toFill))</OmniText>
+                }
+                @if (taken.Count > 0)
+                {
+                    <OmniAlert Severity="OmniSeverity.Warning"><Icon><OmniIcon Name="OmniIconName.Warning" /></Icon><ChildContent>@string.Format(L["PortAllocateKeysHaveValue"].Value, string.Join(", ", taken))</ChildContent></OmniAlert>
+                }
+            </OmniStack>
+        }
 
         @if (_created.Count > 0)
         {
@@ -43,6 +59,6 @@
     }
 
     <DialogFooter OnCancel="@(() => Dialog.Close(_created.Count > 0))">
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AllocateAsync" Disabled="@(_blocker is not null || _serverId is null)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Archive" /></Icon><ChildContent><span>@L["PortAllocate"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@AllocateAsync" Disabled="@(_blocker is not null || _serverId is null || HasTakenKeys)" Class="@(_busy ? "btn-busy" : null)" Busy="@(_busy)"><Icon><OmniIcon name="OmniIconName.Archive" /></Icon><ChildContent><span>@L["PortAllocate"]</span></ChildContent></OmniButton>
     </DialogFooter>
 </OmniStack>

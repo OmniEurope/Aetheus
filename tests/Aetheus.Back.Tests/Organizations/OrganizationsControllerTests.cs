@@ -11,32 +11,72 @@ namespace Aetheus.Back.Tests;
 public class OrganizationsControllerTests
 {
     private readonly IOrganizationService _serviceMock = Substitute.For<IOrganizationService>();
+    private readonly Aetheus.Back.Services.IResourceAuthorizationService _authz =
+        Substitute.For<Aetheus.Back.Services.IResourceAuthorizationService>();
     private readonly OrganizationsController _sut;
 
     public OrganizationsControllerTests()
     {
-        _sut = new OrganizationsController(_serviceMock);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.OrganizationMembersManage, Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        _sut = new OrganizationsController(_serviceMock, _authz);
         _sut.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity(
-                    [new Claim(ClaimTypes.Name, "admin")], "test"))
+                    [new Claim(ClaimTypes.Name, "admin"), new Claim(ClaimTypes.Role, "Admin")], "test"))
             }
         };
+    }
+
+    private void ActAsOrganizationAdmin() =>
+        _sut.ControllerContext.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, "org-admin")], "test"));
+
+    // S2: an Organization Admin cannot walk the global user ids.
+    [Fact]
+    public async Task AddMember_OrganizationAdminById_IsRefused()
+    {
+        ActAsOrganizationAdmin();
+
+        var result = await _sut.AddMember(1,
+            new AddOrganizationMemberRequest { UserId = 5, Role = OrganizationRole.Member }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        await _serviceMock.DidNotReceive().AddMemberAsync(
+            Arg.Any<int>(), Arg.Any<AddOrganizationMemberRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    // S2: by exact login it works, and the found user's e-mail is not read back.
+    [Fact]
+    public async Task AddMember_OrganizationAdminByLogin_HidesTheEmail()
+    {
+        ActAsOrganizationAdmin();
+        _serviceMock.AddMemberAsync(1, Arg.Any<AddOrganizationMemberRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new OrganizationMemberDto(10, 5, "bob", "b@c.d", OrganizationRole.Member, DateTime.UtcNow));
+
+        var result = await _sut.AddMember(1,
+            new AddOrganizationMemberRequest { UserLogin = "bob", Role = OrganizationRole.Member }, TestContext.Current.CancellationToken);
+
+        var member = Assert.IsType<OrganizationMemberDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(member.Email);
     }
 
     [Fact]
     public async Task GetOrganizations_ReturnsOk()
     {
-        _serviceMock.GetOrganizationsAsync(null, Arg.Any<PaginationRequest>(), Arg.Any<CancellationToken>())
+        // The site Admin administers every organization (null): the list is not limited.
+        _authz.GetOrganizationsWithPermissionKeyAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.OrganizationMembersManage, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<int>?)null);
+        _serviceMock.GetOrganizationsAsync(null, Arg.Any<PaginationRequest>(), null, Arg.Any<CancellationToken>())
             .Returns(new PaginatedResult<OrganizationDto>
             {
                 Items = [new OrganizationDto(1, "Acme", "acme", "", 2, 3, DateTime.UtcNow, DateTime.UtcNow)],
                 TotalCount = 1
             });
 
-        var result = await _sut.GetOrganizations(null, new PaginationRequest(), TestContext.Current.CancellationToken);
+        var result = await _sut.GetOrganizations(null, new PaginationRequest(), null, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
@@ -153,6 +193,20 @@ public class OrganizationsControllerTests
             new AddOrganizationMemberRequest { UserId = 5, Role = OrganizationRole.Member }, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // R-10: only a site-wide Admin or a holder of org.members.manage for the organization (R-11) manages its members.
+    [Fact]
+    public async Task AddMember_NotOrganizationAdmin_IsForbidden()
+    {
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.OrganizationMembersManage, 1, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await _sut.AddMember(1,
+            new AddOrganizationMemberRequest { UserId = 5, Role = OrganizationRole.Member }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().AddMemberAsync(
+            Arg.Any<int>(), Arg.Any<AddOrganizationMemberRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

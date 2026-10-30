@@ -38,7 +38,7 @@ public class ErrorHandlingMiddlewareTests(CustomWebApplicationFactory factory)
     public async Task Login_InvalidCredentials_Returns401WithApiError()
     {
         var response = await _client.PostAsJsonAsync("/api/auth/login",
-            new LoginRequest { Username = "wrong", Password = "wrong" }, cancellationToken: TestContext.Current.CancellationToken);
+            new LoginRequest { Email = "wrong@example.com", Password = "wrong" }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
 

@@ -91,9 +91,9 @@ public class GitBasicAuthenticationHandlerTests
     [Fact]
     public async Task InvalidCredentials_Fails()
     {
-        _serviceMock.ValidateBasicAuthAsync("user", "wrong", Arg.Any<CancellationToken>())
-            .Returns(false);
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("user:wrong"));
+        _serviceMock.AuthenticateBasicAsync("user@example.com", "wrong", Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("user@example.com:wrong"));
 
         var result = await AuthenticateAsync($"Basic {encoded}");
 
@@ -103,9 +103,9 @@ public class GitBasicAuthenticationHandlerTests
     [Fact]
     public async Task ValidCredentials_Succeeds()
     {
-        _serviceMock.ValidateBasicAuthAsync("alice", "s3cret", Arg.Any<CancellationToken>())
-            .Returns(true);
-        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:s3cret"));
+        _serviceMock.AuthenticateBasicAsync("alice@example.com", "s3cret", Arg.Any<CancellationToken>())
+            .Returns("alice");
+        var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes("alice@example.com:s3cret"));
 
         var result = await AuthenticateAsync($"Basic {encoded}");
 
@@ -129,7 +129,7 @@ public class GitBasicAuthenticationHandlerTests
         Assert.Equal("42", result.Principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value);
         Assert.True(result.Principal.HasClaim(PatConstants.ScopeClaimType, PatConstants.ReadWriteScopeValue));
         Assert.True(result.Principal.IsInRole("SuperAdmin"));
-        await _serviceMock.DidNotReceive().ValidateBasicAuthAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _serviceMock.DidNotReceive().AuthenticateBasicAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class GitBasicAuthenticationHandlerTests
         Assert.Equal(user, result.Principal!.Identity!.Name);
         Assert.True(result.Principal!.HasClaim(GitBasicAuthenticationHandler.RunScopeClaim, "1"));
         // A run token must never authenticate via the user-account path.
-        await _serviceMock.DidNotReceive().ValidateBasicAuthAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _serviceMock.DidNotReceive().AuthenticateBasicAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

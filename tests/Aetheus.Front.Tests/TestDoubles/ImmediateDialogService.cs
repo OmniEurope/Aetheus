@@ -10,6 +10,15 @@ internal sealed class ImmediateDialogService(AppDialogs dialogs, OmniOverlayServ
     public string? LastTitle { get; private set; }
     public Dictionary<string, object?>? LastParameters { get; private set; }
     public object? OpenResult { get; set; }
+
+    /// <summary>Every dialog component opened, in order, for a flow that opens several in a row.</summary>
+    public List<Type> OpenedComponents { get; } = [];
+
+    /// <summary>The parameters each dialog in <see cref="OpenedComponents"/> was opened with.</summary>
+    public List<Dictionary<string, object?>?> OpenedParameterSets { get; } = [];
+
+    /// <summary>When set, the answer of each opened dialog by its component, instead of <see cref="OpenResult"/>.</summary>
+    public Func<Type, object?>? OpenResultFor { get; set; }
     public bool? ConfirmResult { get; set; } = false;
     public string? LastConfirmMessage { get; private set; }
     public OmniConfirmOptions? LastConfirmOptions { get; private set; }
@@ -28,7 +37,9 @@ internal sealed class ImmediateDialogService(AppDialogs dialogs, OmniOverlayServ
         LastComponent = typeof(T);
         LastTitle = title;
         LastParameters = parameters;
-        return Task.FromResult(OpenResult);
+        OpenedComponents.Add(typeof(T));
+        OpenedParameterSets.Add(parameters);
+        return Task.FromResult(OpenResultFor is null ? OpenResult : OpenResultFor(typeof(T)));
     }
 
     public override Task<bool?> Confirm(string? message, string? title, OmniConfirmOptions? options = null)

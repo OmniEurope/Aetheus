@@ -33,6 +33,7 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
         var checker = new PipelineRequirementsChecker(_pipelines, _libraries, _vaults);
         var readiness = new PipelineSetupReadinessService(
             _templates, _pipelines, _git, Substitute.For<IGitLightRepository>(), _resolver, checker,
+            Substitute.For<IProjectConfigRepositoryService>(),
             NullLogger<PipelineSetupReadinessService>.Instance);
         _sut = new PipelineRequirementsProvisioner(
             readiness, _pipelines, checker, _resolver, _libraries, _vaults,
@@ -67,8 +68,8 @@ public sealed class TemplateLibrariesAndVaultsProvisioningTests
 
     private void ShippedTemplate(string name, string resource)
     {
-        _templates.GetTemplatesAsync(Arg.Any<CancellationToken>())
-            .Returns(new List<PipelineTemplateSummaryDto> { new() { Id = 1, Name = name, Version = 1 } });
+        _pipelines.FindSharedTemplateByNameAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new Aetheus.Back.Data.Entities.PipelineTemplate { Id = 1, Name = name });
         _templates.GetTemplateAsync(1, Arg.Any<CancellationToken>())
             .Returns(new PipelineTemplateDto { Id = 1, Name = name, YamlContent = DeliveryTemplateCatalog.ReadResource(resource) });
     }

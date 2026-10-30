@@ -29,10 +29,10 @@ internal static class BootstrapCredentialPolicy
 
         if (hasDbUsers) return null;
 
-        var adminUser = config["Auth:AdminUser"] ?? "admin";
+        var adminEmail = Aetheus.Back.Data.SeededAdminEmail.Resolve(config);
         var adminPass = config["Auth:AdminPassword"];
         if (string.IsNullOrEmpty(adminPass)
-            || !DeploymentBootstrapIdentity.CredentialsMatch(request, adminUser, adminPass))
+            || !DeploymentBootstrapIdentity.CredentialsMatch(request, adminEmail, adminPass))
             return null;
 
         // The seeded administrator is NOT the deployment identity: it authenticated with

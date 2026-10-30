@@ -24,15 +24,15 @@ public sealed class AppThemeScopeTests : BunitContext
 
     private OmniAppearanceState State => Services.GetRequiredService<OmniAppearanceState>();
 
-    /// <summary>Signed out, nothing chosen: the scope paints OE's shipped look in dark mode, the
+    /// application's default (R-42), and binds nothing itself.</summary>
     /// application's default, and binds nothing itself.</summary>
     [Fact]
-    public void SignedOut_TheScopeIsDarkWithTheShippedLook_AndFollowsTheState()
+    public void SignedOut_TheScopeFollowsTheSystemWithTheShippedLook_AndFollowsTheState()
     {
         var cut = Render<App>();
 
-        cut.WaitForAssertion(() => Assert.Equal("dark", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
-        Assert.Equal(OmniAppearance.Dark, State.Appearance);
+        cut.WaitForAssertion(() => Assert.Equal("system", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
+        Assert.Equal(OmniAppearance.System, State.Appearance);
         Assert.Null(State.Preset);
         Assert.Equal("comfortable", cut.Find("#app-theme-scope").GetAttribute("data-omni-density"));
         // OE keeps the boot snapshot itself, under the key omni-boot.js reads in index.html.
@@ -46,7 +46,7 @@ public sealed class AppThemeScopeTests : BunitContext
     public async Task AChangeOfTheUsersAppearance_ReachesTheScope()
     {
         var cut = Render<App>();
-        cut.WaitForAssertion(() => Assert.Equal("dark", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
+        cut.WaitForAssertion(() => Assert.Equal("system", cut.Find("#app-theme-scope").GetAttribute("data-omni-theme")));
 
         await cut.InvokeAsync(() => State.SetAppearanceAsync(OmniAppearance.Light));
         await cut.InvokeAsync(() => State.SetDensityAsync(OmniDensity.Compact));

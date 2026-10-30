@@ -239,10 +239,10 @@ public sealed class PipelineRequirementsProvisionerTests
         _checker.CheckAsync(Arg.Any<PipelineRequiresDefinition?>(), ProjectId, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(
             [
-                new PipelineRequirementOutcome(PipelineRequirementsChecker.LibraryKind, "aetheus-prod-host", "missing"),
+                new PipelineRequirementOutcome(PipelineRequirementsChecker.LibraryKind, "aetheus-prod-host", Unmet),
                 new PipelineRequirementOutcome(PipelineRequirementsChecker.VaultKind, "aetheus-prod-secrets", null),
                 // An environment the pipeline also needs is not this warning's business.
-                new PipelineRequirementOutcome(PipelineRequirementsChecker.EnvironmentKind, "qa", "missing")
+                new PipelineRequirementOutcome(PipelineRequirementsChecker.EnvironmentKind, "qa", Unmet)
             ]);
 
         var unmet = await _sut.GetUnmetAsync(ProjectId, null, Ct);
@@ -284,8 +284,8 @@ public sealed class PipelineRequirementsProvisionerTests
         _checker.CheckAsync(Arg.Do<PipelineRequiresDefinition?>(definition => checkedFor = definition), ProjectId, Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(
             [
-                new PipelineRequirementOutcome(PipelineRequirementsChecker.LibraryKind, "aetheus-prod-host", "missing"),
-                new PipelineRequirementOutcome(PipelineRequirementsChecker.VaultKind, "aetheus-prod-secrets", "missing")
+                new PipelineRequirementOutcome(PipelineRequirementsChecker.LibraryKind, "aetheus-prod-host", Unmet),
+                new PipelineRequirementOutcome(PipelineRequirementsChecker.VaultKind, "aetheus-prod-secrets", Unmet)
             ]);
 
         var unmet = await _sut.GetUnmetAsync(ProjectId, null, Ct);
@@ -310,4 +310,6 @@ public sealed class PipelineRequirementsProvisionerTests
         Assert.Equal(["keys"], referenced.Vaults);
         Assert.Null(PipelineRequirementsProvisioner.ReferencedResources(new PipelineYamlDefinition()));
     }
+
+    private static readonly PipelineProblem Unmet = PipelineProblem.Of(PipelineProblemCodes.RequiredLibraryMissing, "missing");
 }

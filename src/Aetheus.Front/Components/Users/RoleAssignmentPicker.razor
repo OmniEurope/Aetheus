@@ -1,28 +1,30 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Users
 <div class="role-assignment-picker">
-    <OmniRow Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="role-assignment-heading">
-        <div>
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Roles"]</OmniText>
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                @L["RoleAssignmentHint"]
-            </OmniText>
-        </div>
-        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["SelectedRolesCount"], SelectedRoles.Count)</OmniBadge>
-    </OmniRow>
-
-    @if (SelectedRoles.Count > 0)
+    @if (SelectedLabels.Count > 0)
     {
         <div class="role-assignment-selected" aria-label="@L["SelectedRoles"]">
-            @foreach (var role in SelectedRoles.Take(6))
+            @foreach (var label in SelectedLabels.Take(6))
             {
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@role</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.IdentificationBadge))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@label</OmniBadge>
             }
-            @if (SelectedRoles.Count > 6)
+            @if (SelectedLabels.Count > 6)
             {
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"+{SelectedRoles.Count - 6}")</OmniBadge>
+                <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"+{SelectedLabels.Count - 6}")</NumberBadge>
             }
         </div>
+    }
+
+    @if (OrganizationScoped && _organizations.Count > 1)
+    {
+        @* R-47: a role other than Admin is held for one organization; the choice shows only when there is one to make. *@
+        <OmniDropDown TValue="int" Id="role-assignment-organization" Label="@L["Organization"]"
+            Options="@(_organizations.ToOptions(item => item.Id, item => item.Name))"
+            @bind-Value:get="_organizationId" @bind-Value:set="OnOrganizationChangedAsync" Disabled="@Disabled" Class="role-assignment-organization" />
+    }
+    else if (OrganizationScoped && _organizationsLoaded && _organizations.Count == 0)
+    {
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">@L["RoleAssignmentNoOrganization"]</OmniText>
     }
 
     <div class="role-assignment-toolbar">
@@ -34,6 +36,7 @@
         {
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ClearSearchAsync"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["ClearFilters"]</span></ChildContent></OmniButton>
         }
+        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@string.Format(L["SelectedRolesCount"], SelectedLabels.Count)</NumberBadge>
     </div>
 
     <div class="role-assignment-grid">
@@ -47,11 +50,12 @@
                 <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Role"]" Filterable="true" >
                     <Template Context="role">
                         @{ var isSelected = IsSelected(role.Name); }
-                        <OmniCheckBox TValue="bool" Value="isSelected" ValueExpression="@(() => isSelected)" ValueChanged="@(selected => OnRoleToggledAsync(role.Name, selected))" Class="role-assignment-toggle" Disabled="@Disabled">@role.Name</OmniCheckBox>
-                        @if (!string.IsNullOrWhiteSpace(role.Description))
+                        <OmniCheckBox TValue="bool" Value="isSelected" ValueExpression="@(() => isSelected)" ValueChanged="@(selected => OnRoleToggledAsync(role.Name, selected))" Class="role-assignment-toggle" Disabled="@(Disabled || !CanToggle(role.Name))">@role.Name</OmniCheckBox>
+                        @{ var description = RoleDescriptions.Localize(role, L); }
+                        @if (!string.IsNullOrWhiteSpace(description))
                         {
                             <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted role-assignment-description">
-                                @role.Description
+                                @description
                             </OmniText>
                         }
                     </Template>

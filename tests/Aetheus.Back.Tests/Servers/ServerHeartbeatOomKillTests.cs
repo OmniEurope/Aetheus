@@ -36,7 +36,7 @@ public sealed class ServerHeartbeatOomKillTests
     }
 
     // A fresh service per heartbeat: only the server row carries state, as across backend restarts.
-    private Task HeartbeatAsync(OomKillReportDto? report)
+    private Task HeartbeatAsync(OomKillReportDto? report, params (string Id, string Name)[] containers)
     {
         var hub = Substitute.For<IHubContext<ServerHub>>();
         hub.Clients.Returns(Substitute.For<IHubClients>());
@@ -46,8 +46,12 @@ public sealed class ServerHeartbeatOomKillTests
             Substitute.For<IAuditService>(), Substitute.For<Aetheus.Back.Components.Tasks.ITaskService>(),
             Options.Create(new BackgroundServicesOptions()), _time,
             Substitute.For<IDbTransactionScope>(), domainEvents: _events);
-        return service.ProcessHeartbeatAsync(_server.Id, new ServerHeartbeatDto { AgentVersion = "1.0.0", OomKills = report },
-            TestContext.Current.CancellationToken);
+        return service.ProcessHeartbeatAsync(_server.Id, new ServerHeartbeatDto
+        {
+            AgentVersion = "1.0.0",
+            OomKills = report,
+            Docker = new DockerDataDto { Containers = [.. containers.Select(c => new DockerContainerDto { ContainerId = c.Id, Name = c.Name })] }
+        }, TestContext.Current.CancellationToken);
     }
 
     private static OomKillReportDto Report(string bootId, long count, bool readable = true, params (int Pid, string Process)[] victims) => new()
@@ -175,6 +179,129 @@ public sealed class ServerHeartbeatOomKillTests
         await HeartbeatAsync(Report(Boot1, 4, true, (5, "x")));
         Assert.Empty(OomAlerts());
         Assert.Empty(OomEvents());
+    }
+
+    // Figures of the 2026-10-24 production incident as the agent reports them: dotnet pid 827947,
+    // 663552 kB anonymous, 43008 kB file, 208896 kB shared; the container id is invented (see the
+    // agent tests for the reconstructed kernel lines).
+    private static OomKillReportDto CgroupKillReport(long count, string? containerId = "a1b2c3d4e5f6") => new()
+    {
+        BootId = Boot1,
+        KillCount = count,
+        VictimsReadable = true,
+        RecentVictims =
+        [
+            new OomKillVictimDto
+            {
+                Pid = 827947,
+                Process = "dotnet",
+                Kind = OomKillKind.Cgroup,
+                Cgroup = "/system.slice/docker-a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90.scope",
+                ContainerId = containerId,
+                AnonRssKb = 663552,
+                FileRssKb = 43008,
+                ShmemRssKb = 208896
+            }
+        ]
+    };
+
+    [Fact]
+    public async Task ContainerLimitKill_SaysTheContainerLimitWasReachedWithItsNameAndTheVictimMemory()
+    {
+        await HeartbeatAsync(Report(Boot1, 0));
+        await HeartbeatAsync(CgroupKillReport(1), ("ffffffffffff", "other"), ("a1b2c3d4e5f6", "aetheus-back-green"));
+
+        var alert = Assert.Single(OomAlerts());
+        Assert.Equal(
+            "OOM kill on vps-1: container memory limit reached (aetheus-back-green): dotnet (pid 827947), 894 MB resident (anon 648 MB, file 42 MB, shmem 204 MB).",
+            alert.Message);
+        var kill = Assert.Single(Assert.Single(OomEvents()).Kills!);
+        Assert.Equal(OomKillKind.Cgroup, kill.Kind);
+        Assert.Equal("aetheus-back-green", kill.Container);
+        Assert.Equal("dotnet", kill.Process);
+        Assert.Equal(827947, kill.Pid);
+        Assert.Equal(663552, kill.AnonRssKb);
+        Assert.Equal(["dotnet (pid 827947)"], Assert.Single(OomEvents()).Victims);
+    }
+
+    [Fact]
+    public async Task ContainerLimitKill_WithAContainerTheHeartbeatDoesNotList_ShowsItsShortId()
+    {
+        await HeartbeatAsync(Report(Boot1, 0));
+        await HeartbeatAsync(CgroupKillReport(1));
+
+        Assert.StartsWith(
+            "OOM kill on vps-1: container memory limit reached (a1b2c3d4e5f6): dotnet (pid 827947), 894 MB resident",
+            Assert.Single(OomAlerts()).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CgroupKillOutsideDocker_NamesTheCgroupPath()
+    {
+        await HeartbeatAsync(Report(Boot1, 0));
+        await HeartbeatAsync(new OomKillReportDto
+        {
+            BootId = Boot1,
+            KillCount = 1,
+            VictimsReadable = true,
+            RecentVictims = [new OomKillVictimDto { Pid = 5, Process = "php-fpm", Kind = OomKillKind.Cgroup, Cgroup = "/system.slice/php.service" }]
+        });
+
+        Assert.Equal(
+            "OOM kill on vps-1: cgroup memory limit reached (/system.slice/php.service): php-fpm (pid 5).",
+            Assert.Single(OomAlerts()).Message);
+    }
+
+    [Fact]
+    public async Task GlobalKill_SaysTheServerRanOutOfMemory()
+    {
+        await HeartbeatAsync(Report(Boot1, 0));
+        await HeartbeatAsync(new OomKillReportDto
+        {
+            BootId = Boot1,
+            KillCount = 1,
+            VictimsReadable = true,
+            RecentVictims = [new OomKillVictimDto { Pid = 4242, Process = "stress", Kind = OomKillKind.Global, AnonRssKb = 1998336, FileRssKb = 1024, ShmemRssKb = 0 }]
+        });
+
+        Assert.Equal(
+            "OOM kill on vps-1: server out of memory: stress (pid 4242), 1,953 MB resident (anon 1,952 MB, file 1 MB, shmem 0 MB).",
+            Assert.Single(OomAlerts()).Message);
+    }
+
+    [Fact]
+    public async Task OlderAgentWithoutKinds_ProducesTodaysMessageAndNoDetail()
+    {
+        await HeartbeatAsync(Report(Boot1, 0));
+        // Exactly what an agent from before the kinds sends: pid and process only.
+        await HeartbeatAsync(System.Text.Json.JsonSerializer.Deserialize<OomKillReportDto>(
+            """{"bootId":"11111111-1111-1111-1111-111111111111","killCount":1,"victimsReadable":true,"recentVictims":[{"pid":4242,"process":"stress"}]}""",
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            }));
+
+        Assert.Equal("OOM kill on vps-1: stress (pid 4242).", Assert.Single(OomAlerts()).Message);
+        Assert.Empty(Assert.Single(OomEvents()).Kills ?? []);
+    }
+
+    [Fact]
+    public async Task NotificationHandler_CarriesTheKindTheContainerAndTheMemoryInThePayload()
+    {
+        var userNotifications = Substitute.For<IUserNotificationService>();
+        var notifications = Substitute.For<INotificationService>();
+        var occurrences = Substitute.For<IAlertOccurrenceService>();
+        var handler = new OomKillNotificationHandler(userNotifications, notifications, occurrences);
+        var domainEvent = new OomKillDetectedEvent(9, "vps-1", 1, ["dotnet (pid 827947)"], "message", _time.GetUtcNow().UtcDateTime,
+            [new OomKillDetail("dotnet", 827947, OomKillKind.Cgroup, "aetheus-back-green", "/system.slice/x.scope", 663552, 43008, 208896)]);
+
+        await handler.HandleAsync(domainEvent, TestContext.Current.CancellationToken);
+
+        await userNotifications.Received(1).RecordAdministratorEventAsync(
+            "alert.triggered", Arg.Any<string>(),
+            Arg.Is<string>(payload => payload.Contains("\"Kind\":\"Cgroup\"") && payload.Contains("\"Container\":\"aetheus-back-green\"")
+                && payload.Contains("\"AnonRssKb\":663552") && payload.Contains("\"Victims\":[\"dotnet (pid 827947)\"]")),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

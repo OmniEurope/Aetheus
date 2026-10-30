@@ -50,6 +50,7 @@ public sealed class AnalysisRunResultRepository(AppDbContext db) : IAnalysisRunR
 
         // The counts of the whole set (the Gate tab's figures), whatever the list below is filtered on.
         var counts = await CountFindingsAsync(occurrences, ct).ConfigureAwait(false);
+        var openByCategory = await CountOpenFindingsByCategoryAsync(occurrences, ct).ConfigureAwait(false);
 
         var listed = AnalysisRunFindingFilters.Apply(GroupFindings(AnalysisRunFindingFilters.Narrow(occurrences, request)), request);
         var total = await listed.CountAsync(ct).ConfigureAwait(false);
@@ -66,7 +67,8 @@ public sealed class AnalysisRunResultRepository(AppDbContext db) : IAnalysisRunR
             PageSize = pageSize,
             OpenCount = counts.Open,
             NewOpenCount = counts.NewOpen,
-            DecidedCount = counts.Decided
+            DecidedCount = counts.Decided,
+            OpenCountsByCategory = openByCategory
         };
     }
 
@@ -95,6 +97,21 @@ public sealed class AnalysisRunResultRepository(AppDbContext db) : IAnalysisRunR
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         return counts is null ? (0, 0, 0) : (counts.Open, counts.NewOpen, counts.Decided);
     }
+
+    /// <summary>The open findings the occurrences point at by category, counted by the database (recette R-74): a
+    /// finding counts once, and it has one category, so the counts add up to the open count.</summary>
+    internal static async Task<List<AnalysisRunGateCategoryCountDto>> CountOpenFindingsByCategoryAsync(
+        IQueryable<AnalysisFindingOccurrence> occurrences, CancellationToken ct) =>
+        await occurrences
+            .Where(occurrence => occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open)
+            .GroupBy(occurrence => occurrence.AnalysisFinding.Category)
+            .Select(group => new AnalysisRunGateCategoryCountDto
+            {
+                Category = group.Key,
+                Count = group.Select(occurrence => occurrence.AnalysisFindingId).Distinct().Count()
+            })
+            .OrderBy(count => count.Category)
+            .ToListAsync(ct).ConfigureAwait(false);
 
     /// <summary>
     /// The occurrences grouped into one row per finding, as a run sees it: its latest occurrence's file

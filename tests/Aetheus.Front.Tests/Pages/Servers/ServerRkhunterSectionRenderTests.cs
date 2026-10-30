@@ -58,6 +58,18 @@ public class ServerRkhunterSectionRenderTests : BunitContext
 
     // ── Render ────────────────────────────────────────────────────────────────
 
+    // R-113: before the first scan the agent reports "none"; the page says so in words, not as a raw value.
+    [Fact]
+    public void Renders_NoScanYet_SaysSoInsteadOfTheRawStatus()
+    {
+        var cut = RenderInstalled(new RkhunterDataDto { IsInstalled = true, Version = "1.4.6", LastScanStatus = "none" });
+
+        Assert.Contains(cut.FindAll(".omni-badge"), badge => badge.TextContent.Trim() == "LastScan: RkhunterStatusNone");
+        Assert.DoesNotContain("RkhunterStatusUnknown", cut.Markup, StringComparison.Ordinal);
+        // No scan yet: no warning count either ("Aucun scan (0 avertissements)" read as a scan result).
+        Assert.DoesNotContain("(0 Warnings)", cut.Markup, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Renders_InstalledState_ShowsInstalledBadgeAndScanActions_WithoutTitleHeading()
     {

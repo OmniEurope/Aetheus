@@ -6,12 +6,13 @@ namespace Aetheus.Back.Components.PackageRegistry;
 /// Maven 2 repository endpoint for <c>mvn deploy</c> (HTTP PUT) and dependency resolution
 /// (GET/HEAD). Same authentication as the NuGet and npm registries: an Aetheus personal access token
 /// as the Basic password (Maven <c>settings.xml</c> server credentials) or as a Bearer token. Reading
-/// needs any valid token; deploying needs the Admin role, and a read-only token is refused by the
-/// scope middleware before the action runs.
+/// needs any valid token, except for an artifact an administrator opened to anonymous download
+/// (R-58); deploying needs the Admin role, and a read-only token is refused by the scope middleware
+/// before the action runs.
 /// </summary>
 [ApiController]
 [Route("api/packages/maven")]
-[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName)]
+[Authorize(AuthenticationSchemes = PackageRegistryAuthenticationHandler.SchemeName, Policy = PackageRegistryPolicies.Read)]
 public class MavenRegistryController(
     IMavenRegistryService registry,
     PackageRegistryUploadGate uploadGate) : ControllerBase
@@ -20,6 +21,7 @@ public class MavenRegistryController(
 
     [HttpGet("{**path}")]
     [HttpHead("{**path}")]
+    [AnonymousPackageDownload(PackageRegistryKind.Maven)]
     public async Task<IActionResult> Get(string path, CancellationToken ct)
     {
         if (!MavenRepositoryPath.TryParse(path, out var parsed, out _))

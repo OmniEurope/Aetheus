@@ -38,6 +38,7 @@ public class AuthServiceBasicAuthTests
         {
             Id = 1,
             Username = "bob",
+            Email = "bob@example.com",
             IsActive = true,
             UserRoles = [],
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
@@ -45,65 +46,62 @@ public class AuthServiceBasicAuthTests
             LockoutEndUtc = lockoutEnd
         };
 
-    // --- ValidateBasicAuthAsync ---
+    // --- AuthenticateBasicAsync (Basic username = the account e-mail, never the username) ---
 
     [Fact]
-    public async Task ValidateBasicAuth_UnknownUser_ReturnsFalse()
+    public async Task AuthenticateBasic_UnknownEmail_ReturnsNull()
     {
-        _repo.FindUserWithRolesAsync("ghost", Arg.Any<CancellationToken>()).Returns((User?)null);
+        _repo.FindUserByEmailWithRolesAsync("ghost@example.com", Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        Assert.False(await _sut.ValidateBasicAuthAsync("ghost", "x", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.AuthenticateBasicAsync("ghost@example.com", "x", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task ValidateBasicAuth_LockedOut_ReturnsFalse()
+    public async Task AuthenticateBasic_LockedOut_ReturnsNull()
     {
-        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("bob@example.com", Arg.Any<CancellationToken>())
             .Returns(UserWithPassword("secret", lockoutEnd: DateTime.UtcNow.AddMinutes(10)));
 
-        Assert.False(await _sut.ValidateBasicAuthAsync("bob", "secret", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.AuthenticateBasicAsync("bob@example.com", "secret", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task ValidateBasicAuth_WrongPassword_HandlesFailureAndReturnsFalse()
+    public async Task AuthenticateBasic_WrongPassword_HandlesFailureAndReturnsNull()
     {
-        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("bob@example.com", Arg.Any<CancellationToken>())
             .Returns(UserWithPassword("secret"));
 
-        Assert.False(await _sut.ValidateBasicAuthAsync("bob", "wrong", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.AuthenticateBasicAsync("bob@example.com", "wrong", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task ValidateBasicAuth_CorrectPassword_ReturnsTrue()
+    public async Task AuthenticateBasic_CorrectPassword_ReturnsTheUsername()
     {
-        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("bob@example.com", Arg.Any<CancellationToken>())
             .Returns(UserWithPassword("secret"));
 
-        Assert.True(await _sut.ValidateBasicAuthAsync("bob", "secret", ct: TestContext.Current.CancellationToken));
+        Assert.Equal("bob", await _sut.AuthenticateBasicAsync("bob@example.com", "secret", ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task ValidateBasicAuth_CorrectPasswordAfterFailures_ResetsCounter()
+    public async Task AuthenticateBasic_CorrectPasswordAfterFailures_ResetsCounter()
     {
-        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("bob@example.com", Arg.Any<CancellationToken>())
             .Returns(UserWithPassword("secret", failedCount: 3));
 
-        Assert.True(await _sut.ValidateBasicAuthAsync("bob", "secret", ct: TestContext.Current.CancellationToken));
+        Assert.Equal("bob", await _sut.AuthenticateBasicAsync("bob@example.com", "secret", ct: TestContext.Current.CancellationToken));
         await _repo.Received(1).ResetFailedLoginAsync(1, Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [InlineData("BOB")]
-    [InlineData("Bob")]
-    [InlineData("  bob  ")]
-    public async Task ValidateBasicAuth_UsernameCaseAndWhitespaceInsensitive_ReturnsTrue(string typed)
+    [Fact]
+    public async Task AuthenticateBasic_TheUsernameOfAnAccount_IsNoSignIn()
     {
-        // The repo only answers for the canonical stored "bob"; a true result proves the service
-        // normalised the typed username (case + surrounding whitespace) before the lookup.
-        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>())
-            .Returns(UserWithPassword("secret"));
+        // The account "bob" exists and the password is right, but the typed value is only looked up as an
+        // e-mail address: the username is a display name, never a Basic credential.
+        _repo.FindUserWithRolesAsync("bob", Arg.Any<CancellationToken>()).Returns(UserWithPassword("secret"));
 
-        Assert.True(await _sut.ValidateBasicAuthAsync(typed, "secret", ct: TestContext.Current.CancellationToken));
+        Assert.Null(await _sut.AuthenticateBasicAsync("bob", "secret", ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().FindUserWithRolesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // --- IsSecurityStampValidAsync ---

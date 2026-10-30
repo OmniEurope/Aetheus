@@ -1,5 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Sections
 
 @if (!Embedded)
 {
@@ -13,21 +14,23 @@
         <Badges>
             <HelpLink PageKey="templates" />
         </Badges>
+        <ActionsContent>
+            <SectionOutlet SectionName="@PageHeaderActions.SectionName" />
+        </ActionsContent>
     </OmniPageHeader>
 }
 
-<div class="pipeline-list-toolbar">
-    <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
-        <div class="pipeline-list-spacer"></div>
-        @if (_canWrite)
-        {
-            <OmniOverflowMenu Label="@L["Tools"]">
-                <OmniMenuItem OnClick="@OnImportClickAsync"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
-            </OmniOverflowMenu>
-            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateTemplate" title="@L["NewTemplate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
-        }
-    </OmniRow>
-</div>
+@* Recette R-109 (rule 1 of R-30): Create, the main action, sits in the page header (the pipelines hub's, or this
+   page's own), with Import in the menu beside it. *@
+@if (_canWrite)
+{
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
+        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@CreateTemplate" title="@L["NewTemplate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        <OmniOverflowMenu Label="@L["Tools"]">
+            <OmniMenuItem OnClick="@OnImportClickAsync"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent>@L["Import"]</ChildContent></OmniMenuItem>
+        </OmniOverflowMenu>
+    </SectionContent>
+}
 
 @if (_showImporter)
 {
@@ -63,6 +66,10 @@ else
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
                         <a href="@($"/templates/{template.Id}")" class="pipeline-name-link" title="@template.Name"
                             @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@template.Name</a>
+                        @if (template.IsShared)
+                        {
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@L["SharedTemplate"]</OmniBadge>
+                        }
                     </OmniStack>
                 </Template>
             </OmniDataGridColumn>
@@ -119,7 +126,8 @@ else
                 <Template Context="template">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                         @* STD-BTN detection 11: Edit and Delete visible (Use template without write access), the other actions in the menu. *@
-                        @if (_canWrite)
+                        @* A template the user may not change (a shared one, or no Write on it, from the server's CanEdit) opens read-only: no Edit or Delete. *@
+                        @if (_canWrite && template.CanEdit)
                         {
                             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => EditTemplate(template))" title="@L["Edit"]" Label="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                             <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteTemplateAsync(template))" title="@L["Delete"]" Label="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
@@ -129,7 +137,7 @@ else
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]" Label="@L["UseTemplate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon></OmniButton>
                         }
                         <OmniOverflowMenu Label="@L["MoreActions"]">
-                            @if (_canWrite)
+                            @if (_canWrite && template.CanEdit)
                             {
                                 <OmniMenuItem OnClick="@(() => UseTemplate(template))" title="@L["UseTemplate"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent>@L["UseTemplate"]</ChildContent></OmniMenuItem>
                             }

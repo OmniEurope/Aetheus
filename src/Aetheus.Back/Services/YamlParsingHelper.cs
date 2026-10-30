@@ -40,26 +40,62 @@ public static class YamlParsingHelper
     /// PipelineService and PipelineRunService. Returns <c>null</c> when the YAML is invalid.
     /// </summary>
     public static PipelineYamlDefinition? ParseAndValidate(string yaml, ILogger? logger = null)
+        => ParseAndValidate(yaml, out _, logger);
+
+    /// <summary>
+    /// Same as <see cref="ParseAndValidate(string, ILogger?)"/>, and says why the YAML is refused:
+    /// <paramref name="error"/> is the parser's own message (it names the line and column of a syntax
+    /// error) or the semantic check that failed, and <c>null</c> when the YAML is valid.
+    /// </summary>
+    public static PipelineYamlDefinition? ParseAndValidate(string yaml, out string? error, ILogger? logger = null)
     {
+        error = null;
         try
         {
             var definition = Deserializer.Deserialize<PipelineYamlDefinition>(yaml);
-            if (definition is null) return null;
+            if (definition is null)
+            {
+                error = "the document defines nothing";
+                return null;
+            }
 
-            if (definition.VariableLibraries.Any(string.IsNullOrWhiteSpace)) return null;
-            if (definition.Vaults.Any(string.IsNullOrWhiteSpace)) return null;
+            if (definition.VariableLibraries.Any(string.IsNullOrWhiteSpace))
+            {
+                error = "variable_libraries contains an empty entry";
+                return null;
+            }
+            if (definition.Vaults.Any(string.IsNullOrWhiteSpace))
+            {
+                error = "vaults contains an empty entry";
+                return null;
+            }
 
             return definition;
         }
-        catch (YamlDotNet.Core.YamlException)
+        catch (YamlDotNet.Core.YamlException ex)
         {
+            error = DescribeParseError(ex);
             return null;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException)
         {
             logger?.LogWarning(ex, "Unexpected error parsing pipeline YAML");
+            error = ex.Message;
             return null;
         }
+    }
+
+    /// <summary>
+    /// The parser's message with the place it refers to. A YamlDotNet syntax error keeps its line and
+    /// column on the exception, not in its message ("While scanning a plain scalar value, found invalid
+    /// mapping." alone does not say where), so a reader of a refusal can find the offending line.
+    /// </summary>
+    public static string DescribeParseError(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        return exception is YamlDotNet.Core.YamlException { Start.Line: > 0 } yaml
+            ? $"line {yaml.Start.Line}, column {yaml.Start.Column}: {yaml.Message}"
+            : exception.Message;
     }
 
     /// <summary>
@@ -70,7 +106,8 @@ public static class YamlParsingHelper
     /// DAG (S-TECH-55) - those sibling names map directly to pseudo-stage names. Cross-stage
     /// <c>depends_on</c> resolves to ALL jobs of the referenced stage so the next stage waits for
     /// every parallel job to complete.
-    /// Stages using the legacy <c>steps</c> format pass through unchanged.
+    /// Stages using the legacy <c>steps</c> format keep their name and steps; only a <c>depends_on</c>
+    /// naming a jobs-stage is expanded to that stage's jobs, as for a job.
     /// </summary>
     public static List<PipelineStageDefinition> FlattenJobs(PipelineYamlDefinition definition)
     {
@@ -95,19 +132,40 @@ public static class YamlParsingHelper
         IReadOnlyDictionary<string, List<string>> allJobsPerStage,
         ICollection<PipelineStageDefinition> result)
     {
-        if (stage.Jobs.Count == 0)
+        var isLegacy = stage.Jobs.Count == 0;
+        var externalDependencies = ExpandDependencies(stage.DependsOn, allJobsPerStage, keepWrittenNames: isLegacy);
+        if (isLegacy)
         {
-            result.Add(stage.Isolation is null && defaultIsolation is not null
-                ? stage with { Isolation = defaultIsolation }
-                : stage);
+            // A legacy (steps) stage keeps its own name and steps; only its dependencies are rewritten.
+            var legacy = externalDependencies.SequenceEqual(stage.DependsOn)
+                ? stage
+                : stage with { DependsOn = externalDependencies };
+            result.Add(legacy.Isolation is null && defaultIsolation is not null
+                ? legacy with { Isolation = defaultIsolation }
+                : legacy);
             return;
         }
-        var externalDependencies = stage.DependsOn
-            .SelectMany(dependency => allJobsPerStage.GetValueOrDefault(dependency, [dependency]))
-            .ToList();
         foreach (var job in stage.Jobs)
             result.Add(CreateJobStage(defaultIsolation, stage, job, externalDependencies));
     }
+
+    /// <summary>
+    /// A dependency on a jobs-stage stands for all its jobs, the only names that carry step runs. With
+    /// <paramref name="keepWrittenNames"/> (a legacy stage), a dependency on a stage that is not a
+    /// jobs-stage stays exactly as written, so a wrong case is still reported by the definition validator
+    /// instead of being corrected silently.
+    /// </summary>
+    private static List<string> ExpandDependencies(
+        IEnumerable<string> dependsOn,
+        IReadOnlyDictionary<string, List<string>> allJobsPerStage,
+        bool keepWrittenNames) =>
+        [.. dependsOn.SelectMany(dependency =>
+        {
+            var expanded = allJobsPerStage.GetValueOrDefault(dependency, [dependency]);
+            return keepWrittenNames && expanded is [var only] && string.Equals(only, dependency, StringComparison.OrdinalIgnoreCase)
+                ? [dependency]
+                : expanded;
+        })];
 
     private static PipelineStageDefinition CreateJobStage(
         PipelineIsolationDefinition? defaultIsolation,

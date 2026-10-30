@@ -36,6 +36,10 @@ public sealed class PipelinesControllerAgentReportsTests
     private void Allow(Permission permission, bool allowed) =>
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 3, permission, Arg.Any<CancellationToken>()).Returns(allowed);
 
+    // R-11: the run dialog's parameters belong to running the pipeline, not to editing it.
+    private void AllowRun(bool allowed) =>
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.PipelineRun, 3, Arg.Any<CancellationToken>()).Returns(allowed);
+
     [Theory]
     [InlineData(true, typeof(OkResult))]
     [InlineData(false, typeof(NotFoundResult))]
@@ -143,9 +147,9 @@ public sealed class PipelinesControllerAgentReportsTests
     }
 
     [Fact]
-    public async Task Parameters_AreForbiddenToANonWriter()
+    public async Task Parameters_AreForbiddenWithoutTheRunPermission()
     {
-        Allow(Permission.Write, false);
+        AllowRun(false);
 
         Assert.IsType<ForbidResult>((await Agent().GetRunParameters(3, null, TestContext.Current.CancellationToken)).Result);
         await _runs.DidNotReceiveWithAnyArgs().GetRunParametersAsync(default, default, TestContext.Current.CancellationToken);
@@ -157,7 +161,7 @@ public sealed class PipelinesControllerAgentReportsTests
     [InlineData("a b")]
     public async Task Parameters_ForAnInvalidBranch_AreABadRequest(string branch)
     {
-        Allow(Permission.Write, true);
+        AllowRun(true);
 
         Assert.IsType<BadRequestObjectResult>((await Agent().GetRunParameters(3, branch, TestContext.Current.CancellationToken)).Result);
         await _runs.DidNotReceiveWithAnyArgs().GetRunParametersAsync(default, default, TestContext.Current.CancellationToken);
@@ -169,7 +173,7 @@ public sealed class PipelinesControllerAgentReportsTests
     [InlineData("release/1.2")]
     public async Task Parameters_ForTheDefaultOrAValidBranch_AreRead(string? branch)
     {
-        Allow(Permission.Write, true);
+        AllowRun(true);
         List<PipelineRunParameterDto> parameters = [new PipelineRunParameterDto()];
         _runs.GetRunParametersAsync(3, branch, Arg.Any<CancellationToken>()).Returns(parameters);
 

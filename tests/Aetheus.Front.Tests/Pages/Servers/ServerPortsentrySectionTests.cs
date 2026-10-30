@@ -56,15 +56,10 @@ public class ServerPortsentrySectionTests : BunitContext
         Assert.Contains("Restart", cut.Markup, StringComparison.Ordinal);
     }
 
+    // Same header rule as Apache (R-120): installed and running are the normal state, the version is in the page
+    // title and the blocked count on its tab, so none of them is repeated in the status bar.
     [Fact]
-    public void Renders_InstalledState_ShowsInstalledText()
-    {
-        var cut = RenderInstalled();
-        Assert.Contains("Installed", cut.Markup);
-    }
-
-    [Fact]
-    public void Renders_InstalledWithVersion_ShowsVersionNumber()
+    public void Renders_InstalledAndRunning_DoesNotRepeatTheNormalState()
     {
         var cut = RenderInstalled(new PortsentryDataDto
         {
@@ -73,7 +68,35 @@ public class ServerPortsentrySectionTests : BunitContext
             Version = "1.2.3",
             BlockedCount = 2
         });
-        Assert.Contains("1.2.3", cut.Markup);
+        Assert.DoesNotContain("Installed", cut.FindAll(".omni-badge").Select(b => b.TextContent.Trim()));
+        Assert.DoesNotContain("Running", cut.FindAll(".omni-badge").Select(b => b.TextContent.Trim()));
+        Assert.DoesNotContain("1.2.3", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("2 BlockedIps", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_InstalledButStopped_SaysStopped()
+    {
+        var cut = RenderInstalled(new PortsentryDataDto { IsInstalled = true, IsRunning = false, Mode = "atcp" });
+        Assert.Contains("Stopped", cut.FindAll(".omni-badge").Select(b => b.TextContent.Trim()));
+        Assert.Contains("PortsentryMode_atcp", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ATCP", "PortsentryMode_atcp")]
+    [InlineData("sudp", "PortsentryMode_sudp")]
+    public void Renders_Mode_InWords(string mode, string expectedKey)
+    {
+        var cut = RenderInstalled(new PortsentryDataDto { IsInstalled = true, IsRunning = true, Mode = mode });
+        Assert.Contains(expectedKey, cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain($"Mode: {mode}", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_UnknownMode_IsNotShownRaw()
+    {
+        var cut = RenderInstalled(new PortsentryDataDto { IsInstalled = true, IsRunning = true, Mode = "weird" });
+        Assert.DoesNotContain("weird", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]

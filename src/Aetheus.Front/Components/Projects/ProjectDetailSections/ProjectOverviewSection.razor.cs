@@ -111,8 +111,10 @@ public partial class ProjectOverviewSection : IAsyncDisposable
     private bool ShowGettingStarted => Project is not null && _gitStateLoaded
         && (!GettingStartedComplete || _gettingStartedLastShow);
 
+    // R71: a library a pipeline still waits for keeps the library step « À faire », so the list is not finished.
     private bool GettingStartedComplete => Project is not null
-        && _hasGitRepository && Project.EnvironmentCount > 0 && HasServer && Project.Pipelines.Count > 0;
+        && _hasGitRepository && Project.EnvironmentCount > 0 && HasServer && Project.Pipelines.Count > 0
+        && _unmet.Count == 0;
 
     /// <summary>
     /// Recette R3-67: a finished checklist is shown one last time, saying so, then never again for
@@ -132,6 +134,21 @@ public partial class ProjectOverviewSection : IAsyncDisposable
 
         _gettingStartedLastShow = true;
         await Preferences.SetAsync(PreferenceKeys.GettingStartedClosed(projectId), true);
+    }
+
+    /// <summary>
+    /// R71: the finished checklist's last display carries a Done button that hides it for good (the
+    /// preference is already written by the first visit; it is written again so the choice never
+    /// depends on that earlier write). An unfinished checklist has no such button.
+    /// </summary>
+    private EventCallback GettingStartedDone => GettingStartedComplete
+        ? EventCallback.Factory.Create(this, HideGettingStartedAsync)
+        : default;
+
+    private async Task HideGettingStartedAsync()
+    {
+        _gettingStartedLastShow = false;
+        await Preferences.SetAsync(PreferenceKeys.GettingStartedClosed(Project!.Id), true);
     }
 
     /// <summary>Runner availability includes servers attached directly or through project

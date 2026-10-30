@@ -20,8 +20,9 @@
         @* Offered only when the platform setting allows it; the backend refuses it otherwise. *@
         @if (RunToEndAllowed)
         {
-            <OmniFormField For="launch-run-to-end" Help="@L["RunToEndHelp"]" Class="run-params-field">
-                <OmniSwitch Id="launch-run-to-end" @bind-Value="_runToEnd">@L["RunToEnd"]</OmniSwitch>
+            @* Drawn like the boolean parameters above: the label carries the "?", the switch sits under it. *@
+            <OmniFormField For="launch-run-to-end" Label="@L["RunToEnd"]" Help="@L["RunToEndHelp"]" Class="run-params-field">
+                <OmniSwitch Id="launch-run-to-end" @bind-Value="_runToEnd" aria-labelledby="launch-run-to-end-label" />
             </OmniFormField>
         }
 

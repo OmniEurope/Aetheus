@@ -13,6 +13,7 @@ public abstract class RealtimeAdminGridPageBase<T> : ComponentBase, IAsyncDispos
     [Inject] protected BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] protected HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] protected UiActions Ui { get; set; } = default!;
+    [Inject] protected BusyVeil Veil { get; set; } = default!;
 
     protected AetheusDataGrid<T>? _grid;
     protected int _totalCount;

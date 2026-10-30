@@ -284,7 +284,7 @@ public sealed class SmokeOperationExecutor(
         var containerEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (source, mapped) in new[]
         {
-            ("AETHEUS_SMOKE_ADMIN_USER", "E2E_ADMIN_USER"),
+            ("AETHEUS_SMOKE_ADMIN_USER", "E2E_ADMIN_EMAIL"),
             ("AETHEUS_SMOKE_ADMIN_PASSWORD", "E2E_ADMIN_PASSWORD")
         })
         {

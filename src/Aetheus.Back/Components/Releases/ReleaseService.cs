@@ -611,11 +611,14 @@ public class ReleaseService(
     }
 
     public async Task<PaginatedResult<ReleaseDto>> GetServerReleasesAsync(
-        int serverId, PaginationRequest request, CancellationToken ct = default)
+        int serverId, PaginationRequest request, CancellationToken ct = default, List<int>? accessibleIds = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         var (page, pageSize) = request.Normalize();
-        var (columnFilters, releaseIds) = await ListFilters.ResolveAsync(request.Filters, null, null, serverId, ct).ConfigureAwait(false);
+        var (columnFilters, releaseIds) = await ListFilters.ResolveAsync(request.Filters, null, accessibleIds, serverId, ct).ConfigureAwait(false);
+        // R-46: a server can hold releases of projects of another organization; keep the readable ones.
+        if (accessibleIds is not null)
+            releaseIds = releaseIds is null ? [.. accessibleIds] : [.. releaseIds.Where(accessibleIds.Contains)];
         var (releases, total) = await repo.GetReleasesForServerPagedAsync(
             serverId, page, pageSize, ct, request.SortBy, request.SortDescending, columnFilters, releaseIds).ConfigureAwait(false);
         return new PaginatedResult<ReleaseDto>

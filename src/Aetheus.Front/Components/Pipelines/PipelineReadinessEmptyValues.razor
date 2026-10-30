@@ -22,7 +22,17 @@
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PipelineSetupReadinessEmptyValueDto" Key="key" Title="@L[KeyTitleKey]" Property="Key">
             <Template Context="row">
-                @if (PipelineReadinessText.EmptyValueKeyHref(IsVault, row, ReturnUrl) is { } href)
+                @if (FillInDialog && row.OwnerId is not null)
+                {
+                    @* R-59: in the setup wizard the key opens a dialog to fill it, never the page of its library. *@
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
+                        <code>@row.Key</code>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => FillAsync(row))"
+                                    title="@FillLabel(row)" Label="@FillLabel(row)"
+                                    data-testid="setup-readiness-empty-fill"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
+                    </OmniStack>
+                }
+                else if (PipelineReadinessText.EmptyValueKeyHref(IsVault, row, ReturnUrl) is { } href)
                 {
                     <OmniLink Href="@href" data-testid="setup-readiness-empty-key"><code>@row.Key</code></OmniLink>
                 }

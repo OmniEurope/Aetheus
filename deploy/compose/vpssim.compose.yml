@@ -54,7 +54,7 @@ services:
     environment:
       - AGENT_AUTOINSTALL=${VPSSIM_AGENT:-0}
       - BACKEND_URL=${VPSSIM_BACKEND_URL:-https://host.docker.internal:5301}
-      - ADMIN_USER=${VPSSIM_ADMIN_USER:-admin}
+      - ADMIN_EMAIL=${VPSSIM_ADMIN_EMAIL:-admin@aetheus.local}
       - ADMIN_PASSWORD=${VPSSIM_ADMIN_PASSWORD:-}
       - AGENT_TOKEN=${VPSSIM_AGENT_TOKEN:-}
       - AGENT_NAME=${VPSSIM_AGENT_NAME:-vpssim}

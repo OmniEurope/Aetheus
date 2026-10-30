@@ -60,7 +60,17 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
         await onOutput(
             $"Verdict {target}: {gate.Status} - {gate.ReportCount} rapports, {gate.FindingCount} findings, "
             + $"{gate.BlockerCount} blocages, {gate.WarningCount} avertissements, "
-            + $"note {gate.Grade?.OverallGrade?.ToString() ?? "incomplète"}.", level).ConfigureAwait(false);
+            + (gate.Grade?.OverallGrade is { } letter ? $"note {letter}." : $"note : {GradeText(gate.Grade)}."), level).ConfigureAwait(false);
+        // Run #2958: a rejected grading rule is an F; the log says which rule and why, never a bare letter.
+        foreach (var rejected in Rejections(gate.Grade))
+            await onOutput($"Règle de notation rejetée (note F) {rejected.Key} : {rejected.Rejection}", TaskLogLevel.Warning)
+                .ConfigureAwait(false);
+        // Recette R-23 (W8): the grade travels as an output of the step, so the candidate that triggered this analysis
+        // receives it (a trigger step hands up its child's outputs) and grade-candidate-from-gates seals it into the
+        // release. A gate with no grade says "none", never a letter it did not compute.
+        await onOutput(
+            $"##aetheus[setvariable name=ANALYSIS_{target.ToUpperInvariant()}_GRADE]{gate.Grade?.OverallGrade?.ToString() ?? "none"}",
+            TaskLogLevel.Info).ConfigureAwait(false);
         // A blocked policy verdict is valid evidence and must degrade the assurance grade without
         // masquerading as a producer failure. Only unavailable/incomplete gate evidence is technical.
         return new ExecutorResult(gate.Status == AnalysisGateStatus.Error ? 1 : 0, false);
@@ -74,7 +84,7 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
             .AppendLine()
             .AppendLine($"- Run : [{gate.PipelineRunId}](/pipelines/runs/{gate.PipelineRunId})")
             .AppendLine($"- Verdict : **{gate.Status}**")
-            .AppendLine($"- Note globale : **{gate.Grade?.OverallGrade?.ToString() ?? "incomplète"}**")
+            .AppendLine($"- Note globale : **{GradeText(gate.Grade)}**")
             .AppendLine($"- Domaine limitant : {gate.Grade?.LimitingDomain?.ToString() ?? "indisponible"}")
             .AppendLine($"- Snapshot du barème : `{gate.Grade?.SnapshotHash ?? "indisponible"}`")
             .AppendLine($"- Rapports : {gate.ReportCount}")
@@ -102,7 +112,24 @@ public sealed class AnalysisGateOperationExecutor(IServerApiClient apiClient) : 
         else
             foreach (var domain in gate.Grade.Domains)
                 text.AppendLine($"| {domain.Domain} | {domain.Grade?.ToString() ?? "-"} | {domain.Completeness} | {(domain.Required ? "oui" : "non")} |");
+        var rejections = Rejections(gate.Grade);
+        if (rejections.Count == 0) return;
+        text.AppendLine()
+            .AppendLine("## Règles de notation rejetées (note F)")
+            .AppendLine();
+        foreach (var rejected in rejections)
+            text.AppendLine($"- `{Escape(rejected.Key)}` : {Escape(rejected.Rejection!)}");
     }
+
+    /// <summary>The overall letter, or "none (nothing measured)" for a grade with no letter: since run #2958 a
+    /// rejected grading is an F, so a missing letter only means that no rule applied.</summary>
+    private static string GradeText(AnalysisGradeSummaryDto? grade) =>
+        grade?.OverallGrade?.ToString() ?? "aucune (aucune mesure)";
+
+    private static List<AnalysisGradeMeasureDto> Rejections(AnalysisGradeSummaryDto? grade) =>
+        grade?.Domains.SelectMany(domain => domain.Measures)
+            .Where(measure => !string.IsNullOrWhiteSpace(measure.Rejection))
+            .ToList() ?? [];
 
     private static void AppendViolations(StringBuilder text, AnalysisRunGateDto gate)
     {

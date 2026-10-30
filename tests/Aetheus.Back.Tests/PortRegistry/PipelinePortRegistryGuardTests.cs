@@ -96,7 +96,11 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
         var problems = await _sut.FindPortConflictsAsync(
             DeployDefinition(), DeployVariables, organizationId: 1, projectId: 9, Ct);
 
-        var problem = Assert.Single(problems.Blocking);
+        var found = Assert.Single(problems.Blocking);
+        Assert.Equal(PipelineProblemCodes.PortRegisteredToAnother, found.Code);
+        Assert.Equal("10031", found.Parameters["port"]);
+        Assert.Equal("portfolio-prod-front", found.Parameters["owner"]);
+        var problem = found.English;
         Assert.Contains("10031", problem, StringComparison.Ordinal);
         Assert.Contains("portfolio-prod-front", problem, StringComparison.Ordinal);
         Assert.Contains("vps2577917", problem, StringComparison.Ordinal);
@@ -133,7 +137,7 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
             BlueGreenDefinition(), new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
             organizationId: 1, projectId: 9, Ct);
 
-        Assert.Contains("10027", Assert.Single(problems.Blocking), StringComparison.Ordinal);
+        Assert.Contains("10027", Assert.Single(problems.Blocking).English, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -208,7 +212,9 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
         // The default must not block: an observation may be stale, and refusing on it alone would stop
         // a deployment over a scan nobody confirmed.
         Assert.Empty(report.Blocking);
-        var warning = Assert.Single(report.Warnings);
+        var warningProblem = Assert.Single(report.Warnings);
+        Assert.Equal(PipelineProblemCodes.PortSeenListening, warningProblem.Code);
+        var warning = warningProblem.English;
         Assert.Contains("10031", warning, StringComparison.Ordinal);
         Assert.Contains("grafana", warning, StringComparison.Ordinal);
     }
@@ -224,7 +230,7 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
         var report = await _sut.FindPortConflictsAsync(
             DeployDefinition(policy), DeployVariables, organizationId: 1, projectId: 9, Ct);
 
-        Assert.Contains("10031", Assert.Single(report.Blocking), StringComparison.Ordinal);
+        Assert.Contains("10031", Assert.Single(report.Blocking).English, StringComparison.Ordinal);
         Assert.Empty(report.Warnings);
     }
 
@@ -252,7 +258,7 @@ public sealed class PipelinePortRegistryGuardTests : IDisposable
             var report = await _sut.FindPortConflictsAsync(
                 DeployDefinition(policy), DeployVariables, organizationId: 1, projectId: 9, Ct);
 
-            Assert.Contains("portfolio-prod-front", Assert.Single(report.Blocking), StringComparison.Ordinal);
+            Assert.Contains("portfolio-prod-front", Assert.Single(report.Blocking).English, StringComparison.Ordinal);
         }
     }
 

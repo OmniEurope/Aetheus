@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
+using Aetheus.Front.Tests.TestDoubles;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,12 +32,13 @@ public class MonitoredAppsListTests : BunitContext
     public void RendersApps_AndShowsAddButton_WhenCanWrite()
     {
         SeedApps();
-        var cut = Render<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
+        // The add button sits in the project header (R-109), so the list is rendered next to the header outlet.
+        var cut = this.RenderWithPageHeader<MonitoredAppsList>(p => p.Add(c => c.ProjectId, 1));
         cut.WaitForState(() => cut.Markup.Contains("toto-qa"));
 
         Assert.Contains("toto-qa", cut.Markup);
         Assert.Contains("AppHealthDown", cut.Markup);   // status badge (stub localizer echoes the key)
-        Assert.Contains("AddMonitoredApp", cut.Markup);  // create button visible with write permission
+        Assert.Contains("AddMonitoredApp", cut.Find(".test-outlet").TextContent);  // create button visible with write permission
     }
 
     [Fact]

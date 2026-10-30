@@ -1,12 +1,12 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 
-<div>
-    @* Server-verified hash-chain integrity for this entry (never an optimistic default). *@
-    <OmniCard Class="omni-u-mb-md">
+<OmniStack>
+    @* Server-verified hash-chain integrity for this entry (never an optimistic default).
+       Recette R-116: while it is verified, OE's busy veil lies over the card, no loader beside the wording. *@
+    <OmniCard Class="@(_verifying ? "omni-busy" : null)" aria-busy="@(_verifying ? "true" : "false")">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             @if (_verifying)
             {
-                <AetheusLoader Size="OmniControlSize.Small" Centered="false" />
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["AuditVerifying"]</OmniText>
             }
             else if (_verification is null)
@@ -17,7 +17,7 @@
             else if (_verification.IsValid)
             {
                 <OmniIcon Name="OmniIconName.ShieldCheck" Class="omni-u-text-success" />
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["AuditChainIntact"]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["AuditChainIntact"]</OmniBadge>
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">
                     @string.Format(L["AuditVerifiedThrough"], _verification.TotalEntries)
                 </OmniText>
@@ -25,7 +25,7 @@
             else
             {
                 <OmniIcon Name="OmniIconName.ShieldSlash" Class="omni-u-text-danger" />
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@L["AuditChainBroken"]</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Danger))" Fill="OmniFill.Solid" Tone="OmniTone.Danger">@L["AuditChainBroken"]</OmniBadge>
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">
                     @string.Format(L["AuditBreakAt"], _verification.FirstInvalidId)
                 </OmniText>
@@ -41,7 +41,7 @@
         </OmniStack>
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Lightning" Class="run-tile-icon" /> @L["Action"]</OmniText>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@ActionBadge">@ActionLabel</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(ActionBadge))" Fill="OmniFill.Solid" Tone="@ActionBadge">@ActionLabel</OmniBadge>
         </OmniStack>
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Target" Class="run-tile-icon" /> @L["Target"]</OmniText>
@@ -55,15 +55,15 @@
 
     @if (!string.IsNullOrWhiteSpace(Log.Details))
     {
-        <OmniCodeBlock Code="@FormattedDetails" Title="@L["Details"]" Wrap="true" Class="omni-u-mt-md code-block-bounded code-block-tall" />
+        <OmniCodeBlock Code="@FormattedDetails" Title="@L["Details"]" Wrap="true" Class="code-block-bounded code-block-tall" />
     }
 
     <DialogFooter CancelText="@L["Close"]" OnCancel="Close">
         <SecondaryContent>
             @if (!string.IsNullOrWhiteSpace(Log.Details))
             {
-                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyAsync"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon><ChildContent><span>@L["Copy"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Primary" OnClick="CopyAsync" title="@L["Copy"]" Label="@L["Copy"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
             }
         </SecondaryContent>
     </DialogFooter>
-</div>
+</OmniStack>

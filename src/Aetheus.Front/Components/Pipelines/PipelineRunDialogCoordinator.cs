@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: EUPL-1.2
-using System.Text.Json;
-using Polly.CircuitBreaker;
-using Polly.Timeout;
-
 namespace Aetheus.Front.Components.Pipelines;
 
 /// <summary>Coordinates what a pipeline launch needs to know: the branch and the queue parameters.</summary>
 public sealed class PipelineRunDialogCoordinator(
     ApiClient api,
     OmniDialogService dialog,
+    NotifyHelper toast,
     IStringLocalizer<AppStrings> localizer)
 {
     /// <summary>
@@ -44,9 +41,9 @@ public sealed class PipelineRunDialogCoordinator(
             }
         }
 
-        List<PipelineRunParameterDto> declared;
-        try { declared = await api.Pipelines.GetPipelineRunParametersAsync(pipelineId, selectedBranch).ConfigureAwait(false); }
-        catch (Exception exception) when (IsTransportFailure(exception)) { return null; }
+        // A declaration that cannot be read abandons the launch, and says why.
+        var declared = await ReadDeclaredOrNotifyAsync(pipelineId, selectedBranch).ConfigureAwait(false);
+        if (declared is null) return null;
 
         var (releases, releaseTotal) = await LoadReleasesIfAParameterTakesOneAsync(pipelineId, declared);
         var runToEndAllowed = await IsRunToEndAllowedAsync().ConfigureAwait(false);
@@ -73,8 +70,13 @@ public sealed class PipelineRunDialogCoordinator(
         {
             return (await api.Pipelines.GetRunOptionsAsync().ConfigureAwait(false))?.RunToEndAllowed == true;
         }
-        catch (Exception exception) when (IsTransportFailure(exception))
+        catch (Exception exception) when (RunParametersReading.IsTransportFailure(exception))
         {
+            // The launch goes on without the option, so this is not an abandon. An answer with a status
+            // (an older backend's 404, a 500) was already shown by the global notifier; only a request that
+            // got no answer at all is told here, so the option never vanishes without a word, nor twice.
+            if (exception is not HttpRequestException { StatusCode: not null })
+                RunParametersReading.NotifyUnreachable(toast, localizer);
             return false;
         }
     }
@@ -82,20 +84,48 @@ public sealed class PipelineRunDialogCoordinator(
     /// <summary>
     /// Hands the dialog a way to re-read the declaration when the user picks another branch, since
     /// a branch's YAML may declare a different <c>parameters:</c> block. Returns <c>null</c> on a
-    /// failed read so the dialog keeps the fields it already shows instead of emptying the form.
+    /// failed read so the dialog keeps the fields it already shows instead of emptying the form;
+    /// the reason is shown first.
     /// </summary>
     private Func<string?, Task<List<PipelineRunParameterDto>?>> ReadParametersOrNull(int pipelineId) =>
-        async branch =>
+        branch => ReadDeclaredOrNotifyAsync(pipelineId, branch);
+
+    /// <summary>Reads the parameters a launch declares, or shows why it could not (R-47) and returns
+    /// <c>null</c>: no launch path may abandon in silence. Every launch path reads through here, so the production server
+    /// a deployment asks for as free text is offered as a choice on each of them (R-76).</summary>
+    private async Task<List<PipelineRunParameterDto>?> ReadDeclaredOrNotifyAsync(int pipelineId, string? branch)
+    {
+        var declared = await RunParametersReading.ReadOrNotifyAsync(api, toast, localizer, pipelineId, branch).ConfigureAwait(false);
+        return declared is null ? null : await WithProjectServersAsync(pipelineId, declared).ConfigureAwait(false);
+    }
+
+    /// <summary>Recette R-76: a deployment pipeline written without a server asks for the production server as free text. The
+    /// servers the project has (its own and those of its production environment) are offered as a choice instead, the
+    /// environment's one preselected. A picking aid like the release list: failing to read the servers leaves the parameter as
+    /// declared and never blocks a launch.</summary>
+    private async Task<List<PipelineRunParameterDto>> WithProjectServersAsync(int pipelineId, List<PipelineRunParameterDto> declared)
+    {
+        if (!declared.Exists(RunParameterServerOffer.IsAwaitingServer)) return declared;
+        try
         {
-            try
-            {
-                return await api.Pipelines.GetPipelineRunParametersAsync(pipelineId, branch).ConfigureAwait(false);
-            }
-            catch (Exception exception) when (IsTransportFailure(exception))
-            {
-                return null;
-            }
-        };
+            var pipeline = await api.Pipelines.GetPipelineAsync(pipelineId).ConfigureAwait(false);
+            if (pipeline?.ProjectId is not { } projectId) return declared;
+            // Two independent HTTP reads: sent together, the dialog waits for the slower one only.
+            var projectServersRead = api.Projects.GetProjectServersAsync(projectId);
+            var environmentsRead = api.Servers.GetAllEnvironmentsAsync(projectId);
+            await Task.WhenAll(projectServersRead, environmentsRead).ConfigureAwait(false);
+            var projectServers = await projectServersRead.ConfigureAwait(false);
+            var production = (await environmentsRead.ConfigureAwait(false))
+                .Where(environment => environment.ProjectId == projectId && RunParameterServerOffer.IsProductionEnvironment(environment.Name))
+                .SelectMany(environment => environment.Servers.Select(server => server.ServerName))
+                .ToList();
+            return RunParameterServerOffer.Apply(declared, projectServers.Select(server => server.ServerName), production);
+        }
+        catch (Exception exception) when (RunParametersReading.IsTransportFailure(exception))
+        {
+            return declared;
+        }
+    }
 
     /// <summary>Load restorable releases only when a declared parameter can receive one so
     /// unrelated pipelines avoid the request; respect the API page ceiling and report when the
@@ -112,7 +142,7 @@ public sealed class PipelineRunDialogCoordinator(
                 .ConfigureAwait(false);
             return (page?.Items ?? [], page?.TotalCount ?? 0);
         }
-        catch (Exception exception) when (IsTransportFailure(exception))
+        catch (Exception exception) when (RunParametersReading.IsTransportFailure(exception))
         {
             // Purely a picking aid: failing to load it must never block a launch.
             return ([], 0);
@@ -123,19 +153,6 @@ public sealed class PipelineRunDialogCoordinator(
     /// release can be restored yet: the grid says so), the former 560 px otherwise.</summary>
     internal static string DialogWidth(IEnumerable<PipelineRunParameterDto> declared) =>
         RunParameterTargets.ReleaseFillTarget(declared) is not null ? "720px" : "560px";
-
-    /// <summary>
-    /// Everything a read of this API can throw short of a bug. <see cref="HttpRequestException"/>
-    /// alone is not enough: the front's handlers add resilience (timeout rejection, open circuit)
-    /// and a proxy answering HTML with a 200 surfaces as a <see cref="JsonException"/>. Letting any
-    /// of those escape would make a decorative load take down the launch dialog itself.
-    /// </summary>
-    private static bool IsTransportFailure(Exception exception) =>
-        exception is HttpRequestException
-            or JsonException
-            or OperationCanceledException
-            or TimeoutRejectedException
-            or BrokenCircuitException;
 
     internal static List<Aetheus.Shared.Components.Git.GitLightBranchDto> OrderBranches(
         IEnumerable<Aetheus.Shared.Components.Git.GitLightBranchDto> branches,
@@ -154,16 +171,18 @@ public sealed class PipelineRunDialogCoordinator(
     /// special case: <c>candidateVersion</c> is declared required with no default, so a deployment
     /// always stops for an explicit, confirmed choice, and nothing is ever selected silently.
     /// </summary>
+    /// <param name="prefill">R-72: values the caller already knows (the release to deploy again). The dialog opens
+    /// on them, always, even when nothing is missing, so the user confirms the run with one click instead of it
+    /// starting unseen.</param>
     /// <returns><c>Proceed</c> is false when the user cancelled, or when the declaration could not be read.</returns>
     public async Task<(bool Proceed, Dictionary<string, string>? Parameters)> ResolveDefaultParametersAsync(
-        int pipelineId, string? sourceBranch = null)
+        int pipelineId, string? sourceBranch = null, IReadOnlyDictionary<string, string>? prefill = null)
     {
-        List<PipelineRunParameterDto> declared;
-        try { declared = await api.Pipelines.GetPipelineRunParametersAsync(pipelineId, sourceBranch).ConfigureAwait(false); }
-        catch (Exception exception) when (IsTransportFailure(exception)) { return (false, null); }
+        var declared = await ReadDeclaredOrNotifyAsync(pipelineId, sourceBranch).ConfigureAwait(false);
+        if (declared is null) return (false, null);
         if (declared.Count == 0) return (true, null);
 
-        if (declared.Any(NeedsAnAnswer))
+        if (declared.Any(NeedsAnAnswer) || prefill is { Count: > 0 })
         {
             var (releases, releaseTotal) = await LoadReleasesIfAParameterTakesOneAsync(pipelineId, declared);
             var answered = await dialog.OpenAsync<RunParametersDialog>(
@@ -171,6 +190,7 @@ public sealed class PipelineRunDialogCoordinator(
                 new Dictionary<string, object?>
                 {
                     { "Parameters", declared },
+                    { "Prefill", prefill },
                     { "AvailableReleases", releases },
                     { "AvailableReleaseTotal", releaseTotal }
                 },

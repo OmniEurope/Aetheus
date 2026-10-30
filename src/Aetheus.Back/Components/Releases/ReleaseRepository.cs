@@ -350,9 +350,8 @@ public class ReleaseRepository(AppDbContext db) : IReleaseRepository
             .Select(step => step.PipelineRun.Pipeline.ProjectId)
             .Where(projectId => projectId != null)
             .Select(projectId => projectId!.Value);
-        var linkedProjectIds = db.ProjectServers
-            .Where(projectServer => projectServer.ServerId == serverId)
-            .Select(projectServer => projectServer.ProjectId);
+        // Linked directly, or through an environment of the project (R-83).
+        var linkedProjectIds = db.ProjectIdsOfServer(serverId);
         var projectIds = executedProjectIds.Union(linkedProjectIds).Distinct();
 
         return db.Releases

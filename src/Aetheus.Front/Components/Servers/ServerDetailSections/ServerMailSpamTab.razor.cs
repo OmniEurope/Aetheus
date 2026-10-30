@@ -15,10 +15,19 @@ public partial class ServerMailSpamTab
     [Parameter, EditorRequired] public int ServerId { get; set; }
     [Parameter] public bool CanManage { get; set; }
 
+    /// <summary>R-119: follows the task an action queues; the page is veiled until it ends.</summary>
+    [Parameter] public ServerTaskFollower? Follower { get; set; }
+
     private bool _busy;
 
     internal static string Score(double? score) =>
         score?.ToString("0.##", CultureInfo.CurrentCulture) ?? "?";
+
+    // R-119: the queued task is followed and the page veiled until it ends.
+    private void Followed(MailTaskQueuedDto? queued, string title)
+    {
+        if (queued is not null) Follower?.Follow(title, queued.TaskId);
+    }
 
     private async Task InstallAsync()
     {
@@ -26,6 +35,7 @@ public partial class ServerMailSpamTab
         try
         {
             var queued = await Api.Mail.InstallSpamFilterAsync(ServerId);
+            Followed(queued, L["MailSpamFilter"]);
             if (queued is not null) Toast.Success(L["TaskQueued"]);
             else Toast.Error(L["ActionFailed"]);
         }
@@ -41,6 +51,7 @@ public partial class ServerMailSpamTab
         try
         {
             var queued = await Api.Mail.QueueMailActionAsync(ServerId, new MailActionRequest { Action = action });
+            Followed(queued, L["MailSpamFilter"]);
             if (queued is not null) Toast.Success(L["TaskQueued"]);
             else Toast.Error(L["ActionFailed"]);
         }
@@ -69,6 +80,7 @@ public partial class ServerMailSpamTab
                 AddHeaderScore = result.AddHeaderScore,
                 GreylistScore = result.GreylistScore
             });
+            Followed(queued, L["MailSpamThresholds"]);
             if (queued is not null) Toast.Success(L["TaskQueued"]);
             else Toast.Error(L["ActionFailed"]);
         }
@@ -86,6 +98,7 @@ public partial class ServerMailSpamTab
         try
         {
             var queued = await Api.Mail.LearnSpamAsync(ServerId, new LearnSpamRequest { IsSpam = result.IsSpam, RawMessage = result.RawMessage });
+            Followed(queued, L["MailLearnTitle"]);
             if (queued is not null) Toast.Success(L["TaskQueued"]);
             else Toast.Error(L["ActionFailed"]);
         }

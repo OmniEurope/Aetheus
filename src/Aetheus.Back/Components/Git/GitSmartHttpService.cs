@@ -254,7 +254,9 @@ public class GitSmartHttpService(
         return psi;
     }
 
-    public async Task MarkPushedAsync(int projectId, string slug, IReadOnlyList<GitRefUpdate> updatedRefs, CancellationToken ct = default)
+    public async Task MarkPushedAsync(
+        int projectId, string slug, IReadOnlyList<GitRefUpdate> updatedRefs, CancellationToken ct = default,
+        string? pusherUsername = null)
     {
         // receive-pack has already accepted and persisted the refs before this callback starts. The
         // client is therefore free to close its HTTP request while these durable post-receive effects
@@ -300,7 +302,8 @@ public class GitSmartHttpService(
                 entity.Name,
                 entity.DefaultBranch,
                 ResolveSafeRepositoryPath(projectId, slug) ?? string.Empty,
-                updatedRefs));
+                updatedRefs,
+                pusherUsername));
     }
 
     private async Task UpdateDefaultBranchAsync(
@@ -361,8 +364,8 @@ public class GitSmartHttpService(
     }
 
 
-    public Task<bool> ValidateBasicAuthAsync(string username, string password, CancellationToken ct = default)
-        => authService.ValidateBasicAuthAsync(username, password, ct);
+    public Task<string?> AuthenticateBasicAsync(string email, string password, CancellationToken ct = default)
+        => authService.AuthenticateBasicAsync(email, password, ct);
 
     public Task<bool> IsRunActiveAsync(int runId, CancellationToken ct = default)
         => lightRepo.IsRunActiveAsync(runId, ct);

@@ -142,10 +142,15 @@ public sealed class PipelineTemplateService(
     {
         var template = await repo.FindTemplateAsync(id, ct).ConfigureAwait(false);
         if (template is null) return false;
+        // A shipped catalog template is extended from every organization (FindSharedTemplateByNameAsync),
+        // so its references are counted in all of them, not only in the platform organization.
+        int? scope = await IsSharedCatalogNameAsync(template.Name, template.OrganizationId, ct).ConfigureAwait(false)
+            ? null
+            : template.OrganizationId;
         var pipelineDefinitions = await repo.GetPipelineYamlDefinitionsByOrganizationAsync(
-            template.OrganizationId, ct).ConfigureAwait(false) ?? [];
+            scope, ct).ConfigureAwait(false) ?? [];
         var templateDefinitions = await repo.GetTemplateVersionYamlDefinitionsByOrganizationAsync(
-            template.OrganizationId, template.Id, ct).ConfigureAwait(false) ?? [];
+            scope, template.Id, ct).ConfigureAwait(false) ?? [];
         if (pipelineDefinitions.Concat(templateDefinitions)
             .Any(yaml => ReferencesTemplate(yaml, template.Name)))
             throw new ConflictException(
@@ -166,22 +171,13 @@ public sealed class PipelineTemplateService(
     public async Task<PipelineTemplateDto?> ImportTemplateAsync(
         string yamlContent, CancellationToken ct = default, int? organizationId = null)
     {
-        PipelineYamlDefinition? definition;
-        try
-        {
-            definition = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(yamlContent);
-        }
-        catch (Exception exception) when (exception is YamlDotNet.Core.YamlException
-            or InvalidOperationException or ArgumentException)
-        {
-            logger.LogWarning(exception, "Failed to parse imported YAML template");
-            return null;
-        }
-        if (definition is null) return null;
+        var (name, error) = ReadImportedTemplateName(yamlContent);
+        if (error is not null) logger.LogWarning(error, "Failed to parse imported YAML template");
+        if (name is null) return null;
 
         return await CreateTemplateAsync(new CreatePipelineTemplateRequest
         {
-            Name = string.IsNullOrWhiteSpace(definition.Name) ? "Imported Template" : definition.Name,
+            Name = name,
             Description = string.Empty,
             Category = "Imported",
             OrganizationId = organizationId,
@@ -202,6 +198,41 @@ public sealed class PipelineTemplateService(
             yamlContent, resolvedOrganizationId, parameters ?? new Dictionary<string, string>(), ct)
             .ConfigureAwait(false);
         return resolution.Yaml;
+    }
+
+    public async Task<bool> IsSharedCatalogTemplateAsync(int id, CancellationToken ct = default)
+    {
+        var template = await repo.GetTemplateAsync(id, ct).ConfigureAwait(false);
+        return template is not null
+            && await IsSharedCatalogNameAsync(template.Name, template.OrganizationId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsSharedCatalogNameAsync(string name, int organizationId, CancellationToken ct = default)
+    {
+        // Same normalization as FindSharedTemplateByNameAsync: a case variant of a catalog name held by
+        // the platform organization would be resolved as the shared template too.
+        if (!DeliveryTemplateCatalog.Definitions.ContainsKey(name.Trim().ToLowerInvariant())) return false;
+        var organization = await organizationRepository.GetByIdAsync(organizationId, ct).ConfigureAwait(false);
+        return string.Equals(
+            organization?.Slug, DeliveryTemplateCatalog.PlatformOrganizationSlug, StringComparison.Ordinal);
+    }
+
+    /// <summary>The name an imported YAML file gets as a template; null (with the parse error, if
+    /// any) when the file is not a pipeline definition.</summary>
+    internal static (string? Name, Exception? Error) ReadImportedTemplateName(string yamlContent)
+    {
+        PipelineYamlDefinition? definition;
+        try
+        {
+            definition = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(yamlContent);
+        }
+        catch (Exception exception) when (exception is YamlDotNet.Core.YamlException
+            or InvalidOperationException or ArgumentException)
+        {
+            return (null, exception);
+        }
+        if (definition is null) return (null, null);
+        return (string.IsNullOrWhiteSpace(definition.Name) ? "Imported Template" : definition.Name, null);
     }
 
     private async Task<int> GetDefaultOrganizationIdAsync(CancellationToken ct)

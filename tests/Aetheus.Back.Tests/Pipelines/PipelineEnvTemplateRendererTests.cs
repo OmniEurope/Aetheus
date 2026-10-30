@@ -52,6 +52,22 @@ public sealed class PipelineEnvTemplateRendererTests
     }
 
     [Fact]
+    public void EveryMissingAndEmptyVariable_IsReportedInTheSameRefusal()
+    {
+        var failure = Assert.Throws<BadRequestException>(() =>
+            PipelineEnvTemplateRenderer.Render(
+                "APPNAME=#{APPNAME}#\nDB_USER=#{DB_USER}#\nDB_NAME=#{DB_USER}#\nJWT_KEY=#{JWT_KEY}#\nADMIN=#{ADMIN_EMAIL}#\nOK=#{OK}#\n",
+                Variables(("OK", "fine"), ("ADMIN_EMAIL", ""))));
+
+        Assert.Contains("'APPNAME', 'DB_USER', 'JWT_KEY'", failure.Message, StringComparison.Ordinal);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(failure.Message, "'DB_USER'"));
+        Assert.Contains("empty: 'ADMIN_EMAIL'", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("'OK'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("vault", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("environment", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnEmptyVariable_Fails_BecauseComposeWouldReadItAsMissing()
     {
         var failure = Assert.Throws<BadRequestException>(() =>

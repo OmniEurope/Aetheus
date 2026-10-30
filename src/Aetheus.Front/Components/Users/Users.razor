@@ -6,21 +6,27 @@
 
 <div class="iam-page iam-list-page">
     <OmniPageHeader Title="@L["Users"]"
-        Class="iam-page-header" Subtitle="@Breadcrumb.Subtitle(L["UserManagement"])">
+        Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("group")" /></Icon>
         <Badges>
         <HelpLink PageKey="users" />
         </Badges>
         <ActionsContent>
+        @* R-10 (d): the site Admin, or an organization's administrator, who creates an account in its organizations. *@
+        @if (Auth.IsAdmin || Permissions.Can(PermissionKeys.OrganizationMembersManage))
+        {
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnCreate" title="@L["NewUser"]"><Icon><OmniIcon Name="OmniIconName.UserPlus" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        }
         </ActionsContent>
     </OmniPageHeader>
 
-    <AdminIdentityNav ActiveSection="users" />
+    <AdminIdentityNav ActiveSection="users" OrganizationChanged="@OnOrganizationChangedAsync" />
 
+    @* R-14: the failure alert and the grid surface are separated by this stack's gap, not by a margin of their own. *@
+    <OmniStack Class="iam-list-body">
     @if (_loadFailed)
     {
-        <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+        <OmniAlert Severity="OmniSeverity.Danger">
             @L["LoadFailed"]
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryLoadAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
         </OmniAlert>
@@ -31,27 +37,36 @@
             Count="@_totalCount" PageSize="20" IsLoading="@_loading" LoadData="@OnLoadData" ExportRead="@ReadExportAsync" Density="OmniDensity.Compact"
             Virtualize="@AetheusGrid.RemoteVirtualization"
             VirtualData="@(() => new OmniDataGridResult<UserDto>(_users, _totalCount))"
-            FullHeight="true" RowClick="@(user => Nav.NavigateTo($"/users/{user.Id}"))">
+            MinHeight="0" FullHeight="true" RowClick="@OnRowClick">
             <Columns>
                 <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="UserDto" Property="Username" Title="@L["Username"]" Filterable="true" >
                     <Template Context="user">
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.ExtraLarge" Align="OmniAlignment.Center">
-                            <a href="/users/@user.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@user.Username</a>
+                            @if (Auth.IsAdmin)
+                            {
+                                <a href="/users/@user.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@user.Username</a>
+                            }
+                            else
+                            {
+                                <OmniText Element="OmniTextElement.Span">@user.Username</OmniText>
+                            }
                         </OmniStack>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="UserDto" Property="Email" Title="@L["Email"]" Filterable="true" />
-                <OmniDataGridColumn TItem="UserDto" Key="Roles" ExportValue="@RolesExport" Title="@L["Roles"]" Width="220px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_roleNames" FilterSearchable="true" >
+                <OmniDataGridColumn TItem="UserDto" Property="Email" Title="@L["Email"]" Filterable="true" Visible="@Auth.IsAdmin" />
+                @* The e-mails and the site-wide roles are the site Admin's to read (the API leaves them out for an
+                   organization's administrator). *@
+                <OmniDataGridColumn TItem="UserDto" Key="Roles" Visible="@Auth.IsAdmin" ExportValue="@RolesExport" Title="@L["Roles"]" Width="220px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_roleNames" FilterSearchable="true" >
                     <Template Context="user">
                         <OmniRow Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                             @foreach (var role in user.Roles.Take(3))
                             {
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@GetRoleBadgeStyle(role)">@role</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.IdentificationBadge))" Fill="OmniFill.Solid" Tone="@GetRoleBadgeStyle(role)">@role</OmniBadge>
                             }
                             @if (user.Roles.Count > 3)
                             {
-                                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral"
-                                    title="@string.Join(", ", user.Roles.Skip(3))">@($"+{user.Roles.Count - 3}")</OmniBadge>
+                                <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral"
+                                    title="@string.Join(", ", user.Roles.Skip(3))">@($"+{user.Roles.Count - 3}")</NumberBadge>
                             }
                             <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => Nav.NavigateTo($"/users/{user.Id}"))" title="@L["Edit"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
@@ -61,11 +76,18 @@
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="UserDto" Property="IsActive" Title="@L["Active"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@YesNoText" >
                     <Template Context="user">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@(user.IsActive ? OmniTone.Success : OmniTone.Danger)">@(user.IsActive ? L["Yes"] : L["No"])</OmniBadge>
+                        @* R-25: the switch of the row, no confirmation; the account of the signed-in user is the one that cannot be switched off. *@
+                        <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                            <OmniSwitch TValue="bool" Value="@user.IsActive" ValueExpression="@(() => user.IsActive)" ValueChanged="@(value => OnActiveChangedAsync(user, value))"
+                                        Disabled="@(IsSelf(user) || !Auth.IsAdmin)" aria-label="@L["Active"]" title="@(IsSelf(user) ? L["CannotDeactivateYourself"] : L["Active"])" />
+                        </span>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="UserDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
+                <OmniDataGridColumn TItem="UserDto" Property="UpdatedAt" Title="@L["LastModified"]" FormatString="{0:g}" Width="190px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
+                <OmniDataGridColumn TItem="UserDto" Property="LastActivityAt" Title="@L["LastActivity"]" FormatString="{0:g}" Width="190px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             </Columns>
         </AetheusDataGrid>
     </div>
+    </OmniStack>
 </div>

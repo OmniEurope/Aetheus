@@ -50,7 +50,7 @@ internal sealed class PipelineVariableResolver(
         await AddVaultVariablesAsync(resolved, secretKeys, definition, projectId, ct).ConfigureAwait(false);
         AddAdditionalVariables(resolved, additionalVariables);
         // R-24: written last, over every other source, so the verdict always comes from the release itself.
-        await PipelineReleaseGateVariables.InjectAsync(resolved, definition, projectId, repo, ct).ConfigureAwait(false);
+        await PipelineReleaseGateVariables.InjectAsync(resolved, definition, projectId, repo, ct, runId).ConfigureAwait(false);
         PipelineVariableExpansion.ExpandResolved(
             resolved, secretKeys, PipelineUnresolvedVariableGuard.BuildDeferredNames(definition));
         if (enforceResolvedReferences)
@@ -154,8 +154,11 @@ internal sealed class PipelineVariableResolver(
         }
     }
 
-    /// <summary>The one place this sentence is written, so the reader below can recognise its own.</summary>
-    internal static string MissingLibraryWarning(string name) => $"Variable library '{name}' not found.";
+    /// <summary>The one place this warning is written, so the reader below can recognise its own: a stored
+    /// problem the front says in the user's language (runs recorded before it keep the English sentence,
+    /// which the reader below still recognises).</summary>
+    internal static string MissingLibraryWarning(string name) => PipelineProblem.Of(
+        PipelineProblemCodes.VariableLibraryNotFound, $"Variable library '{name}' not found.", ("library", name)).ToStored();
 
     public async Task<List<string>> DropResolvedLibraryWarningsAsync(
         IReadOnlyCollection<string> warnings, int? projectId, CancellationToken ct = default)
@@ -180,6 +183,11 @@ internal sealed class PipelineVariableResolver(
 
     private static string? TryReadMissingLibraryName(string warning)
     {
+        if (StoredProblem.TryRead(warning, out var stored))
+            return stored.Problem.Code == PipelineProblemCodes.VariableLibraryNotFound
+                && stored.Problem.Parameters.TryGetValue("library", out var library) && library.Length > 0
+                ? library
+                : null;
         const string prefix = "Variable library '";
         const string suffix = "' not found.";
         if (!warning.StartsWith(prefix, StringComparison.Ordinal)

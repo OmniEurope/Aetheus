@@ -60,37 +60,6 @@ public sealed class PipelineAdvisoryAiStepTests
     }
 
     [Fact]
-    public void FindingsPlaceholder_MapsFromYaml_AndReachesTheAgentEnvironment()
-    {
-        var definition = YamlParsingHelper.ParseAndValidate(Yaml.Replace(
-            "findings: true", "findings: true\n        findings_placeholder: true", StringComparison.Ordinal))!;
-        var step = YamlParsingHelper.FlattenJobs(definition).Single(stage => stage.Name == "AI review").Steps.Single();
-        var environment = new Dictionary<string, string>();
-
-        PipelineStepTaskDispatcher.AddAiPublicationVariables(environment, 7, "AI review", step);
-
-        Assert.True(step.FindingsPlaceholder);
-        Assert.Equal("true", environment["AETHEUS_AI_FINDINGS_PLACEHOLDER"]);
-    }
-
-    [Fact]
-    public void FindingsPlaceholder_WithoutFindings_IsRefused()
-    {
-        var errors = new List<string>();
-
-        PipelineAiStepValidator.Validate(errors, new PipelineStepDefinition
-        {
-            Name = "Review",
-            Type = "ai",
-            Profile = "claude-sonnet",
-            Prompt = "Review.",
-            FindingsPlaceholder = true
-        }, "stage 'AI review'");
-
-        Assert.Contains(errors, error => error.Contains("findings_placeholder needs findings: true", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public void AnAdvisoryFailure_LeavesTheRunSuccessful()
     {
         var keys = PipelineRunScheduler.AdvisoryStepKeys(Definition());
@@ -293,7 +262,8 @@ public sealed class PipelineAdvisoryAiStepTests
 
         await repository.Received(1).AppendRunWarningsAsync(
             7, Arg.Is<IReadOnlyCollection<string>>(warnings =>
-                warnings.Single() == $"AI step 'Review commits': {Resolution}"),
+                StoredProblem.English(warnings.Single()) == $"AI step 'Review commits': {Resolution}"
+                && StoredProblem.CodeOf(warnings.Single()) == "AiStepFallback"),
             Arg.Any<CancellationToken>());
     }
 

@@ -209,7 +209,8 @@ public sealed class PipelineStageDispatchPlanner(
             .Where(step => ReferenceEquals(step, refusal.RefusedStep)
                 || step.Status is TaskExecutionStatus.Pending or TaskExecutionStatus.Assigned)
             .ToList();
-        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [refusal.Reason], failedSteps, ct).ConfigureAwait(false);
+        await finalizer.FailRunWithUnmatchedStagesAsync(runId, [refusal.Reason], failedSteps, ct, refusal.FailureCode)
+            .ConfigureAwait(false);
     }
 
     private async Task<bool> HandleSystemStageAsync(

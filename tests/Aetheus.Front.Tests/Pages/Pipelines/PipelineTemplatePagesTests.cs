@@ -43,10 +43,10 @@ public sealed class PipelineTemplatePagesTests : BunitContext
         });
 
         var cut = Render<PipelineTemplatePromote>(parameters => parameters.Add(component => component.PipelineId, 4));
-        cut.WaitForState(() => cut.FindComponents<MonacoDiffViewer>().Count == 1);
+        cut.WaitForState(() => cut.FindComponents<OmniDiffViewer>().Count == 1);
 
-        Assert.Equal("name: old", cut.FindComponent<MonacoDiffViewer>().Instance.OriginalValue);
-        Assert.Equal("name: new", cut.FindComponent<MonacoDiffViewer>().Instance.ModifiedValue);
+        Assert.Equal("name: old", cut.FindComponent<OmniDiffViewer>().Instance.Original);
+        Assert.Equal("name: new", cut.FindComponent<OmniDiffViewer>().Instance.Modified);
         Assert.DoesNotContain("rz-dialog", cut.Markup, StringComparison.Ordinal);
     }
 
@@ -68,11 +68,42 @@ public sealed class PipelineTemplatePagesTests : BunitContext
         var cut = Render<PipelineTemplateUpdate>(parameters => parameters
             .Add(component => component.PipelineId, 5)
             .Add(component => component.TargetVersion, 2));
-        cut.WaitForState(() => cut.FindComponents<MonacoDiffViewer>().Count == 1);
+        cut.WaitForState(() => cut.FindComponents<OmniDiffViewer>().Count == 1);
 
         Assert.Contains("OrphanOverridesWarning", cut.Markup, StringComparison.Ordinal);
-        Assert.True(cut.Find("button[disabled]").TextContent.Contains("ConfirmUpdate", StringComparison.Ordinal));
+        Assert.Contains(cut.FindAll("button[disabled]"), button => button.TextContent.Contains("ConfirmUpdate", StringComparison.Ordinal));
         Assert.DoesNotContain("rz-dialog", cut.Markup, StringComparison.Ordinal);
+    }
+
+    // Recette R-100, R-101, R-102: the comparison takes the height the page leaves it, steps from one change to the
+    // next with OE's own navigation bar, and runs through the frame module, as Monaco cannot run under the strict CSP.
+    [Fact]
+    public void UpdatePage_DiffFillsThePage_NavigatesBetweenChanges_AndRunsInTheFrame()
+    {
+        MockPipeline(5);
+        _handler.SetJsonResponse("fleet-update/preview", new PipelineFleetUpdatePreviewDto
+        {
+            PipelineId = 5,
+            TemplateName = "ci",
+            CurrentVersion = 1,
+            TargetVersion = 2,
+            CurrentResolvedYaml = "name: old",
+            TargetResolvedYaml = "name: new"
+        });
+
+        var cut = Render<PipelineTemplateUpdate>(parameters => parameters
+            .Add(component => component.PipelineId, 5)
+            .Add(component => component.TargetVersion, 2));
+        cut.WaitForState(() => cut.FindComponents<OmniDiffViewer>().Count == 1);
+
+        var diff = cut.FindComponent<OmniDiffViewer>().Instance;
+        Assert.True(diff.FillAvailableHeight);
+        Assert.True(diff.ShowNavigation);
+        Assert.Equal(EditorModules.Frame, diff.InteropModulePath);
+        Assert.Equal("yaml", diff.Language);
+        Assert.NotNull(cut.Find(".page-fill-body .omni-diff-viewer--fill"));
+        Assert.NotNull(cut.Find(".omni-diff-viewer__previous"));
+        Assert.NotNull(cut.Find(".omni-diff-viewer__next"));
     }
 
     [Fact]

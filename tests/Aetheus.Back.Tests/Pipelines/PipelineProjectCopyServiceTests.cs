@@ -155,6 +155,40 @@ public sealed class PipelineProjectCopyServiceTests
         Assert.Equal(PipelineSetupReadinessKind.MissingEnvironments, Assert.Single(result.Readiness.Checks).Kind);
     }
 
+    /// <summary>R-76: the source project worked on develop, the new project's repository only has main; the copy must read main.</summary>
+    [Fact]
+    public async Task Copy_RewritesTheSourceBranchOfTheDefinition_ToTheBranchOfTheNewProject()
+    {
+        _pipelines.GetPipelineDefinitionsForProjectAsync(SourceProjectId, Arg.Any<CancellationToken>())
+            .Returns([(12, "aetheus-ci", "name: aetheus-ci\ntrigger: manual\nsource_branch: \"develop\"\nstages: []\n")]);
+        var created = new List<CreatePipelineRequest>();
+        _pipelineService.When(service => service.CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => created.Add(call.Arg<CreatePipelineRequest>()));
+
+        await _sut.CopyAsync(Request(12) with { TargetBranch = "main" }, null, null, null, null, Ct);
+
+        var copy = Assert.Single(created);
+        Assert.Equal("main", copy.SourceBranch);
+        Assert.Contains("\nsource_branch: \"main\"\n", copy.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("develop", copy.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Copy_WithoutATargetBranch_WritesNoSourceBranchLine_AsTheWizardDoes()
+    {
+        _pipelines.GetPipelineDefinitionsForProjectAsync(SourceProjectId, Arg.Any<CancellationToken>())
+            .Returns([(12, "aetheus-ci", "name: aetheus-ci\ntrigger: manual\nsource_branch: \"develop\"\nstages: []\n")]);
+        var created = new List<CreatePipelineRequest>();
+        _pipelineService.When(service => service.CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => created.Add(call.Arg<CreatePipelineRequest>()));
+
+        await _sut.CopyAsync(Request(12) with { TargetBranch = null }, null, null, null, null, Ct);
+
+        var copy = Assert.Single(created);
+        Assert.Null(copy.SourceBranch);
+        Assert.DoesNotContain("source_branch", copy.YamlDefinition, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Copy_OfOnePipeline_ReportsTheReferenceToAPipelineNotCopied()
     {
@@ -284,6 +318,63 @@ public sealed class PipelineProjectCopyServiceTests
         Assert.Equal(PipelineCopyStatus.NotCopied, item.Status);
         Assert.Contains(item.Issues, issue => issue.Kind == PipelineCopyIssueKind.InvalidDefinition);
         await _pipelineService.DidNotReceive().CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    // Recette R-86: a generic template reads `${{ project.slug }}.share`, so the source project's libraries
+    // and vaults are named after ITS slug (`w7.share`); the copies must carry the TARGET project's slug,
+    // the name the copied pipelines will read, not the source's.
+    [Fact]
+    public async Task Copy_OfSlugNamedLibrariesAndVaults_NamesThemAfterTheTargetProject()
+    {
+        _pipelines.GetProjectNameAsync(SourceProjectId, Arg.Any<CancellationToken>()).Returns("W7");
+        _pipelines.GetProjectNameAsync(TargetProjectId, Arg.Any<CancellationToken>()).Returns("R2 Probe");
+        SourceHas("w7-candidate", """
+            name: w7-candidate
+            trigger: manual
+            variable_libraries:
+              - ${{ project.slug }}.share
+              - w7.prod
+            vaults:
+              - ${{ project.slug }}.prod
+            stages: []
+            """);
+        _libraries.GetLibrariesAsync(SourceProjectId, Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaginatedResult<VariableLibraryDto>
+            {
+                Items =
+                [
+                    new VariableLibraryDto { Id = 31, Name = "w7.share", ProjectId = SourceProjectId },
+                    new VariableLibraryDto { Id = 32, Name = "w7.prod", ProjectId = SourceProjectId }
+                ]
+            });
+        _libraries.ExportEntriesAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([new VariableEntryDto { Key = "HOST", Value = "x" }]);
+        _vaults.GetVaultsAsync(SourceProjectId, Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(new PaginatedResult<VaultDto>
+            {
+                Items = [new VaultDto { Id = 41, Name = "w7.prod", ProjectId = SourceProjectId }]
+            });
+        _vaults.ExportSecretKeysAsync(41, Arg.Any<CancellationToken>()).Returns(["DB_PASSWORD"]);
+        var createdLibraries = new List<string>();
+        _libraries.When(service => service.CreateLibraryAsync(Arg.Any<CreateVariableLibraryRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => createdLibraries.Add(call.Arg<CreateVariableLibraryRequest>().Name));
+        var createdVaults = new List<string>();
+        _vaults.When(service => service.CreateVaultAsync(Arg.Any<CreateVaultRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => createdVaults.Add(call.Arg<CreateVaultRequest>().Name));
+        CreatePipelineRequest? pipeline = null;
+        _pipelineService.When(service => service.CreatePipelineAsync(Arg.Any<CreatePipelineRequest>(), Arg.Any<CancellationToken>()))
+            .Do(call => pipeline = call.Arg<CreatePipelineRequest>());
+
+        var result = await _sut.CopyAsync(
+            Request(20) with { SourcePrefix = "w7", Prefix = "r2probe" }, null, null, null, null, Ct);
+
+        Assert.Equal(["r2-probe.share", "r2-probe.prod"], createdLibraries);
+        Assert.Equal(["r2-probe.prod"], createdVaults);
+        Assert.Equal(["w7.share", "w7.prod"], result.Plan.Libraries.Select(item => item.SourceName));
+        // A literal source name in the definition follows its copy; the expression is left for the run to expand.
+        Assert.NotNull(pipeline);
+        Assert.Contains("- r2-probe.prod", pipeline.YamlDefinition, StringComparison.Ordinal);
+        Assert.Contains("${{ project.slug }}.share", pipeline.YamlDefinition, StringComparison.Ordinal);
+        Assert.DoesNotContain("w7.", pipeline.YamlDefinition, StringComparison.Ordinal);
     }
 
     [Fact]

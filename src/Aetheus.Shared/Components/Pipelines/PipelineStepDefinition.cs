@@ -88,12 +88,6 @@ public sealed record PipelineStepDefinition
     /// on an advisory step and a failure otherwise. Maps to YAML <c>findings</c>.</summary>
     public bool Findings { get; init; }
 
-    /// <summary>type: ai with <see cref="Findings"/> only. When the model reports no finding, the agent
-    /// publishes one synthetic note instead, its message starting with <c>[FAKE]</c>, so an experiment
-    /// can see the whole chain (real API call, SARIF, Gate tab) work on a clean commit. It never replaces
-    /// a real finding. Maps to YAML <c>findings_placeholder</c>.</summary>
-    public bool FindingsPlaceholder { get; init; }
-
     /// <summary>type: ai only. A commit range (<c>A..B</c>, run variables substituted) whose
     /// <c>git log --stat</c> and <c>git diff</c> the agent adds to the prompt from the workspace, within a
     /// fixed size budget. Maps to YAML <c>git_range</c>.</summary>

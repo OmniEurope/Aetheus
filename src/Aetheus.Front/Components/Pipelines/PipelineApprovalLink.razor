@@ -1,0 +1,54 @@
+@* SPDX-License-Identifier: EUPL-1.2 *@
+@page "/pipelines/runs/{RunId:int}/approvals/{ApprovalId:int}"
+@*
+    Recette R-24: the page the Approve, Reject and Comment buttons of an approval request mail open. The link
+    only opens it; the decision is this page's POST through the authenticated API, once, for a reader who
+    was already signed in when the link was opened (the sign-in drops the action, see LoginRedirect). The
+    decision banner is the run page's own (PipelineRunApprovalPanel): same buttons, same comment field.
+*@
+
+<PageTitle>@L["ApprovalLinkTitle"] - Aetheus</PageTitle>
+
+<OmniStack>
+    <OmniPageHeader Title="@L["ApprovalLinkTitle"]" ShowBack="true" BackHref="@RunHref" Subtitle="@Breadcrumb.Subtitle()">
+        <Icon><OmniIcon Name="OmniIconName.CheckCircle" /></Icon>
+    </OmniPageHeader>
+
+    @if (_loading)
+    {
+        <AetheusLoader Size="OmniControlSize.Large" />
+    }
+    else if (_approval is null)
+    {
+        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ApprovalLinkUnavailableTitle"]" Class="approval-link-unavailable">@L["ApprovalLinkUnavailable"]</OmniAlert>
+    }
+    else
+    {
+        @if (DecidedHere)
+        {
+            <OmniAlert Severity="@(_approval.Status == ApprovalStatus.Approved ? OmniSeverity.Success : OmniSeverity.Warning)" Class="approval-link-outcome">
+                @L[_approval.Status == ApprovalStatus.Approved ? "ApprovalLinkApproved" : "ApprovalLinkRejected"]
+            </OmniAlert>
+        }
+        else if (_approval.Status != ApprovalStatus.Pending)
+        {
+            <OmniAlert Severity="OmniSeverity.Info" Title="@L["ApprovalLinkAlreadyDecided"]" Class="approval-link-already-decided">@DecidedLine</OmniAlert>
+        }
+
+        <PipelineRunApprovalPanel Approval="_controller" StartWithComment="_commentAsked" />
+
+        <OmniCard>
+            <OmniStack Gap="OmniSpacing.Small">
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Wrap="true" Align="OmniAlignment.Center">
+                    <OmniText Element="OmniTextElement.Strong">@StageLine</OmniText>
+                    <OmniBadge Tone="@StatusTone" Icon="@(BadgeIcon.ForState(StatusTone))" Class="approval-link-status">@L[StatusKey]</OmniBadge>
+                </OmniStack>
+                @if (_approval.Status != ApprovalStatus.Pending)
+                {
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@DecidedLine</OmniText>
+                }
+                <a href="@RunHref">@L["ViewRun"]</a>
+            </OmniStack>
+        </OmniCard>
+    }
+</OmniStack>

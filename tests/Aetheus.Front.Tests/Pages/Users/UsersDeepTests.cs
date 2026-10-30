@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using System.Reflection;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using UsersPage = Aetheus.Front.Components.Users.Users;
 
@@ -56,36 +57,13 @@ public class UsersDeepTests : BunitContext
     }
 
     [Fact]
-    public async Task SharedSearch_FiltersTheUsers()
-    {
-        // The shared identity section-bar search filters this grid without a separate page search
-        // box.
-        SetupDefaults();
-        var cut = Render<UsersPage>();
-        cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
-        Assert.Empty(cut.FindAll(".iam-page-header input"));
-
-        _handler.SetJsonResponse("api/organizations?", new PaginatedResult<OrganizationDto>());
-        _handler.SetJsonResponse("api/roles?", new PaginatedResult<RoleDto>());
-        var search = Services.GetRequiredService<Aetheus.Front.Components.Users.AdminIdentitySearch>();
-        await cut.InvokeAsync(() => search.SetAsync("alice", "users"));
-
-        // The grid's own page request (pageSize 20), not the section count (pageSize 1): a GoToPage(0)
-        // on a grid already at page 0 reloaded nothing and only the count carried the term.
-        cut.WaitForAssertion(() => Assert.Contains(_handler.Requests, request =>
-            request.Url.Contains("api/users?", StringComparison.Ordinal)
-            && request.Url.Contains("pageSize=20", StringComparison.Ordinal)
-            && request.Url.Contains("search=alice", StringComparison.Ordinal)));
-    }
-
-    [Fact]
-    public void OnCreate_OpensCreateUserDialog()
+    public void OnCreate_OpensTheCreateUserPage()
     {
         SetupDefaults();
         var cut = Render<UsersPage>();
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar-circular"));
 
-        // OnCreate opens the UserCreateDialog via the OmniDialogService rather than navigating.
+        // R-9: creating a user goes to its own page, no dialog opens.
         var dialog = Services.GetRequiredService<OmniDialogService>();
         Type? openedDialog = null;
         dialog.OnOpen += (_, type, _, _) => openedDialog = type;
@@ -93,7 +71,8 @@ public class UsersDeepTests : BunitContext
         var method = typeof(UsersPage).GetMethod("OnCreate", Priv)!;
         method.Invoke(cut.Instance, []);
 
-        Assert.Equal("UserCreateDialog", openedDialog?.Name);
+        Assert.Null(openedDialog);
+        Assert.EndsWith("/admin/users/new", Services.GetRequiredService<NavigationManager>().Uri);
     }
 
     [Theory]

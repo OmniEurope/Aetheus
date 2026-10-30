@@ -32,7 +32,7 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         // Step 1: Login
         var loginResp = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = "admin",
+            Email = IntegrationAuth.AdminEmail,
             Password = AdminPassword
         }, cancellationToken: TestContext.Current.CancellationToken);
         loginResp.EnsureSuccessStatusCode();
@@ -85,7 +85,7 @@ public sealed class RefreshTokenIntegrationTests(PostgresFixture fixture)
         await using var factory = new AetheusWebApplicationFactory(fixture.ConnectionString);
         using var client = factory.CreateClient();
         var login = await (await client.PostAsJsonAsync("/api/auth/login",
-            new LoginRequest { Username = "admin", Password = AdminPassword }, cancellationToken: ct))
+            new LoginRequest { Email = IntegrationAuth.AdminEmail, Password = AdminPassword }, cancellationToken: ct))
             .Content.ReadFromJsonAsync<LoginResponse>(IntegrationJsonOptions.Default, cancellationToken: ct);
 
         int userId;

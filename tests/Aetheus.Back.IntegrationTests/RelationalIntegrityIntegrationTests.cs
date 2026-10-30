@@ -67,11 +67,11 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
         // Arrange
         await ResetAndMigrateAsync();
         await using var db = NewContext();
-        db.Users.Add(new User { Username = "alice", PasswordHash = "h1" });
+        db.Users.Add(new User { Username = "alice", Email = "alice-1@example.test", PasswordHash = "h1" });
         await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         // Act + Assert
-        db.Users.Add(new User { Username = "alice", PasswordHash = "h2" });
+        db.Users.Add(new User { Username = "alice", Email = "alice-2@example.test", PasswordHash = "h2" });
         await AssertUniqueViolationAsync(() => db.SaveChangesAsync());
     }
 
@@ -115,7 +115,7 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
         await using var db = NewContext();
         var org = NewOrg("members");
         db.Organizations.Add(org);
-        var user = new User { Username = "bob", PasswordHash = "h" };
+        var user = new User { Username = "bob", Email = "bob@example.test", PasswordHash = "h" };
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
@@ -214,7 +214,7 @@ public sealed class RelationalIntegrityIntegrationTests(PostgresFixture fixture)
         {
             var org = NewOrg("cascade-members");
             db.Organizations.Add(org);
-            var user = new User { Username = "carol", PasswordHash = "h" };
+            var user = new User { Username = "carol", Email = "carol@example.test", PasswordHash = "h" };
             db.Users.Add(user);
             await db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
 

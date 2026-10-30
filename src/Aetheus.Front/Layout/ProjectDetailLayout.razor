@@ -36,7 +36,7 @@
            Show project status only when inactive. *@
         @* Combine section-specific actions with Follow and Edit in the header menu, placing
            section actions first. *@
-        RenderFragment? projectMenu = Loader.Project is { } project
+        RenderFragment? projectMenu = Loader.Project is { DeletionRequestedAt: null } project
             ? @<text>
                 @foreach (var action in _sectionMenu.Actions)
                 {
@@ -48,18 +48,31 @@
             : null;
         <OmniPageHeader ShowBack="true" BackHref="@BackHref" Subtitle="@Breadcrumb.Subtitle()" MenuContent="@projectMenu" Icon="@MaterialIconMap.HeaderIcon(SectionIcon)">
             <Badges>
-                @if (Loader.Project is { Status: not ProjectStatus.Active } inactive)
+                @if (Loader.Project is { DeletionRequestedAt: not null })
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L[inactive.Status.ToString()]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning" data-testid="project-deletion-pending">@L["ProjectDeletionPending"]</OmniBadge>
+                }
+                else if (Loader.Project is { Status: not ProjectStatus.Active } inactive)
+                {
+                    <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L[inactive.Status.ToString()]</OmniBadge>
                 }
             </Badges>
             <ActionsContent>
-                <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" />
+                @* Recette R-51: the hidden section pages of a project waiting for its cleanup offer no action. *@
+                @if (Loader.Project is not { DeletionRequestedAt: not null })
+                {
+                    <Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="@PageHeaderActions.SectionName" />
+                }
             </ActionsContent>
         </OmniPageHeader>
+        @* Recette R-51: a project deleted while something stays on its servers shows only the way to finish it. *@
+        @if (Loader.Project is { DeletionRequestedAt: not null } pending)
+        {
+            <Aetheus.Front.Components.Projects.ProjectDeletionPendingPanel ProjectId="@pending.Id" />
+        }
     }
 
-    <div class="@(Loader.Project is null ? "blade-content blade-content-hidden" : "blade-content")">
+    <div class="@(Loader.Project is null or { DeletionRequestedAt: not null } ? "blade-content blade-content-hidden" : "blade-content")">
         <CascadingValue Value="_sectionMenu" IsFixed="true">
             @Body
         </CascadingValue>

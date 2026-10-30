@@ -2,6 +2,8 @@
 @namespace Aetheus.Front.Components.Shared
 @* Show the route summary before individual timings and load the metric explorer only on demand so
    the overview stays focused and inexpensive. *@
+@* R-14: the summary tiles, the route grid and the explorer are separated by this stack's gap, not by margins. *@
+<OmniStack>
 @if (_loading)
 {
     <AetheusLoader Size="OmniControlSize.Small" />
@@ -18,7 +20,7 @@ else
 {
     @* Use equal-height responsive tiles so the summary remains readable on phones; show the last
        export time with its measurement window to make freshness explicit. *@
-    <OmniTileGrid Columns="4" Class="omni-u-mb-md">
+    <OmniTileGrid Columns="4">
         <OmniStatTile Class="app-performance-tile" Value="@LastSentText" Title="@L["AppPerformanceLastSent"]" Detail="@WindowText" data-testid="app-performance-window" />
         <OmniStatTile Class="app-performance-tile" Value="@RoutesCountText" Title="@L["AppPerformanceRoutes"]" />
         <OmniStatTile Class="app-performance-tile" Value="@TotalRequestsText" Title="@L["AppPerformanceRequests"]" />
@@ -27,7 +29,7 @@ else
 
     @* Export the displayed measurement context and every filtered route through the grid's footer
        so the file remains interpretable outside the page. *@
-    <AetheusDataGrid Data="@_report.Routes" TItem="AppRouteTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]" class="omni-u-mb-lg"
+    <AetheusDataGrid FullHeight="true" Data="@_report.Routes" TItem="AppRouteTimingDto" KeyProperty="Route" Virtualize="true" EmptyText="@L["PerformanceNoSamples"]"
                      ShowFooterBar="true" ExportTitle="@ExportTitle"
                      ExportFields="@ExportFields" ExportFileName="@ExportFileName">
         <Columns>
@@ -73,7 +75,7 @@ else
 }
 
 @* The explorer is rendered only once opened: its metric list is not read for a reader who never asks. *@
-<OmniFieldset Collapsible="true" @bind-Expanded="_explorerExpanded" Class="omni-u-mt-md">
+<OmniFieldset Collapsible="true" @bind-Expanded="_explorerExpanded">
     <Legend>@L["AppPerformanceExplore"]</Legend>
     <ChildContent>
         @if (_explorerExpanded)
@@ -82,3 +84,4 @@ else
         }
     </ChildContent>
 </OmniFieldset>
+</OmniStack>

@@ -24,25 +24,29 @@
     }
 </SectionContent>
 
-@* --- Status bar --- *@
+@* --- Status bar ---
+   Same rule as Apache (R-120): the version is in the page title, "Installed" and "Running" are the normal state and
+   are not shown, the blocked count is on the "Blocked IPs" tab. What is left: not installed or stopped, and the
+   detection mode in words. *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(Ps.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Ps.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
-    @if (Ps.IsInstalled)
+    @if (!Ps.IsInstalled)
     {
-        <OmniBadge Fill="OmniFill.Solid" Tone="@(Ps.IsRunning ? OmniTone.Success : OmniTone.Danger)">@(Ps.IsRunning ? L["Running"] : L["Stopped"])</OmniBadge>
-        @if (!string.IsNullOrEmpty(Ps.Version))
+        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["NotInstalled"]</OmniBadge>
+    }
+    else
+    {
+        @if (!Ps.IsRunning)
         {
-            <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">v@(Ps.Version)</OmniText>
+            <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Danger))" Fill="OmniFill.Solid" Tone="OmniTone.Danger">@L["Stopped"]</OmniBadge>
         }
-        @if (!string.IsNullOrEmpty(Ps.Mode))
+        @if (PortsentryModeText(Ps.Mode) is { } mode)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@($"{L["Mode"]}: {Ps.Mode}")</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Settings))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@mode</OmniBadge>
         }
-        <OmniBadge Fill="OmniFill.Solid" Tone="@GetBlockedCountBadgeStyle(Ps.BlockedCount)">@($"{Ps.BlockedCount} {L["BlockedIps"]}")</OmniBadge>
     }
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="PortSentry" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="PortSentry" SettleOnHeartbeat="true" OnSettled="ReloadAfterSettleAsync" />
 
 @if (Ps.IsInstalled)
 {

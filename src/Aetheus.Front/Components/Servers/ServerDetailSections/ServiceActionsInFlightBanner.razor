@@ -4,7 +4,7 @@
    Recette R3-22: one banner for the whole page, so it stays where it is when a service changes grid. *@
 @if (InFlightActions is { Count: > 0 } running)
 {
-    <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-sm service-actions-in-flight">
+    <OmniAlert Severity="OmniSeverity.Info" Class="service-actions-in-flight">
         @foreach (var (service, action) in running)
         {
             <div class="service-action-in-flight"><OmniLink Href="@($"/tasks/{action.TaskId}")">@InFlightText(service, action)</OmniLink></div>

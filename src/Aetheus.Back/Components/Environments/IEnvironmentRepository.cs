@@ -15,6 +15,7 @@ public interface IEnvironmentRepository
     Task AddEnvironmentAsync(Environment environment, CancellationToken ct = default);
     Task RemoveEnvironmentAsync(Environment environment, CancellationToken ct = default);
     Task<Environment?> GetEnvironmentForDuplicationAsync(int id, CancellationToken ct = default);
+    Task<EnvironmentCopyReferences?> GetCopyReferencesAsync(int id, CancellationToken ct = default);
     Task<bool> NameExistsInProjectAsync(string name, int? projectId, CancellationToken ct = default);
     Task<int?> GetProjectServerProjectIdAsync(int projectServerId, CancellationToken ct = default);
     Task<bool> LinkExistsAsync(int envId, int projectServerId, CancellationToken ct = default);

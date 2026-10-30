@@ -14,7 +14,7 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
     {
         var project = await db.Projects.AsNoTracking()
             .Where(item => item.Id == projectId)
-            .Select(item => new { item.Name, item.OrganizationId })
+            .Select(item => new { item.Name, item.OrganizationId, item.DeletionRequestedAt })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (project is null) return null;
 
@@ -47,7 +47,8 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
             libraryIds,
             await db.Releases.Where(item => item.ProjectId == projectId).Select(item => item.Id).ToListAsync(ct).ConfigureAwait(false),
             await db.ServiceConnections.Where(item => item.ProjectId == projectId).Select(item => item.Id).ToListAsync(ct).ConfigureAwait(false),
-            await db.PackageFeeds.Where(item => item.ProjectId == projectId).Select(item => item.Id).ToListAsync(ct).ConfigureAwait(false));
+            await db.PackageFeeds.Where(item => item.ProjectId == projectId).Select(item => item.Id).ToListAsync(ct).ConfigureAwait(false),
+            project.DeletionRequestedAt);
     }
 
     public Task<int> CountActiveRunsAsync(ProjectDeletionScope scope, CancellationToken ct = default) =>
@@ -108,6 +109,17 @@ internal sealed class ProjectDeletionRepository(AppDbContext db) : IProjectDelet
         await DeleteAllAsync(db.MonitoredApps.Where(item => scope.MonitoredAppIds.Contains(item.Id)), ct).ConfigureAwait(false);
         await DeleteOwnedConfigurationAsync(scope, ct).ConfigureAwait(false);
         await DeleteProjectRowsAsync(scope, ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> MarkDeletionPendingAsync(int projectId, DateTime at, CancellationToken ct = default)
+    {
+        var project = await db.Projects.FirstOrDefaultAsync(item => item.Id == projectId, ct).ConfigureAwait(false);
+        if (project is null) return false;
+        if (project.DeletionRequestedAt is not null) return true;
+        project.DeletionRequestedAt = at;
+        project.UpdatedAt = at;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Runs and what hangs off them. Tasks go first: the run and step-run foreign keys only

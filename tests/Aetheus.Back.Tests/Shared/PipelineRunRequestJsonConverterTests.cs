@@ -90,4 +90,20 @@ public sealed class PipelineRunRequestJsonConverterTests
         Assert.Equal("release/1", request.SourceBranch);
         Assert.Equal("k", request.IdempotencyKey);
     }
+
+    /// <summary>R-72: the override travels in both shapes, the legacy one the front sends and the current one.</summary>
+    [Fact]
+    public void GateOverride_IsReadFromTheLegacyAndTheCurrentShape_AndRoundTrips()
+    {
+        var legacy = Read("""{"candidateVersion":"1.2.3","AETHEUS_RUN_GATE_OVERRIDE":"true"}""");
+        Assert.True(legacy.GateOverride);
+        Assert.Equal("1.2.3", Assert.Single(legacy.Parameters!).Value);
+
+        Assert.False(Read("""{"candidateVersion":"1.2.3","AETHEUS_RUN_GATE_OVERRIDE":"yes"}""").GateOverride);
+        Assert.True(Read("""{"parameters":{"candidateVersion":"1.2.3"},"gateOverride":true}""").GateOverride);
+        Assert.False(Read("""{"parameters":{"candidateVersion":"1.2.3"}}""").GateOverride);
+
+        var roundTrip = Read(JsonSerializer.Serialize(new PipelineRunRequest { GateOverride = true }));
+        Assert.True(roundTrip.GateOverride);
+    }
 }

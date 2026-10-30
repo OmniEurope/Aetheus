@@ -14,6 +14,7 @@ public class UsersTests : BunitContext
     public UsersTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, authenticated: true, isAdmin: true);
+        _handler.SetOrganizations();
     }
 
     [Fact]
@@ -86,17 +87,17 @@ public class UsersTests : BunitContext
     }
 
     [Fact]
-    public void Renders_UserEdit_NewUser()
+    public void Renders_UserCreate_Page()
     {
         _handler.SetPaginatedJsonResponse("api/roles",
         [
             new RoleDto { Id = 1, Name = "Admin" },
             new RoleDto { Id = 2, Name = "User" }
         ]);
-        var cut = Render<UserEdit>();
+        var cut = Render<UserCreate>();
         cut.WaitForState(() => cut.Markup.Contains("Admin"));
 
-        // New-user mode renders the empty create form and a server-paged role selector.
+        // The create page renders the empty form and a server-paged role selector.
         Assert.NotEmpty(cut.FindAll("input"));
         Assert.Contains("Admin", cut.Markup);
         Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Create"));

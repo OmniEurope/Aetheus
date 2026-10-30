@@ -29,6 +29,8 @@ public class RoleServiceTests
             .Returns(true);
         _repoMock.GetUsersInRoleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
+        _repoMock.GetEffectiveActionKeysAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([]);
         _sut = new RoleService(_repoMock, _userServiceMock, _auditMock, _authzMock, Substitute.For<IAdminChangeNotifier>(), _userNotifierMock);
     }
 
@@ -81,7 +83,7 @@ public class RoleServiceTests
     [Fact]
     public async Task CreateRoleAsync_DuplicateName_ThrowsConflict()
     {
-        _repoMock.RoleNameExistsAsync("Admin", null, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Admin", null, null, Arg.Any<CancellationToken>())
             .Returns(true);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
@@ -91,7 +93,7 @@ public class RoleServiceTests
     [Fact]
     public async Task CreateRoleAsync_Valid_CreatesAndAudits()
     {
-        _repoMock.RoleNameExistsAsync("Developer", null, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Developer", null, null, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.CreateRoleAsync("Developer", "Dev role", Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 2, Name = "Developer", Description = "Dev role" });
@@ -128,7 +130,7 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleEntityAsync(2, Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 2, Name = "Dev", Description = "" });
-        _repoMock.RoleNameExistsAsync("Existing", 2, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Existing", null, 2, Arg.Any<CancellationToken>())
             .Returns(true);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
@@ -140,7 +142,7 @@ public class RoleServiceTests
     {
         var role = new Role { Id = 2, Name = "Dev", Description = "old" };
         _repoMock.GetRoleEntityAsync(2, Arg.Any<CancellationToken>()).Returns(role);
-        _repoMock.RoleNameExistsAsync("Developer", 2, Arg.Any<CancellationToken>()).Returns(false);
+        _repoMock.RoleNameTakenAsync("Developer", null, 2, Arg.Any<CancellationToken>()).Returns(false);
         _repoMock.UpdateRoleAsync(role, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _repoMock.GetRoleAsync(2, Arg.Any<CancellationToken>())
             .Returns(new RoleDto { Id = 2, Name = "Developer", Description = "new" });
@@ -253,7 +255,7 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleEntityAsync(99, Arg.Any<CancellationToken>()).Returns((Role?)null);
 
-        await Assert.ThrowsAsync<NotFoundException>(() => _sut.AddUserToRoleAsync(99, 1, ct: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<NotFoundException>(() => _sut.AddUserToRoleAsync(99, 1, 4, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -262,9 +264,9 @@ public class RoleServiceTests
         _repoMock.GetRoleEntityAsync(2, Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 2, Name = "Dev", Description = "" });
 
-        await _sut.AddUserToRoleAsync(2, 7, ct: TestContext.Current.CancellationToken);
+        await _sut.AddUserToRoleAsync(2, 7, 4, ct: TestContext.Current.CancellationToken);
 
-        await _userServiceMock.Received(1).AssignRoleAsync(7, 2, Arg.Any<CancellationToken>());
+        await _userServiceMock.Received(1).AssignRoleAsync(7, 2, 4, Arg.Any<CancellationToken>());
         await _auditMock.Received(1).LogAsync("Role.UserAdded", "Role", 2, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -273,9 +275,9 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleEntityAsync(2, Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 2, Name = "Dev", Description = "" });
-        _userServiceMock.UnassignRoleAsync(7, 2, Arg.Any<CancellationToken>()).Returns(false);
+        _userServiceMock.UnassignRoleAsync(7, 2, 4, Arg.Any<CancellationToken>()).Returns(false);
 
-        await Assert.ThrowsAsync<NotFoundException>(() => _sut.RemoveUserFromRoleAsync(2, 7, ct: TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<NotFoundException>(() => _sut.RemoveUserFromRoleAsync(2, 7, 4, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -283,11 +285,11 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleEntityAsync(2, Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 2, Name = "Dev", Description = "" });
-        _userServiceMock.UnassignRoleAsync(7, 2, Arg.Any<CancellationToken>()).Returns(true);
+        _userServiceMock.UnassignRoleAsync(7, 2, 4, Arg.Any<CancellationToken>()).Returns(true);
 
-        await _sut.RemoveUserFromRoleAsync(2, 7, ct: TestContext.Current.CancellationToken);
+        await _sut.RemoveUserFromRoleAsync(2, 7, 4, ct: TestContext.Current.CancellationToken);
 
-        await _userServiceMock.Received(1).UnassignRoleAsync(7, 2, Arg.Any<CancellationToken>());
+        await _userServiceMock.Received(1).UnassignRoleAsync(7, 2, 4, Arg.Any<CancellationToken>());
         await _auditMock.Received(1).LogAsync("Role.UserRemoved", "Role", 2, Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
@@ -340,7 +342,7 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleAsync(1, Arg.Any<CancellationToken>())
             .Returns(new RoleDto { Id = 1, Name = "Developer", Description = "Dev" });
-        _repoMock.RoleNameExistsAsync("Developer (Copy)", null, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Developer (Copy)", null, null, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.CreateRoleAsync("Developer (Copy)", "Dev", Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 5, Name = "Developer (Copy)", Description = "Dev" });
@@ -363,9 +365,9 @@ public class RoleServiceTests
     {
         _repoMock.GetRoleAsync(1, Arg.Any<CancellationToken>())
             .Returns(new RoleDto { Id = 1, Name = "Dev", Description = "" });
-        _repoMock.RoleNameExistsAsync("Dev (Copy)", null, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Dev (Copy)", null, null, Arg.Any<CancellationToken>())
             .Returns(true);
-        _repoMock.RoleNameExistsAsync("Dev (Copy 2)", null, Arg.Any<CancellationToken>())
+        _repoMock.RoleNameTakenAsync("Dev (Copy 2)", null, null, Arg.Any<CancellationToken>())
             .Returns(false);
         _repoMock.CreateRoleAsync("Dev (Copy 2)", "", Arg.Any<CancellationToken>())
             .Returns(new Role { Id = 6, Name = "Dev (Copy 2)", Description = "" });
@@ -421,22 +423,59 @@ public class RoleServiceTests
     }
 
     [Fact]
-    public async Task GetMyPermissionsAsync_IncludesOrganizationInheritedProjectAndServerReads()
+    public async Task GetMyPermissionsAsync_ReportsTheRolesHeldPerOrganization()
     {
-        var permissions = Substitute.For<IPermissionRepository>();
-        permissions.GetOrganizationIdsForUsernameAsync("alice", Arg.Any<CancellationToken>()).Returns([4]);
-        permissions.GetResourceIdsByOrganizationsAsync(ResourceType.Project, Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 4 })), Arg.Any<CancellationToken>()).Returns([10]);
-        permissions.GetResourceIdsByOrganizationsAsync(ResourceType.Server, Arg.Is<List<int>>(ids => ids.SequenceEqual(new[] { 4 })), Arg.Any<CancellationToken>()).Returns([20]);
+        // ADR-059 (R-45): membership alone lends nothing; the summary is the roles held per organization,
+        // each permission naming the organization it applies to.
         _userServiceMock.GetCurrentUserAsync(Arg.Any<CancellationToken>())
-            .Returns(new UserDto { Id = 1, Username = "alice", Roles = ["User"] });
+            .Returns(new UserDto { Id = 1, Username = "alice", Roles = [] });
+        _repoMock.GetEffectivePermissionsAsync(1, Arg.Any<CancellationToken>()).Returns(
+        [
+            new EffectivePermissionDto
+            {
+                ResourceType = ResourceType.Project, Permission = Permission.Read,
+                GrantedByRole = RoleNames.Reader, OrganizationId = 4, OrganizationName = "A"
+            }
+        ]);
+
+        var result = await _sut.GetMyPermissionsAsync(UserPrincipal("1", "alice"), ct: TestContext.Current.CancellationToken);
+
+        var permission = Assert.Single(result!.EffectivePermissions);
+        Assert.Equal(4, permission.OrganizationId);
+        Assert.Equal(RoleNames.Reader, permission.GrantedByRole);
+        // R-11: the same grant is reported as its catalogue key, in the same organization.
+        var key = Assert.Single(result.PermissionKeys);
+        Assert.Equal(new EffectivePermissionKeyDto(PermissionKeys.ProjectView, null, 4), key);
+    }
+
+    [Fact]
+    public async Task R11_GetMyPermissionsAsync_AddsTheActionKeysHeldToTheLevelKeys()
+    {
+        _userServiceMock.GetCurrentUserAsync(Arg.Any<CancellationToken>())
+            .Returns(new UserDto { Id = 1, Username = "alice", Roles = [] });
+        _repoMock.GetEffectivePermissionsAsync(1, Arg.Any<CancellationToken>()).Returns(
+            [new EffectivePermissionDto { ResourceType = ResourceType.Server, Permission = Permission.Write, OrganizationId = 4 }]);
+        _repoMock.GetEffectiveActionKeysAsync(1, Arg.Any<CancellationToken>())
+            .Returns([new EffectivePermissionKeyDto(PermissionKeys.ServerFirewallManage, null, 4)]);
+
+        var result = await _sut.GetMyPermissionsAsync(UserPrincipal("1", "alice"), ct: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [PermissionKeys.ServerView, PermissionKeys.ServerEdit, PermissionKeys.ServerFirewallManage],
+            result!.PermissionKeys.Select(k => k.Key).ToList());
+    }
+
+    [Fact]
+    public async Task R11_GetMyPermissionsAsync_TheSiteAdminHoldsEveryCatalogueKey()
+    {
+        _userServiceMock.GetCurrentUserAsync(Arg.Any<CancellationToken>())
+            .Returns(new UserDto { Id = 1, Username = "root", Roles = [RoleNames.Admin] });
         _repoMock.GetEffectivePermissionsAsync(1, Arg.Any<CancellationToken>()).Returns([]);
-        var sut = new RoleService(_repoMock, _userServiceMock, _auditMock, _authzMock,
-            Substitute.For<IAdminChangeNotifier>(), _userNotifierMock, permissions);
 
-        var result = await sut.GetMyPermissionsAsync(UserPrincipal("1", "alice"), ct: TestContext.Current.CancellationToken);
+        var result = await _sut.GetMyPermissionsAsync(UserPrincipal("1", "root", RoleNames.Admin), ct: TestContext.Current.CancellationToken);
 
-        Assert.Contains(result!.EffectivePermissions, p => p.ResourceType == ResourceType.Project && p.ResourceId == 10 && p.Permission == Permission.Read);
-        Assert.Contains(result.EffectivePermissions, p => p.ResourceType == ResourceType.Server && p.ResourceId == 20 && p.Permission == Permission.Read);
+        Assert.Equal(PermissionCatalog.All.Select(d => d.Key).Order(StringComparer.Ordinal),
+            result!.PermissionKeys.Select(k => k.Key).Order(StringComparer.Ordinal));
     }
 
     private static System.Security.Claims.ClaimsPrincipal UserPrincipal(string subject, string name, params string[] roles)
@@ -475,15 +514,10 @@ public class RoleServiceTests
     public async Task R2_014_TheBootstrapIdentity_GainsNothingFromAUserRowOfTheSameName()
     {
         // Only its claims count: a user row named like it, or organization membership, lends it nothing.
-        var permissions = Substitute.For<IPermissionRepository>();
-        permissions.GetOrganizationIdsForUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([4]);
-        permissions.GetResourceIdsByOrganizationsAsync(Arg.Any<ResourceType>(), Arg.Any<List<int>>(), Arg.Any<CancellationToken>()).Returns([10]);
         _userServiceMock.GetCurrentUserAsync(Arg.Any<CancellationToken>())
             .Returns(new UserDto { Id = 9, Username = "admin", Roles = ["Admin", "Operators"] });
-        var sut = new RoleService(_repoMock, _userServiceMock, _auditMock, _authzMock,
-            Substitute.For<IAdminChangeNotifier>(), _userNotifierMock, permissions);
 
-        var result = await sut.GetMyPermissionsAsync(UserPrincipal("bootstrap", "admin"), TestContext.Current.CancellationToken);
+        var result = await _sut.GetMyPermissionsAsync(UserPrincipal("bootstrap", "admin"), TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.Empty(result.Roles);

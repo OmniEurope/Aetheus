@@ -31,4 +31,7 @@ internal sealed class PipelineProjectOwnerRepository(AppDbContext db) : IPipelin
         return await db.Users.AsNoTracking()
             .AnyAsync(u => u.Username == username && u.IsActive, ct).ConfigureAwait(false);
     }
+
+    public Task<bool> IsProjectDeletionPendingAsync(int projectId, CancellationToken ct = default) =>
+        db.Projects.AsNoTracking().AnyAsync(p => p.Id == projectId && p.DeletionRequestedAt != null, ct);
 }

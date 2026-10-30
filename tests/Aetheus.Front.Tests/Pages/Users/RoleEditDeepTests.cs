@@ -20,6 +20,7 @@ public class RoleEditDeepTests : BunitContext
     public RoleEditDeepTests()
     {
         _handler = BunitTestHelper.RegisterServices(this, isAdmin: true);
+        _handler.SetOrganizations();
         _handler.SetJsonResponse(
             HttpMethod.Get,
             "api/roles/0",
@@ -145,6 +146,7 @@ public class RoleEditDeepTests : BunitContext
     {
         SetupRole(1);
         _handler.SetJsonResponse("api/roles/1/permissions", true);
+        _handler.SetJsonResponse("api/roles/1/permission-keys", new List<string>());
         var cut = Render<RoleEdit>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => !cut.Markup.Contains("rz-progressbar"));
 

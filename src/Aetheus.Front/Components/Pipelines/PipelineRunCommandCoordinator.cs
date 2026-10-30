@@ -7,7 +7,8 @@ internal sealed class PipelineRunCommandCoordinator(
     OmniDialogService dialog,
     NotifyHelper toast,
     IStringLocalizer<AppStrings> localizer,
-    IJSRuntime js)
+    IJSRuntime js,
+    BusyVeil veil)
 {
     public async Task<bool> RetryFailedAsync(PipelineRunDto run)
     {
@@ -36,11 +37,14 @@ internal sealed class PipelineRunCommandCoordinator(
 
     public async Task CancelAsync(PipelineRunDto run)
     {
-        var status = await api.Pipelines.CancelPipelineRunAsync(run.Id);
-        if (status.Success)
-            toast.Info("RunCancelled", "RunCancelledDetail");
-        else if (status.Forbidden)
-            toast.Error("PipelineRunFailed", "PipelineRunForbidden");
+        await veil.RunAsync(async () =>
+        {
+            var status = await api.Pipelines.CancelPipelineRunAsync(run.Id);
+            if (status.Success)
+                toast.Info("RunCancelled", "RunCancelledDetail");
+            else if (status.Forbidden)
+                toast.Error("PipelineRunFailed", "PipelineRunForbidden");
+        });
     }
 
     public Task ShowVariablesAsync(PipelineRunDto run) =>

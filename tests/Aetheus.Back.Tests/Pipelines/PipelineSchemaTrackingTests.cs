@@ -171,15 +171,18 @@ public sealed class PipelineSchemaTrackingTests
     }
 
     [Fact]
-    public async Task Environment_WithoutAGateStillListsThePendingContractions()
+    public async Task Environment_WithoutAGateOfItsOwnDeploymentsShowsNoPendingContraction()
     {
+        // Recette R-81: the registry is the plan of Aetheus's own schema. An environment none of whose deployments
+        // recorded a gate (the production of another project) must not list those tables.
         var repo = Substitute.For<IPipelineMigrationGateRepository>();
         repo.EnvironmentExistsAsync(3, Arg.Any<CancellationToken>()).Returns(true);
 
         var schema = await new PipelineSchemaTrackingService(repo).GetForEnvironmentAsync(3, TestContext.Current.CancellationToken);
 
         Assert.Null(schema!.LastGate);
-        Assert.NotEmpty(schema.PendingContractions);
+        Assert.Empty(schema.PendingContractions);
+        await repo.DidNotReceive().FindFirstAppliedReleaseVersionAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

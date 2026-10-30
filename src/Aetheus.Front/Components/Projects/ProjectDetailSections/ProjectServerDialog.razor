@@ -39,6 +39,6 @@
 
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnSubmit" Class="@(Saving ? "btn-busy" : null)" Busy="@(Saving)"><Icon><OmniIcon Name="@MaterialIconMap.Resolve((_editMode ? "save" : "add"))" /></Icon><ChildContent><span>@(_editMode ? L["Save"] : L["Add"])</span></ChildContent></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@OnCancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
     </OmniStack>
 </OmniStack>

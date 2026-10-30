@@ -8,10 +8,12 @@
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("tune")" /></Icon>
 </OmniPageHeader>
 
-<UrlSyncedTabs Slugs="@(new[] { "general", "quality-gates", "email", "daily-recap", "secrets", "tokens" })">
+<UrlSyncedTabs Slugs="@(new[] { "general", "quality-gates", "email", "daily-recap", "certificate-alerts", "secrets", "tokens" })">
     <Tabs>
-        <OmniTabsItem Key="general" Title="@L["General"]">
-            <OmniCard Class="omni-u-mt-sm">
+        <OmniTabsItem Key="general" Title="@L["General"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("tune")" /></Icon><ChildContent>
+            @* R-14: the card and the section are separated by this stack's gap, not by a margin of their own. *@
+            <OmniStack>
+            <OmniCard>
                 @foreach (var setting in TextSettings)
                 {
                     <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
@@ -30,14 +32,15 @@
                 }
             </OmniCard>
             @* A switch, saved as soon as it changes: "run to end" is a safety choice, not free text. *@
-            <OmniSettingsSection Title="@L["Pipelines"]" Class="omni-u-mt-md">
+            <OmniSettingsSection Title="@L["Pipelines"]">
                 <OmniSettingsTile Title="@L["AllowRunToEnd"]" Description="@L["AllowRunToEndDescription"]">
                     <OmniSwitch Value="@_allowRunToEnd" ValueExpression="@(() => _allowRunToEnd)"
                                 ValueChanged="@((bool value) => SaveRunToEndAsync(value))" Disabled="@_savingRunToEnd"
                                 aria-label="@L["AllowRunToEnd"]" />
                 </OmniSettingsTile>
             </OmniSettingsSection>
-        </OmniTabsItem>
+            </OmniStack>
+        </ChildContent></OmniTabsItem>
 
         <OmniTabsItem Key="quality-gates" Title="@L["QualityGates"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve(("rule"))" /></Icon><ChildContent>
             <QualityGatePolicyEditor Scope="AnalysisPolicyScope.Global" CanEdit="true" />
@@ -45,20 +48,21 @@
 
         @* The platform e-mail sender, default no-reply mailbox or custom SMTP server. *@
         <OmniTabsItem Key="email" Title="@L["EmailSenderTab"]"><Icon><OmniIcon Name="OmniIconName.Envelope" /></Icon><ChildContent>
-            <div class="omni-u-mt-sm">
-                <EmailSenderSettingsPanel />
-            </div>
+            <EmailSenderSettingsPanel />
         </ChildContent></OmniTabsItem>
 
         @* The daily recap e-mail, sent every morning by the platform sender. *@
         <OmniTabsItem Key="daily-recap" Title="@L["DailyRecapTab"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("schedule")" /></Icon><ChildContent>
-            <div class="omni-u-mt-sm">
-                <DailyRecapSettingsPanel />
-            </div>
+            <DailyRecapSettingsPanel />
         </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="secrets" Title="@L["Secrets"]">
-            <OmniCard Class="omni-u-mt-sm">
+        @* R-69: when to alert before a certificate expires. *@
+        <OmniTabsItem Key="certificate-alerts" Title="@L["CertificateAlertsTab"]"><Icon><OmniIcon Name="OmniIconName.Lock" /></Icon><ChildContent>
+            <CertificateAlertSettingsPanel />
+        </ChildContent></OmniTabsItem>
+
+        <OmniTabsItem Key="secrets" Title="@L["Secrets"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lock")" /></Icon><ChildContent>
+            <OmniCard>
                 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.End" Class="omni-u-mb-lg">
                     <OmniFormField Label="@L["Key"]" For="oe-formfield-pages-settings-adminsettings-1">
                         <OmniTextBox Id="oe-formfield-pages-settings-adminsettings-1" @bind-Value="_newSecretKey" />
@@ -77,7 +81,7 @@
                                 <OmniText Element="OmniTextElement.Paragraph">--------</OmniText>
                             </Template>
                         </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="SecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+                        <OmniDataGridColumn TItem="SecretDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="10rem" Filterable="true" />
                         <OmniDataGridColumn TItem="SecretDto" Title="" Width="6.25rem" Sortable="false">
                             <Template Context="secret">
                                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => DeleteSecret(secret.Id))" title="@L["DeleteSecret"]" Label="@L["DeleteSecret"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
@@ -86,10 +90,10 @@
                     </Columns>
                 </OmniDataGrid>
             </OmniCard>
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="tokens" Title="@L["RegistrationTokens"]">
-            <OmniCard Class="omni-u-mt-sm">
+        <OmniTabsItem Key="tokens" Title="@L["RegistrationTokens"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("vpn_key")" /></Icon><ChildContent>
+            <OmniCard>
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@GenerateToken" Class="omni-u-mb-lg" title="@L["GenerateToken"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Generate"]</span></ChildContent></OmniButton>
 
                 <OmniDataGrid @ref="_tokensGrid" ExportMarkdown="false" FillAvailableHeight="true" Items="@_tokens" TItem="RegistrationTokenDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" EmptyText="@L["NoRecords"]" Class="aetheus-grid-fullheight" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
@@ -110,13 +114,13 @@
                         </OmniDataGridColumn>
                         <OmniDataGridColumn TItem="RegistrationTokenDto" Property="IsUsed" Title="@L["Used"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@UsedText">
                             <Template Context="t">
-                                <OmniBadge Fill="OmniFill.Solid" Tone="@(t.IsUsed ? OmniTone.Neutral : OmniTone.Success)">@(t.IsUsed ? L["Used"].Value : L["Available"].Value)</OmniBadge>
+                                <OmniBadge Icon="@(BadgeIcon.ForState(t.IsUsed ? OmniTone.Neutral : OmniTone.Success))" Fill="OmniFill.Solid" Tone="@(t.IsUsed ? OmniTone.Neutral : OmniTone.Success)">@(t.IsUsed ? L["Used"].Value : L["Available"].Value)</OmniBadge>
                             </Template>
                         </OmniDataGridColumn>
-                        <OmniDataGridColumn TItem="RegistrationTokenDto" Property="ExpiresAt" Title="@L["Expires"]" FormatString="{0:g}" Width="10rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+                        <OmniDataGridColumn TItem="RegistrationTokenDto" Property="ExpiresAt" Title="@L["Expires"]" FormatString="{0:g}" Width="10rem" Filterable="true" />
                     </Columns>
                 </OmniDataGrid>
             </OmniCard>
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>

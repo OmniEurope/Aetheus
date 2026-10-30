@@ -95,6 +95,71 @@ public sealed class PipelineSetupProductionTests : BunitContext
             && request.Body!.Contains("application-deploy-prod", StringComparison.Ordinal));
     }
 
+    /// <summary>Recette R-72: a candidate that succeeds hands the release it published to the deployment pipeline created
+    /// in the same pass, like <c>aetheus-candidate</c>. The deployment keeps its own approvals, so production still waits.</summary>
+    [Fact]
+    public async Task AProductionAnalysisThatAnswersNotJson_StillCreatesTheDeployProdPipeline_WithoutAnalysis()
+    {
+        var cut = await OpenCapabilitiesAsync();
+        _handler.SetRawResponse(HttpMethod.Post, "api/pipelines/setup/production-analysis", "<html>proxy error</html>", "text/html");
+
+        var created = await FinishAsync(cut, 7);
+
+        var deploy = Assert.Single(created, request => request.Name == "atlas-deploy-prod");
+        Assert.DoesNotContain("COMPOSE_FILE", deploy.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AProductionAnalysisThatTimesOut_StillCreatesTheDeployProdPipeline_WithoutAnalysis()
+    {
+        var cut = await OpenCapabilitiesAsync();
+        _handler.SetAsyncJsonResponse<PipelineProductionAnalysisDto>(HttpMethod.Post, "api/pipelines/setup/production-analysis",
+            _ => Task.FromException<PipelineProductionAnalysisDto>(new TaskCanceledException("Test: timeout")));
+
+        var created = await FinishAsync(cut, 7);
+
+        var deploy = Assert.Single(created, request => request.Name == "atlas-deploy-prod");
+        Assert.DoesNotContain("COMPOSE_FILE", deploy.YamlDefinition, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheCandidate_IsChainedToTheDeployProdPipelineCreatedInTheSamePass_WithTheLatestRelease()
+    {
+        var cut = await OpenCapabilitiesAsync();
+
+        var created = await FinishAsync(cut, 7);
+
+        var candidate = Parse(Assert.Single(created, request => request.Name == "atlas-candidate").YamlDefinition);
+        var chain = Assert.IsType<List<object>>(candidate["on_success"]);
+        var target = Assert.IsType<Dictionary<object, object>>(Assert.Single(chain));
+        Assert.Equal("atlas-deploy-prod", target["pipeline"]);
+        Assert.Equal("latest", target["release"]);
+    }
+
+    [Fact]
+    public async Task WithoutProduction_TheCandidateIsChainedToNothing()
+    {
+        var cut = await OpenCapabilitiesAsync();
+
+        await ClickAsync(cut, "setup-option-production");
+        var created = await FinishAsync(cut, 6);
+
+        Assert.All(created, request =>
+            Assert.DoesNotContain("on_success", request.YamlDefinition, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OnlyTheCandidateTemplate_CarriesTheChain_AndOnlyWhenTheDeployProdPipelineIsCreated()
+    {
+        var withDeploy = Input();
+        var withoutDeploy = withDeploy with { CreatedSuffixes = ["ci"] };
+
+        Assert.Contains("on_success:", PipelineSetupYamlBuilder.Build("atlas-candidate", "application-candidate", 3, withDeploy), StringComparison.Ordinal);
+        Assert.DoesNotContain("on_success", PipelineSetupYamlBuilder.Build("atlas-candidate", "application-candidate", 3, withoutDeploy), StringComparison.Ordinal);
+        Assert.DoesNotContain("on_success", PipelineSetupYamlBuilder.Build("atlas-ci", "application-ci", 3, withDeploy), StringComparison.Ordinal);
+        Assert.DoesNotContain("on_success", PipelineSetupYamlBuilder.Build("atlas-deploy-prod", "application-deploy-prod", 3, withDeploy), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task TheCapabilitiesStep_AsksNothingAboutADeploymentTarget_AndNeverReadsTheServers()
     {

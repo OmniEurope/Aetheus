@@ -207,6 +207,46 @@ public sealed class PipelineReleaseGateVariablesTests : IDisposable
         Assert.DoesNotContain(ApprovalVariable, vars.Keys);
     }
 
+    private const string OverriddenVerifyCondition = "eq(variables['AETHEUS_RUN_GATE_OVERRIDE'], 'true')";
+
+    [Fact]
+    public async Task ARunLaunchedDespiteTheGate_TellsTheAgentStepsSo()
+    {
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: null, grade: null);
+        var run = DeployRun(ProjectId, "1.4.0");
+        run.GateOverrideAt = new DateTime(2026, 10, 28, 12, 0, 0, DateTimeKind.Utc);
+        _repo.GetPipelineRunWithPipelineAsync(run.Id, Arg.Any<CancellationToken>()).Returns(run);
+
+        var vars = await ResolveStageAsync(run);
+
+        Assert.Equal("true", vars[GateOverrideVariable]);
+        Assert.True(PipelineRunHelpers.EvaluateCondition(OverriddenVerifyCondition, vars, false).Met);
+    }
+
+    [Fact]
+    public async Task NeitherThePipelineNorTheCaller_CanClaimAGateOverride()
+    {
+        // The run itself was not launched despite the gate: a launch or pipeline variable naming the override
+        // is overwritten, so the agent-side verification keeps refusing.
+        await AddReleaseAsync(ProjectId, "1.4.0", deployable: null, grade: null);
+        var forged = new Dictionary<string, string> { [GateOverrideVariable] = "true" };
+        var run = DeployRun(ProjectId, "1.4.0", extra: forged);
+        _repo.GetPipelineRunWithPipelineAsync(run.Id, Arg.Any<CancellationToken>()).Returns(run);
+
+        var vars = await ResolveStageAsync(run, DeployDefinition(forged));
+
+        Assert.Equal("false", vars[GateOverrideVariable]);
+        Assert.False(PipelineRunHelpers.EvaluateCondition(OverriddenVerifyCondition, vars, false).Met);
+    }
+
+    [Fact]
+    public void TheOverriddenVerification_NeverRunsWhenTheVariableIsAbsent()
+    {
+        var verdict = PipelineRunHelpers.EvaluateCondition(OverriddenVerifyCondition, [], false);
+        Assert.Null(verdict.Error);
+        Assert.False(verdict.Met);
+    }
+
     [Fact]
     public void TheTemplateCondition_RequiresTheApprovalWhenTheVariableIsAbsent()
     {

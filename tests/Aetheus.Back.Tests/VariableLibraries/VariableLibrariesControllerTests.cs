@@ -16,6 +16,9 @@ public class VariableLibrariesControllerTests
 
     public VariableLibrariesControllerTests()
     {
+        // ADR-059: the caller's organization lets it give a library to the project (the denial has its own test).
+        _authzMock.CanOwnAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _sut = new VariableLibrariesController(_serviceMock, _authzMock);
         _sut.ControllerContext = new ControllerContext
         {
@@ -105,6 +108,22 @@ public class VariableLibrariesControllerTests
         var result = await _sut.CreateLibrary(new CreateVariableLibraryRequest { Name = "New" }, TestContext.Current.CancellationToken);
 
         Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    // R-46: a Write role in organization A never creates a library inside a project of organization B.
+    [Fact]
+    public async Task CreateLibrary_InAProjectItsOrganizationDoesNotAllow_IsForbidden()
+    {
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.VariableLibrary, null, Permission.Write, Arg.Any<CancellationToken>())
+            .Returns(true);
+        _authzMock.CanOwnAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.VariableLibrary, 42, null, null, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var result = await _sut.CreateLibrary(
+            new CreateVariableLibraryRequest { Name = "New", ProjectId = 42 }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        await _serviceMock.DidNotReceive().CreateLibraryAsync(Arg.Any<CreateVariableLibraryRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -32,7 +32,15 @@ internal sealed class PipelineMigrationGateRepository(AppDbContext db) : IPipeli
                 && step.StageName == verdict.StageName
                 && step.StepName == verdict.StepName
                 && db.EnvironmentServers.Any(link =>
-                    link.EnvironmentId == environmentId && link.ServerId == step.ServerId)))
+                    link.EnvironmentId == environmentId && link.ServerId == step.ServerId))
+                // Servers can be shared by several projects' environments: the run must also be a deployment of this
+                // environment, which is a pipeline of its project or one the environment owns (recette R-81).
+                && db.PipelineRuns.Any(run => run.Id == verdict.PipelineRunId
+                    && db.Pipelines.Any(pipeline => pipeline.Id == run.PipelineId
+                        && (pipeline.EnvironmentId == environmentId
+                            || (pipeline.ProjectId != null
+                                && db.Environments.Any(environment =>
+                                    environment.Id == environmentId && environment.ProjectId == pipeline.ProjectId))))))
             .OrderByDescending(verdict => verdict.CreatedAt)
             .ThenByDescending(verdict => verdict.Id)
             .FirstOrDefaultAsync(ct);

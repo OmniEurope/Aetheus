@@ -8,7 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Aetheus.Back.Components.Users;
 
-public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents) : IUserService
+public class UserService(IUserRepository repo, IHttpContextAccessor httpContextAccessor, IAuditService audit, IResourceAuthorizationService authz, IMemoryCache cache, TimeProvider timeProvider, IAdminChangeNotifier notifier, IUserChangeNotifier userNotifier, IDomainEventDispatcher domainEvents, IOrganizationRoleAssignmentService roleAssignments) : IUserService
 {
     private readonly UserPipelineOwnershipGuard _pipelineOwnership = new(repo, audit, domainEvents);
 
@@ -28,6 +28,25 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         };
     }
 
+    public async Task<PaginatedResult<UserDto>> GetOrganizationUsersAsync(
+        PaginationRequest request, IReadOnlyList<int> organizationIds, bool siteAdmin, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(organizationIds);
+        var (page, pageSize) = request.Normalize();
+        var (items, totalCount) = await repo.GetUsersPagedProjectedAsync(
+            request.Search, page, pageSize, ct, request.SortBy, request.SortDescending, request.Filters, organizationIds)
+            .ConfigureAwait(false);
+
+        return new PaginatedResult<UserDto>
+        {
+            Items = siteAdmin ? items : [.. items.Select(user => user with { Email = null, Roles = [] })],
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
     public async Task<UserDto?> GetUserDetailAsync(int id, CancellationToken ct = default)
     {
         var user = await repo.GetUserDetailAsync(id, ct).ConfigureAwait(false);
@@ -40,9 +59,11 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
             Email = user.Email,
             IsActive = user.IsActive,
             MustChangePassword = user.MustChangePassword,
-            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList(),
+            Roles = SiteRoles(user),
+            OrganizationRoles = OrganizationRoles(user),
             CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
+            UpdatedAt = user.UpdatedAt,
+            LastActivityAt = user.LastActivityAt
         };
     }
 
@@ -61,14 +82,19 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         var existing = await repo.FindByUsernameAsync(normalized, ct).ConfigureAwait(false);
         if (existing is not null)
             throw new ConflictException($"Username '{normalized}' is already taken.");
+        var email = await RequireAvailableEmailAsync(request.Email, null, ct).ConfigureAwait(false);
+        RefuseOrganizationRolesHeldSiteWide(request.Roles);
+        await roleAssignments.ValidateAsync(request.OrganizationRoles, ct).ConfigureAwait(false);
 
         var user = new User
         {
             Username = normalized,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            Email = request.Email,
+            // R-14 (owner decision 2026-10-28): no password at creation. The hash is of 32 random bytes nobody
+            // ever sees, so no password signs in until the person chooses theirs from the welcome mail's link.
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))),
+            Email = email,
             IsActive = true,
-            MustChangePassword = request.MustChangePassword
+            MustChangePassword = false
         };
 
         await repo.AddUserAsync(user, ct).ConfigureAwait(false);
@@ -81,11 +107,27 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
 
             await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         }
+        // R-47: each organization role makes the new user a member of that organization.
+        if (request.OrganizationRoles.Count > 0)
+            await roleAssignments.ReplaceForUserAsync(user.Id, request.OrganizationRoles, ct).ConfigureAwait(false);
 
         var detail = await repo.GetUserDetailAsync(user.Id, ct).ConfigureAwait(false);
         await audit.LogAsync("Created", "User", user.Id, user.Username, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(AdminEntities.User, user.Id, EntityChangeOps.Created, ct).ConfigureAwait(false);
-        return MapToDto(detail!);
+        // R-14: the account exists whatever becomes of its welcome mail; the answer says which.
+        var welcome = new UserWelcomeRequestedEvent(user.Id, user.Username, email);
+        await domainEvents.DispatchAsync(welcome, ct).ConfigureAwait(false);
+        if (SiteRoles(detail!).Contains(RoleNames.Admin))
+            await AnnounceSiteAdminAsync(detail!, ct).ConfigureAwait(false);
+        return MapToDto(detail!) with
+        {
+            WelcomeMail = welcome.Outcome ?? new WelcomeMailResultDto
+            {
+                Status = WelcomeMailStatus.Failed,
+                To = email,
+                Message = "The welcome mail was not sent: it could not be written (see the server log)."
+            }
+        };
     }
 
     public async Task<UserDto?> UpdateUserAsync(int id, UpdateUserRequest request, CancellationToken ct = default)
@@ -94,16 +136,16 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         if (user is null) return null;
         var normalized = (request.Username ?? string.Empty).Trim().ToLowerInvariant();
         await EnsureUsernameAvailableAsync(id, user.Username, normalized, ct).ConfigureAwait(false);
+        var email = await RequireAvailableEmailAsync(request.Email, id, ct).ConfigureAwait(false);
         // Every refusal is decided before the entity changes, because the pipeline transfer below
         // saves its own changes and must not carry a half-applied update of this user with it.
         var deactivating = user.IsActive && !request.IsActive;
-        var requestedRolesList = request.Roles ?? [];
+        var requestedRolesList = await ValidateRequestedRolesAsync(user, request, ct).ConfigureAwait(false);
         var roleChange = DescribeRoleChange(user, requestedRolesList);
         // AUD-05: a change that can remove an active administrator holds the administrator-set lock
         // until its commit, so two such changes never both pass the "last administrator" count.
-        await using var administratorSet = roleChange.WasAdmin && (roleChange.LosingAdmin || deactivating)
-            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
-            : null;
+        await using var administratorSet =
+            await LockAdministratorSetWhenLosingOneAsync(roleChange, deactivating, ct).ConfigureAwait(false);
         await EnsureSecurityChangeAllowedAsync(user, roleChange, deactivating, ct).ConfigureAwait(false);
         var previousUsername = user.Username;
         var renamed = !string.Equals(previousUsername, normalized, StringComparison.Ordinal);
@@ -113,22 +155,60 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
                 user.Id, user.Username, request.TransferPipelinesToUsername, request.ForceWithOwnedPipelines,
                 "Deactivated", ct).ConfigureAwait(false);
         await ApplyUpdateAsync(
-            user, request, normalized, requestedRolesList, roleChange,
+            user, request, normalized, email, requestedRolesList, roleChange,
             endsSessions: deactivating || renamed || forcedChangeArmed, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        var organizationRolesChanged = await ReplaceOrganizationRolesAsync(user.Id, request, ct).ConfigureAwait(false);
         InvalidateIdentityCaches(user, previousUsername, renamed, forcedChangeArmed);
-        await PublishUserUpdateAsync(user, roleChange.HasChanged, deactivating, ct).ConfigureAwait(false);
+        return await PublishUpdatedUserAsync(user, organizationRolesChanged, roleChange, deactivating, ct).ConfigureAwait(false);
+    }
+
+    // The administrator-set lock is held only by a change that can remove an active administrator.
+    private async Task<IAsyncDisposable?> LockAdministratorSetWhenLosingOneAsync(
+        RoleChange roleChange, bool deactivating, CancellationToken ct) =>
+        roleChange.WasAdmin && (roleChange.LosingAdmin || deactivating)
+            ? await repo.LockAdministratorSetAsync(ct).ConfigureAwait(false)
+            : null;
+
+    // Everything that follows the saved update: the notifications, the announcement of a new site
+    // administrator and the end of a deactivated user's sessions.
+    private async Task<UserDto> PublishUpdatedUserAsync(
+        User user, bool organizationRolesChanged, RoleChange roleChange, bool deactivating, CancellationToken ct)
+    {
+        await PublishUserUpdateAsync(user, roleChange.HasChanged || organizationRolesChanged, deactivating, ct).ConfigureAwait(false);
+        if (roleChange.WillBeAdmin && !roleChange.WasAdmin)
+            await AnnounceSiteAdminAsync(user, ct).ConfigureAwait(false);
+        if (organizationRolesChanged)
+            user = await repo.GetUserDetailAsync(user.Id, ct).ConfigureAwait(false) ?? user;
         if (deactivating)
             await EndSessionAsync(user.Id, UserSessionEndReasons.Deactivated, ct).ConfigureAwait(false);
         return MapToDto(user);
     }
 
+    private async Task<bool> ReplaceOrganizationRolesAsync(int userId, UpdateUserRequest request, CancellationToken ct) =>
+        request.OrganizationRoles is { } requestedOrganizationRoles
+        && await roleAssignments.ReplaceForUserAsync(userId, requestedOrganizationRoles, ct).ConfigureAwait(false);
+
+    // Every refusal about the requested roles, before anything is saved; returns the site-wide role names.
+    private async Task<List<string>> ValidateRequestedRolesAsync(User user, UpdateUserRequest request, CancellationToken ct)
+    {
+        var requestedRolesList = request.Roles ?? [];
+        RefuseOrganizationRolesHeldSiteWide(requestedRolesList);
+        if (request.OrganizationRoles is { } organizationRoles)
+        {
+            await roleAssignments.ValidateAsync(organizationRoles, ct).ConfigureAwait(false);
+            // RBAC audit, finding 10: refused here, before anything is saved, rather than half-way.
+            await roleAssignments.RefuseLastOwnerLossAsync(user.Id, organizationRoles, ct).ConfigureAwait(false);
+        }
+        return requestedRolesList;
+    }
+
     private async Task ApplyUpdateAsync(
-        User user, UpdateUserRequest request, string normalizedUsername, List<string> requestedRoles,
+        User user, UpdateUserRequest request, string normalizedUsername, string email, List<string> requestedRoles,
         RoleChange roleChange, bool endsSessions, CancellationToken ct)
     {
         user.Username = normalizedUsername;
-        user.Email = request.Email;
+        user.Email = email;
         user.IsActive = request.IsActive;
         user.MustChangePassword = request.MustChangePassword;
         user.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -164,9 +244,22 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
             throw new ConflictException($"Username '{normalizedUsername}' is already taken.");
     }
 
+    // PLAN-003 P3-2: the e-mail is the sign-in identifier, so every account has one, stored normalized
+    // and held by no other account. The refusal names a code the front says in the user's language.
+    private async Task<string> RequireAvailableEmailAsync(string? requested, int? userId, CancellationToken ct)
+    {
+        var email = UserEmail.Normalize(requested)
+            ?? throw new BadRequestException("An e-mail address is required: it is the sign-in identifier.");
+        if (await repo.EmailInUseAsync(email, userId, ct).ConfigureAwait(false))
+            throw new ConflictException("This e-mail address is already used by another account.", UserErrorCodes.EmailInUse);
+        return email;
+    }
+
     private static RoleChange DescribeRoleChange(User user, IReadOnlyCollection<string> requestedRoles)
     {
-        var previous = user.UserRoles.Select(item => item.Role.Name).OrderBy(name => name).ToList();
+        // Only Admin is held site-wide (ADR-059); the inert legacy rows of other roles are no change.
+        var previous = user.UserRoles.Select(item => item.Role.Name)
+            .Where(name => name == RoleNames.Admin).OrderBy(name => name).ToList();
         var requested = requestedRoles.OrderBy(name => name).ToList();
         return new RoleChange(
             !previous.SequenceEqual(requested, StringComparer.Ordinal),
@@ -186,6 +279,8 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
             && string.Equals(callerName, user.Username, StringComparison.Ordinal);
         if (changingOwnAccount && roleChange.LosingAdmin)
             throw new BadRequestException("You cannot remove the Admin role from your own account.");
+        if (changingOwnAccount && deactivating)
+            throw new BadRequestException("You cannot deactivate your own account.");
         if (!roleChange.WasAdmin) return;
         var admins = await repo.CountActiveAdminsAsync(ct).ConfigureAwait(false);
         if (admins <= 1)
@@ -199,7 +294,9 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
     {
         var roles = await repo.GetRolesByNamesAsync(requestedRoles, ct).ConfigureAwait(false);
         var requestedRoleIds = roles.Select(role => role.Id).ToHashSet();
-        user.UserRoles.RemoveAll(userRole => !requestedRoleIds.Contains(userRole.RoleId));
+        // Only the Admin row is replaced: the inert legacy rows of other roles stay, so rolling the
+        // ScopeRoleAssignmentsToOrganizations migration back still finds them (ADR-059).
+        user.UserRoles.RemoveAll(userRole => userRole.Role.Name == RoleNames.Admin && !requestedRoleIds.Contains(userRole.RoleId));
         var assignedRoleIds = user.UserRoles.Select(userRole => userRole.RoleId).ToHashSet();
         foreach (var role in roles.Where(role => !assignedRoleIds.Contains(role.Id)))
             user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id, Role = role });
@@ -353,24 +450,63 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         return await repo.GetAllRoleNamesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task AssignRoleAsync(int userId, int roleId, CancellationToken ct = default)
+    public async Task AssignRoleAsync(int userId, int roleId, int? organizationId, CancellationToken ct = default)
     {
         var user = await repo.GetUserDetailAsync(userId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"User {userId} not found.");
         var role = await repo.FindRoleAsync(roleId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Role {roleId} not found.");
 
+        if (!IsSiteRole(role.Name))
+        {
+            // ADR-059: every role but Admin is held for one organization, and makes the user a member.
+            if (organizationId is not { } organization)
+                throw new BadRequestException($"The '{role.Name}' role is held for one organization; choose the organization.");
+            if (!await roleAssignments.AssignAsync(user.Id, organization, role.Id, ct).ConfigureAwait(false))
+                throw new ConflictException($"User '{user.Username}' already holds role '{role.Name}' for this organization.");
+            await PersistRoleChangeAsync(user, ct).ConfigureAwait(false);
+            return;
+        }
+        if (organizationId is not null)
+            throw new BadRequestException($"The '{role.Name}' role is site-wide and is never held for one organization.");
+
         if (user.UserRoles.Any(ur => ur.RoleId == roleId))
             throw new ConflictException($"User '{user.Username}' already holds role '{role.Name}'.");
 
         user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
         await PersistRoleChangeAsync(user, ct).ConfigureAwait(false);
+        await AnnounceSiteAdminAsync(user, ct).ConfigureAwait(false);
     }
 
-    public async Task<bool> UnassignRoleAsync(int userId, int roleId, CancellationToken ct = default)
+    public async Task<bool> UnassignRoleAsync(int userId, int roleId, int? organizationId, CancellationToken ct = default)
     {
         var user = await repo.GetUserDetailAsync(userId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"User {userId} not found.");
+
+        if (organizationId is { } organization)
+        {
+            var held = user.OrganizationRoles.FirstOrDefault(item => item.RoleId == roleId && item.OrganizationId == organization);
+            if (held is null
+                || !await roleAssignments.UnassignAsync(user.Id, organization, roleId, ct).ConfigureAwait(false))
+                return false;
+            await PersistRoleChangeAsync(user, ct).ConfigureAwait(false);
+            return true;
+        }
+
+        if (user.OrganizationRoles.Any(item => item.RoleId == roleId))
+        {
+            // No organization named (the role's member list shows each holder once): the role leaves
+            // every organization it is held for, and an organization left without role ends the membership.
+            var remaining = user.OrganizationRoles
+                .Where(item => item.RoleId != roleId)
+                .Select(item => new OrganizationRoleAssignmentDto { OrganizationId = item.OrganizationId, Role = item.Role.Name })
+                .ToList();
+            await roleAssignments.ReplaceForUserAsync(user.Id, remaining, ct).ConfigureAwait(false);
+            var legacy = user.UserRoles.FirstOrDefault(ur => ur.RoleId == roleId);
+            if (legacy is not null) user.UserRoles.Remove(legacy);
+            await PersistRoleChangeAsync(user, ct).ConfigureAwait(false);
+            return true;
+        }
 
         var target = user.UserRoles.FirstOrDefault(ur => ur.RoleId == roleId);
         if (target is null) return false;
@@ -405,6 +541,14 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         await userNotifier.NotifyPermissionsChangedAsync(user.Id, PermissionChangeReasons.Roles, ct).ConfigureAwait(false);
     }
 
+    // Owner decision 2026-10-28: every account that newly holds the site Admin role is audited and told by mail.
+    // Auth sends the mail and audits its outcome; a mail that does not leave never undoes the grant.
+    private async Task AnnounceSiteAdminAsync(User user, CancellationToken ct)
+    {
+        await audit.LogAsync("SiteAdminGranted", "User", user.Id, user.Username, ct).ConfigureAwait(false);
+        await domainEvents.DispatchAsync(new SiteAdminGrantedEvent(user.Id, user.Username, user.Email), ct).ConfigureAwait(false);
+    }
+
     // Rotates the security stamp (immediate JWT revocation). Part of the entity being persisted, so
     // this must run BEFORE SaveChangesAsync. Pair with InvalidateAuthzCaches AFTER the commit - see
     // that method's doc comment for why the two are not combined into a single pre-save call.
@@ -420,6 +564,33 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         authz.InvalidateRoleCache(user.Username);
     }
 
+    private static bool IsSiteRole(string roleName) =>
+        string.Equals(roleName, RoleNames.Admin, StringComparison.Ordinal);
+
+    // ADR-059: only Admin is held site-wide; any other role names an organization.
+    private static void RefuseOrganizationRolesHeldSiteWide(IEnumerable<string> roleNames)
+    {
+        var refused = roleNames.Where(name => !IsSiteRole(name)).ToList();
+        if (refused.Count > 0)
+            throw new BadRequestException(
+                $"Only the '{RoleNames.Admin}' role is held site-wide; give {string.Join(", ", refused)} for an organization.");
+    }
+
+    private static List<string> SiteRoles(User user) =>
+        user.UserRoles.Where(item => IsSiteRole(item.Role.Name)).Select(item => item.Role.Name).ToList();
+
+    private static List<OrganizationRoleAssignmentDto> OrganizationRoles(User user) =>
+        user.OrganizationRoles
+            .OrderBy(item => item.Organization?.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.Role?.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(item => new OrganizationRoleAssignmentDto
+            {
+                OrganizationId = item.OrganizationId,
+                OrganizationName = item.Organization?.Name,
+                Role = item.Role?.Name ?? string.Empty
+            })
+            .ToList();
+
     private sealed record RoleChange(bool HasChanged, bool WasAdmin, bool WillBeAdmin)
     {
         public bool LosingAdmin => WasAdmin && !WillBeAdmin;
@@ -433,8 +604,10 @@ public class UserService(IUserRepository repo, IHttpContextAccessor httpContextA
         IsActive = u.IsActive,
         TotpEnabled = u.TotpEnabled,
         MustChangePassword = u.MustChangePassword,
-        Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
+        Roles = SiteRoles(u),
+        OrganizationRoles = OrganizationRoles(u),
         CreatedAt = u.CreatedAt,
-        UpdatedAt = u.UpdatedAt
+        UpdatedAt = u.UpdatedAt,
+        LastActivityAt = u.LastActivityAt
     };
 }

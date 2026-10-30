@@ -7,6 +7,7 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
     [Parameter, SupplyParameterFromQuery(Name = "search")]
     public string? Search { get; set; }
 
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
@@ -213,12 +214,15 @@ public partial class SystemLogs : ComponentBase, IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, ConfirmIcon = OmniIconName.Broom, OkButtonText = L["Purge"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
 
-        var deleted = await Api.Security.PurgeSystemLogsAsync();
-        if (deleted.HasValue)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("PurgeLogs", "PurgeResult", deleted.Value);
-            await OnRefreshAsync();
-        }
+            var deleted = await Api.Security.PurgeSystemLogsAsync();
+            if (deleted.HasValue)
+            {
+                Toast.Success("PurgeLogs", "PurgeResult", deleted.Value);
+                await OnRefreshAsync();
+            }
+        });
     }
 
     private Task OnCopyCorrelationIdAsync(string correlationId) => Clipboard.CopyAsync(correlationId, correlationId);

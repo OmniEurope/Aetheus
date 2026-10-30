@@ -17,10 +17,11 @@ public static class PipelineRunDtoMapper
     public static PipelineRunDto MapRunToDto(PipelineRun r)
     {
         var definition = ParseSnapshot(r);
-        return MapRunToDto(
+        var dto = MapRunToDto(
             r,
             definition is null ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) : StageDepths(definition),
             definition is null ? [] : PipelineRunScheduler.AdvisoryStepKeys(definition));
+        return dto with { DeployedAddress = PipelineRunDeployedAddress.Read(r, definition, dto.ResolvedVariables) };
     }
 
     /// <summary>The run's own definition snapshot, null when missing or unparseable.</summary>
@@ -94,6 +95,9 @@ public static class PipelineRunDtoMapper
             PipelineName = r.Pipeline?.Name ?? string.Empty,
             Status = r.Status,
             RunToEnd = r.RunToEnd,
+            GateOverrideBy = r.GateOverrideBy,
+            GateOverrideAt = r.GateOverrideAt,
+            GateOverrideWarnings = PipelineGateOverride.ReadWarnings(r.GateOverrideWarningsJson),
             ResumeDeadline = r.Status == PipelineStatus.AwaitingResume ? r.ResumeDeadline : null,
             CancellationRequested = HasCancellationRequest(r.AdditionalVariablesJson),
             CancelledBy = CancellationNote(r.AdditionalVariablesJson, PipelineRunHelpers.CancelledByVariable),

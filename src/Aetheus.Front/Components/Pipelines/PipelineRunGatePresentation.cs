@@ -82,4 +82,38 @@ internal static class PipelineRunGatePresentation
     /// </summary>
     public static AnalysisGrade? DeployedCandidateGrade(PipelineRunDto run, bool qualityTileShown) =>
         !qualityTileShown && run.Parameters.ContainsKey(CandidateVersionParameter) ? run.GateGrade : null;
+
+    /// <summary>
+    /// Recette R-74: the open findings of the gate by domain (the display domains: reliability and code quality read
+    /// as one), in the order of the grade block. They add up to the open count of the tile, which says so: 5 findings
+    /// in the tile and 2 on a grade line are explained by the 3 that sit in another domain. Every domain counts in the
+    /// grade (owner decision of 2026-10-25), so none is set apart. Empty when the gate holds no open finding.
+    /// </summary>
+    public static IReadOnlyList<(AnalysisGradeDomain Domain, int Count)> OpenFindingsByDomain(AnalysisRunGateDto gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+
+        return [.. gate.OpenFindingCounts
+            .GroupBy(count => DisplayDomainOf(count.Category))
+            .Select(group => (Domain: group.Key, Count: group.Sum(count => count.Count)))
+            .Where(item => item.Count > 0)
+            .OrderBy(item => DisplayOrder(item.Domain))];
+    }
+
+    // The domain a finding of this category belongs to, as the grade block lists it.
+    private static AnalysisGradeDomain DisplayDomainOf(AnalysisCategory category) => category switch
+    {
+        AnalysisCategory.Architecture => AnalysisGradeDomain.Architecture,
+        AnalysisCategory.CodeQuality or AnalysisCategory.Coverage or AnalysisCategory.Duplication or AnalysisCategory.Accessibility
+            => AnalysisGradeDomain.CodeQuality,
+        _ => AnalysisGradeDomain.Security
+    };
+
+    // The order of the grade block: security, then code quality and tests, then architecture.
+    private static int DisplayOrder(AnalysisGradeDomain domain) => domain switch
+    {
+        AnalysisGradeDomain.Security => 0,
+        AnalysisGradeDomain.CodeQuality => 1,
+        _ => 2
+    };
 }

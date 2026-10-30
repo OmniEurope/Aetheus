@@ -1,7 +1,9 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@* R-99: OE's veil lies over the dialog while a version is being restored; its content stays mounted under it. *@
+<OmniStack Class="@(_restoring ? "omni-busy" : null)" aria-busy="@(_restoring ? "true" : "false")" data-testid="version-history-zone">
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">
+    <OmniAlert Severity="OmniSeverity.Danger">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
@@ -36,3 +38,4 @@
     </Columns>
 </AetheusDataGrid>
 <DialogFooter CancelText="@L["Close"]" OnCancel="@Close" />
+</OmniStack>

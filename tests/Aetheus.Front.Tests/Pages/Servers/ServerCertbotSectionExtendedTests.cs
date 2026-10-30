@@ -65,18 +65,47 @@ public class ServerCertbotSectionExtendedTests : BunitContext
         Assert.Contains("example.com", cut.Markup);
     }
 
+    // R-121: the version is said in the page title, the installed state and the number of certificates are not
+    // repeated in the status bar; the grid has no counter nor filter box above it, its filters are inline.
     [Fact]
-    public void Renders_InstalledBadge_WhenInstalled()
+    public void StatusBar_HasNoInstalledBadgeNoCertificateCountNoVersion_AndNoFilterBoxAboveTheGrid()
     {
         var cut = RenderSection();
-        Assert.Contains("Installed", cut.Markup);
+
+        Assert.DoesNotMatch(@">\s*Installed\s*<", cut.Markup);
+        Assert.DoesNotContain("CertificateCount", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("2.11.0", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("FilterCertificates", cut.Markup, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Renders_Version_InMarkup()
+    public void StatusBar_KeepsTheRenewalCheckBadge_WhenInstalled()
+    {
+        var s = MakeServer();
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, s).Add(x => x.ServerId, s.Id));
+        Assert.Single(cut.FindAll("[data-testid=certbot-renewal-check]"));
+    }
+
+    [Fact]
+    public void TheGridFiltersInlineUnderItsHeader()
     {
         var cut = RenderSection();
-        Assert.Contains("2.11.0", cut.Markup);
+        // ShowHeaderFilterMenu="false": the filter row is rendered and no column header holds a filter button,
+        // except the Expiry column, whose AdvancedFilter adds the From and To range menu (R-52, OE 1.10.0).
+        Assert.Single(cut.FindAll("tr.omni-data-grid__filters"));
+        var menu = Assert.Single(cut.FindAll(".omni-data-grid__filter-menu"));
+        Assert.Contains("Expiry", menu.QuerySelector(".omni-data-grid__filter-menu-panel")!.GetAttribute("aria-label"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheExpiryFilter_IsOneTextInputForADayAMonthOrAYear_NotTwoDatePickers()
+    {
+        var cut = RenderSection();
+        // R-52 (OE 1.10.0): the date column reads dd/mm/yyyy, mm/yyyy or yyyy in one field; the From and To
+        // range pickers live in the header menu of the same filter (AdvancedFilter), not in the filter row.
+        Assert.Empty(cut.FindAll("tr.omni-data-grid__filters input[type=date]"));
+        Assert.NotEmpty(cut.FindAll("tr.omni-data-grid__filters input[type=text]"));
+        Assert.NotEmpty(cut.FindAll(".omni-data-grid__filter-menu input[type=date]"));
     }
 
     [Fact]
@@ -86,42 +115,28 @@ public class ServerCertbotSectionExtendedTests : BunitContext
         {
             Certbot = new CertbotDataDto { IsInstalled = false, Certificates = [] }
         };
-        var cut = RenderSection(server);
-        Assert.Contains("NotInstalled", cut.Markup);
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
+        Assert.Contains("NotInstalled", cut.Find("[data-outlet=page-header-badges]").TextContent);
     }
 
     [Fact]
-    public void FilteredCertificates_EmptySearch_ReturnsAll()
+    public void R_18_InstalledWithAFailedRenewalTest_ShowsNoNotInstalledBadge()
     {
-        var cut = RenderSection();
-        var certs = (List<CertbotCertificateDto>)typeof(ServerCertbotSection)
-            .GetProperty("FilteredCertificates", Priv)!
-            .GetValue(cut.Instance)!;
-        Assert.Equal(2, certs.Count);
-    }
+        var server = MakeServer([]) with
+        {
+            Certbot = new CertbotDataDto
+            {
+                IsInstalled = true,
+                Certificates = [],
+                RenewalCheckedAt = new DateTime(2026, 10, 12, 3, 0, 0, DateTimeKind.Utc),
+                RenewalCheckSucceeded = false
+            }
+        };
+        var cut = this.RenderWithPageHeader<ServerCertbotSection>(p => p.Add(x => x.Server, server).Add(x => x.ServerId, server.Id));
 
-    [Fact]
-    public void FilteredCertificates_ByName_Filters()
-    {
-        var cut = RenderSection();
-        typeof(ServerCertbotSection).GetField("_certSearch", Priv)!.SetValue(cut.Instance, "api");
-        var certs = (List<CertbotCertificateDto>)typeof(ServerCertbotSection)
-            .GetProperty("FilteredCertificates", Priv)!
-            .GetValue(cut.Instance)!;
-        Assert.Single(certs);
-        Assert.Equal("api.example.com", certs[0].Name);
-    }
-
-    [Fact]
-    public void FilteredCertificates_ByDomain_MatchesDomainContains()
-    {
-        var cut = RenderSection();
-        typeof(ServerCertbotSection).GetField("_certSearch", Priv)!.SetValue(cut.Instance, "www.example");
-        var certs = (List<CertbotCertificateDto>)typeof(ServerCertbotSection)
-            .GetProperty("FilteredCertificates", Priv)!
-            .GetValue(cut.Instance)!;
-        Assert.Single(certs);
-        Assert.Equal("example.com", certs[0].Name);
+        Assert.DoesNotContain("NotInstalled", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.Find("[data-outlet=page-header-badges]").Children);
+        Assert.NotEmpty(cut.FindAll(".certbot-renewal-failures"));
     }
 
     [Fact]

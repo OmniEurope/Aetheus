@@ -40,8 +40,11 @@ internal sealed class PipelineFleetService(
     public async Task<PipelineFleetItemDto> GetItemAsync(int pipelineId, CancellationToken ct = default)
     {
         var row = await GetRowAsync(pipelineId, ct).ConfigureAwait(false);
-        var templates = await pipelineRepository.GetTemplatesAsync(ct).ConfigureAwait(false);
-        return MapFleetItem(row, BuildTemplateIndex(templates));
+        var reference = ParseReference(row.YamlDefinition);
+        var template = reference is null
+            ? null
+            : await FindTemplateAsync(reference.Name, row.OrganizationId, ct).ConfigureAwait(false);
+        return MapFleetItem(row, reference, template);
     }
 
     public async Task<PipelineFleetUpdatePreviewDto> PreviewUpdateAsync(
@@ -49,13 +52,14 @@ internal sealed class PipelineFleetService(
     {
         var (row, reference, template) = await GetTemplateContextAsync(pipelineId, ct).ConfigureAwait(false);
         var currentVersion = reference.Version ?? template.LatestVersion;
-        var parameters = ExtractDefaultParameters(row.YamlDefinition);
+        // No run supplies the parameters here: a required one without a default (a candidate version) would
+        // refuse the whole preview, so both sides keep their placeholders and the diff shows the definitions.
         var currentYaml = RewriteReference(row.YamlDefinition, reference.Name, currentVersion);
         var targetYaml = RewriteReference(row.YamlDefinition, reference.Name, targetVersion);
         var currentResolution = await templateResolver.ResolveAsync(
-            currentYaml, row.OrganizationId, parameters, ct).ConfigureAwait(false);
+            currentYaml, row.OrganizationId, null, ct).ConfigureAwait(false);
         var targetResolution = await templateResolver.ResolveAsync(
-            targetYaml, row.OrganizationId, parameters, ct).ConfigureAwait(false);
+            targetYaml, row.OrganizationId, null, ct).ConfigureAwait(false);
         var currentBaseResolution = await templateResolver.ResolveAsync(
             BuildTemplateResolutionYaml(template.Name, currentVersion), row.OrganizationId, null, ct)
             .ConfigureAwait(false);
@@ -220,8 +224,9 @@ internal sealed class PipelineFleetService(
         int pipelineId, CancellationToken ct = default)
     {
         var (row, reference, template) = await GetTemplateContextAsync(pipelineId, ct).ConfigureAwait(false);
+        // Without parameters, like the update preview: a required one without a default must not refuse it.
         var effective = await templateResolver.ResolveAsync(
-            row.YamlDefinition, row.OrganizationId, ExtractDefaultParameters(row.YamlDefinition), ct)
+            row.YamlDefinition, row.OrganizationId, null, ct)
             .ConfigureAwait(false);
         var latest = await GetVersionAsync(template, template.LatestVersion, ct).ConfigureAwait(false);
         return new PipelinePromotePreviewDto
@@ -299,21 +304,21 @@ internal sealed class PipelineFleetService(
         var row = await GetRowAsync(pipelineId, ct).ConfigureAwait(false);
         var reference = ParseReference(row.YamlDefinition)
             ?? throw new BadRequestException("This pipeline is outside the template catalog.");
-        var template = await pipelineRepository.FindTemplateByNameAsync(
-            reference.Name, row.OrganizationId, ct).ConfigureAwait(false)
+        var template = await FindTemplateAsync(reference.Name, row.OrganizationId, ct).ConfigureAwait(false)
             ?? throw new BadRequestException($"Pipeline template '{reference.Name}' was not found.");
         return new PipelineFleetTemplateContext(row, reference, template);
     }
 
+    /// <summary>The template resolver's rule (R-78): the organization's own template, otherwise the
+    /// delivery template the platform shares with every organization.</summary>
+    private async Task<Data.Entities.PipelineTemplate?> FindTemplateAsync(
+        string name, int organizationId, CancellationToken ct) =>
+        await pipelineRepository.FindTemplateByNameAsync(name, organizationId, ct).ConfigureAwait(false)
+        ?? await pipelineRepository.FindSharedTemplateByNameAsync(name, ct).ConfigureAwait(false);
+
     private static PipelineFleetItemDto MapFleetItem(
-        PipelineFleetRow row,
-        IReadOnlyDictionary<(int OrganizationId, string Name), Data.Entities.PipelineTemplate> templates)
+        PipelineFleetRow row, TemplateReference? reference, Data.Entities.PipelineTemplate? template)
     {
-        var reference = ParseReference(row.YamlDefinition);
-        Data.Entities.PipelineTemplate? template = null;
-        if (reference is not null)
-            templates.TryGetValue(
-                (row.OrganizationId, reference.Name.ToUpperInvariant()), out template);
         var pinnedVersion = reference?.Version;
         var freshness = reference is null
             ? PipelineFleetFreshness.OffCatalog
@@ -337,12 +342,6 @@ internal sealed class PipelineFleetService(
         };
     }
 
-    private static Dictionary<(int OrganizationId, string Name), Data.Entities.PipelineTemplate>
-        BuildTemplateIndex(IEnumerable<Data.Entities.PipelineTemplate> templates) =>
-        templates.GroupBy(
-                template => (template.OrganizationId, template.Name.ToUpperInvariant()))
-            .ToDictionary(group => group.Key, group => group.First());
-
     private static TemplateReference? ParseReference(string yaml)
     {
         var match = ExtendsLinePattern.Match(yaml);
@@ -361,15 +360,6 @@ internal sealed class PipelineFleetService(
         return ExtendsLinePattern.Replace(yaml,
             match => match.Groups["prefix"].Value + QuoteYaml($"{name}@{version}") + match.Groups["suffix"].Value,
             1);
-    }
-
-    private static Dictionary<string, string> ExtractDefaultParameters(string yaml)
-    {
-        var definition = YamlParsingHelper.Deserializer.Deserialize<PipelineYamlDefinition>(yaml)
-            ?? throw new BadRequestException("The pipeline YAML is empty.");
-        return definition.Parameters
-            .Where(parameter => parameter.Default is not null)
-            .ToDictionary(parameter => parameter.Name, parameter => parameter.Default!, StringComparer.OrdinalIgnoreCase);
     }
 
     private static List<string> FindOrphanOverrides(string childYaml, string oldBaseYaml, string newBaseYaml)

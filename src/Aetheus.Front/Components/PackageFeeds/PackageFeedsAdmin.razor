@@ -19,14 +19,14 @@
     IsLoading="@_loading" LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20"
     Virtualize="@AetheusGrid.RemoteVirtualization"
     VirtualData="@(() => new OmniDataGridResult<PackageFeedDto>(_feeds, _totalCount))"
-    class="omni-u-mt-lg" FullHeight="true">
+    FullHeight="true">
     <EmptyTemplate>
         <EmptyState Icon="inventory" Title="@L["NoPackageFeeds"]" Description="@L["NoPackageFeedsDescription"]" />
     </EmptyTemplate>
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="PackageFeedDto" Property="Name" Title="@L["Name"]" Filterable="true" />
         <OmniDataGridColumn TItem="PackageFeedDto" Property="FeedType" Title="@L["Type"]" Width="120px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@FeedTypeText" >
-            <Template Context="f"><OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(f.FeedType)</OmniBadge></Template>
+            <Template Context="f"><OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L.Localize(f.FeedType)</OmniBadge></Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PackageFeedDto" Property="UpstreamUrl" Title="@L["UpstreamUrl"]" Filterable="true" >
             <Template Context="f"><span class="text-mono">@f.UpstreamUrl</span></Template>

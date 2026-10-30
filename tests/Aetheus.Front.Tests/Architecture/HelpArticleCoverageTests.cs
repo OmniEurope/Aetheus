@@ -86,6 +86,19 @@ public class HelpArticleCoverageTests
     }
 
     [Fact]
+    public void Help_Articles_Have_The_Same_Number_Of_Sections_In_Both_Languages()
+    {
+        var (en, fr) = ReadCatalogs();
+        var mismatches = en
+            .Where(pair => fr.TryGetValue(pair.Key, out var french) && french.Sections.Count != pair.Value.Sections.Count)
+            .Select(pair => $"{pair.Key}: EN {pair.Value.Sections.Count}, FR {fr[pair.Key].Sections.Count}")
+            .ToList();
+
+        Assert.True(mismatches.Count == 0,
+            "Each help article must carry the same sections in both languages:\n  " + string.Join("\n  ", mismatches));
+    }
+
+    [Fact]
     public void Every_Article_Has_A_Canonical_Go_To_Page_Route()
     {
         var field = typeof(HelpArticlePage).GetField(

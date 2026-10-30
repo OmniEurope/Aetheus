@@ -67,6 +67,10 @@ public static class PipelineFunctions
         new VerifyReleaseAncestryFunction(),
         new PayloadEvidenceFunction(),
         new RecordNightlyQualificationFunction(),
-        new VerifyPublicDistributionFunction()
+        new VerifyPublicDistributionFunction(),
+        // Recette R-23 (W8)
+        new GradeCandidateFromGatesFunction(),
+        // Recette R-90
+        new ScanDotnetRuntimeCveFunction()
     ];
 }

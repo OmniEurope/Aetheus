@@ -132,7 +132,7 @@ public class TeamspeakServiceTests
         Assert.NotNull(captured);
         Assert.Equal(1, captured.ServerId);
         Assert.Contains("TeamSpeak", captured.Name);
-        Assert.Equal(ExecutorType.Shell, captured.Executor);
+        Assert.Equal(ExecutorType.Operation, captured.Executor);
         await _audit.Received(1).LogAsync(Arg.Is<string>(s => s.Contains("Teamspeak")), "Teamspeak", 1, Arg.Any<string>(), TestContext.Current.CancellationToken);
     }
 
@@ -275,19 +275,33 @@ public class TeamspeakServiceTests
         Assert.Contains("\"TEAMSPEAK_QUERY_PORT\":\"10011\"", captured.EnvironmentVariables);
     }
 
-    [Fact]
-    public async Task ExecuteActionAsync_StaysShellTask()
+    // R-119: start/stop/restart were `systemctl ... teamspeak3` shell strings, run without root and carrying no kind,
+    // so the agent never collected its TeamSpeak inventory again. They are typed operations with a fixed target now.
+    [Theory]
+    [InlineData(TeamspeakAction.Start, OperationKind.TeamspeakStart)]
+    [InlineData(TeamspeakAction.Stop, OperationKind.TeamspeakStop)]
+    [InlineData(TeamspeakAction.Restart, OperationKind.TeamspeakRestart)]
+    public async Task ExecuteActionAsync_QueuesTheTypedOperation_NeverAShellCommand(TeamspeakAction action, OperationKind expected)
     {
         ServerTask? captured = null;
         _repo.AddTaskAsync(Arg.Any<ServerTask>(), TestContext.Current.CancellationToken)
             .Returns(ci => { captured = ci.Arg<ServerTask>(); return Task.CompletedTask; });
 
-        await _sut.ExecuteActionAsync(1, new TeamspeakActionRequest { Action = TeamspeakAction.Restart }, ct: TestContext.Current.CancellationToken);
+        await _sut.ExecuteActionAsync(1, new TeamspeakActionRequest { Action = action }, ct: TestContext.Current.CancellationToken);
 
-        // systemctl control is NOT a ServerQuery command - it remains a shell task.
         Assert.NotNull(captured);
-        Assert.Equal(ExecutorType.Shell, captured.Executor);
-        Assert.Equal(OperationKind.None, captured.Operation);
+        Assert.Equal(ExecutorType.Operation, captured.Executor);
+        Assert.Equal(expected, captured.Operation);
+        Assert.Equal("-", captured.Command);
+        Assert.True(OperationTargetValidator.IsValid(expected, captured.Command));
+    }
+
+    [Fact]
+    public async Task ExecuteActionAsync_UnknownAction_ThrowsBadRequest_AndQueuesNothing()
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ExecuteActionAsync(
+            1, new TeamspeakActionRequest { Action = (TeamspeakAction)999 }, ct: TestContext.Current.CancellationToken));
+        await _repo.DidNotReceive().AddTaskAsync(Arg.Any<ServerTask>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

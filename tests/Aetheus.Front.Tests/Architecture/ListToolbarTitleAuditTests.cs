@@ -31,8 +31,9 @@ public sealed class ListToolbarTitleAuditTests
             }
         }
 
-        // The count confirms that remaining Git-repository and template toolbars are detected.
-        Assert.True(toolbars >= 2, $"Expected the shared list toolbars to be found, got {toolbars}.");
+        // The count confirms that the remaining Git-repository toolbar is detected. The template list's own
+        // toolbar was a spacer and its actions; they moved to the page header (R-109) and the toolbar is gone.
+        Assert.True(toolbars >= 1, $"Expected the shared list toolbars to be found, got {toolbars}.");
         Assert.True(violations.Count == 0,
             "A list toolbar repeats the page title that OmniPageHeader already renders:\n"
             + string.Join("\n", violations));

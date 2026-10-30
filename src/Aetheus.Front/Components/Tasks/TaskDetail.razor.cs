@@ -8,6 +8,7 @@ namespace Aetheus.Front.Components.Tasks;
 
 public partial class TaskDetail : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private TaskTrackerService LiveTasks { get; set; } = default!;
     [Inject] private ILogger<TaskDetail> Logger { get; set; } = default!;
@@ -195,15 +196,19 @@ public partial class TaskDetail : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, ConfirmIcon = OmniIconName.Stop, OkButtonText = L["Stop"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
 
-        var status = await Api.Pipelines.CancelTaskAsync(_task.Id);
-        if (!status.Success)
+        var task = _task;
+        await Veil.RunAsync(async () =>
         {
-            Toast.Error("Error", "CancelTaskFailed");
-            return;
-        }
+            var status = await Api.Pipelines.CancelTaskAsync(task.Id);
+            if (!status.Success)
+            {
+                Toast.Error("Error", "CancelTaskFailed");
+                return;
+            }
 
-        Toast.Success("TaskCancelled", "TaskCancelledDetail", _task.Id);
-        _task = await Api.Pipelines.GetTaskAsync(_task.Id);
+            Toast.Success("TaskCancelled", "TaskCancelledDetail", task.Id);
+            _task = await Api.Pipelines.GetTaskAsync(task.Id);
+        });
     }
 
     private void OnPermissionsChanged() => InvokeAsync(StateHasChanged);

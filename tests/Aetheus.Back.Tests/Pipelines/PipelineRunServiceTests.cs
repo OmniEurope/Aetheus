@@ -609,8 +609,9 @@ public class PipelineRunServiceTests
         Assert.NotNull(result);
         Assert.NotNull(captured);
         var warnings = System.Text.Json.JsonSerializer.Deserialize<List<string>>(captured!.WarningsJson!)!;
-        Assert.Contains("Unknown top-level property 'future_option' will be ignored.", warnings);
-        Assert.Contains("Unknown step property 'future_step_option' will be ignored.", warnings);
+        var english = warnings.Select(StoredProblem.English).ToList();
+        Assert.Contains("Unknown top-level property 'future_option' will be ignored.", english);
+        Assert.Contains("Unknown step property 'future_step_option' will be ignored.", english);
     }
 
     [Fact]
@@ -6013,6 +6014,42 @@ public class PipelineRunServiceTests
 
     // --- ResolveVariablesAsync tests (via TriggerRunAsync) ---
 
+    /// <summary>R-113: a refused launch keeps its English message for logs and API clients, and carries
+    /// every preflight problem as a code and parameters the front says in the user's language.</summary>
+    [Fact]
+    public async Task TriggerRunAsync_PreflightRefusal_CarriesTheProblemsNextToTheEnglishMessage()
+    {
+        const string yaml = """
+            name: refused
+            trigger: manual
+            stages:
+              - name: build
+                steps:
+                  - name: make
+                    shell: make
+            """;
+        SetupTriggerRunMocks(yaml);
+        _portGuardMock.FindPortConflictsAsync(
+                Arg.Any<PipelineYamlDefinition>(), Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new PortConflictReport(
+                [PipelineProblem.Of(PipelineProblemCodes.PortRegisteredToAnother, "Port 8080 on server 'web' is already registered to 'shop'.",
+                    ("port", 8080), ("server", "web"), ("owner", "shop"), ("declaredAt", "2026-10-01"))],
+                []));
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.TriggerRunAsync(1, ct: TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "This run cannot complete with the current configuration: Port 8080 on server 'web' is already registered to 'shop'.",
+            error.Message);
+        var problem = Assert.Single(error.Problems!);
+        Assert.Equal(PipelineProblemCodes.PortRegisteredToAnother, problem.Code);
+        Assert.Equal("8080", problem.Parameters["port"]);
+        Assert.Equal("shop", problem.Parameters["owner"]);
+        await _repoMock.DidNotReceive().AddPipelineRunAsync(Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task TriggerRunAsync_DuplicateDeploymentTarget_BlocksBeforeRunCreation()
     {
@@ -6041,6 +6078,12 @@ public class PipelineRunServiceTests
         Assert.Contains("Duplicate deployment target 'portfolio'", error.Message, StringComparison.Ordinal);
         Assert.Contains("deploy-first", error.Message, StringComparison.Ordinal);
         Assert.Contains("deploy-second", error.Message, StringComparison.Ordinal);
+        // R-113: the same refusal travels as a code the front translates.
+        var problem = Assert.Single(error.Problems!);
+        Assert.Equal(PipelineProblemCodes.DuplicateDeploymentTarget, problem.Code);
+        Assert.Equal("portfolio", problem.Parameters["app"]);
+        Assert.Equal("deploy-first", problem.Parameters["firstStep"]);
+        Assert.Equal("deploy-second", problem.Parameters["secondStep"]);
         await _repoMock.DidNotReceive().AddPipelineRunAsync(
             Arg.Any<PipelineRun>(), Arg.Any<CancellationToken>());
     }

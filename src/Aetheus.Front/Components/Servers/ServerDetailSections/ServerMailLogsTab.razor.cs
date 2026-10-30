@@ -22,6 +22,9 @@ public partial class ServerMailLogsTab
 
     internal string? Content => _content;
 
+    /// <summary>True from the request until the task completes: the tab wears the busy veil.</summary>
+    private bool Pending => _pendingTaskId is not null;
+
     private async Task FetchAsync()
     {
         var filter = string.IsNullOrWhiteSpace(_filter) ? null : _filter.Trim();

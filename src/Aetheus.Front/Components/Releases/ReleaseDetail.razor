@@ -13,14 +13,14 @@ else if (_release is null)
 }
 else
 {
-    @* Use a short title and display the full release name once below for reading and copying. *@
-    <OmniPageHeader Title="@ReleaseHelper.ShortVersion(_release.Version)"
-        ShowBack="true" Subtitle="@Breadcrumb.Subtitle(ReleaseHelper.ShortVersion(_release.Version) == _release.Version ? null : _release.Version)">
+    @* R-31 (user decision of 2026-10-27): the header no longer carries the release name; the full name is in
+       the Source tile, with its Copier button. *@
+    <OmniPageHeader Title="@L["Release"]" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("new_releases")" /></Icon>
         <Badges>
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@_release.ProjectName</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Folder))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral"><EntityNameLink Kind="EntityNameKind.Project" Id="_release.ProjectId" Name="@_release.ProjectName" /></OmniBadge>
             <ReleaseStatusBadge Status="@_release.Status" />
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"#{_release.BuildNumber}")</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"#{_release.BuildNumber}")</NumberBadge>
         </Badges>
         <ActionsContent>
             @* STD-BTN detection 11: Rerun visible on an archived release, the other actions in the menu;
@@ -31,15 +31,20 @@ else
             }
             else if (CanRollback)
             {
-                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@RollbackAsync" Disabled="@(!_canWrite)" title="@RollbackDisabledReason"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent><span>@L["Rollback"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@RollbackAsync" Disabled="@(!CanRollbackRelease)" title="@RollbackDisabledReason"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent><span>@L["Rollback"]</span></ChildContent></OmniButton>
             }
             @* Recette R-13: a recorded status that is wrong is put back from the menu, never a second button. *@
-            @if (CanRestoreStatus || (IsArchived && CanRollback))
+            @* R-72: Redeploy sits in the menu whatever the visible action is; without a kept artifact it says why. *@
+            @if (RedeployOffered || CanRestoreStatus || (IsArchived && CanRollback))
             {
                 <OmniOverflowMenu Label="@L["MoreActions"]">
+                    @if (RedeployOffered)
+                    {
+                        <OmniMenuItem OnClick="@RedeployAsync" Disabled="@(!CanRedeploy)" title="@RedeployTitle" data-testid="release-redeploy"><Icon><OmniIcon Name="OmniIconName.Reset" /></Icon><ChildContent>@L["Redeploy"]</ChildContent></OmniMenuItem>
+                    }
                     @if (IsArchived && CanRollback)
                     {
-                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@RollbackAsync" Disabled="@(!_canWrite)" title="@RollbackDisabledReason"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent>@L["Rollback"]</ChildContent></OmniMenuItem>
+                        <OmniMenuItem Tone="OmniTone.Danger" OnClick="@RollbackAsync" Disabled="@(!CanRollbackRelease)" title="@RollbackDisabledReason"><Icon><OmniIcon Name="OmniIconName.ArrowUUpLeft" /></Icon><ChildContent>@L["Rollback"]</ChildContent></OmniMenuItem>
                     }
                     @if (CanRestoreStatus)
                     {
@@ -50,20 +55,31 @@ else
         </ActionsContent>
     </OmniPageHeader>
 
+    <OmniStack>
     @* Decision D2: say what an archived release lost and what it kept. *@
     @if (IsArchived)
     {
-        <OmniAlert Severity="OmniSeverity.Info" Title="@L["ReleaseArchivedTitle"]" Class="omni-u-mb-lg">@L["ReleaseArchivedHint"]</OmniAlert>
+        <OmniAlert Severity="OmniSeverity.Info" Title="@L["ReleaseArchivedTitle"]">@L["ReleaseArchivedHint"]</OmniAlert>
     }
 
     @* Source (where it comes from) vs Deliverables (what it ships / where it targets) *@
     @* R-5: source, lifecycle and deliverables are OE tiles of one OmniTileGrid (same width, same height). *@
-    <OmniTileGrid Columns="@(HasDeliverables ? 3 : 2)" Gap="OmniSpacing.Large">
-            <OmniCard>
+    @* R-78: Source is a double tile so a pipeline name stays on one line; the grid follows its own width
+       (MinColumnWidth, a double tile spans two columns), and the tiles keep equal heights (R-45). *@
+    <OmniTileGrid Columns="@(HasDeliverables ? 4 : 3)" MinColumnWidth="14rem" Gap="OmniSpacing.Large">
+            <OmniCard DoubleWidth="true">
                 <div class="detail-panel-title">
                     <OmniIcon Name="OmniIconName.Graph"Class="run-tile-icon omni-u-text-accent" />
                     <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Source"]</OmniText>
                 </div>
+                @* R-31: both Copier buttons (name and tag) are blue (Primary), a user exception to the copy-is-minor rule. *@
+                <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
+                    <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Package" Class="run-tile-icon" /> @L["Name"]</OmniText>
+                    <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                        <OmniText Element="OmniTextElement.Paragraph" Class="text-mono" data-testid="release-name">@_release.Version</OmniText>
+                        <OmniButton Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small" OnClick="@CopyVersionAsync" title="@L["Copy"]" Label="@L["Copy"]" data-testid="release-copy-version"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
+                    </OmniStack>
+                </OmniStack>
                 @if (_release.Branches.Count > 0)
                 {
                     @foreach (var branch in _release.Branches)
@@ -102,7 +118,10 @@ else
                 {
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row">
                         <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted"><OmniIcon Name="OmniIconName.Tag" Class="run-tile-icon" /> @L["Tag"]</OmniText>
-                        <OmniText Element="OmniTextElement.Paragraph"><ShortId Value="@_release.TagName" Href="@TagHref" /></OmniText>
+                        <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
+                            <OmniText Element="OmniTextElement.Paragraph"><ShortId Value="@_release.TagName" Href="@TagHref" Copyable="false" /></OmniText>
+                            <OmniButton Variant="OmniButtonVariant.Primary" Size="OmniControlSize.Small" OnClick="@CopyTagAsync" title="@L["Copy"]" Label="@L["Copy"]" data-testid="release-copy-tag"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
+                        </OmniStack>
                     </OmniStack>
                 }
                 @* The run that CREATED the release, never the last run that recorded it. *@
@@ -187,7 +206,7 @@ else
     @* Changelog as Timeline *@
     @if (VisibleChangelogEntries.Count > 0)
     {
-        <OmniCard Class="omni-u-mt-lg omni-u-p-lg">
+        <OmniCard Class="omni-u-p-lg">
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                 <OmniIcon Name="OmniIconName.Reset" />
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Changelog"]</OmniText>
@@ -199,7 +218,7 @@ else
                                 <div class="release-cl-content">
                                     @if (!string.IsNullOrEmpty(entry.Type))
                                     {
-                                        <OmniBadge Fill="OmniFill.Solid" Tone="@GetChangelogBadge(entry.Type)" Class="release-cl-badge">@entry.Type</OmniBadge>
+                                        <OmniBadge Icon="@(BadgeIcon.For(GetChangelogBadge(entry.Type)))" Fill="OmniFill.Solid" Tone="@GetChangelogBadge(entry.Type)" Class="release-cl-badge">@entry.Type</OmniBadge>
                                     }
                                     <span class="release-cl-text">@entry.Text</span>
                                 </div>
@@ -208,4 +227,5 @@ else
             </OmniTimeline>
         </OmniCard>
     }
+    </OmniStack>
 }

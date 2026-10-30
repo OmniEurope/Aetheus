@@ -23,6 +23,17 @@ public sealed class PipelineCopyAdapterTests
     public void NewResourceName_KeepsAGenericName(string source, string expected) =>
         Assert.Equal(expected, PipelineCopyAdapter.NewResourceName(source, "aetheus", "ats"));
 
+    [Theory]
+    [InlineData("w7.share", "r2-probe.share")]
+    [InlineData("W7.prod", "r2-probe.prod")]
+    [InlineData("w7-extra", "r2probe-extra")]
+    [InlineData("w7", "w7")]
+    [InlineData("w7.", "w7.")]
+    [InlineData("w70.share", "w70.share")]
+    [InlineData("application.share", "application.share")]
+    public void NewResourceName_RenamesASourceSlugNameToTheTargetSlug(string source, string expected) =>
+        Assert.Equal(expected, PipelineCopyAdapter.NewResourceName(source, "w7", "r2probe", "w7", "r2-probe"));
+
     [Fact]
     public void Adapt_RewritesTheKnownNames_AndTheApplicationPrefix()
     {

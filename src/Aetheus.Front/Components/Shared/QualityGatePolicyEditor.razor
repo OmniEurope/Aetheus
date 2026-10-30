@@ -9,15 +9,18 @@
 }
 else
 {
-    <OmniCard Class="quality-gate-activation-card omni-u-mb-lg">
+    @* R-14: the activation card, the rules header, the form, the preview, the tiles, the rules and the history are
+       separated by this stack's gap, not by margins of their own. *@
+    <OmniStack>
+    <OmniCard Class="quality-gate-activation-card">
         <div class="quality-gate-activation-copy">
             <div class="quality-gate-activation-icon" aria-hidden="true">
                 <OmniIcon Name="OmniIconName.ShieldCheck" />
             </div>
             <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.ExtraLarge">
                 <OmniRow Gap="OmniSpacing.ExtraLarge">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["QualityGateOptionalBadge"]</OmniBadge>
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">YAML</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["QualityGateOptionalBadge"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Code))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">YAML</OmniBadge>
                 </OmniRow>
                 <OmniHeading Level="OmniHeadingLevel.H5">@L["QualityGateOptionalTitle"]</OmniHeading>
                 <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">
@@ -28,7 +31,7 @@ else
         <OmniCodeBlock Code="@YamlExample" Title="@L["QualityGateYamlExample"]" Language="yaml" Class="quality-gate-yaml-panel" />
     </OmniCard>
 
-    <OmniRow Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md">
+    <OmniRow Gap="OmniSpacing.Medium" Align="OmniAlignment.Center" Justify="OmniJustification.Between">
         <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
             <OmniHeading Level="OmniHeadingLevel.H5">@L["QualityGates"]</OmniHeading>
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["QualityGatesInheritanceHelp"]</OmniText>
@@ -57,7 +60,7 @@ else
 
     @if (_showForm)
     {
-        <OmniCard Class="omni-u-mb-md analysis-governance-form">
+        <OmniCard Class="analysis-governance-form">
             <OmniTemplateForm TModel="PolicyFormModel" Model="@_form" OnValidSubmit="@SaveAsync">
                 <OmniDataAnnotationsValidator Localizer="@L" />
                 <OmniRow Gap="OmniSpacing.Large">
@@ -164,7 +167,7 @@ else
                 @* STD-BTN detection 11: Save visible, the other actions in the menu. *@
                 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mt-md">
                     <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Save" /></Icon><ChildContent><span>@L["Save"]</span></ChildContent></OmniButton>
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CancelEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="CancelEdit"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                     <OmniOverflowMenu Label="@L["MoreActions"]">
                         <OmniMenuItem OnClick="PreviewAsync" Disabled="@_previewing" title="@L["QualityGatePreview"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon><ChildContent>@L["Preview"]</ChildContent></OmniMenuItem>
                     </OmniOverflowMenu>
@@ -175,7 +178,7 @@ else
 
     @if (_preview is not null)
     {
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md">
+        <OmniAlert Severity="OmniSeverity.Info">
             <OmniText Element="OmniTextElement.Strong">@L["QualityGateEffectivePreview"]</OmniText>
             <OmniText Element="OmniTextElement.Paragraph">@L["QualityGateSnapshotHash"]: <code>@_preview.SnapshotHash</code></OmniText>
             <OmniText Element="OmniTextElement.Paragraph">
@@ -195,17 +198,17 @@ else
             {
                 <OmniText Element="OmniTextElement.Paragraph">
                     @L["QualityGateLatestRunVerdict", _preview.LatestRunGate.PipelineRunId]:
-                    <strong>@_preview.LatestRunGate.Status</strong>
+                    <strong>@L.Localize(_preview.LatestRunGate.Status)</strong>
                     · @L["AnalysisGrade"]:
                     @* The grade drawn as everywhere else, its colour included. *@
-                    @if (_preview.LatestRunGate.Grade?.OverallGrade is { } overall) { <GradeBadge Value="@overall" /> } else { <strong>@L["Incomplete"]</strong> }
+                    @if (_preview.LatestRunGate.Grade?.OverallGrade is { } overall) { <GradeBadge Value="@overall" /> } else { <strong>@L["NotAvailable"]</strong> }
                 </OmniText>
             }
         </OmniAlert>
     }
 
     @* R-5: the rule counts are OE stat tiles of one OmniTileGrid (same width, same height). *@
-    <OmniTileGrid Columns="3" Gap="OmniSpacing.Small" Class="quality-gate-stat-tiles">
+    <OmniTileGrid Columns="3" Gap="OmniSpacing.Small">
         <OmniStatTile Value="@_policies.Count.ToString()" Title="@L["QualityGateRuleCount"]" />
         <OmniStatTile Value="@_policies.Count(item => item.IsInherited).ToString()" Title="@L["QualityGateInheritedCount"]" />
         <OmniStatTile Value="@_policies.Count(item => !item.IsInherited).ToString()" Title="@L["QualityGateLocalCount"]" />
@@ -221,11 +224,11 @@ else
                    filter. *@
                 <OmniDataGridColumn TItem="AnalysisPolicyDto" Property="Scope" Title="@L["QualityGateOrigin"]" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ScopeText">
                     <Template Context="item">
-                        <OmniBadge Fill="OmniFill.Solid"
+                        <OmniBadge Icon="@(BadgeIcon.Of(item.IsInherited ? OmniIconName.ArrowDown : OmniIconName.Pin))" Fill="OmniFill.Solid"
                             Tone="@(item.IsInherited ? OmniTone.Neutral : OmniTone.Accent)">@ScopeLabel(item.Scope)</OmniBadge>
                         @if (item.IsOverride)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["QualityGateOverride"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["QualityGateOverride"]</OmniBadge>
                         }
                     </Template>
                 </OmniDataGridColumn>
@@ -238,7 +241,7 @@ else
                 <OmniDataGridColumn TItem="AnalysisPolicyDto" Property="Version" Title="@L["Version"]" Width="6rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
                 <OmniDataGridColumn TItem="AnalysisPolicyDto" Property="IsEffective" Title="@L["Status"]" Width="8rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EffectiveText">
                     <Template Context="item">
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid"
+                        <OmniBadge Icon="@(BadgeIcon.ForState(item.IsEffective ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid"
                             Tone="@(item.IsEffective ? OmniTone.Success : OmniTone.Danger)">@(item.IsEffective ? L["Enabled"].Value : L["Disabled"].Value)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
@@ -272,7 +275,7 @@ else
 
     @if (_historyPolicy is not null)
     {
-        <OmniCard Class="omni-u-mt-md">
+        <OmniCard>
             <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Justify="OmniJustification.Between">
                 <OmniHeading Level="OmniHeadingLevel.H5">
                     @L["QualityGateHistoryFor", _historyPolicy.Name]
@@ -301,4 +304,5 @@ else
             </OmniDataGrid>
         </OmniCard>
     }
+    </OmniStack>
 }

@@ -8,7 +8,7 @@
 </OmniBadge>
 @if (Step.IsAdvisory)
 {
-    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" title="@L["StepAdvisoryHint"].Value" Class="@Class">
+    <OmniBadge Tone="OmniTone.Neutral" Fill="OmniFill.Outline" Icon="@BadgeIcon.Of(OmniIconName.Info)" title="@L["StepAdvisoryHint"].Value" Class="@Class">
         @L["StepAdvisory"]
     </OmniBadge>
 }

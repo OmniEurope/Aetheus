@@ -144,6 +144,26 @@ public sealed record UpdatePipelineRequest
     /// <summary>An AI runner profile of the pipeline's organization; null is automatic.</summary>
     [Range(1, int.MaxValue)]
     public int? AiRunnerProfileId { get; init; }
+
+    /// <summary>The <see cref="PipelineRepositoryDefinitionDto.Sha256"/> of the repository file the
+    /// caller saw in the review dialog. Required to commit an edited definition over a repository file
+    /// that changed since Aetheus last synced it; without it such a save is refused (409).</summary>
+    [StringLength(64)]
+    public string? ConfirmedRepositoryYamlSha256 { get; init; }
+}
+
+/// <summary>The definition file a pipeline has in its project's repository on a branch, as the
+/// review before a save needs it: the text and the hash a confirmed overwrite must quote.</summary>
+public sealed record PipelineRepositoryDefinitionDto
+{
+    /// <summary>Whether the repository holds a definition file for the pipeline on that branch.</summary>
+    public bool Exists { get; init; }
+
+    /// <summary>The file content; null when <see cref="Exists"/> is false.</summary>
+    public string? Yaml { get; init; }
+
+    /// <summary>Hash of the content with its line endings and trailing blank lines normalized.</summary>
+    public string? Sha256 { get; init; }
 }
 
 /// <summary>Query for a page of pipeline runs: paging (inherited), sorting (inherited
@@ -184,6 +204,11 @@ public sealed record PipelineRunDto
     public string? CancellationReason { get; init; }
     /// <summary>The run was launched in "run to end" mode: every step continued on error.</summary>
     public bool RunToEnd { get; init; }
+    /// <summary>R-72: who deployed despite the quality gate (null for a run launched without the
+    /// override), when, and the reasons the gate had, as they stood at the launch.</summary>
+    public string? GateOverrideBy { get; init; }
+    public DateTime? GateOverrideAt { get; init; }
+    public List<DeploymentGateWarningDto> GateOverrideWarnings { get; init; } = [];
     /// <summary>Until when a run in <see cref="PipelineStatus.AwaitingResume"/> can still be resumed
     /// (UTC); null for a run in any other status. Carried on the run detail only (recette R-39).</summary>
     public DateTime? ResumeDeadline { get; init; }
@@ -249,6 +274,19 @@ public sealed record PipelineRunDto
     /// Carried on the run DETAIL only: the run list has no room for it and would pay the
     /// deserialization per row.
     public List<PreflightCheckDto> PreflightChecks { get; init; } = [];
+
+    /// <summary>R-82: where a succeeded deployment run put the application (and the API, when it answers
+    /// elsewhere). Null for a run that did not deploy and for one whose address is not known. Carried on
+    /// the run DETAIL only.</summary>
+    public PipelineRunDeployedAddressDto? DeployedAddress { get; init; }
+}
+
+/// <summary>The address a deployment run put the application at: the application, and the API when it has an
+/// address of its own. Both are absolute http(s) addresses without a trailing slash.</summary>
+public sealed record PipelineRunDeployedAddressDto
+{
+    public string AppUrl { get; init; } = string.Empty;
+    public string? ApiUrl { get; init; }
 }
 
 /// <summary>Provides the launching user and on_success descendant runs for the lineage tile.

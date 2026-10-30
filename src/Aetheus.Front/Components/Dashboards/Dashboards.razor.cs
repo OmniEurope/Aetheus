@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Dashboards;
 
 public partial class Dashboards
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -63,15 +64,18 @@ public partial class Dashboards
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Monitoring.DeleteDashboardAsync(id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            _dashboards = await Api.Monitoring.GetDashboardsAsync();
-            Toast.Success("Deleted", "Deleted");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Monitoring.DeleteDashboardAsync(id);
+            if (success)
+            {
+                _dashboards = await Api.Monitoring.GetDashboardsAsync();
+                Toast.Success("Deleted", "Deleted");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 }

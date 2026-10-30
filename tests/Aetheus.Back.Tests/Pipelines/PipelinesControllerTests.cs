@@ -24,14 +24,24 @@ public class PipelinesControllerTests
 
     public PipelinesControllerTests()
     {
+        // ADR-059: the caller's organization lets it give a pipeline to the project.
+        _authz.CanCreateInProjectAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         _authz.HasPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(),
             Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        // R-11: running and deciding approvals are named permissions of their own.
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _authz.GetUserOrganizationIdsAsync(
                 Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>())
             .Returns([1]);
+        // ADR-059: validation runs in an organization where a role reads pipelines, not mere membership.
+        _authz.GetOrganizationIdsWithPermissionAsync(
+                Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns([1]);
         _runService.GetPipelineIdForRunAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
-        _runService.GetPipelineIdForApprovalAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(1);
+        _approvalService.GetApprovalScopeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(new PipelineApprovalScope(1, 3, null));
         _runService.IsServerAssignedToRunAsync(Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(true);
         // Default: YAML is valid. Tests that exercise the invalid-YAML path override this.
         _service.ValidateYamlStrict(Arg.Any<string>())
@@ -54,12 +64,15 @@ public class PipelinesControllerTests
                 OrganizationId = 4,
                 TemplateId = 7
             });
+        // Every owner shares the project's organization unless a test says otherwise (RBAC audit, finding 6).
+        _authz.BelongsToProjectOrganizationAsync(Arg.Any<int?>(), Arg.Any<ResourceType>(), Arg.Any<IEnumerable<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(true);
         // The real owner authorization, not a substitute: these tests are about which owners a caller
         // may attach a pipeline to, and stubbing that away would assert on the stub instead.
         _sut = new PipelinesController(
             _service, _runService, _approvalService, _artifactService, _webhookService,
             new PipelineOwnerAuthorization(_service, _authz), _authz, _runToEnd);
-        _fleetSut = new PipelineFleetController(_fleetService, _authz);
+        _fleetSut = new PipelineFleetController(_fleetService, _authz, Substitute.For<IPipelineTemplateService>());
         var controllerContext = new ControllerContext
         {
             HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -350,6 +363,41 @@ public class PipelinesControllerTests
     }
 
     [Fact]
+    public async Task CreatePipeline_ProjectWithAnEnvironmentOfAnotherOrganization_IsForbidden()
+    {
+        // RBAC audit, finding 6: writing both is not enough; the request validation refuses two owners
+        // over HTTP, and the owner authorization holds the rule whatever the request shape.
+        _authz.BelongsToProjectOrganizationAsync(3, ResourceType.Environment, Arg.Any<IEnumerable<int>?>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.CreatePipeline(
+            new CreatePipelineRequest { Name = "New", YamlDefinition = "yaml", ProjectId = 3, EnvironmentId = 9 },
+            TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await _service.DidNotReceiveWithAnyArgs().CreatePipelineAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task GetRepositoryDefinition_NeedsWritePermission_ThenAnswersFoundOrNotFound()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 5, Permission.Write, ct).Returns(false);
+        Assert.IsType<ForbidResult>((await _sut.GetRepositoryDefinition(5, "develop", null, ct)).Result);
+        await _service.DidNotReceive().GetRepositoryDefinitionAsync(5, Arg.Any<string?>(), Arg.Any<string?>(), ct);
+
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 5, Permission.Write, ct).Returns(true);
+        _service.GetRepositoryDefinitionAsync(5, "develop", "deploy", ct)
+            .Returns(new PipelineRepositoryDefinitionDto { Exists = true, Yaml = "name: deploy", Sha256 = "h" });
+        var ok = Assert.IsType<OkObjectResult>((await _sut.GetRepositoryDefinition(5, "develop", "deploy", ct)).Result);
+        Assert.Equal("h", Assert.IsType<PipelineRepositoryDefinitionDto>(ok.Value).Sha256);
+
+        _service.GetRepositoryDefinitionAsync(404, null, null, ct).Returns((PipelineRepositoryDefinitionDto?)null);
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 404, Permission.Write, ct).Returns(true);
+        Assert.IsType<NotFoundResult>((await _sut.GetRepositoryDefinition(404, null, null, ct)).Result);
+    }
+
+    [Fact]
     public async Task UpdatePipeline_Found_ReturnsOk()
     {
         var dto = new PipelineDto { Id = 1, Name = "Updated" };
@@ -493,21 +541,26 @@ public class PipelinesControllerTests
     }
 
     [Fact]
-    public async Task TriggerRun_InvalidYaml_ReturnsBadRequestAndDoesNotTrigger()
+    public async Task TriggerRun_PipelineRemovedDuringPreparation_ReturnsBadRequestThatDoesNotBlameTheYaml()
     {
+        // Preparation returns null only for a pipeline that no longer exists; a YAML that cannot be read
+        // throws a BadRequestException carrying the parser's line and column instead (next test).
         _service.GetPipelineAsync(1, TestContext.Current.CancellationToken)
-            .Returns(new PipelineDto { Id = 1, Name = "p", YamlDefinition = "::bad::" });
+            .Returns(new PipelineDto { Id = 1, Name = "p", YamlDefinition = "name: p" });
         _runService.PrepareRunAsync(1, null, Arg.Any<CancellationToken>())
             .Returns((PipelineRunPreparation?)null);
 
         var response = await _sut.TriggerRun(1, null, TestContext.Current.CancellationToken);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(response.Result);
-        Assert.Contains("authoritative pipeline YAML", Assert.IsType<string>(badRequest.Value));
+        var message = Assert.IsType<string>(badRequest.Value);
+        Assert.Contains("removed", message, StringComparison.Ordinal);
+        Assert.DoesNotContain("YAML", message, StringComparison.Ordinal);
         await _runService.DidNotReceive().TriggerPreparedRunAsync(Arg.Any<PipelineRunPreparation>(),
             Arg.Any<Dictionary<string, string>?>(), Arg.Any<Dictionary<string, string>?>(),
             Arg.Any<CancellationToken>());
     }
+
 
     [Fact]
     public async Task Preflight_Found_ReturnsOk()
@@ -695,7 +748,7 @@ public class PipelinesControllerTests
     // --- ResumeRun (R-39) ---
 
     [Fact]
-    public async Task R39_ResumeRun_WithPipelineWrite_ResumesInTheSignedInUsersName()
+    public async Task R39_ResumeRun_WithTheRunPermission_ResumesInTheSignedInUsersName()
     {
         _sut.ControllerContext = new ControllerContext
         {
@@ -709,22 +762,66 @@ public class PipelinesControllerTests
 
         Assert.IsType<NoContentResult>(response);
         await _authz.Received(1).HasPermissionAsync(
-            Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 1, Permission.Write, Arg.Any<CancellationToken>());
+            Arg.Any<ClaimsPrincipal>(), PermissionKeys.PipelineRun, 1, Arg.Any<CancellationToken>());
         await _runService.Received(1).ResumeAwaitingRunAsync(10, "alice", TestContext.Current.CancellationToken);
     }
-
-    /// <summary>The same permission as cancelling the run or deciding its approval: without Pipeline.Write
+    /// <summary>The same permission as cancelling the run: without pipeline.run
     /// on the run's pipeline, nothing is replayed.</summary>
     [Fact]
-    public async Task R39_ResumeRun_WithoutPipelineWrite_IsForbiddenAndResumesNothing()
+    public async Task R39_ResumeRun_WithoutTheRunPermission_IsForbiddenAndResumesNothing()
     {
         _authz.HasPermissionAsync(
-                Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 1, Permission.Write, Arg.Any<CancellationToken>())
+                Arg.Any<ClaimsPrincipal>(), PermissionKeys.PipelineRun, 1, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
 
         Assert.IsType<ForbidResult>(response);
+        await _runService.DidNotReceive().ResumeAwaitingRunAsync(
+            Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A resume replays the run's captured steps on its target servers, like a retry: without
+    /// Server.Admin on every target of the run's captured definition, nothing is resumed.</summary>
+    [Fact]
+    public async Task R39_ResumeRun_CallerLacksServerAdminOnTarget_IsForbiddenAndResumesNothing()
+    {
+        _runService.GetRetryTargetServerIdsAsync(10, Arg.Any<CancellationToken>()).Returns(new List<int> { 42 });
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(),
+                ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response);
+        await _runService.DidNotReceive().ResumeAwaitingRunAsync(
+            Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R39_ResumeRun_CallerAdministersEveryTarget_Resumes()
+    {
+        _runService.GetRetryTargetServerIdsAsync(10, Arg.Any<CancellationToken>()).Returns(new List<int> { 42, 43 });
+
+        var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NoContentResult>(response);
+        await _authz.Received(1).HasPermissionAsync(
+            Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 42, Permission.Admin, Arg.Any<CancellationToken>());
+        await _authz.Received(1).HasPermissionAsync(
+            Arg.Any<ClaimsPrincipal>(), ResourceType.Server, 43, Permission.Admin, Arg.Any<CancellationToken>());
+        await _runService.Received(1).ResumeAwaitingRunAsync(10, Arg.Any<string?>(), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task R39_ResumeRun_RunDefinitionUnreadable_Returns404AndResumesNothing()
+    {
+        _runService.GetRetryTargetServerIdsAsync(10, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyCollection<int>?)null);
+
+        var response = await _sut.ResumeRun(10, TestContext.Current.CancellationToken);
+
+        Assert.IsType<NotFoundResult>(response);
         await _runService.DidNotReceive().ResumeAwaitingRunAsync(
             Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
@@ -1001,9 +1098,34 @@ public class PipelinesControllerTests
         _approvalService.DecideApprovalAsync(1, Arg.Any<ApprovalDecisionRequest>(), TestContext.Current.CancellationToken)
             .Returns(approval);
 
-        var response = await _sut.DecideApproval(1, new ApprovalDecisionRequest(), TestContext.Current.CancellationToken);
+        var response = await _sut.DecideApproval(1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, TestContext.Current.CancellationToken);
 
         Assert.IsType<OkObjectResult>(response.Result);
+    }
+
+    [Theory]
+    [InlineData(ApprovalStatus.TimedOut)]
+    [InlineData(ApprovalStatus.Pending)]
+    public async Task DecideApproval_ASystemOnlyStatus_IsRefusedBeforeAnything(ApprovalStatus decision)
+    {
+        // RBAC audit, finding 11: TimedOut belongs to the expiry sweep, never to a user.
+        var response = await _sut.DecideApproval(1, new ApprovalDecisionRequest { Decision = decision }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<BadRequestObjectResult>(response.Result);
+        await _approvalService.DidNotReceiveWithAnyArgs().DecideApprovalAsync(default, default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task DecideApproval_PipelineWriterWithoutProjectAdmin_IsForbidden()
+    {
+        // Writing the pipeline starts the run; it does not also let the run through its gate (finding 11).
+        _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 3, Permission.Admin, Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var response = await _sut.DecideApproval(1, new ApprovalDecisionRequest { Decision = ApprovalStatus.Approved }, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await _approvalService.DidNotReceiveWithAnyArgs().DecideApprovalAsync(default, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -1014,7 +1136,7 @@ public class PipelinesControllerTests
             .Returns<Task<PipelineApprovalDto>>(_ => throw new ConflictException("Approval 99 was already Approved."));
 
         var refusal = await Assert.ThrowsAsync<ConflictException>(() =>
-            _sut.DecideApproval(99, new ApprovalDecisionRequest(), TestContext.Current.CancellationToken));
+            _sut.DecideApproval(99, new ApprovalDecisionRequest { Decision = ApprovalStatus.Rejected }, TestContext.Current.CancellationToken));
 
         Assert.Equal("Approval 99 was already Approved.", refusal.Message);
     }

@@ -106,6 +106,19 @@ public sealed class DisplayFormattingTests
     }
 
     [Theory]
+    [InlineData(155.1, "155 Go")]
+    [InlineData(385.7, "386 Go")]
+    [InlineData(1d, "1 Go")]
+    [InlineData(0.04, "41 Mo")]
+    [InlineData(-3d, "0 o")]
+    [InlineData(double.NaN, "0 o")]
+    public void SizeFromGoWhole_WritesAWholeNumberFromOneGo(double gigabytes, string expected)
+    {
+        using var _ = new CultureScope("fr-FR");
+        Assert.Equal(expected, DisplayFormatting.SizeFromGoWhole(gigabytes));
+    }
+
+    [Theory]
     [InlineData(5_324.8, "5,2 Go")]
     [InlineData(16_000d, "15,6 Go")]
     [InlineData(740d, "740 Mo")]

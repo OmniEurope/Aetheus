@@ -45,35 +45,8 @@ public class TeamspeakCommandHelperTests
         Assert.False(TeamspeakCommandHelper.IsValidChannelName(longName));
     }
 
-    // --- BuildServiceCommand ---
-
-    [Fact]
-    public void BuildServiceCommand_Start_ReturnsSystemctlStart()
-    {
-        var cmd = TeamspeakCommandHelper.BuildServiceCommand(TeamspeakAction.Start);
-        Assert.Equal("systemctl start teamspeak3", cmd);
-    }
-
-    [Fact]
-    public void BuildServiceCommand_Stop_ReturnsSystemctlStop()
-    {
-        var cmd = TeamspeakCommandHelper.BuildServiceCommand(TeamspeakAction.Stop);
-        Assert.Equal("systemctl stop teamspeak3", cmd);
-    }
-
-    [Fact]
-    public void BuildServiceCommand_Restart_ReturnsSystemctlRestart()
-    {
-        var cmd = TeamspeakCommandHelper.BuildServiceCommand(TeamspeakAction.Restart);
-        Assert.Equal("systemctl restart teamspeak3", cmd);
-    }
-
-    [Fact]
-    public void BuildServiceCommand_InvalidAction_Throws()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            TeamspeakCommandHelper.BuildServiceCommand((TeamspeakAction)999));
-    }
+    // BuildServiceCommand was removed (R-119: typed OperationKind.TeamspeakStart/Stop/Restart). See
+    // TeamspeakServiceTests (dispatch) + TeamspeakServiceOperationExecutorTests (agent argv).
 
     // BuildGetLogsCommand was removed (typed OperationKind.TeamspeakGetLogs). See
     // TeamspeakServiceTests (dispatch) + TeamspeakGracefulRestartOperationExecutorTests (agent read).

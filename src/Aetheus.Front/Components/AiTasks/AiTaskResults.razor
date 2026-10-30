@@ -4,12 +4,11 @@
 
 <PageTitle>@(_task?.Name ?? L["AiTasks"]) - Aetheus</PageTitle>
 
-<OmniPageHeader Title="@(_task?.Name ?? L["AiTasks"])" Subtitle="@Breadcrumb.Subtitle()">
+<OmniPageHeader Title="@(_task?.Name ?? L["AiTasks"])" Subtitle="@Breadcrumb.Subtitle()" ShowBack="true" BackHref="@ListUrl">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("psychology")" /></Icon>
     <ActionsContent>
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@RunAsync" Busy="@(_starting || _runningServerTaskId is not null)"
                     Disabled="@(!CanWrite)"><Icon><OmniIcon Name="OmniIconName.Play" /></Icon><ChildContent><span>@L["Run"]</span></ChildContent></OmniButton>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => Nav.NavigateTo(ListUrl))"><Icon><OmniIcon Name="OmniIconName.ArrowLeft" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
     </ActionsContent>
     @* STD-BTN detection 11: Run visible, the other actions in the menu. *@
     <MenuContent>
@@ -17,15 +16,16 @@
     </MenuContent>
 </OmniPageHeader>
 
+<OmniStack>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+    <OmniAlert Severity="OmniSeverity.Danger">
         @L["LoadFailed"]
         <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => LoadAsync(_selected?.Id))"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
     </OmniAlert>
 }
 
-<OmniTileGrid Columns="4" Class="ai-results-tiles omni-u-mb-lg">
+<OmniTileGrid Columns="4" Class="ai-results-tiles">
     <OmniStatTile Value="@_totalCount.ToString(System.Globalization.CultureInfo.CurrentCulture)" Title="@L["AiTaskRuns"]">
         <Icon><OmniIcon Name="OmniIconName.ListBullets" /></Icon>
     </OmniStatTile>
@@ -60,8 +60,8 @@ else
                     <OmniTimelineItem DateText="@RunDate(run)" Level="OmniHeadingLevel.H6">
                         <button type="button" class="@($"ai-results-run {(current ? "ai-results-run--selected" : null)}")"
                                 aria-pressed="@(current ? "true" : "false")" @onclick="@(() => Select(run))">
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
-                            <OmniBadge Fill="OmniFill.Tonal" Tone="@(run.Succeeded ? OmniTone.Success : OmniTone.Danger)">@(run.Succeeded ? L["AiRunSucceeded"] : L["AiRunFailed"])</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(AiVerdictText.Tone(run.Verdict)))" Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(run.Succeeded ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Tonal" Tone="@(run.Succeeded ? OmniTone.Success : OmniTone.Danger)">@(run.Succeeded ? L["AiRunSucceeded"] : L["AiRunFailed"])</OmniBadge>
                             <span class="ai-results-run-duration">@FormatDuration(run.DurationMs)</span>
                         </button>
                     </OmniTimelineItem>
@@ -78,14 +78,14 @@ else
         {
             <OmniCard Class="ai-results-detail">
                 <div class="ai-results-detail-head">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(AiVerdictText.Tone(run.Verdict)))" Fill="OmniFill.Solid" Tone="@AiVerdictText.Tone(run.Verdict)">@AiVerdictText.Label(L, run.Verdict)</OmniBadge>
                     @if (run.SendsDataExternally)
                     {
-                        <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["ExternalData"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["ExternalData"]</OmniBadge>
                     }
                     @if (run.Truncated)
                     {
-                        <OmniBadge Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["Truncated"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Warning))" Fill="OmniFill.Tonal" Tone="OmniTone.Warning">@L["Truncated"]</OmniBadge>
                     }
                 </div>
                 <dl class="ai-results-facts">
@@ -108,14 +108,16 @@ else
                             <div class="markdown-content ai-results-report">@((MarkupString)_reportHtml)</div>
                         </ChildContent></OmniTabsItem>
                         <OmniTabsItem Key="diff" Title="@L["Diff"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("difference")" /></Icon><ChildContent>
-                            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync" Class="omni-u-mb-sm"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton>
+                            <OmniStack>
+                            <OmniStack Orientation="OmniOrientation.Horizontal"><OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@DownloadPatchAsync"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DownloadPatch"]</span></ChildContent></OmniButton></OmniStack>
                             @if (!string.IsNullOrWhiteSpace(run.ProposedBranchName))
                             {
-                                <OmniAlert Severity="OmniSeverity.Success" Class="omni-u-mb-sm">
+                                <OmniAlert Severity="OmniSeverity.Success">
                                     @L["ProposedBranchCreated"]: <a href="/git-repositories/@run.ProposedRepositoryId">@run.ProposedBranchName</a>
                                 </OmniAlert>
                             }
-                            <MonacoDiffViewer OriginalValue="" ModifiedValue="@run.DiffPatch" />
+                            <OmniDiffViewer Modified="@run.DiffPatch" Height="28rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
+                            </OmniStack>
                         </ChildContent></OmniTabsItem>
                         </Tabs>
                     </UrlSyncedTabs>
@@ -124,3 +126,4 @@ else
         }
     </div>
 }
+</OmniStack>

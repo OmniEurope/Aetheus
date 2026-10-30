@@ -53,11 +53,12 @@ services:
         - AETHEUS_RUN_MIGRATIONS=false
         - ConnectionStrings__Default=Host=${APPNAME}-${ENV}-database;Port=5432;Database=${DB_NAME:-aetheus};Username=${DB_USER};Password=${DB_PASSWORD}
         - Auth__JwtKey=${JWT_KEY}
-        # The persistent administrator, from the environment file and nowhere else. DbInitializer
+        # The persistent administrator (sign-in e-mail, empty = the seed default admin@aetheus.local, and
+        # password), from the environment file and nowhere else. DbInitializer
         # hashes this into the seeded `admin` user on a first run, so it must be the durable secret:
         # when the deployment's throwaway identity arrived under these names instead, a new
         # environment got a permanent administrator nobody could ever log in as.
-        - Auth__AdminUser=${ADMIN_USER:-admin}
+        - Auth__AdminEmail=${ADMIN_EMAIL:-}
         - Auth__AdminPassword=${ADMIN_PASSWORD}
         # The run-scoped, self-expiring identity the deployment smoke authenticates with. Separate
         # names so it can never be mistaken for the pair above.

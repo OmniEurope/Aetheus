@@ -351,6 +351,7 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
                 NewOpen: findings.Count(finding => finding.IsNew && finding.Status == AnalysisFindingStatus.Open),
                 Decided: findings.Count(finding => finding.Status.IsDecision()))
             : await AnalysisRunResultRepository.CountFindingsAsync(findingQuery, ct).ConfigureAwait(false);
+        var openByCategory = await AnalysisRunResultRepository.CountOpenFindingsByCategoryAsync(findingQuery, ct).ConfigureAwait(false);
         var evaluationQuery = db.AnalysisEvaluations.AsNoTracking()
             .Where(evaluation => evaluation.PipelineRunId == runId);
         if (categoryFilter is not null)
@@ -382,6 +383,7 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
             FindingCount = findingCounts.Open,
             NewFindingCount = findingCounts.NewOpen,
             DecidedFindingCount = findingCounts.Decided,
+            OpenFindingCounts = openByCategory,
             ComponentCount = reports.Sum(report => report.ComponentCount),
             MetricCount = reports.Sum(report => report.MetricCount),
             BlockerCount = reports.Sum(report => report.BlockerCount),
@@ -417,8 +419,12 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
     }
 
     /// <summary>The run's gate verdict: an operational error (no report, a missing or failed producer,
-    /// an incomplete grade) wins over a block, a block (a blocking report or a grade below the minimum)
-    /// over a warning. Extracted from <see cref="GetRunGateAsync"/> to keep it under the complexity budget.</summary>
+    /// a grading that measured nothing) wins over a block, a block (a blocking report or a grade below the
+    /// minimum) over a warning. A grading rule the validator rejects is no operational error: it is a measure graded
+    /// F (run #2958), so it blocks through the minimum grade like any other F. A grade resting on part of the
+    /// required measures is still a grade (recette R-73, R-74): the measures nobody observed are listed on the Gate tab with their step, and a producer that ran and
+    /// published nothing is already a missing producer. Extracted from <see cref="GetRunGateAsync"/> to keep it under
+    /// the complexity budget.</summary>
     private static AnalysisGateStatus ResolveGateStatus(
         List<AnalysisRunGateReportDto> reports,
         List<string> missingProducers,
@@ -427,11 +433,13 @@ internal sealed class AnalysisInsightsRepository(AppDbContext db)
         var hasOperationalError = reports.Count == 0 || missingProducers.Count > 0 || reports.Any(report =>
             report.ReportStatus is AnalysisReportStatus.Error or AnalysisReportStatus.TimedOut or AnalysisReportStatus.Unavailable
             || report.GateStatus is null or AnalysisGateStatus.Error)
-            || grade?.Completeness == AnalysisGradeCompleteness.Incomplete;
+            || grade is { OverallGrade: null, Completeness: AnalysisGradeCompleteness.Incomplete };
         if (hasOperationalError) return AnalysisGateStatus.Error;
         var gradeBlocks = grade?.OverallGrade.HasValue == true
-            && grade.MinimumGrade.HasValue
-            && grade.OverallGrade.Value > grade.MinimumGrade.Value;
+            && (grade.MinimumGrade.HasValue
+                ? grade.OverallGrade.Value > grade.MinimumGrade.Value
+                // Only a rejected minimum_grade leaves a graded summary without a minimum: its F cannot pass.
+                : grade.OverallGrade.Value == AnalysisGrade.F);
         if (gradeBlocks || reports.Any(report => report.GateStatus == AnalysisGateStatus.Blocked))
             return AnalysisGateStatus.Blocked;
         return reports.Any(report => report.GateStatus == AnalysisGateStatus.Warning)

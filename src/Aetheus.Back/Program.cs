@@ -277,6 +277,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddAetheusRateLimiting(builder.Configuration);
 
 // --- OpenAPI ---
+// R-28: the generated OpenAPI document is kept for the process lifetime (see OpenApiDocumentCachePolicy).
+builder.Services.AddOutputCache(o => o.AddPolicy(OpenApiDocumentCachePolicy.Name, b => b.AddPolicy<OpenApiDocumentCachePolicy>(), excludeDefaultPolicy: true));
 builder.Services.AddOpenApi();
 for (var partition = 0; partition < OpenApiDastPartition.Count; partition++)
 {
@@ -340,10 +342,10 @@ if (!app.Environment.IsDevelopment() && HttpsPortConfiguration.IsKnown(app.Confi
 // - the in-app API Reference is an admin surface, so the spec must not be readable by any authenticated
 // user (matching the nav, which already hides the page from non-admins).
 if (app.Environment.IsDevelopment())
-    app.MapOpenApi();
+    app.MapOpenApi().CacheOutput(OpenApiDocumentCachePolicy.Name);
 else
 {
-    app.MapOpenApi().RequireAuthorization(new AuthorizeAttribute { Roles = "Admin" });
+    app.MapOpenApi().RequireAuthorization(new AuthorizeAttribute { Roles = "Admin" }).CacheOutput(OpenApiDocumentCachePolicy.Name);
     // F-26: enable HSTS in non-Development environments.
     app.UseHsts();
 }
@@ -366,6 +368,7 @@ app.UseWhen(
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseOutputCache();
 // Read-only Personal Access Token enforcement (ADR-024 4.5): runs after authorization so
 // HttpContext.User carries the PAT principal; refuses mutating requests made with a read-only PAT.
 app.UseMiddleware<PatScopeEnforcementMiddleware>();

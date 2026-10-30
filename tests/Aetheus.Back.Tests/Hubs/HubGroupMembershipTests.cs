@@ -32,7 +32,7 @@ public class HubGroupMembershipTests
             .Returns(ids);
 
     private void Organizations(params int[] ids) =>
-        _authz.GetUserOrganizationIdsAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns([.. ids]);
+        _authz.GetOrganizationIdsWithPermissionAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns([.. ids]);
 
     private void AssertLeft(params string[] groups)
     {

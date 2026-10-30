@@ -52,6 +52,8 @@ public class HubConnectionFactory(
         // A caller can supply a notifying retry policy to surface reconnect-attempt delays to the UI
         // (the connection-lost dialog countdown). Absent one, the connection retries without end
         // (EndlessRetryPolicy): SignalR's own schedule gave up after four attempts, about 45 s.
+        // Timestamps pushed over the hub are localised like the HTTP ones (JsonOptions.Web).
+        builder.AddJsonProtocol(protocol => JsonOptions.AddLocalDateTimeConverters(protocol.PayloadSerializerOptions));
         var connection = builder.WithAutomaticReconnect(retryPolicy ?? new EndlessRetryPolicy()).Build();
         connection.ReportCatchUpTo(SyncStatus);
         ReportOutages(connection, hubPath);

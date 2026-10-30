@@ -39,4 +39,10 @@ public sealed class YamlSerializationService
     {
         return Serializer.Serialize(definition).TrimEnd();
     }
+
+    /// <summary>One stage as the mapping a <c>stages:</c> entry holds (R-105: the wizard rewrites a template's stage).</summary>
+    public string SerializeStage(PipelineStageDefinition stage)
+    {
+        return Serializer.Serialize(stage).TrimEnd();
+    }
 }

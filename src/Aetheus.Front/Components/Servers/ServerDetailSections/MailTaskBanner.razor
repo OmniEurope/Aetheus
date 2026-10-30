@@ -1,9 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* While mail tasks run, one information banner at the top of the mail page names them, with the
-   inline indicator and the elapsed time, as the reinstall banner does. *@
-<OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-lg mail-task-running">
+   elapsed time, as the reinstall banner does; OE's busy veil lies over the banner (Recette R-116), no loader. *@
+<OmniAlert Severity="OmniSeverity.Info" Class="mail-task-running omni-busy" aria-busy="true">
     <div class="mail-task-running__line">
-        <AetheusLoader Size="OmniControlSize.Small" Class="mail-task-running__indicator" />
         <span class="mail-task-running__text">@string.Format(L["MailTaskRunning"], string.Join(", ", Labels))</span>
         <span class="mail-task-running__elapsed">@Elapsed</span>
     </div>

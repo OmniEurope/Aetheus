@@ -53,63 +53,8 @@ public class RkhunterCommandHelperTests
         Assert.DoesNotMatch(@"[;|&`$(){}\<>\r\n\0]", cmd);
     }
 
-    // --- BuildSetupCommand ---
-
-    [Fact]
-    public void BuildSetupCommand_NoMail_ReturnsBasicSetup()
-    {
-        var cmd = RkhunterCommandHelper.BuildSetupCommand(null);
-
-        Assert.Contains("apt-get install", cmd);
-        Assert.Contains("rkhunter", cmd);
-        Assert.Contains("--update", cmd);
-        Assert.Contains("--propupd", cmd);
-        Assert.DoesNotContain("MAIL-ON-WARNING", cmd);
-    }
-
-    [Fact]
-    public void BuildSetupCommand_EmptyMail_ReturnsBasicSetup()
-    {
-        var cmd = RkhunterCommandHelper.BuildSetupCommand("");
-
-        Assert.DoesNotContain("MAIL-ON-WARNING", cmd);
-    }
-
-    [Fact]
-    public void BuildSetupCommand_ValidMail_IncludesMailConfig()
-    {
-        var cmd = RkhunterCommandHelper.BuildSetupCommand("admin@example.com");
-
-        Assert.Contains("MAIL-ON-WARNING", cmd);
-        Assert.Contains("admin@example.com", cmd);
-    }
-
-    [Fact]
-    public void BuildSetupCommand_InvalidMail_Throws()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            RkhunterCommandHelper.BuildSetupCommand("not-an-email"));
-    }
-
-    [Fact]
-    public void BuildSetupCommand_InjectionAttempt_Throws()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            RkhunterCommandHelper.BuildSetupCommand("admin@example.com\"; rm -rf /; echo \""));
-    }
-
-    // Guards the silent-fail class: the agent's CommandValidator rejects any segment
-    // containing a shell metacharacter, and only `&&` may join segments. If anyone
-    // reintroduces `2>&1`, `||`, `;`, `2>/dev/null`, or `$( )` here, this fires.
-    [Theory]
-    [InlineData(null)]
-    [InlineData("admin@example.com")]
-    public void BuildSetupCommand_EverySegmentIsMetacharFree(string? mailOnWarning)
-    {
-        var cmd = RkhunterCommandHelper.BuildSetupCommand(mailOnWarning);
-        foreach (var segment in cmd.Split("&&"))
-            Assert.DoesNotMatch(@"[;|&`$(){}\<>\r\n\0]", segment);
-    }
+    // BuildSetupCommand was removed (R-119: typed OperationKind.RkhunterSetup). See RkhunterServiceTests
+    // (dispatch, address validation) + RkhunterSetupOperationTests (agent argv).
 
     // --- BuildGetLogsCommand ---
 

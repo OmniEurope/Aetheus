@@ -254,6 +254,31 @@ public class OwnerTypeSelectorTests : BunitContext
     }
 
     [Fact]
+    public async Task OnProjectChanged_ProjectServerKind_LeavesOutTheServersReachedOnlyThroughAnEnvironment()
+    {
+        // R-83: the project's server list now carries environment servers (Id 0, no project server behind
+        // them); a pipeline, library or vault can only be owned by a real project server.
+        _handler.SetPaginatedJsonResponse("api/projects/1/servers", new List<ProjectServerDto>
+        {
+            new() { Id = 20, ProjectId = 1, DisplayName = "App Server", Host = "10.0.0.1" },
+            new() { Id = 0, ProjectId = 1, ServerId = 7, DisplayName = "Env Server", Host = "10.0.0.2", ViaEnvironmentId = 3, ViaEnvironmentName = "prod" }
+        });
+        var cut = Render<OwnerTypeSelector>(p => p
+            .Add(x => x.Projects, MakeProjects()));
+        typeof(OwnerTypeSelector).GetField("_kind", Priv)!
+            .SetValue(cut.Instance, OwnerTypeSelector.OwnerKind.ProjectServer);
+
+        var method = typeof(OwnerTypeSelector).GetMethod("OnProjectChanged", Priv)!;
+        await cut.InvokeAsync(async () =>
+            await (Task)method.Invoke(cut.Instance, [(object)(int?)1])!);
+
+        var projectServers = (List<ProjectServerDto>)typeof(OwnerTypeSelector)
+            .GetField("_projectServers", Priv)!
+            .GetValue(cut.Instance)!;
+        Assert.Equal("App Server", Assert.Single(projectServers).DisplayName);
+    }
+
+    [Fact]
     public async Task OnEnvironmentChanged_InvokesCallback()
     {
         int? capturedEnvId = -1;

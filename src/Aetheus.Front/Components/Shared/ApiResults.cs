@@ -13,6 +13,15 @@ public sealed record ApiOutcome<TValue, TError>(
 {
     public bool IsSuccess => Value is not null;
 
+    /// <summary>The refusal as problem codes, when the API stated it so (a refused pipeline launch);
+    /// <see cref="ErrorMessage"/> holds the same refusal in English.</summary>
+    public IReadOnlyList<ProblemDto>? ErrorProblems { get; init; }
+
+    /// <summary>The refusal to show the user: <see cref="ErrorProblems"/> in the user's language when this
+    /// front knows every code, otherwise <see cref="ErrorMessage"/>.</summary>
+    public string? LocalizedErrorMessage(IStringLocalizer<AppStrings> localizer)
+        => LaunchProblemText.Describe(ErrorProblems, localizer) ?? ErrorMessage;
+
     /// <summary>
     /// A failure that is neither a 2xx success nor a typed 400 validation error: an auth/server
     /// failure (401/403/500/…) the caller cannot interpret from <see cref="Value"/>/<see cref="Error"/>

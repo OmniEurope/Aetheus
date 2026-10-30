@@ -5,7 +5,7 @@ namespace Aetheus.Front.Components.Servers;
 /// <summary>Derives overview update progress and failure from the locally queued request and
 /// persisted <see cref="ServerDetailDto.AgentUpdateRequest"/>. Persisted state keeps an active
 /// update visible after reloading.</summary>
-internal sealed record AgentUpdateOverviewState(string? InProgressTarget, bool Failed, string? FailureDiagnostic)
+internal sealed record AgentUpdateOverviewState(string? InProgressTarget, bool Failed, string? FailureDiagnostic, string? FailureCode = null)
 {
     internal static readonly AgentUpdateOverviewState None = new(null, false, null);
 
@@ -28,7 +28,7 @@ internal sealed record AgentUpdateOverviewState(string? InProgressTarget, bool F
         ServerDetailDto server, AgentUpdateRequestSummaryDto request, bool askedHere) => request.Status switch
         {
             // An older failure is the progress card's to show; the Overview reports the one it asked for.
-            AgentUpdateRequestStatus.Failed => askedHere ? new AgentUpdateOverviewState(null, true, request.FailureDiagnostic) : None,
+            AgentUpdateRequestStatus.Failed => askedHere ? new AgentUpdateOverviewState(null, true, request.FailureDiagnostic, request.FailureCode) : None,
             AgentUpdateRequestStatus.Confirmed => None,
             _ when Reached(server, request.TargetVersion) => None,
             _ => new AgentUpdateOverviewState(request.TargetVersion, false, null)

@@ -30,14 +30,14 @@
             <OmniColumn Span="8">
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall" Align="OmniAlignment.Center">
                     <OmniIcon Name="@MaterialIconMap.Resolve(ServerTypeHelper.GetIcon(Server.Type))" Class="icon-sm" />
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@ServerTypeHelper.GetBadgeStyle(Server.Type)">@L.Localize(Server.Type)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(ServerTypeHelper.GetBadgeStyle(Server.Type)))" Fill="OmniFill.Solid" Tone="@ServerTypeHelper.GetBadgeStyle(Server.Type)">@L.Localize(Server.Type)</OmniBadge>
                 </OmniStack>
             </OmniColumn>
         </OmniRow>
         <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="4"><OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Status"]</OmniText></OmniColumn>
             <OmniColumn Span="8">
-                <OmniBadge Fill="OmniFill.Solid" Tone="@(Server.Status == ServerStatus.Online ? OmniTone.Success : OmniTone.Danger)">@L.Localize(Server.Status)</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.ForState(Server.Status == ServerStatus.Online ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(Server.Status == ServerStatus.Online ? OmniTone.Success : OmniTone.Danger)">@L.Localize(Server.Status)</OmniBadge>
             </OmniColumn>
         </OmniRow>
         <OmniRow Gap="OmniSpacing.Large">
@@ -56,7 +56,7 @@
                     <OmniRow Gap="OmniSpacing.XSmall">
                         @foreach (var tag in Server.Tags)
                         {
-                            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@tag</OmniBadge>
                         }
                     </OmniRow>
                 </OmniColumn>

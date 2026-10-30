@@ -34,12 +34,15 @@ public sealed class OrganizationDetailDeleteTests : BunitContext
 
     private bool DeleteSent() => _handler.Requests.Any(request => request.Method == "DELETE" && request.Url.EndsWith(DeleteUrl, StringComparison.Ordinal));
 
+    private static AngleSharp.Dom.IElement? FindDeleteButton(IRenderedComponent<OrganizationDetail> cut) =>
+        cut.FindAll("button.omni-button--danger").FirstOrDefault(button => button.TextContent.Trim() == "Delete");
+
     private async Task DeleteAsync()
     {
         var cut = Render<OrganizationDetail>(p => p.Add(c => c.Id, 1));
-        // STD-BTN detection 11: Delete organization is an entry of the general form's "More actions" menu.
-        cut.WaitForAssertion(() => Assert.NotNull(cut.FindMenuItem("DeleteOrganization")));
-        await cut.FindMenuItem("DeleteOrganization")!.ClickAsync(new());
+        // R-22 (d), owner decision of 2026-10-27: Delete is a red Danger button next to Save, not a menu entry.
+        cut.WaitForAssertion(() => Assert.NotNull(FindDeleteButton(cut)));
+        await FindDeleteButton(cut)!.ClickAsync(new());
     }
 
     [Fact]

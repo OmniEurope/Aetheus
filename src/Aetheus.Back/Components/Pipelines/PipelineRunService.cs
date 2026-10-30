@@ -88,8 +88,9 @@ public class PipelineRunService(
 
     public Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
-        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default)
-        => launcher.RecordRefusedAutomatedLaunchAsync(pipelineId, triggerSource, reason, additionalVariables, ct);
+        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
+        IReadOnlyList<ProblemDto>? problems = null)
+        => launcher.RecordRefusedAutomatedLaunchAsync(pipelineId, triggerSource, reason, additionalVariables, ct, problems);
 
     public Task<PipelineRunDto?> RerunAsync(int sourceRunId, RerunMode mode, CancellationToken ct = default)
         => launcher.RerunAsync(sourceRunId, mode, ct);
@@ -244,9 +245,13 @@ public class PipelineRunService(
         preflight.ValidateUniqueDeploymentTargets(definition, resolvedVars);
 
         var organizationId = await repo.GetPipelineOrganizationIdAsync(pipeline.Id, ct).ConfigureAwait(false);
-        return await advisoryPreflight
+        var result = await advisoryPreflight
             .BuildAsync(definition, resolvedVars, warnings, organizationId, preparation.EffectiveProjectId, ct)
             .ConfigureAwait(false);
+        // R-72: what the gate holds against the release a deployment names, for the launch to confirm.
+        var gate = await PipelineDeploymentGateWarnings.AssessAsync(
+            definition, resolvedVars, preparation.EffectiveProjectId, repo, ct).ConfigureAwait(false);
+        return gate is { Warnings.Count: > 0 } ? result with { GateWarnings = gate.Warnings } : result;
     }
 
     // S-TECH-D4XR: pull the declared-parameter values out of the supplied additional vars, validate
@@ -266,7 +271,7 @@ public class PipelineRunService(
             .Where(kv => definition.Parameters.Any(p => p.Name.Equals(kv.Key, StringComparison.OrdinalIgnoreCase)))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
 
-        PipelineParameterResolver.TryResolve(
+        PipelineParameterResolver.TryResolveProblems(
             definition.Parameters, supplied, out var effective, out var errors, enforceRequired: !forPreflight);
         if (forPreflight)
         {
@@ -285,7 +290,8 @@ public class PipelineRunService(
                 additionalVars[PipelineCommandBuilder.ParameterKeyPrefix + k] = v;
             }
         }
-        return errors.Select(e => $"Parameter: {e}").ToList();
+        // Stored problems: the preview says them in the user's language, an API client reads the English.
+        return [.. errors.Select(error => new PipelineProblem(error.Code, error.Parameters, $"Parameter: {error.English}").ToStored())];
     }
 
     public async Task<IReadOnlyCollection<int>> ResolveCandidateTargetServerIdsAsync(
@@ -313,7 +319,7 @@ public class PipelineRunService(
         IReadOnlyDictionary<string, string> childOutputs, CancellationToken ct = default)
         => scheduler.ResolveCompletedTriggerStepAsync(step, childStatus, childOutputs, launcher, ct);
 
-    public Task<PipelineRunDto?> TriggerChainedRunAsync(
+    public Task<PipelineChainedRunOutcome> TriggerChainedRunAsync(
         int childPipelineId, Dictionary<string, string>? upstreamVariables, CancellationToken ct = default) =>
         triggerSteps.TriggerChainedRunAsync(childPipelineId, upstreamVariables, launcher, ct);
 

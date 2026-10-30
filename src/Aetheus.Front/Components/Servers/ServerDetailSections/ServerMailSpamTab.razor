@@ -13,7 +13,7 @@
     else
     {
         <OmniRow Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
-            <OmniBadge Fill="OmniFill.Solid" Tone="@(Spam.IsRunning ? OmniTone.Success : OmniTone.Danger)">@($"{Spam.Name} {Spam.Version} {(Spam.IsRunning ? L["Running"] : L["Stopped"])}".Trim())</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="@(Spam.IsRunning ? OmniTone.Success : OmniTone.Danger)">@($"{Spam.Name} {Spam.Version} {(Spam.IsRunning ? L["Running"] : L["Stopped"])}".Trim())</NumberBadge>
             <div class="blade-content-spacer"></div>
             @if (CanManage)
             {

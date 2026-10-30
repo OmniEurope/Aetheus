@@ -35,10 +35,10 @@
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(Ts.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Ts.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
+    <OmniBadge Icon="@(BadgeIcon.ForState(Ts.IsInstalled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Ts.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Ts.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
     @if (Ts.IsInstalled)
     {
-        <OmniBadge Fill="OmniFill.Solid" Tone="@(Ts.IsRunning ? OmniTone.Success : OmniTone.Danger)">@(Ts.IsRunning ? L["Running"] : L["Stopped"])</OmniBadge>
+        <OmniBadge Icon="@(BadgeIcon.ForState(Ts.IsRunning ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(Ts.IsRunning ? OmniTone.Success : OmniTone.Danger)">@(Ts.IsRunning ? L["Running"] : L["Stopped"])</OmniBadge>
         @if (!string.IsNullOrEmpty(Ts.Version))
         {
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">v@(Ts.Version)</OmniText>
@@ -47,8 +47,8 @@
         {
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Ts.ServerName</OmniText>
         }
-        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@($"{Ts.OnlineClients}/{Ts.MaxClients} {L["OnlineClients"]}")</OmniBadge>
-        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"{Ts.ChannelCount} {L["Channels"]}")</OmniBadge>
+        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@($"{Ts.OnlineClients}/{Ts.MaxClients} {L["OnlineClients"]}")</NumberBadge>
+        <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@($"{Ts.ChannelCount} {L["Channels"]}")</NumberBadge>
         @if (Ts.UptimeSeconds > 0)
         {
             <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@L["Uptime"]: @FormatUptime(Ts.UptimeSeconds)</OmniText>
@@ -56,7 +56,7 @@
     }
 </OmniRow>
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="TeamSpeak" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="TeamSpeak" SettleOnHeartbeat="true" OnSettled="RefreshLiveAsync" />
 
 @if (Ts.IsInstalled)
 {
@@ -128,8 +128,8 @@
                         <OmniDataGridColumn TItem="TeamspeakChannelDto" Title="@L["Flags"]" Width="180px" Filterable="false" >
                             <Template Context="ch">
                                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.XSmall">
-                                    @if (ch.IsDefault) { <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Default"]</OmniBadge> }
-                                    @if (ch.IsPermanent) { <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Perm"]</OmniBadge> }
+                                    @if (ch.IsDefault) { <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Star))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Default"]</OmniBadge> }
+                                    @if (ch.IsPermanent) { <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Pin))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L["Perm"]</OmniBadge> }
                                     @if (ch.HasPassword) { <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning"><OmniIcon Name="OmniIconName.Lock" /></OmniBadge> }
                                 </OmniStack>
                             </Template>

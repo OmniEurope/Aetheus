@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Shared;
-using Aetheus.Back.Data.Entities;
 
 namespace Aetheus.Back.Components.Projects;
 
@@ -8,7 +7,7 @@ namespace Aetheus.Back.Components.Projects;
 /// keys; the status and action columns are not filterable, so they have no entry. </summary>
 internal static class ProjectServerListQuery
 {
-    internal static readonly GridQueryMap<ProjectServer> Columns = new GridQueryMap<ProjectServer>()
+    internal static readonly GridQueryMap<ProjectServerRow> Columns = new GridQueryMap<ProjectServerRow>()
         .Text("displayName", s => s.DisplayName)
         .Text("host", s => s.Host)
         .Number("port", s => s.Port)

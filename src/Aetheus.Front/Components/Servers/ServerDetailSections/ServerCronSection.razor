@@ -12,20 +12,20 @@
 
 @* --- Status bar --- *@
 <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@(Cron.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Cron.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
-    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@string.Format(L["CronJobCount"], Cron.Jobs.Count)</OmniBadge>
+    <OmniBadge Icon="@(BadgeIcon.ForState(Cron.IsInstalled ? OmniTone.Success : OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="@(Cron.IsInstalled ? OmniTone.Success : OmniTone.Neutral)">@(Cron.IsInstalled ? L["Installed"] : L["NotInstalled"])</OmniBadge>
+    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@string.Format(L["CronJobCount"], Cron.Jobs.Count)</NumberBadge>
 </OmniRow>
 
 <ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Cron" />
 
 <OmniTabs>
-        <OmniTabsItem Title="@L["CronJobs"]">
+        <OmniTabsItem Title="@L["CronJobs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("schedule")" /></Icon><ChildContent>
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
                 <CountBadge Value="@FilteredJobs.Count" Variant="OmniTone.Accent" />
                 <OmniTextBox aria-label="@L["FilterCronJobs"]" @bind-Value="_jobSearch" Placeholder="@L["FilterCronJobs"]" />
             </OmniStack>
             <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["CronJobs"])" ExportFields="@ExportContext.Fields()" Items="@FilteredJobs" TItem="CronJobDto" KeyOf="@(row => row.Id)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
-                AllowGrouping="true" ShowGroupPanel="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+                AllowGrouping="true" ShowGroupPanel="true" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
                 OnRowClick="@(args => OpenFromRowAsync(args.Item))">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="CronJobDto" Property="User" Title="@L["User"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
@@ -53,5 +53,5 @@
                     </OmniDataGridColumn>
                 </Columns>
             </OmniDataGrid>
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 </OmniTabs>

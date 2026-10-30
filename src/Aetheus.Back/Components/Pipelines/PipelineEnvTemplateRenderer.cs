@@ -42,6 +42,11 @@ internal static class PipelineEnvTemplateRenderer
         ArgumentNullException.ThrowIfNull(template);
         ArgumentNullException.ThrowIfNull(variables);
 
+        // R-68: every variable the sample cannot get is collected over the whole file and reported together, so
+        // fixing a deployment never takes one attempt per missing variable.
+        var undefined = new List<string>();
+        var empty = new List<string>();
+        var forbidden = new List<string>();
         var output = new StringBuilder();
         foreach (var rawLine in template.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
         {
@@ -58,20 +63,18 @@ internal static class PipelineEnvTemplateRenderer
                 throw new BadRequestException(
                     "Environment template line is not KEY=VALUE with a variable name as key.");
 
+            var lineHasProblem = false;
             var value = TokenRegex.Replace(line[(separator + 1)..], match =>
             {
                 var name = match.Groups[1].Value;
-                if (!variables.TryGetValue(name, out var resolved))
-                    throw new BadRequestException(
-                        $"Environment template variable '{name}' is not defined.");
-                if (resolved.Length == 0)
-                    throw new BadRequestException(
-                        $"Environment template variable '{name}' is empty: give it a value in its library or vault.");
-                if (resolved.IndexOfAny(['\r', '\n', '\0']) >= 0)
-                    throw new BadRequestException(
-                        $"Environment template variable '{name}' contains a forbidden line break or NUL byte.");
-                return resolved;
+                if (variables.TryGetValue(name, out var resolved) && resolved.Length > 0
+                    && resolved.IndexOfAny(['\r', '\n', '\0']) < 0)
+                    return resolved;
+                lineHasProblem = true;
+                AddOnce(!variables.ContainsKey(name) ? undefined : resolved!.Length == 0 ? empty : forbidden, name);
+                return match.Value;
             });
+            if (lineHasProblem) continue;
             if (value.Contains("#{", StringComparison.Ordinal))
                 throw new BadRequestException(
                     $"Environment template line '{key}' contains an invalid or unresolved token.");
@@ -83,11 +86,36 @@ internal static class PipelineEnvTemplateRenderer
                 .Append("\"\n");
         }
 
+        if (undefined.Count + empty.Count + forbidden.Count > 0)
+            throw new BadRequestException(DescribeMissing(undefined, empty, forbidden));
+
         // The split leaves one empty element after a final line break; one line break ends the file.
         var rendered = output.ToString().TrimEnd('\n') + "\n";
         if (rendered.Length > MaxRenderedLength)
             throw new BadRequestException(
                 $"Rendered environment file exceeds the {MaxRenderedLength} character safety limit.");
         return rendered;
+    }
+
+    private static void AddOnce(List<string> names, string name)
+    {
+        if (!names.Contains(name, StringComparer.OrdinalIgnoreCase)) names.Add(name);
+    }
+
+    private static string Quote(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
+
+    /// <summary>One sentence for every variable the sample could not get, each named, with where to define it.</summary>
+    private static string DescribeMissing(List<string> undefined, List<string> empty, List<string> forbidden)
+    {
+        var parts = new List<string>();
+        if (undefined.Count > 0)
+            parts.Add($"Environment template variable(s) not defined: {Quote(undefined)}. Define each one in a variable "
+                + "library or a vault of the project, or in an environment its pipeline reads.");
+        if (empty.Count > 0)
+            parts.Add($"Environment template variable(s) empty: {Quote(empty)}. Give each a value in the variable "
+                + "library or the vault that holds it.");
+        if (forbidden.Count > 0)
+            parts.Add($"Environment template variable(s) with a forbidden line break or NUL byte: {Quote(forbidden)}.");
+        return string.Join(" ", parts);
     }
 }

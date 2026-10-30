@@ -7,22 +7,23 @@
 }
 else
 {
+<OmniStack>
     @* Recette R-29: the page's main action sits in the page header, on the title line. *@
     <SectionContent SectionName="@PageHeaderActions.SectionName">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => _addVisible = true)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
     </SectionContent>
 
-    <OmniDataGrid Items="@_modules" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" TItem="ServerModuleDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+    <OmniDataGrid Items="@_modules" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" TItem="ServerModuleDto" EmptyText="@L["NoRecords"]" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ServerModuleDto" Property="Name" Title="@L["Name"]"  Filterable="true"/>
             <OmniDataGridColumn TItem="ServerModuleDto" Property="Type" Title="@L["Type"]" Width="8.125rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@TypeText">
                 <Template Context="m">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L.Localize(m.Type)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Accent))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@L.Localize(m.Type)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ServerModuleDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@StatusText">
                 <Template Context="m">
-                    <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="@GetModuleStatusBadge(m.Status)">@L[m.Status.ToString()]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetModuleStatusBadge(m.Status)))" Fill="OmniFill.Solid" Tone="@GetModuleStatusBadge(m.Status)">@L[m.Status.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="ServerModuleDto" Property="Version" Title="@L["Version"]" Width="6.25rem"  Filterable="true"/>
@@ -36,7 +37,7 @@ else
 
     @if (_addVisible)
     {
-        <OmniCard Class="omni-u-mt-lg">
+        <OmniCard>
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L["AddModule"]</OmniHeading>
             <OmniTemplateForm TModel="AddModuleModel" Model="@_addModel" OnValidSubmit="@((EditContext context) => AddModuleAsync((AddModuleModel)context.Model))">
             <OmniDataAnnotationsValidator Localizer="@L" />
@@ -60,11 +61,12 @@ else
                 <OmniColumn Span="12" MediumSpan="2">
                     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Class="omni-u-mt-xl">
                         <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_addSaving ? "btn-busy" : null)" Busy="@(_addSaving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
-                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => _addVisible = false)"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                     </OmniStack>
                 </OmniColumn>
             </OmniRow>
             </OmniTemplateForm>
         </OmniCard>
     }
+</OmniStack>
 }

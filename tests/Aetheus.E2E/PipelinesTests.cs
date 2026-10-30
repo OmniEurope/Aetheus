@@ -24,7 +24,7 @@ public class PipelinesTests : E2ETestBase
 
         // The list's New button sits in the one-line page header. Scoped to the header because the
         // empty state also renders a "New Pipeline" CTA when the grid is empty.
-        var newButton = Page.Locator(".omni-page-header__actions").GetByRole(AriaRole.Button, new() { Name = "New Pipeline" });
+        var newButton = Page.Locator(".omni-page-header__actions .pipeline-list-new-button");
         await Expect(newButton).ToBeVisibleAsync(new() { Timeout = 10000 });
 
         await WaitForNoSpinnerAsync();
@@ -98,7 +98,7 @@ public class PipelinesTests : E2ETestBase
     public async Task Pipelines_NewPipeline_NavigatesToSetupWizard()
     {
         await NavigateToAsync("pipelines");
-        await Page.Locator(".omni-page-header__actions").GetByRole(AriaRole.Button, new() { Name = "New Pipeline" }).ClickAsync();
+        await Page.Locator(".omni-page-header__actions .pipeline-list-new-button").ClickAsync();
 
         await Expect(Page).ToHaveURLAsync(
             new System.Text.RegularExpressions.Regex("/pipelines/setup"), new() { Timeout = 5000 });

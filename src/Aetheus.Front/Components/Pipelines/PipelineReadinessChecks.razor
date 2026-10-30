@@ -1,13 +1,15 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* One finding per row. Only a blocking finding is an OmniAlert (R2-18); the explanations are tooltips.
    The fix is a link to the page that makes it, or for a missing repository the creation dialog over
-   the current page. *@
+   the current page. R-52: the table of empty values is not in the finding's text column (after its icon,
+   which left it a useless offset): it sits under the finding, over the whole width, and scrolls sideways
+   when its columns do not fit. *@
 @foreach (var check in Checks)
 {
     @if (BlockingAsAlert && check.Severity == PipelineSetupReadinessSeverity.Blocking)
     {
         <OmniAlert Severity="OmniSeverity.Warning" data-testid="setup-readiness-check">
-            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" OnChanged="@OnChanged" />
+            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" EnvironmentReturnUrl="@EnvironmentReturnUrl" OnChanged="@OnChanged" />
         </OmniAlert>
     }
     else
@@ -17,7 +19,14 @@
             <OmniBadge Tone="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniTone.Warning : OmniTone.Info)" Fill="OmniFill.Tonal">
                 <Icon><OmniIcon Name="@(check.Severity == PipelineSetupReadinessSeverity.Blocking ? OmniIconName.Warning : OmniIconName.Info)" /></Icon>
             </OmniBadge>
-            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" OnChanged="@OnChanged" />
+            <PipelineReadinessCheckBody Check="@check" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl" EnvironmentReturnUrl="@EnvironmentReturnUrl" OnChanged="@OnChanged" />
         </OmniStack>
+    }
+    @if (check.EmptyValues.Count > 0)
+    {
+        @* R-10: library or vault, key and pipeline, one row per value and pipeline that reads it. *@
+        <PipelineReadinessEmptyValues Rows="@check.EmptyValues" ReturnUrl="@ReturnUrl"
+                                      FillInDialog="@FillEmptyValuesInDialog" OnChanged="@OnChanged"
+                                      IsVault="@(check.Kind == PipelineSetupReadinessKind.EmptyVaultSecrets)" />
     }
 }

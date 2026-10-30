@@ -19,7 +19,7 @@ else
     <OmniPageHeader Title="@($"{L["Task"]} #{_task.Id}")" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("task_alt")" /></Icon>
         <Badges>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@TaskListView.GetTaskBadge(_task.Status)">@L.Localize(_task.Status)</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(TaskListView.GetTaskBadge(_task.Status)))" Fill="OmniFill.Solid" Tone="@TaskListView.GetTaskBadge(_task.Status)">@L.Localize(_task.Status)</OmniBadge>
             @if (!string.IsNullOrWhiteSpace(_task.FailureCode))
             {
                 <OmniBadge Fill="OmniFill.Solid" Tone="@TaskListView.GetFailureBadge(_task.FailureCode)"><Icon><OmniIcon Name="@TaskListView.GetFailureIcon(_task.FailureCode)" /></Icon><ChildContent>@L[_task.FailureCode]</ChildContent></OmniBadge>
@@ -33,15 +33,16 @@ else
         </ActionsContent>
     </OmniPageHeader>
 
+    <OmniStack>
     @if (!string.IsNullOrWhiteSpace(_task.FailureReason))
     {
-        <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mt-lg">
+        <OmniAlert Severity="OmniSeverity.Danger">
             <strong>@L["FailureReason"]</strong>: @_task.FailureReason
         </OmniAlert>
     }
 
     @* R-5: the two panels are OE tiles of one OmniTileGrid (same width, same height). *@
-    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
             <OmniCard>
                 <div class="detail-panel-title">
                     <OmniIcon Name="OmniIconName.Info"Class="run-tile-icon omni-u-text-accent" />
@@ -68,7 +69,7 @@ else
                 </OmniStack>
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["Executor"]</OmniText>
-                    <OmniText Element="OmniTextElement.Paragraph">@_task.Executor</OmniText>
+                    <OmniText Element="OmniTextElement.Paragraph">@L.Localize(_task.Executor)</OmniText>
                 </OmniStack>
                 <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="detail-row" Gap="OmniSpacing.Large">
                     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-text-muted">@L["TimeoutSeconds"]</OmniText>
@@ -101,10 +102,10 @@ else
 
     @if (!string.IsNullOrWhiteSpace(_task.Command))
     {
-        <OmniCodeBlock Code="@_task.Command" Title="@L["Command"]" Wrap="true" Class="omni-u-mt-lg code-block-bounded code-block-tall" />
+        <OmniCodeBlock Code="@_task.Command" Title="@L["Command"]" Wrap="true" Class="code-block-bounded code-block-tall" />
     }
 
-    <OmniCard Class="omni-u-mt-lg">
+    <OmniCard>
         <div class="detail-panel-title">
             <OmniIcon Name="OmniIconName.Document" Class="run-tile-icon omni-u-text-accent" />
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Logs"]</OmniText>
@@ -132,4 +133,5 @@ else
             }
         </div>
     </OmniCard>
+    </OmniStack>
 }

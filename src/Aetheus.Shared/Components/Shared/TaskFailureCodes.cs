@@ -9,6 +9,10 @@ public static class TaskFailureCodes
     public const string BuildFailed = nameof(BuildFailed);
     public const string TestsFailed = nameof(TestsFailed);
 
+    /// <summary>R-68: a value the step needs is missing or empty (a variable of its environment sample). It is a
+    /// configuration to complete in a library, a vault or an environment, never a problem of the server.</summary>
+    public const string ConfigurationIncomplete = nameof(ConfigurationIncomplete);
+
     /// <summary>The target server's agent cannot execute the task: its protocol is unsupported or it
     /// does not declare the capability the operation needs. Raised by the backend, never by an agent,
     /// so the run fails with a reason instead of leaving the task Pending forever.</summary>

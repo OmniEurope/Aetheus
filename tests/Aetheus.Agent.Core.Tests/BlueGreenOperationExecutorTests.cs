@@ -402,9 +402,125 @@ public sealed class BlueGreenOperationExecutorTests : IDisposable
             OperationKind.BlueGreenUp, "aetheus-demo", env, 60,
             (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
 
-        Assert.Contains(log, line => line.Contains("is an orphan and is rolled back first", StringComparison.Ordinal));
+        Assert.Contains(log, line => line.Contains("is an orphan and is undone first", StringComparison.Ordinal));
         Assert.Equal("server 127.0.0.1:10029;\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
         Assert.False(journal.Exists && journal.OwnerRun == "2490", "The orphan transaction is still open.");
+    }
+
+    // Runs 1422/1423 on the simulator: a first deployment switched, its run failed without retiring it, and
+    // every later deployment was refused forever. No environment lock (the generic template declares no
+    // environment), but run 1422 is earlier and no longer in flight: its transaction is an orphan, and a first
+    // deployment has no colour to roll back to, so it is retired before this run rebuilds blue.
+    [Fact]
+    public async Task Up_WithAnEndedEarlierRunsInitialSwitchedTransaction_RetiresItAndDeploys()
+    {
+        var (env, journal, confPath) = await OpenInitialSwitchedTransactionAsync(ownerRun: "1422");
+        env["AETHEUS_BG_OWNER_RUN"] = "1423";
+        env["AETHEUS_BG_ACTIVE_RUNS"] = "1423,1424";
+        var log = new List<string>();
+
+        var result = await CreateExecutor(new FakeShell(), HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.BlueGreenUp, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains(log, line => line.Contains("run 1422 is no longer in flight", StringComparison.Ordinal));
+        Assert.Contains(log, line => line.Contains("Initial deployment retired", StringComparison.Ordinal));
+        Assert.Equal("# none\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+        Assert.False(journal.Exists, "The orphan transaction is still open.");
+        Assert.Contains(log, line => line.EndsWith("BLUEGREEN_LIVE_COLOR]none", StringComparison.Ordinal));
+    }
+
+    // The owner is still in flight: it may be about to roll back or commit, so nothing of it is touched.
+    [Fact]
+    public async Task Up_WithAnEarlierRunStillInFlight_RefusesAndLeavesItsTransaction()
+    {
+        var (env, journal, _) = await OpenInitialSwitchedTransactionAsync(ownerRun: "1422");
+        env["AETHEUS_BG_OWNER_RUN"] = "1423";
+        env["AETHEUS_BG_ACTIVE_RUNS"] = "1422,1423";
+        var shell = new FakeShell();
+        var log = new List<string>();
+
+        var result = await CreateExecutor(shell, HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.BlueGreenUp, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(log, line => line.Contains("Run 1422 left a deployment transaction open", StringComparison.Ordinal));
+        Assert.Empty(shell.DockerEnvironments);
+        Assert.Equal(BlueGreenJournal.Switched, journal.State);
+    }
+
+    // A later run missing from the list may simply have started after it was taken; an absent list proves
+    // nothing either (an older control plane).
+    [Theory]
+    [InlineData("1424", "1423")]
+    [InlineData("1422", null)]
+    public async Task Up_WhenTheOwnerCannotBeShownToHaveEnded_Refuses(string ownerRun, string? activeRuns)
+    {
+        var (env, journal, _) = await OpenInitialSwitchedTransactionAsync(ownerRun);
+        env["AETHEUS_BG_OWNER_RUN"] = "1423";
+        if (activeRuns is not null) env["AETHEUS_BG_ACTIVE_RUNS"] = activeRuns;
+
+        var result = await CreateExecutor(new FakeShell(), HttpStatusCode.OK).ExecuteAsync(
+            OperationKind.BlueGreenUp, "aetheus-demo", env, 60,
+            (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Equal(BlueGreenJournal.Switched, journal.State);
+    }
+
+    // The template's Rollback stage retires a failed first deployment with a step of the same run.
+    [Fact]
+    public async Task Retire_OfThisRunsInitialSwitchedTransaction_ClosesIt()
+    {
+        var (env, journal, _) = await OpenInitialSwitchedTransactionAsync(ownerRun: "1422");
+        env["AETHEUS_BG_OWNER_RUN"] = "1422";
+
+        var result = await CreateExecutor(new FakeShell()).ExecuteAsync(
+            OperationKind.BlueGreenRetire, "aetheus-demo", env, 60,
+            (_, _) => Task.CompletedTask, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(journal.Exists);
+    }
+
+    // Retiring stops a colour: never the first deployment another run may still be validating.
+    [Fact]
+    public async Task Retire_OfAnotherRunStillInFlight_IsRefusedAndLeavesItIntact()
+    {
+        var (env, journal, confPath) = await OpenInitialSwitchedTransactionAsync(ownerRun: "1422");
+        env["AETHEUS_BG_OWNER_RUN"] = "1423";
+        env["AETHEUS_BG_ACTIVE_RUNS"] = "1422,1423";
+        var log = new List<string>();
+
+        var result = await CreateExecutor(new FakeShell()).ExecuteAsync(
+            OperationKind.BlueGreenRetire, "aetheus-demo", env, 60,
+            (line, _) => { log.Add(line); return Task.CompletedTask; }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(log, line => line.Contains("belongs to run 1422, which may still be running", StringComparison.Ordinal));
+        Assert.Equal(BlueGreenJournal.Switched, journal.State);
+        Assert.Equal("# blue\n", await File.ReadAllTextAsync(confPath, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>A first deployment (previous colour none) switched to blue by <paramref name="ownerRun"/>.</summary>
+    private async Task<(Dictionary<string, string> Env, BlueGreenJournal Journal, string ConfPath)> OpenInitialSwitchedTransactionAsync(
+        string ownerRun)
+    {
+        var env = BaseEnvironment();
+        Assert.True(BlueGreenContext.TryCreate("aetheus-demo", env, out var context, out _));
+        var journal = new BlueGreenJournal(context!);
+        Assert.True(journal.TryOpen("none", "blue", "rev-1", ownerRun, out _));
+        journal.MarkSwitched();
+        journal.WriteLiveColour("blue");
+        var confPath = Path.Combine(_root, "upstream.conf");
+        await File.WriteAllTextAsync(confPath, "# blue\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(context!.JournalDir, "upstream.before"), "# none\n", TestContext.Current.CancellationToken);
+        env["AETHEUS_BG_UPSTREAM_CONF"] = confPath;
+        env["AETHEUS_BG_RELOAD_HELPER"] = "/usr/local/bin/reload";
+        return (env, journal, confPath);
     }
 
     // Only the complete absence of a transaction is "nothing to undo".

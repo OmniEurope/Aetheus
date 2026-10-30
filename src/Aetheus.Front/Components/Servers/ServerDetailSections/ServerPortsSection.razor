@@ -1,14 +1,20 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
+@using Microsoft.AspNetCore.Components.Sections
 @inject GridExportContext ExportContext
 @* The port registry is compared with observed listeners; discrepancies are shown without automatic
    correction. *@
 
+@* Recette R-109 (rule 1 of R-30): the scan, the page's main action, sits in the page header on the title line. *@
+<SectionContent SectionName="@PageHeaderActions.SectionName">
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)" title="@ScanTooltip"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
+</SectionContent>
+
 <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.Large">
+    <ServerTaskFollower @ref="_follower" ServerId="@ServerId" />
     <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center">
         <OmniIcon Name="OmniIconName.Graph" />
         <div class="flex-spacer"></div>
         <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">@ScanCaption</OmniText>
-        <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@ObserveAsync" Disabled="@(!CanScan)" Class="@(_scanning ? "btn-busy" : null)" Busy="@(_scanning)" title="@ScanTooltip"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["PortScanRefresh"]</span></ChildContent></OmniButton>
     </OmniStack>
 
     <OmniText Element="OmniTextElement.Paragraph">@L["PortRegistryHint"]</OmniText>
@@ -46,7 +52,7 @@
             </OmniTemplateForm>
             @if (_addError is not null)
             {
-                <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mt-md">@_addError</OmniAlert>
+                <OmniAlert Severity="OmniSeverity.Danger">@_addError</OmniAlert>
             }
 
             <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End" Class="omni-u-mt-md">
@@ -86,16 +92,16 @@
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="PortRow" Property="Source" Title="@L["Source"]" Width="8.125rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@SourceText">
                     <Template Context="row">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@SourceBadge(row.Source)">@L.Localize(row.Source)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(SourceBadge(row.Source)))" Fill="OmniFill.Solid" Tone="@SourceBadge(row.Source)">@L.Localize(row.Source)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="PortRow" Property="Listening" Title="@L["PortListening"]" Width="8.75rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@ListeningFilterText">
                     <Template Context="row">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@ListeningBadge(row.Listening)">@ListeningText(row.Listening)</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(ListeningBadge(row.Listening)))" Fill="OmniFill.Solid" Tone="@ListeningBadge(row.Listening)">@ListeningText(row.Listening)</OmniBadge>
                     </Template>
                 </OmniDataGridColumn>
-                <OmniDataGridColumn TItem="PortRow" Property="DeclaredAt" Title="@L["PortDeclaredAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-                <OmniDataGridColumn TItem="PortRow" Property="UpdatedAt" Title="@L["PortUpdatedAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+                <OmniDataGridColumn TItem="PortRow" Property="DeclaredAt" Title="@L["PortDeclaredAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" />
+                <OmniDataGridColumn TItem="PortRow" Property="UpdatedAt" Title="@L["PortUpdatedAt"]" Width="10.625rem" FormatString="{0:g}" Filterable="true" />
                 <OmniDataGridColumn TItem="PortRow" Title="@L["Actions"]" Sortable="false" Filterable="false">
                     <Template Context="row">
                         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small">

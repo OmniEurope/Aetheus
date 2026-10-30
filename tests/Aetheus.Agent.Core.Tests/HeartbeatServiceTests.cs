@@ -180,6 +180,53 @@ public class HeartbeatServiceTests
             Arg.Any<CancellationToken>());
     }
 
+    // R-119: the server sections' new typed operations need the agent version (software capability) AND the grant
+    // their helper runs under; without the grant the agent never claims them, so the task explains itself instead of
+    // failing on a sudo refusal.
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_WithoutTheGrants_DoesNotClaimTheSectionOperations()
+    {
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(AgentCapabilities.ApacheModules, LastSentHeartbeat().AgentCapabilities!);
+        Assert.DoesNotContain(AgentCapabilities.RkhunterSetup, LastSentHeartbeat().AgentCapabilities!);
+        Assert.DoesNotContain(AgentCapabilities.TeamspeakServiceControl, LastSentHeartbeat().AgentCapabilities!);
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_WithTheGrants_ClaimsTheSectionOperations()
+    {
+        _sudoersHashCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, string>
+            {
+                ["aetheus-apache"] = "a",
+                ["aetheus-package"] = "p",
+                ["aetheus-rkhunter"] = "r",
+                ["aetheus-teamspeak"] = "t"
+            });
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        Assert.Contains(AgentCapabilities.ApacheModules, LastSentHeartbeat().AgentCapabilities!);
+        Assert.Contains(AgentCapabilities.RkhunterSetup, LastSentHeartbeat().AgentCapabilities!);
+        Assert.Contains(AgentCapabilities.TeamspeakServiceControl, LastSentHeartbeat().AgentCapabilities!);
+    }
+
+    [Fact]
+    public async Task CollectAndSendHeartbeatAsync_RkhunterSetup_NeedsBothThePackageAndTheRkhunterGrants()
+    {
+        _sudoersHashCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, string> { ["aetheus-rkhunter"] = "r" });
+        var service = CreateService();
+
+        await service.CollectAndSendHeartbeatAsync(TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(AgentCapabilities.RkhunterSetup, LastSentHeartbeat().AgentCapabilities!);
+    }
+
     [Fact]
     public async Task CollectAndSendHeartbeatAsync_ApiFailure_DoesNotCorruptNextIteration()
     {
@@ -304,7 +351,7 @@ public class HeartbeatServiceTests
         await service.CollectAndSendHeartbeatAsync(ct);
         await _mailCollectorMock.Received(1).CollectAsync(Arg.Any<CancellationToken>());
 
-        health.InvalidateMailInventory();
+        health.InvalidateInventories(CachedInventory.Mail);
         await service.CollectAndSendHeartbeatAsync(ct);
 
         await _mailCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
@@ -312,6 +359,37 @@ public class HeartbeatServiceTests
         // The mark is consumed: the next beat within the TTL uses the cache again.
         await service.CollectAndSendHeartbeatAsync(ct);
         await _mailCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task R119_AnInvalidatedApacheInventory_IsCollectedAgainBeforeItsTtl_AndTheBeatCarriesTheNewOne()
+    {
+        // The clock never advances: only the invalidation can explain a second Apache collection (a deleted
+        // site file kept showing in the inventory until the 180 s cache expired).
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 26, 10, 0, 0, TimeSpan.Zero));
+        var health = new AgentRuntimeHealth(time);
+        _apacheCollectorMock.CollectAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                new ApacheDataDto { Version = "before" },
+                new ApacheDataDto { Version = "after" });
+        var sent = new List<string>();
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Do<ServerHeartbeatDto>(beat => sent.Add(beat.Apache?.Version ?? "")), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time, health);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await _apacheCollectorMock.Received(1).CollectAsync(Arg.Any<CancellationToken>());
+
+        health.InvalidateInventories(CachedInventory.Apache);
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        await _apacheCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
+        Assert.Equal(["before", "before", "after"], sent);
+        // The mark is consumed: the next beat within the TTL uses the cache again.
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await _apacheCollectorMock.Received(2).CollectAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -524,11 +602,14 @@ public class HeartbeatServiceTests
         await service.CollectAndSendHeartbeatAsync(ct);
         Assert.True(LastSentHeartbeat().DockerAvailable);
         Assert.Contains(AgentCapabilities.DockerExecution, LastSentHeartbeat().AgentCapabilities!);
+        Assert.Contains(AgentCapabilities.DockerManagement, LastSentHeartbeat().AgentCapabilities!);
 
         // A daemon that stays silent past the hold is reported unavailable (fail-closed).
         time.Advance(AgentRuntimeDefaults.DockerProbeIndeterminateHold);
         await service.CollectAndSendHeartbeatAsync(ct);
         Assert.False(LastSentHeartbeat().DockerAvailable);
+        // R-119: without Docker the agent claims none of the Docker page's changes either.
+        Assert.DoesNotContain(AgentCapabilities.DockerManagement, LastSentHeartbeat().AgentCapabilities!);
     }
 
     private ServerHeartbeatDto LastSentHeartbeat() => _apiClientMock.ReceivedCalls()
@@ -616,6 +697,57 @@ public class HeartbeatServiceTests
         Assert.Null(sent[2].ClockSample);
         // A backend that does not stamp its reply (one predating the measure) gives no sample.
         Assert.Null(sent[3].ClockSample);
+    }
+
+    /// <summary>How many times the collector behind each cached inventory has been asked to collect.</summary>
+    private Dictionary<CachedInventory, int> CollectionCounts() => new()
+    {
+        [CachedInventory.Apache] = CollectCalls(_apacheCollectorMock),
+        [CachedInventory.Mail] = CollectCalls(_mailCollectorMock),
+        [CachedInventory.Certbot] = CollectCalls(_certbotCollectorMock),
+        [CachedInventory.Teamspeak] = CollectCalls(_teamspeakCollectorMock),
+        [CachedInventory.Portsentry] = CollectCalls(_portsentryCollectorMock),
+        [CachedInventory.Rkhunter] = CollectCalls(_rkhunterCollectorMock),
+        [CachedInventory.Firewall] = CollectCalls(_firewallCollectorMock),
+        [CachedInventory.SecurityUpdates] = CollectCalls(_securityUpdatesCollectorMock),
+        [CachedInventory.Docker] = CollectCalls(_dockerCollectorMock)
+    };
+
+    private static int CollectCalls(object collector) =>
+        collector.ReceivedCalls().Count(call => call.GetMethodInfo().Name is "CollectAsync" or "CollectAllAsync");
+
+    [Theory]
+    [InlineData(CachedInventory.Certbot)]
+    [InlineData(CachedInventory.Teamspeak)]
+    [InlineData(CachedInventory.Portsentry)]
+    [InlineData(CachedInventory.Rkhunter)]
+    [InlineData(CachedInventory.Firewall)]
+    [InlineData(CachedInventory.SecurityUpdates)]
+    [InlineData(CachedInventory.Docker)]
+    public async Task R119_AnInvalidatedInventory_IsCollectedAgainBeforeItsTtl_AndNoOtherOneIs(CachedInventory outdated)
+    {
+        // The clock never advances: only the invalidation can explain a second collection of this inventory.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero));
+        var health = new AgentRuntimeHealth(time);
+        _apiClientMock.SendHeartbeatAsync(1, Arg.Any<ServerHeartbeatDto>(), Arg.Any<CancellationToken>())
+            .Returns((ServerHeartbeatResponseDto?)null);
+        var service = CreateService(time, health);
+        var ct = TestContext.Current.CancellationToken;
+
+        await service.CollectAndSendHeartbeatAsync(ct);
+        await service.CollectAndSendHeartbeatAsync(ct);
+        var before = CollectionCounts();
+        Assert.Equal(1, before[outdated]);
+
+        health.InvalidateInventories(outdated);
+        await service.CollectAndSendHeartbeatAsync(ct);
+
+        var after = CollectionCounts();
+        foreach (var inventory in before.Keys)
+            Assert.Equal(inventory == outdated ? 2 : 1, after[inventory]);
+        // The mark is consumed: the next beat within the TTL uses the cache again.
+        await service.CollectAndSendHeartbeatAsync(ct);
+        Assert.Equal(2, CollectionCounts()[outdated]);
     }
 
     private HeartbeatService CreateService(

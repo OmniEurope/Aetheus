@@ -37,7 +37,8 @@ public class UserServiceCacheInvalidationOrderTests
             TimeProvider.System,
             _notifier,
             _userNotifier,
-            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>());
+            Substitute.For<Aetheus.Back.Services.DomainEvents.IDomainEventDispatcher>(),
+            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>());
     }
 
     [Fact]
@@ -77,10 +78,11 @@ public class UserServiceCacheInvalidationOrderTests
     {
         var user = new User { Id = 1, Username = "u", IsActive = true, SecurityStamp = "old", UserRoles = [] };
         _repoMock.GetUserDetailAsync(1, Arg.Any<CancellationToken>()).Returns(user);
-        _repoMock.FindRoleAsync(2, Arg.Any<CancellationToken>()).Returns(new Role { Id = 2, Name = "Dev" });
+        // The site-wide Admin role: the one held without an organization (ADR-059).
+        _repoMock.FindRoleAsync(2, Arg.Any<CancellationToken>()).Returns(new Role { Id = 2, Name = "Admin" });
         _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-        await _sut.AssignRoleAsync(1, 2, ct: TestContext.Current.CancellationToken);
+        await _sut.AssignRoleAsync(1, 2, null, ct: TestContext.Current.CancellationToken);
 
         Received.InOrder(() =>
         {
@@ -134,7 +136,7 @@ public class UserServiceCacheInvalidationOrderTests
         _repoMock.GetUserDetailAsync(1, Arg.Any<CancellationToken>()).Returns(user);
         _repoMock.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
-        await _sut.UnassignRoleAsync(1, 2, ct: TestContext.Current.CancellationToken);
+        await _sut.UnassignRoleAsync(1, 2, null, ct: TestContext.Current.CancellationToken);
 
         Received.InOrder(() =>
         {

@@ -8,9 +8,6 @@ public static partial class ApacheCommandHelper
     public static bool IsValidSiteName(string name) =>
         !string.IsNullOrWhiteSpace(name) && SiteNameRegex().IsMatch(name);
 
-    public static bool IsValidModuleName(string name) =>
-        !string.IsNullOrWhiteSpace(name) && ModuleNameRegex().IsMatch(name);
-
     public static string BuildServiceCommand(ApacheAction action) => action switch
     {
         ApacheAction.Start => "systemctl start apache2 || systemctl start httpd",
@@ -25,11 +22,9 @@ public static partial class ApacheCommandHelper
     // CommandValidator refused their `a2ensite x && systemctl reload` strings. Enable, disable and delete
     // a site now dispatch typed OperationKind.ApacheEnableSite / ApacheDisableSite / ApacheDeleteSite.
 
-    public static string BuildEnableModuleCommand(string moduleName) =>
-        $"a2enmod {moduleName} && systemctl restart apache2";
-
-    public static string BuildDisableModuleCommand(string moduleName) =>
-        $"a2dismod {moduleName} && systemctl restart apache2";
+    // BuildEnableModuleCommand / BuildDisableModuleCommand were removed (recette R-119): their
+    // `a2enmod x && systemctl restart apache2` strings ran without root and carried no operation kind.
+    // Module changes now dispatch typed OperationKind.ApacheEnableModule / ApacheDisableModule.
 
     public static string BuildGetLogsCommand(string logType, int lines)
     {
@@ -62,9 +57,6 @@ public static partial class ApacheCommandHelper
     // Only allow alphanumeric, hyphens, dots, and .conf extension
     [GeneratedRegex(@"^[a-zA-Z0-9._-]+$")]
     private static partial Regex SiteNameRegex();
-
-    [GeneratedRegex(@"^[a-zA-Z0-9_-]+$")]
-    private static partial Regex ModuleNameRegex();
 
     // Absolute Linux path: letters, digits, hyphens, underscores, dots, slashes
     [GeneratedRegex(@"^/[a-zA-Z0-9._/-]+$")]

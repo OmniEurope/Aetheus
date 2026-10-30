@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Git.Events;
+using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Pipelines;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -20,12 +21,16 @@ public sealed class GitPushPipelineTriggerHandlerTests
     private readonly IPipelineRunService _runService = Substitute.For<IPipelineRunService>();
     private readonly IPipelineRepository _pipelineRepo = Substitute.For<IPipelineRepository>();
     private readonly IGitLightCliService _cli = Substitute.For<IGitLightCliService>();
+    private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
     private readonly GitPushPipelineTriggerHandler _sut;
 
     public GitPushPipelineTriggerHandlerTests() =>
         _sut = new GitPushPipelineTriggerHandler(
             _pipelineService, _runService, _pipelineRepo, _cli,
-            new PipelineDefinitionSynchronizer(_pipelineService, _cli, NullLogger<PipelineDefinitionSynchronizer>.Instance),
+            new PipelineDefinitionSynchronizer(
+                _pipelineService, _cli,
+                new PipelineRunNotificationPublisher(_pipelineRepo, _userNotifications),
+                NullLogger<PipelineDefinitionSynchronizer>.Instance),
             NullLogger<GitPushPipelineTriggerHandler>.Instance);
 
     private static GitPushProcessedEvent Push(string reference, string commit, string defaultBranch = "main") =>
@@ -56,16 +61,50 @@ public sealed class GitPushPipelineTriggerHandlerTests
             }]);
         _pipelineService.HasActiveRunAsync(12, Arg.Any<CancellationToken>()).Returns(false);
 
-        await _sut.HandleAsync(Push("refs/heads/main", commit), TestContext.Current.CancellationToken);
+        await _sut.HandleAsync(Push("refs/heads/main", commit) with { PusherUsername = "carol" }, TestContext.Current.CancellationToken);
 
+        // The pusher is handed over so an edited definition becomes hers (RBAC audit, finding 3).
         await _pipelineService.Received(1).UpsertPipelineFromYamlAsync(
-            "release", yaml, 7, "webhook", Arg.Any<CancellationToken>(), "main", "main", 1);
+            "release", yaml, 7, "webhook", Arg.Any<CancellationToken>(), "main", "main", 1, "carol");
         await _runService.Received(1).TriggerAutomatedRunAsync(
             12, "GitPush",
             Arg.Is<Dictionary<string, string>>(variables =>
                 variables["WEBHOOK_REF"] == "refs/heads/main"
                 && variables["AETHEUS_SOURCE_COMMIT"] == commit),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Recette R-49. The production incident of 2026-10-25: a pushed definition whose description holds an
+    /// unquoted " : " is not YAML. The push is accepted and the stored pipeline is left alone, but the
+    /// project's subscribers are told which file, which commit and the parser's own message, which names
+    /// the line.
+    /// </summary>
+    [Fact]
+    public async Task Handle_APushedDefinitionThatIsNotYaml_IsNotStored_AndTheProjectIsToldWhichFileAndLine()
+    {
+        const string commit = "0123456789abcdef0123456789abcdef01234567";
+        const string invalid = "name: aetheus-deploy-prod\ntrigger: manual\nparameters:\n  - name: scope\n    description: Diagnostic : liste\nstages: []\n";
+        _cli.GetTreeAsync("/srv/git/repo.git", commit, ".pipeline", Arg.Any<CancellationToken>())
+            .Returns([new GitLightTreeEntryDto { Name = "aetheus-deploy-prod.yaml", Type = GitTreeEntryType.Blob }]);
+        _cli.GetBlobAsync("/srv/git/repo.git", commit, ".pipeline/aetheus-deploy-prod.yaml", Arg.Any<CancellationToken>())
+            .Returns(new GitLightBlobDto { Path = ".pipeline/aetheus-deploy-prod.yaml", Content = invalid });
+
+        var exception = await Record.ExceptionAsync(() =>
+            _sut.HandleAsync(Push("refs/heads/main", commit), TestContext.Current.CancellationToken));
+
+        Assert.Null(exception);
+        await _pipelineService.DidNotReceiveWithAnyArgs().UpsertPipelineFromYamlAsync(
+            default!, default!, default, default!, TestContext.Current.CancellationToken, default, default, default);
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            "pipeline.launch-refused",
+            Arg.Is<string>(payload =>
+                payload.Contains("aetheus-deploy-prod.yaml")
+                && payload.Contains("\"ProjectId\":7")
+                && payload.Contains("push:main@0123456789ab")
+                && payload.Contains("line 5, column")
+                && payload.Contains("While scanning a plain scalar value, found invalid mapping")),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
     }
 
     /// <summary>

@@ -1,6 +1,11 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Deleting a project removes everything it owns, so the confirmation counts it first and asks for
-   the project's name before the Delete button wakes up. *@
+   the project's name before the Delete button wakes up. Recette R-97: it also asks the agents what the
+   project deployed on its servers. Recette R-49: the most useful counts stay in sight, the rest behind
+   "Afficher plus". Recette R-50: one veil over the whole deletion (OE's, content mounted under it), then the
+   end in the same dialog: what was deleted, what was not and why, and a single Fermer. Recette R-51: a project
+   already deleted and waiting for its server cleanup comes back here to relaunch it. *@
+<div class="@(_deleting ? "omni-busy" : null)" aria-busy="@(_deleting ? "true" : "false")" data-testid="project-delete-zone">
 <OmniStack Gap="OmniSpacing.Large">
     @if (_loading)
     {
@@ -10,32 +15,192 @@
     {
         <OmniAlert Severity="OmniSeverity.Danger">@L["ProjectDeletionPreviewFailed"]</OmniAlert>
     }
+    else if (_report is { } report)
+    {
+        @if (report.Outcome == ProjectDeletionOutcome.Deleted)
+        {
+            <OmniAlert Severity="OmniSeverity.Success" Title="@L["ProjectDeletionDoneTitle"]" Class="project-deletion-outcome">@L["ProjectDeletionDone"]</OmniAlert>
+        }
+        else
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProjectDeletionPending"]" Class="project-deletion-outcome">@L["ProjectDeletionPendingIntro"]</OmniAlert>
+        }
+        <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-report-deleted">
+            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ProjectDeletionReportDeleted"]</OmniHeading>
+            <OmniDataGrid Items="@report.Deleted" ExportTitle="@ExportContext.Title(L["ProjectDeletionReportDeleted"])" ExportFields="@ExportContext.Fields()" TItem="ProjectDeletionReportRow"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
+                <Columns>
+                    <OmniDataGridColumn Frozen="true" TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportDetail"]" Width="9rem" Filterable="true" />
+                </Columns>
+            </OmniDataGrid>
+        </OmniStack>
+        <OmniStack Gap="OmniSpacing.Small" Class="project-deletion-report-kept">
+            <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-m-0">@L["ProjectDeletionReportNotDeleted"]</OmniHeading>
+            <OmniDataGrid Items="@report.NotDeleted" ExportTitle="@ExportContext.Title(L["ProjectDeletionReportNotDeleted"])" ExportFields="@ExportContext.Fields()" TItem="ProjectDeletionReportRow"
+                          ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true" MaxHeight="@AetheusGrid.ScrollMaxHeight" EmptyText="@L["ProjectDeletionReportNothing"].Value">
+                <Columns>
+                    <OmniDataGridColumn Frozen="true" TItem="ProjectDeletionReportRow" Property="Item" Title="@L["ProjectDeletionReportItem"]" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Place" Title="@L["ProjectDeletionReportPlace"]" Width="9rem" Filterable="true" />
+                    <OmniDataGridColumn TItem="ProjectDeletionReportRow" Property="Detail" Title="@L["ProjectDeletionReportReason"]" Filterable="true" />
+                </Columns>
+            </OmniDataGrid>
+        </OmniStack>
+    }
     else
     {
-        <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ProjectDeletionIrreversible"]">@L["ProjectDeletionIntro"]</OmniAlert>
-        @if (_preview.Items.Count > 0)
+        @if (Resuming)
+        {
+            <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProjectDeletionPending"]">@L["ProjectDeletionResumeIntro"]</OmniAlert>
+        }
+        else
+        {
+            <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ProjectDeletionIrreversible"]">@L["ProjectDeletionIntro"]</OmniAlert>
+        }
+        @if (_preview.Items.Count == 0)
+        {
+            <p>@L["ProjectDeletionNothingElse"]</p>
+        }
+        else if (MainItems.Any())
         {
             <OmniDescriptionList Columns="2" Class="project-deletion-counts">
-                @foreach (var item in _preview.Items)
+                @foreach (var item in MainItems)
                 {
                     <OmniDescriptionItem Term="@L.Localize(item.Kind)">@item.Count</OmniDescriptionItem>
                 }
             </OmniDescriptionList>
         }
-        else
+        @if (OtherItems.Any() || _preview.Servers.Count > 0)
         {
-            <p>@L["ProjectDeletionNothingElse"]</p>
+            @* Recette R-49: the rest of the counts and what the agents found, folded until asked for. *@
+            <OmniFieldset Collapsible="true" Expanded="false" Class="project-deletion-more">
+                <Legend>@L["ProjectDeletionShowMore"]</Legend>
+                <ChildContent>
+                    <OmniStack Gap="OmniSpacing.Medium">
+                        @if (OtherItems.Any())
+                        {
+                            <OmniDescriptionList Columns="2" Class="project-deletion-other-counts">
+                                @foreach (var item in OtherItems)
+                                {
+                                    <OmniDescriptionItem Term="@L.Localize(item.Kind)">@item.Count</OmniDescriptionItem>
+                                }
+                            </OmniDescriptionList>
+                        }
+                        @foreach (var server in _preview.Servers)
+                        {
+                            <OmniCard Class="project-deletion-server">
+                                <HeaderContent><OmniHeading Level="OmniHeadingLevel.H6" Class="omni-u-m-0">@server.ServerName</OmniHeading></HeaderContent>
+                                <ChildContent>
+                                    <OmniStack>
+                                    @if (server.MissingCapabilities.Count > 0)
+                                    {
+                                        <OmniAlert Severity="OmniSeverity.Warning">@L["ProjectDeletionServerMissingCapabilities", string.Join(", ", server.MissingCapabilities)]</OmniAlert>
+                                    }
+                                    @if (server.State != ProjectDeletionServerState.Ready)
+                                    {
+                                        <OmniAlert Severity="OmniSeverity.Warning">@StateText(server.State)</OmniAlert>
+                                    }
+                                    else if (TaskOf(server.ServerId) is not { } task)
+                                    {
+                                        @if (_discovering)
+                                        {
+                                            <AetheusLoader />
+                                        }
+                                        else
+                                        {
+                                            <OmniAlert Severity="OmniSeverity.Danger">@L["ProjectDeletionServerNotAsked"]</OmniAlert>
+                                        }
+                                    }
+                                    else if (task.State == ProjectServerTaskState.Running)
+                                    {
+                                        <OmniStack Gap="OmniSpacing.Small">
+                                            <AetheusLoader />
+                                            <p>@L["ProjectDeletionServerReading"]</p>
+                                        </OmniStack>
+                                    }
+                                    else
+                                    {
+                                        <OmniStack>
+                                            @if (task.Resources.Count == 0 && task.Unreadable.Count == 0 && task.Failure is null)
+                                            {
+                                                <p>@L["ProjectDeletionServerNothing"]</p>
+                                            }
+                                            @foreach (var (environment, kinds) in Groups(task))
+                                            {
+                                                <OmniDescriptionList Class="project-deletion-environment">
+                                                    <OmniDescriptionItem Term="@L["ProjectDeletionEnvironment"]"><strong>@(environment ?? L["ProjectDeletionProjectWide"])</strong></OmniDescriptionItem>
+                                                    @foreach (var kind in kinds)
+                                                    {
+                                                        <OmniDescriptionItem Term="@L.Localize(kind.Key)">
+                                                            <ul class="project-deletion-resources">
+                                                                @foreach (var resource in kind)
+                                                                {
+                                                                    <li><code>@resource.Name</code></li>
+                                                                }
+                                                            </ul>
+                                                        </OmniDescriptionItem>
+                                                    }
+                                                </OmniDescriptionList>
+                                            }
+                                            @if (task.Unreadable.Count > 0)
+                                            {
+                                                <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ProjectDeletionServerUnreadable"]">
+                                                    <ul>
+                                                        @foreach (var unreadable in task.Unreadable)
+                                                        {
+                                                            <li>@L.Localize(unreadable.Kind) (@unreadable.Scope) : @unreadable.Reason</li>
+                                                        }
+                                                    </ul>
+                                                </OmniAlert>
+                                            }
+                                            @if (task.Failure is { Length: > 0 } failure)
+                                            {
+                                                <OmniAlert Severity="OmniSeverity.Danger" Title="@L["ProjectDeletionServerFailed"]"><pre>@failure</pre></OmniAlert>
+                                            }
+                                        </OmniStack>
+                                    }
+                                    </OmniStack>
+                                </ChildContent>
+                            </OmniCard>
+                        }
+                    </OmniStack>
+                </ChildContent>
+            </OmniFieldset>
         }
-        <p>@L["ProjectDeletionKeptOutside"]</p>
+        @if (_discoveryRefused)
+        {
+            <OmniAlert Severity="OmniSeverity.Danger">@L["ProjectDeletionServerRequestFailed"]</OmniAlert>
+        }
+        @if (HasRefusedValues)
+        {
+            <p class="project-deletion-refused">@L["ProjectDeletionRefusedSentence"]</p>
+        }
         @if (_preview.ActiveRunCount > 0)
         {
             <OmniAlert Severity="OmniSeverity.Warning" Class="project-deletion-active-runs">@string.Format(L["ProjectDeletionActiveRuns"], _preview.ActiveRunCount)</OmniAlert>
         }
-        <OmniFormField Label="@string.Format(L["ProjectDeletionTypeName"], _preview.ProjectName)" For="project-delete-confirm">
-            <OmniTextBox @bind-Value="_confirmation" Id="project-delete-confirm" Autocomplete="off" />
-        </OmniFormField>
+        @if (NeedsVolumeAcknowledgement)
+        {
+            <OmniCheckBox @bind-Value="_volumesAcknowledged" Id="project-delete-volumes-ack">@L["ProjectDeletionVolumesAcknowledge"]</OmniCheckBox>
+        }
+        @if (!Resuming)
+        {
+            <OmniFormField Label="@string.Format(L["ProjectDeletionTypeName"], _preview.ProjectName)" For="project-delete-confirm" Required="true"
+                           Help="@L["ProjectDeletionTypeNameHelp"]">
+                <OmniTextBox @bind-Value="_confirmation" Id="project-delete-confirm" Autocomplete="off" />
+            </OmniFormField>
+        }
     }
-    <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
-        <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon><ChildContent><span>@L["Delete"]</span></ChildContent></OmniButton>
-    </Aetheus.Front.Components.Shared.DialogFooter>
+    @if (_report is not null)
+    {
+        <Aetheus.Front.Components.Shared.DialogFooter CancelText="@L["Close"]" OnCancel="@Close" />
+    }
+    else
+    {
+        <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@(() => Dialog.Close())">
+            <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@DeleteAsync" Disabled="@(!CanDelete)" Busy="@_deleting" Id="project-delete-submit"><Icon><OmniIcon Name="@(Resuming ? OmniIconName.Sync : OmniIconName.Delete)" /></Icon><ChildContent><span>@(Resuming ? L["ProjectDeletionRelaunch"] : L["Delete"])</span></ChildContent></OmniButton>
+        </Aetheus.Front.Components.Shared.DialogFooter>
+    }
 </OmniStack>
+</div>

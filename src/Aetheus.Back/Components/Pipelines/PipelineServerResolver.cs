@@ -471,12 +471,36 @@ internal sealed class PipelineServerResolver(AppDbContext db) : IPipelineRunnerT
         releases = int.TryParse(releaseSelector, out var releaseId)
             ? releases.Where(release => release.Id == releaseId)
             : releases.Where(release => release.Version == releaseSelector);
-        return await releases
+        var found = await releases
             .OrderByDescending(release => release.DetectedAt)
-            .Select(release => new DeploymentGateRelease(
-                release.Id, release.Version, release.AssuranceGrade, release.Deployable))
+            .Select(release => new
+            {
+                Gate = new DeploymentGateRelease(
+                    release.Id, release.Version, release.AssuranceGrade, release.Deployable,
+                    release.BlockingTestCount, release.Artifacts.Count),
+                PublishingRunId = release.CreatedByPipelineRunId ?? release.PipelineRunId
+            })
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (found?.PublishingRunId is not { } runId) return found?.Gate;
+
+        // R-72: the security findings still open on the run that published the release, distinct
+        // findings, not their occurrences (one finding reported by two scanners counts once).
+        var openSecurityFindings = await db.AnalysisFindingOccurrences.AsNoTracking()
+            .Where(occurrence => occurrence.AnalysisReport.PipelineRunId == runId
+                && SecurityCategories.Contains(occurrence.AnalysisReport.Category)
+                && occurrence.AnalysisFinding.Status == AnalysisFindingStatus.Open)
+            .Select(occurrence => occurrence.AnalysisFindingId)
+            .Distinct()
+            .CountAsync(ct).ConfigureAwait(false);
+        return found.Gate with { OpenSecurityFindingCount = openSecurityFindings };
     }
+
+    /// <summary>The analysis categories the Gate reads as the security domain.</summary>
+    private static readonly AnalysisCategory[] SecurityCategories =
+    [
+        AnalysisCategory.Sast, AnalysisCategory.Secrets, AnalysisCategory.Dependencies, AnalysisCategory.Container,
+        AnalysisCategory.InfrastructureAsCode, AnalysisCategory.Sbom, AnalysisCategory.Dast
+    ];
 
     public async Task<BranchAdvanceRelease?> FindBranchAdvanceReleaseAsync(
         int projectId, string version, CancellationToken ct = default) =>

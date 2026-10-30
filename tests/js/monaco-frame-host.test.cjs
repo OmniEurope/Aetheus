@@ -19,7 +19,7 @@ function loadHost() {
     return document.querySelector('#editor iframe');
 }
 
-for (const method of ['dispose', 'disposeDiffEditor', 'disposeEditor']) {
+for (const method of ['dispose', 'disposeEditor']) {
     test(`SITE-FUNC-MONACO-DISPOSE-001: ${method} of a frame Blazor already removed is a no-op`, () => {
         const frame = loadHost();
         frame.remove();

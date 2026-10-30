@@ -58,7 +58,10 @@
                     <OmniIcon Name="@StageIcon(bar.Stage)" Class="@StatusIconClass(bar.Stage)" Label="@StageStatusText(bar.Stage)" />
                     <span class="run-gantt-label-text">@bar.Stage.DisplayName</span>
                 </span>
-                <div class="run-gantt-track" title="@BarTitle(bar, layout, progress)">
+                @* R-40: a click on a stage's band leads down to the detailed timeline (ScrollTargetId). *@
+                <div class="@TrackClass" title="@BarTitle(bar, layout, progress)"
+                     role="@TrackRole" tabindex="@TrackTabIndex" data-scroll-target="@ScrollTargetId"
+                     @onclick="ScrollToTimelineAsync" @onkeydown="OnTrackKeyDownAsync">
                     <svg class="run-gantt-svg" viewBox="0 0 100 1" preserveAspectRatio="none" aria-hidden="true">
                         <rect class="run-gantt-track-fill" x="0" y="0" width="100" height="1" rx="0.15" />
                         <line class="run-gantt-gridline" x1="25" y1="0" x2="25" y2="1" />
@@ -90,7 +93,8 @@
                 <span class="run-gantt-cols">
                     @foreach (var column in columns)
                     {
-                        <span class="run-gantt-col" data-column="@column.Kind">@column.Value(bar, layout)</span>
+                        var figure = column.Value(bar, layout);
+                        <span class="run-gantt-col" data-column="@column.Kind" title="@figure">@figure</span>
                     }
                 </span>
             </div>

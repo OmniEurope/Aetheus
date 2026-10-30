@@ -19,6 +19,10 @@ public interface IPipelineProjectCopyFlow
     PipelineProjectCopyResultDto? Result { get; }
     string? CopyError { get; }
     bool ReadinessLoading { get; }
+
+    /// <summary>True when neither the new project nor its repository names a branch: the copies are written without a
+    /// <c>source_branch:</c> (R-76), which the first step says.</summary>
+    bool SourceBranchMissing { get; }
     ProjectDto? TargetProject { get; }
     ProjectDto? SourceProject { get; }
     IEnumerable<ProjectDto> SourceProjects { get; }

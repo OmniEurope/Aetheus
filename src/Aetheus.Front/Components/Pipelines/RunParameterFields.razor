@@ -46,7 +46,7 @@
         @if (p.Name == FillTargetName && ConcernText is { } concern)
         {
             @* Not blocking: the release stays deployable, the user is only told what the Gate said. *@
-            <OmniAlert Severity="OmniSeverity.Warning" Class="run-params-release-warning" data-testid="release-gate-warning">@concern</OmniAlert>
+            <OmniAlert Severity="OmniSeverity.Warning" data-testid="release-gate-warning">@concern</OmniAlert>
         }
     </text>;
 }
@@ -68,7 +68,7 @@
 @if (Parameters.Any(parameter => parameter.Advanced))
 {
     @* Rarely changed options stay folded, so the dialog asks for the version and nothing else (R-25). *@
-    <OmniFieldset Collapsible="true" Expanded="false" Class="run-params-advanced" data-testid="run-params-advanced">
+    <OmniFieldset Collapsible="true" Expanded="false" data-testid="run-params-advanced">
         <Legend>@L["RunParametersAdvanced"]</Legend>
         <ChildContent>
             @foreach (var p in Parameters.Where(parameter => parameter.Advanced))

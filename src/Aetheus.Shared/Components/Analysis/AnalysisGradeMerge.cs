@@ -2,7 +2,7 @@
 namespace Aetheus.Shared.Components.Analysis;
 
 /// <summary>Shares domain-by-domain run-tree grading between the backend and Gate tab, retaining
-/// the worst complete grade for each domain.</summary> <remarks>Snapshot hashing remains the
+/// the worst grade measured for each domain.</summary> <remarks>Snapshot hashing remains the
 /// backend responsibility; the merged display result has no <see
 /// cref="AnalysisGradeSummaryDto.SnapshotHash"/>.</remarks>
 public static class AnalysisGradeMerge
@@ -40,8 +40,10 @@ public static class AnalysisGradeMerge
         return summary;
     }
 
-    /// <summary>The overall grade is the worst required domain, and only once every required domain is
-    /// completely measured; otherwise the summary is incomplete and ungraded.</summary>
+    /// <summary>The overall grade is the worst required domain that has a grade (recette R-73, R-74: a grade is
+    /// always shown, from what was observed). <see cref="AnalysisGradeSummaryDto.Completeness"/> only records
+    /// whether every required domain was measured completely; a required measure nobody observed is listed on
+    /// its domain, never turned into a grade nor a state of the grade.</summary>
     public static AnalysisGradeSummaryDto Summarize(
         IReadOnlyList<AnalysisGradeDomainDto> domains,
         AnalysisGrade? minimumGrade,
@@ -54,7 +56,7 @@ public static class AnalysisGradeMerge
         var complete = required.Count > 0
             && required.All(domain => domain.Completeness == AnalysisGradeCompleteness.Complete
                 && domain.Grade.HasValue);
-        var grade = complete ? required.Max(domain => domain.Grade) : null;
+        var grade = required.Where(domain => domain.Grade.HasValue).Max(domain => domain.Grade);
         return new AnalysisGradeSummaryDto
         {
             OverallGrade = grade,
@@ -75,8 +77,9 @@ public static class AnalysisGradeMerge
     private static AnalysisGradeDomainDto? MergeDomain(IReadOnlyCollection<AnalysisGradeDomainDto> candidates)
     {
         if (candidates.Count == 0) return null;
+        // A domain measured in part still has its grade, from the measures observed (recette R-74).
         var measured = candidates
-            .Where(domain => domain.Completeness == AnalysisGradeCompleteness.Complete && domain.Grade.HasValue)
+            .Where(domain => domain.Grade.HasValue)
             .ToList();
         var chosen = measured.Count > 0
             ? measured.OrderByDescending(domain => domain.Grade).ThenByDescending(domain => domain.EvaluatedAt).First()

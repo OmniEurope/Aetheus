@@ -122,6 +122,33 @@ public sealed class PublishFailedTestsFunctionTests : IDisposable
     }
 
     [Fact]
+    public async Task Publish_NamesTheFlakyListOfASuiteRerunAsFlaky()
+    {
+        _harness.Write("ws/.qa-test-results/current/flaky-tests.txt", "Integration.Api.Login\n");
+        _parameters["variable"] = "QA_CURRENT_INTEGRATION_FLAKY_TESTS";
+        _parameters["sources"] = ".qa-test-results/current/flaky-tests.txt";
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("Integration.Api.Login", variables["QA_CURRENT_INTEGRATION_FLAKY_TESTS"]);
+        Assert.Contains(_harness.Log, entry => entry.Line == "Flaky tests (1): Integration.Api.Login");
+        Assert.DoesNotContain(_harness.Log, entry => entry.Line.StartsWith("Failed tests", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Publish_PublishesNothingWithoutAFlakyList()
+    {
+        _parameters["variable"] = "QA_CURRENT_E2E_FLAKY_TESTS";
+        _parameters["sources"] = ".qa-test-results/qa-1-current/e2e/flaky-tests.txt";
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Empty(variables);
+    }
+
+    [Fact]
     public async Task Publish_SaysNothingWhenNoTestFailed()
     {
         _harness.Write("ws/integration.trx", Trx(("A.One", "Passed")));

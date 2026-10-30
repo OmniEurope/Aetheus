@@ -35,7 +35,7 @@ public interface IServerLifecycleService
     Task<List<string>> GetServerNamesAsync(CancellationToken ct = default);
     Task<List<string>> GetServerNamesAsync(List<int>? accessibleIds = null, CancellationToken ct = default);
     Task<PaginatedResult<ProjectDto>> GetServerProjectsAsync(
-        int serverId, PaginationRequest request, CancellationToken ct = default);
+        int serverId, PaginationRequest request, CancellationToken ct = default, List<int>? readableProjectIds = null);
     Task<List<PipelineDto>> GetServerPipelinesAsync(int serverId, CancellationToken ct = default);
     Task<List<VariableLibraryDto>> GetServerVariableLibrariesAsync(int serverId, CancellationToken ct = default);
     Task<List<VaultDto>> GetServerVaultsAsync(int serverId, CancellationToken ct = default);

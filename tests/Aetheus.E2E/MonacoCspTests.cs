@@ -29,10 +29,12 @@ public sealed class MonacoCspTests : E2ETestBase
         // STD-BTN detection 11: Show Diff sits in the editor toolbar's "More actions" menu.
         await Page.Locator(".pipeline-edit-toolbar .omni-overflow-menu__trigger").ClickAsync();
         await Page.GetByRole(AriaRole.Menuitem, new() { Name = "Show Diff" }).ClickAsync();
-        await Expect(Page.Locator("iframe.monaco-editor-frame")).ToHaveCountAsync(2);
-        await Expect(Page.Locator("iframe.monaco-editor-frame").Nth(1)).ToBeVisibleAsync();
+        // R-100: the diff is OE's OmniDiffViewer, drawn through the frame module in its own frame.
+        var diffFrame = Page.Locator(".omni-diff-viewer iframe.omni-code-editor-frame");
+        await Expect(diffFrame).ToHaveCountAsync(1);
+        await Expect(diffFrame).ToBeVisibleAsync();
         await Page.WaitForFunctionAsync("""
-            () => Array.from(document.querySelectorAll('iframe.monaco-editor-frame'))
+            () => Array.from(document.querySelectorAll('iframe.monaco-editor-frame, .omni-diff-viewer iframe.omni-code-editor-frame'))
                 .every(frame => frame.contentWindow?.document.querySelector('.monaco-editor'))
             """);
 

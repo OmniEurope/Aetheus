@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Organizations;
 
 public partial class Organizations : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private AuthStateProvider Auth { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -13,7 +14,8 @@ public partial class Organizations : IAsyncDisposable
     [Inject] private BreadcrumbService Breadcrumb { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
     [Inject] private NotifyHelper Notify { get; set; } = default!;
-    [Inject] private AdminIdentitySearch Search { get; set; } = default!;
+    [Inject] private Aetheus.Front.Components.Shared.PermissionService Permissions { get; set; } = default!;
+    [Inject] private Aetheus.Front.Components.Shared.AdministrationScopeService Scope { get; set; } = default!;
 
     private List<OrganizationDto> _items = [];
     private Aetheus.Front.Components.Shared.AetheusDataGrid<OrganizationDto>? _grid;
@@ -25,11 +27,14 @@ public partial class Organizations : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        if (!Aetheus.Front.Components.Shared.AdminPageEntry.TryEnter(Auth, Nav, Breadcrumb, L, "Organizations"))
+        if (!Aetheus.Front.Components.Shared.AdminPageEntry.TryEnter(
+                Auth, Permissions, PermissionKeys.OrganizationMembersManage, Nav, Breadcrumb, L, "Organizations"))
             return;
-
-        // The search shared with Users and Roles, in the section bar.
-        Search.Changed += ResetSearchAsync;
+        // The organization switcher's choice filters the list (owner decision 2026-10-28).
+        await Scope.EnsureLoadedAsync();
+        // The admin hub is the site Admin's.
+        if (!Auth.IsAdmin)
+            return;
 
         // Realtime: refresh the list on any org create/update/delete, and on member/project changes
         // (which move the Members/Projects counts shown in the grid). RT4M.
@@ -42,15 +47,18 @@ public partial class Organizations : IAsyncDisposable
         }));
     }
 
-    /// <summary>One page of the export, with the search, sort and column filters of the
+    /// <summary>One page of the export, with the sort and column filters of the
     /// grid.</summary>
     private async Task<PaginatedResult<OrganizationDto>> ReadExportAsync(GridLoadArgs args)
     {
         var (page, pageSize) = args.ToPageRequest();
         var (sortBy, sortDescending) = args.ToSortRequest("Name");
-        return await Api.Servers.GetOrganizationsAsync(Search.Search, page, pageSize, sortBy, sortDescending, filters: args.ToApiFilters())
+        return await Api.Servers.GetOrganizationsAsync(null, page, pageSize, sortBy, sortDescending, filters: args.ToApiFilters(),
+                organizationId: Scope.SelectedFor(PermissionKeys.OrganizationMembersManage))
             ?? new PaginatedResult<OrganizationDto>();
     }
+
+    private Task OnOrganizationChangedAsync() => _grid?.Reload() ?? Task.CompletedTask;
 
     private async Task LoadDataAsync(GridLoadArgs args)
     {
@@ -62,7 +70,8 @@ public partial class Organizations : IAsyncDisposable
         if (showLoading) _loading = true;
         try
         {
-            var result = await Api.Servers.GetOrganizationsAsync(Search.Search, page, pageSize, sortBy, sortDescending, filters: filters);
+            var result = await Api.Servers.GetOrganizationsAsync(null, page, pageSize, sortBy, sortDescending, filters: filters,
+                organizationId: Scope.SelectedFor(PermissionKeys.OrganizationMembersManage));
             _items = result?.Items ?? [];
             _totalCount = result?.TotalCount ?? 0;
         }
@@ -87,9 +96,6 @@ public partial class Organizations : IAsyncDisposable
         }
     }
 
-    // Forced, the first page reloads even when the grid is already on it.
-    private Task ResetSearchAsync() => _grid?.GoToPage(0, forceReload: true) ?? Task.CompletedTask;
-
     private async Task OnCreate()
     {
         // Creation stays a lightweight dialog; on success go straight to the new org's detail page.
@@ -110,20 +116,22 @@ public partial class Organizations : IAsyncDisposable
             L["Delete"],
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"], CancelButtonText = L["GoBack"] });
         if (confirmed != true) return;
-        if (await Api.Servers.DeleteOrganizationAsync(org.Id))
+        await Veil.RunAsync(async () =>
         {
-            await RefreshSilentlyAsync();
-            Notify.Success("Deleted", "Deleted");
-        }
-        else
-        {
-            Notify.Error("Error", "DeleteFailed");
-        }
+            if (await Api.Servers.DeleteOrganizationAsync(org.Id))
+            {
+                await RefreshSilentlyAsync();
+                Notify.Success("Deleted", "Deleted");
+            }
+            else
+            {
+                Notify.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     public async ValueTask DisposeAsync()
     {
-        Search.Changed -= ResetSearchAsync;
         if (_adminRt is not null) await _adminRt.DisposeAsync();
     }
 }

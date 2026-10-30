@@ -65,12 +65,12 @@ public partial class PackageFeedsAdmin : Aetheus.Front.Components.Shared.Realtim
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        await Ui.RunAsync(
+        await Veil.RunAsync(() => Ui.RunAsync(
             () => Api.Packages.DeletePackageFeedAsync(feed.Id),
             "Deleted",
             ReloadAsync,
             errorKey: "DeleteFailed",
-            successTitleKey: "Deleted");
+            successTitleKey: "Deleted"));
     }
 
 }

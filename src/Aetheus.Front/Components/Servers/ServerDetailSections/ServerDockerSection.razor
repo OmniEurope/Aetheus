@@ -10,40 +10,40 @@
     </SectionContent>
 }
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
 
 @* TabRenderMode.Client keeps every tab alive: switching tabs must not destroy an open shell or a
    half-edited compose file, and a SignalR result arriving on an inactive tab must still land. *@
 <UrlSyncedTabs RenderAllPanels="true" Slugs="@(new[] { "containers", "images", "compose", "networks", "volumes", "relations" })">
     <Tabs>
-        <OmniTabsItem Key="containers" Title="@L["Containers"]">
+        <OmniTabsItem Key="containers" Title="@L["Containers"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("deployed_code")" /></Icon><ChildContent>
             @* Four SignalR channels (inspect, exec, env, ls) come back through the parent, hence the @ref. *@
             <DockerContainersTab @ref="_containersTab" @key="ServerId" Server="@Server" ServerId="@ServerId" CanAdmin="@CanAdmin"
                 InitialLoaded="@_dockerInitialLoaded" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="images" Title="@L["DockerImages"]">
+        <OmniTabsItem Key="images" Title="@L["DockerImages"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("layers")" /></Icon><ChildContent>
             <DockerImagesTab @key="ServerId" ServerId="@ServerId" CanAdmin="@CanAdmin" Images="@Server.Docker.Images" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="compose" Title="@L["DockerCompose"]">
+        <OmniTabsItem Key="compose" Title="@L["DockerCompose"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("view_list")" /></Icon><ChildContent>
             @* The compose file arrives over SignalR on the parent's connection, hence the @ref. *@
             <DockerComposeTab @ref="_composeTab" @key="ServerId" ServerId="@ServerId" CanAdmin="@CanAdmin" Stacks="@Server.Docker.ComposeStacks" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="networks" Title="@L["DockerNetworks"]">
+        <OmniTabsItem Key="networks" Title="@L["DockerNetworks"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("lan")" /></Icon><ChildContent>
             <DockerNetworksTab @key="ServerId" Networks="@Server.Docker.Networks" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
-        <OmniTabsItem Key="volumes" Title="@L["DockerVolumes"]">
+        <OmniTabsItem Key="volumes" Title="@L["DockerVolumes"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("storage")" /></Icon><ChildContent>
             @* Extracted: the tab owns its own filter state, the parent owns the inventory.
                @key on ServerId so switching server resets that state instead of leaking it. *@
             <DockerVolumesTab @key="ServerId" Volumes="@Server.Docker.Volumes" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
         @* --- Relations tab --- *@
-        <OmniTabsItem Key="relations" Title="@L["Relations"]">
+        <OmniTabsItem Key="relations" Title="@L["Relations"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("link")" /></Icon><ChildContent>
             <DockerRelationsGraph Docker="@Server.Docker" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>

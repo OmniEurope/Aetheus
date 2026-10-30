@@ -27,8 +27,10 @@ public sealed record PipelineProjectCopyRequest
     [RegularExpression("^[a-z0-9]+(-[a-z0-9]+)*$")]
     public string SourcePrefix { get; init; } = string.Empty;
 
-    /// <summary>Branch of the new project's repository the copies are written to (the wizard sends the
-    /// project's default branch, as for its own pipelines); null lets the repository decide.</summary>
+    /// <summary>Branch of the new project's repository the copies are written to and read from (the wizard sends the
+    /// branch it would choose for its own pipelines: develop when the repository has it, else the default branch). It also
+    /// replaces the <c>source_branch:</c> of each copied definition; null removes that line and lets the repository
+    /// decide.</summary>
     [StringLength(255)]
     public string? TargetBranch { get; init; }
 

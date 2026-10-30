@@ -82,7 +82,7 @@ public sealed class E2EGlobalSetup
             {
                 using var response = await http.PostAsJsonAsync($"{PlaywrightConfig.BackendUrl}/api/auth/login", new
                 {
-                    Username = PlaywrightConfig.AdminUser,
+                    Email = PlaywrightConfig.AdminEmail,
                     Password = PlaywrightConfig.AdminPassword
                 });
                 response.EnsureSuccessStatusCode();

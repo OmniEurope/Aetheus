@@ -11,6 +11,8 @@ internal static class RoleListQuery
     internal static readonly GridQueryMap<RoleDto> Columns = new GridQueryMap<RoleDto>()
         .Text("name", r => r.Name)
         .Text("description", r => r.Description)
+        .Date("createdAt", r => r.CreatedAt)
+        .Date("updatedAt", r => r.UpdatedAt)
         .Number("permissionCount", r => r.PermissionCount)
         .Number("userCount", r => r.UserCount);
 

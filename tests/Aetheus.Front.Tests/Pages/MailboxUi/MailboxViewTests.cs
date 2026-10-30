@@ -72,6 +72,9 @@ public sealed class MailboxViewTests : BunitContext
     private IRenderedComponent<MailboxView> RenderView() =>
         Render<MailboxView>(parameters => parameters.Add(view => view.ServerId, 7).Add(view => view.AccountId, 3));
 
+    private IRenderedComponent<PageHeaderOutletHost> RenderViewInPageHeader() =>
+        this.RenderWithPageHeader<MailboxView>(parameters => parameters.Add(view => view.ServerId, 7).Add(view => view.AccountId, 3));
+
     [Fact]
     public void A_locked_mailbox_offers_to_unlock_and_reads_nothing()
     {
@@ -106,16 +109,18 @@ public sealed class MailboxViewTests : BunitContext
     public void R3_52_TheHeader_ShowsOneMainAction_AndKeepsTheOthersInTheMenu()
     {
         UnlockedMailbox();
-        var cut = RenderView();
-        cut.WaitForElement(".mailbox-folders");
+        // R-109: Compose and the menu sit in the server page's header, so the view is rendered next to the header outlet.
+        var host = RenderViewInPageHeader();
+        host.FindComponent<MailboxView>().WaitForElement(".mailbox-folders");
 
-        var header = cut.Find(".mailbox-header");
+        var header = host.Find(".test-outlet");
         var primary = Assert.Single(header.QuerySelectorAll("button.omni-button--primary"));
         Assert.Contains("MailboxCompose", primary.TextContent, StringComparison.Ordinal);
         Assert.DoesNotContain(header.QuerySelectorAll("button"), button => button.TextContent.Contains("MailboxNewFolder", StringComparison.Ordinal));
-        Assert.NotNull(cut.FindMenuItem("MailboxNewFolder"));
-        Assert.NotNull(cut.FindMenuItem("Refresh"));
-        Assert.NotNull(cut.FindMenuItem("MailboxLock"));
+        Assert.Empty(host.FindComponent<MailboxView>().FindAll(".mailbox-header button"));
+        Assert.NotNull(host.FindMenuItem("MailboxNewFolder"));
+        Assert.NotNull(host.FindMenuItem("Refresh"));
+        Assert.NotNull(host.FindMenuItem("MailboxLock"));
     }
 
     [Fact]
@@ -288,12 +293,13 @@ public sealed class MailboxViewTests : BunitContext
     {
         UnlockedMailbox();
         Services.GetRequiredService<PermissionService>().SetPermissions(
-            [new EffectivePermissionDto { ResourceType = ResourceType.Server, Permission = Permission.Read }], false);
+            [new EffectivePermissionDto { ResourceType = ResourceType.Server, Permission = Permission.Read }], false,
+            [new EffectivePermissionKeyDto(PermissionKeys.ServerMailboxRead, null, null)]);
 
-        var cut = RenderView();
+        var host = RenderViewInPageHeader();
 
-        cut.WaitForElement(".mailbox-folders");
-        var write = cut.FindAll(".mailbox-header button").Single(button => button.TextContent.Contains("MailboxCompose", StringComparison.Ordinal));
+        host.FindComponent<MailboxView>().WaitForElement(".mailbox-folders");
+        var write = host.Find(".test-outlet").QuerySelectorAll("button").Single(button => button.TextContent.Contains("MailboxCompose", StringComparison.Ordinal));
         Assert.True(write.HasAttribute("disabled"));
     }
 

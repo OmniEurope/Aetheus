@@ -75,6 +75,60 @@ public sealed class PipelineRunRerunCoordinatorTests : BunitContext
             request.Url.Contains("api/pipelines/runs/42/rerun", StringComparison.Ordinal));
     }
 
+    /// <summary>R-47 on the rerun path: the API refuses to read the pipeline's parameters (invalid YAML, 400
+    /// with its reason). The rerun stops and the user reads that reason, not a generic "load failed".</summary>
+    [Fact]
+    public async Task ParameterLoadRefusedWithAReason_ShowsTheReasonOnce_AndStartsNothing()
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetRawResponse(
+            HttpMethod.Get,
+            "api/pipelines/5/parameters",
+            """{"message":"The pipeline YAML is invalid: While scanning a plain scalar value, found invalid mapping.","correlationId":"0HN7:00000001"}""",
+            "application/json",
+            System.Net.HttpStatusCode.BadRequest);
+        handler.SetJsonResponse(HttpMethod.Post, "api/pipelines/runs/42/rerun", new PipelineRunDto { Id = 99 });
+        var coordinator = new PipelineRunRerunCoordinator(
+            Services.GetRequiredService<ApiClient>(),
+            Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
+            Services.GetRequiredService<NotifyHelper>(),
+            Services.GetRequiredService<OmniDialogService>(),
+            new BunitTestHelper.StubLocalizer());
+
+        await coordinator.RerunAsync(FailedRun(), null);
+
+        var toast = Assert.Single(Services.Toasts());
+        Assert.Equal(OmniEurope.Blazor.Components.OmniSeverity.Danger, toast.Severity);
+        Assert.Contains("The pipeline YAML is invalid: While scanning", toast.Detail, StringComparison.Ordinal);
+        Assert.DoesNotContain(handler.Requests, request => request.Url.Contains("api/pipelines/runs/42/rerun", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.Forbidden, "PreflightForbidden")]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError, "RunParametersReadFailed")]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable, "RunParametersReadFailed")]
+    public async Task ParameterLoadRefusedThroughTheGlobalNotifier_ShowsExactlyOneToast(
+        System.Net.HttpStatusCode status, string expectedKey)
+    {
+        var handler = BunitTestHelper.RegisterServices(this);
+        handler.SetResponse("api/pipelines/5/parameters", status);
+        var toast = Services.GetRequiredService<NotifyHelper>();
+        var localizer = new BunitTestHelper.StubLocalizer();
+        using var notifier = new ErrorNotificationHandler(toast, localizer) { InnerHandler = handler };
+        using var http = new HttpClient(notifier, disposeHandler: false) { BaseAddress = new Uri("http://test/") };
+        var coordinator = new PipelineRunRerunCoordinator(
+            new ApiClient(http),
+            Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>(),
+            toast,
+            Services.GetRequiredService<OmniDialogService>(),
+            localizer);
+
+        await coordinator.RerunAsync(FailedRun(), null);
+
+        var raised = Assert.Single(Services.Toasts());
+        Assert.Contains(expectedKey, raised.Detail, StringComparison.Ordinal);
+    }
+
     private (PipelineRunRerunCoordinator Coordinator, BunitTestHelper.TestHandler Handler, Aetheus.Front.Tests.TestDoubles.ImmediateDialogService Dialog) WithParameters(
         params PipelineRunParameterDto[] declared)
     {

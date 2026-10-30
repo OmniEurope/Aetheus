@@ -118,9 +118,14 @@ public class GitSmartHttpControllerTests
         _serviceMock.ExecuteServiceAsync(1, "repo", "git-receive-pack", Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(new GitSmartHttpResponse("application/x-git-receive-pack-result", stream, []));
 
+        // The pusher is recorded with the push (RBAC audit, finding 3: an edited definition becomes hers).
+        _sut.ControllerContext.HttpContext.User = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "carol")], "Test"));
+
         var result = await _sut.ReceivePack(1, "repo", TestContext.Current.CancellationToken);
         Assert.IsType<FileStreamResult>(result);
-        await _serviceMock.Received(1).MarkPushedAsync(1, "repo", Arg.Any<IReadOnlyList<GitRefUpdate>>(), Arg.Any<CancellationToken>());
+        await _serviceMock.Received(1).MarkPushedAsync(1, "repo", Arg.Any<IReadOnlyList<GitRefUpdate>>(), Arg.Any<CancellationToken>(), "carol");
     }
 
     // --- Run-token scope (GitRunCloneToken) honoured for READ only ---

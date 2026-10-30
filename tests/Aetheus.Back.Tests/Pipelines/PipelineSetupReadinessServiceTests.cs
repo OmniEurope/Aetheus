@@ -54,13 +54,14 @@ public sealed class PipelineSetupReadinessServiceTests
     private readonly IPipelineTemplateResolver _resolver = Substitute.For<IPipelineTemplateResolver>();
 
     private PipelineSetupReadinessService BuildSut() => new(
-        _templates, _repo, _git, _gitRepositories, _resolver, _requirements,
+        _templates, _repo, _git, _gitRepositories, _resolver, _requirements, Substitute.For<IProjectConfigRepositoryService>(),
         Substitute.For<ILogger<PipelineSetupReadinessService>>());
 
+    /// <summary>A template the platform shares (the project's organization defines none of that name).</summary>
     private void Template(int id, string name, string yaml)
     {
-        _templates.GetTemplatesAsync(Arg.Any<CancellationToken>()).Returns(call =>
-            new List<PipelineTemplateSummaryDto> { new() { Id = id, Name = name, Version = 1 } });
+        _repo.FindSharedTemplateByNameAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new Aetheus.Back.Data.Entities.PipelineTemplate { Id = id, Name = name });
         _templates.GetTemplateAsync(id, Arg.Any<CancellationToken>())
             .Returns(new PipelineTemplateDto { Id = id, Name = name, YamlContent = yaml });
     }
@@ -103,6 +104,39 @@ public sealed class PipelineSetupReadinessServiceTests
         Assert.True(readiness.HasBlocking);
         Assert.True(readiness.RepositoryInspected);
         Assert.Equal("main", readiness.InspectedBranch);
+    }
+
+    /// <summary>R-78: a name resolves as the resolver will run it, the project's organization's own template
+    /// first, never the first template of that name of another organization.</summary>
+    [Fact]
+    public async Task TemplateName_ResolvesInTheProjectsOrganization_NotInAnotherOne()
+    {
+        const string CleanTemplate = "name: other\nstages:\n  - name: Build\n    execution_role: build\n    steps:\n      - name: Run\n        shell: echo ok\n";
+        // Another customer's template of that name, listed first, and the platform's shared one: both clean.
+        _templates.GetTemplatesAsync(Arg.Any<CancellationToken>()).Returns(
+            new List<PipelineTemplateSummaryDto>
+            {
+                new() { Id = 3, Name = "application-ci", OrganizationId = 99, Version = 1 },
+                new() { Id = 5, Name = "application-ci", OrganizationId = 42, Version = 1 }
+            });
+        _templates.GetTemplateAsync(3, Arg.Any<CancellationToken>())
+            .Returns(new PipelineTemplateDto { Id = 3, Name = "application-ci", YamlContent = CleanTemplate });
+        Template(9, "application-ci", CleanTemplate);
+        // The project's organization's own one calls an adapter script the branch does not carry.
+        _repo.GetPipelineOwnerOrganizationIdAsync(7, null, null, Arg.Any<CancellationToken>()).Returns(42);
+        _repo.FindTemplateByNameAsync("application-ci", 42, Arg.Any<CancellationToken>())
+            .Returns(new Aetheus.Back.Data.Entities.PipelineTemplate { Id = 5, Name = "application-ci", OrganizationId = 42 });
+        _templates.GetTemplateAsync(5, Arg.Any<CancellationToken>())
+            .Returns(new PipelineTemplateDto { Id = 5, Name = "application-ci", YamlContent = CiTemplate });
+        Runners(11);
+        Repository();
+        AdapterDirectory("quality.sh");
+
+        var readiness = await RunAsync("application-ci");
+
+        var check = Assert.Single(readiness.Checks);
+        Assert.Equal(PipelineSetupReadinessKind.MissingAdapterScripts, check.Kind);
+        Assert.Equal([".pipeline/scripts/ci.sh"], check.Items);
     }
 
     [Fact]

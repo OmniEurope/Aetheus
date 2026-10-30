@@ -95,6 +95,17 @@ public sealed class PipelineSetupWizardTests : BunitContext
         Assert.Contains("extends: application-deploy-prod@1", requests[6].YamlDefinition, StringComparison.Ordinal);
     }
 
+    /// <summary>R-60: the end of the wizard lands on the project's overview, not on its pipelines page.</summary>
+    [Fact]
+    public async Task Wizard_FinishNavigatesToTheProjectOverview()
+    {
+        await FinishWizardAsync(new ProjectDto { Id = 7, Name = "Atlas", DefaultBranch = "develop" }, TemplateCatalog());
+
+        var nav = Services.GetRequiredService<NavigationManager>();
+        await Task.Run(() => SpinWait.SpinUntil(() => nav.Uri.EndsWith("/projects/7", StringComparison.Ordinal), TimeSpan.FromSeconds(10)));
+        Assert.Equal("http://localhost/projects/7", nav.Uri);
+    }
+
     /// <summary>User decision 2026-10-24: every pipeline the wizard creates is pinned to the number its template has in
     /// the catalog at that moment (its latest published version), never to a floating latest.</summary>
     [Fact]
@@ -113,7 +124,11 @@ public sealed class PipelineSetupWizardTests : BunitContext
             var template = catalog.Single(item => item.Name == reference[..at]);
             Assert.Equal(template.Version.ToString(System.Globalization.CultureInfo.InvariantCulture), reference[(at + 1)..]);
         });
-        Assert.DoesNotContain(requests, request => request.YamlDefinition.Contains("latest", StringComparison.OrdinalIgnoreCase));
+        // "latest" never names a template version. The only line allowed to carry the word is the release selector of the
+        // candidate's chain to the deployment (R-72: the release the candidate just published), which is not a template.
+        Assert.All(requests, request => Assert.DoesNotContain(
+            request.YamlDefinition.Split('\n').Where(line => line != "    release: latest"),
+            line => line.Contains("latest", StringComparison.OrdinalIgnoreCase)));
     }
 
     [Fact]
@@ -396,7 +411,7 @@ public sealed class PipelineSetupWizardTests : BunitContext
 
         Assert.Equal(
             "http://localhost/pipelines/setup?projectId=7&prefix=atlas&options="
-                + Uri.EscapeDataString("frontend,backend,database,ci,quality,security,qa,candidate,nightly,production,rollback")
+                + Uri.EscapeDataString("frontend,backend,database,ci,quality,security,qa,candidate,nightly,production,rollback,lang-dotnet")
                 + "&architecture=application&sameProject=no&step=summary",
             nav.Uri);
     }

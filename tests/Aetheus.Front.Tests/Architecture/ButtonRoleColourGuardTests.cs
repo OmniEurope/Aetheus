@@ -36,6 +36,9 @@ public class ButtonRoleColourGuardTests
         ("Components/Pipelines/PipelineSetupReadinessPanel.razor", "ProvisionAsync",
             "R2-26 (2026-10-21): in the summary's to-do block, the libraries and vaults line shows its create button blue, "
             + "like the repository line's, both aligned in one column (one main action per line)"),
+        ("Components/Pipelines/ReleasePickerGrid.razor", "ToggleShowAll",
+            "R-57 (2026-10-25): in the run parameters dialog, Tout afficher is blue beside the blue Exécuter, "
+            + "though it is a filter action; the user's explicit exception"),
     ];
 
     /// <summary>
@@ -205,6 +208,23 @@ public class ButtonRoleColourGuardTests
             + "are Secondary (or Ghost when minor):\n  " + string.Join("\n  ", violations.Distinct()));
     }
 
+    /// <summary>A recorded second blue button must still exist: an exception whose markup was renamed or
+    /// removed would otherwise stay in the list and excuse a different button with the same handler.</summary>
+    [Fact]
+    public void EveryUserChosenSecondBlueButton_StillMatchesABlueButtonOfItsFile()
+    {
+        var stale = UserChosenSecondBlueButtons.Where(exception =>
+            !ButtonZoneScanner.Buttons(File.ReadAllText(Path.Combine(FrontDirectory(), exception.File)))
+                .Where(ButtonZoneScanner.IsMain)
+                .Any(button => Regex.IsMatch(button.Markup, $@"OnClick=""[^""]*\b{Regex.Escape(exception.Handler)}\b")))
+            .Select(exception => $"{exception.File}: {exception.Handler} ({exception.Decision})")
+            .ToList();
+
+        Assert.True(stale.Count == 0,
+            "A documented second blue button no longer matches a blue button of its file; update or remove it:\n  "
+            + string.Join("\n  ", stale));
+    }
+
     /// <summary>
     /// The zones and grid rows the user chose to keep with several visible actions (decision of 2026-10-17),
     /// each named by its file and the exact actions it shows (a button's label key, read from its Text, Label,
@@ -223,6 +243,8 @@ public class ButtonRoleColourGuardTests
             "User decision of 2026-09-28, kept on 2026-10-17: Obtain and Install the mail certificate are both shown, both blue"),
         ("Components/Pipelines/PipelineRunApprovalPanel.razor", ["Approve", "Reject", "ApprovalAddComment"],
             "User decision of 2026-10-17: Approve and Reject both stay visible, with Add a comment beside them"),
+        ("Components/Organizations/OrganizationDetail.razor", ["Save", "Delete"],
+            "R-22 (d), user decision of 2026-10-27: the organization's General form shows Save and a red Delete (confirmed with Delete / Go back) side by side; Delete is no longer in a menu"),
     ];
 
     [Fact]

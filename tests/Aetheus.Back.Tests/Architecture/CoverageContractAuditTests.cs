@@ -57,7 +57,7 @@ public sealed class CoverageContractAuditTests
         Assert.Contains("@(\"--coverlet\")", launcher, StringComparison.Ordinal);
         Assert.Contains("elseif ($Coverage) { $coverageDir } else", launcher, StringComparison.Ordinal);
         // Integration coverage is stored beside, not among, product reports.
-        Assert.Contains("-ResultDirectory (Join-Path $coverageDir \"Integration\")", launcher, StringComparison.Ordinal);
+        Assert.Contains("ResultDirectory = (Join-Path $coverageDir \"Integration\")", launcher, StringComparison.Ordinal);
         Assert.Contains("--coverlet --results-directory \"$COVERAGE_DIR/Integration\"", linuxLauncher, StringComparison.Ordinal);
         Assert.DoesNotContain("\"--results-directory\", $coverageDir", launcher, StringComparison.Ordinal);
         Assert.Contains("\"coverage.cobertura.*.xml\"", launcher, StringComparison.Ordinal);
@@ -65,7 +65,11 @@ public sealed class CoverageContractAuditTests
         Assert.Contains("normalize-coverage-report.sh", linuxLauncher, StringComparison.Ordinal);
         foreach (var suite in ProductSuites)
         {
-            Assert.Contains(suite.Replace('/', '\\'), launcher, StringComparison.Ordinal);
+            // A host suite by its Windows path; the agent suite by the `dotnet test --project` of its Linux container.
+            Assert.True(
+                launcher.Contains(suite.Replace('/', '\\'), StringComparison.Ordinal)
+                || launcher.Contains($"--project {suite} ", StringComparison.Ordinal),
+                $"The Windows launcher does not run {suite}.");
             Assert.Contains(suite, linuxLauncher, StringComparison.Ordinal);
         }
         Assert.Contains("TEST_CONFIGURATION=\"Release\"", linuxLauncher, StringComparison.Ordinal);

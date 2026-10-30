@@ -125,10 +125,8 @@ public sealed class ApiSmokeFixture(SharedPostgresContainer shared) : IAsyncLife
             var createResp = await admin.PostAsJsonAsync("/api/users", new CreateUserRequest
             {
                 Username = username,
-                Password = password,
-                Roles = ["Reader"],
-                // D1: a flagged account only reaches the password change; this one tests RBAC.
-                MustChangePassword = false
+                Email = $"{username}@example.com",
+                OrganizationRoles = await IntegrationUsers.InDefaultOrganizationAsync(admin, "Reader")
             }, cancellationToken: TestContext.Current.CancellationToken);
             createResp.EnsureSuccessStatusCode();
             var created = await createResp.Content.ReadFromJsonAsync<UserDto>(
@@ -136,12 +134,14 @@ public sealed class ApiSmokeFixture(SharedPostgresContainer shared) : IAsyncLife
                 cancellationToken: TestContext.Current.CancellationToken)
                 ?? throw new InvalidOperationException("Reader creation returned an empty response body.");
             _readerUserIds.Add(created.Id);
+            // D1: a flagged account only reaches the password change; this one tests RBAC.
+            await IntegrationUsers.SetPasswordAsync(Factory.Services, created.Id, password);
         }
 
         var client = Factory.CreateClient();
-        IntegrationAuth.SetBearer(client, await IntegrationAuth.LoginAsync(
+        IntegrationAuth.SetBearer(client, await IntegrationAuth.LoginByEmailAsync(
             client,
-            username,
+            $"{username}@example.com",
             password,
             TestContext.Current.CancellationToken));
         return client;

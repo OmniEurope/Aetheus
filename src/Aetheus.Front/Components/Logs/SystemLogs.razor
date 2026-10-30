@@ -7,9 +7,20 @@
 
 <OmniPageHeader Title="@L["SystemLogs"]" Subtitle="@Breadcrumb.Subtitle()">
     <Icon><OmniIcon Name="@MaterialIconMap.Resolve("description")" /></Icon>
+    <ActionsContent>
+        @* Recette R-109 (rule 1 of R-30): Download, the main action, in the page header; the other actions in its menu. *@
+        @if (!string.IsNullOrWhiteSpace(_selectedFile))
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
+        }
+    </ActionsContent>
+    <MenuContent>
+        <OmniMenuItem Tone="OmniTone.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent>@L["Purge"]</ChildContent></OmniMenuItem>
+    </MenuContent>
 </OmniPageHeader>
 
-<OmniCard Class="omni-u-mb-lg">
+<OmniStack Class="page-fill-body">
+<OmniCard>
     <OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.End">
         <OmniStack Orientation="OmniOrientation.Vertical" Gap="OmniSpacing.XSmall">
                 <OmniLabel For="ddFile">@L["LogFile"]</OmniLabel>
@@ -52,29 +63,19 @@
         </OmniStack>
 
         @* No Refresh and no polling toggle, the page follows the log files live. *@
-
-        @* STD-BTN detection 11: Download visible, the other actions in the menu. *@
-        @if (!string.IsNullOrWhiteSpace(_selectedFile))
-        {
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="OnDownloadAsync" Class="@(_isDownloading ? "btn-busy" : null)" Busy="@(_isDownloading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
-        }
-
-        <OmniOverflowMenu Label="@L["MoreActions"]">
-            <OmniMenuItem Tone="OmniTone.Danger" OnClick="OnPurgeAsync" title="@L["PurgeLogs"]"><Icon><OmniIcon Name="OmniIconName.Broom" /></Icon><ChildContent>@L["Purge"]</ChildContent></OmniMenuItem>
-        </OmniOverflowMenu>
     </OmniRow>
 </OmniCard>
 
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-sm">@L["LoadFailed"]</OmniAlert>
+    <OmniAlert Severity="OmniSeverity.Danger">@L["LoadFailed"]</OmniAlert>
 }
 @* Fetch virtualized log blocks with bar filters, sort and column filters applied by the API to the
    entire log. *@
 <AetheusDataGrid ShowFooterBar="true" @ref="_grid" TItem="SystemLogEntryDto" Data="@_items" Count="@_total" IsLoading="@_loading"
                  LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="50" Virtualize="@AetheusGrid.RemoteVirtualization"
                  VirtualData="@(() => new OmniDataGridResult<SystemLogEntryDto>(_items, _total))"
-                 FullHeight="true" RowClick="@OnRowClick" class="omni-u-mb-lg">
+                 FullHeight="true" RowClick="@OnRowClick">
     <EmptyTemplate>
         @if (!_loadFailed)
         {
@@ -90,7 +91,7 @@
                                 Title="@L["LogLevel"]" Width="7.5rem" Filterable="true"
                                 FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@LevelsArray" FormatFilterValue="@LevelText">
                 <Template Context="entry">
-                    <OmniBadge Fill="OmniFill.Solid"
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetBadgeStyle(entry.Level)))" Fill="OmniFill.Solid"
                                  Tone="@GetBadgeStyle(entry.Level)">@LevelText(entry.Level)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
@@ -127,3 +128,4 @@
             </OmniDataGridColumn>
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

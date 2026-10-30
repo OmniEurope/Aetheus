@@ -53,7 +53,7 @@
             FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true"
             Visible="@GroupByProject" Class="pipeline-project-column" HeaderClass="pipeline-project-column">
             <Template Context="pipeline">
-                <span class="pipeline-project-context">@(pipeline.ProjectName ?? L["Unassigned"])</span>
+                <span class="pipeline-project-context"><EntityNameLink Kind="EntityNameKind.Project" Id="pipeline.ProjectId" Name="@(pipeline.ProjectName ?? L["Unassigned"])" /></span>
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="PipelineDependencyDto" Title="@L["RecentRunsColumn"]" Width="8rem"
@@ -91,7 +91,7 @@
                     }
                     else
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AutonomousPipeline"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Robot))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@L["AutonomousPipeline"]</OmniBadge>
                     }
                 }
             </Template>
@@ -112,7 +112,7 @@
                     else
                     {
                         <span class="pipeline-template-status" title="@TemplateStatusTitle(fleetItem)">
-                            <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@FreshnessStyle(fleetItem.Freshness)">@FreshnessText(fleetItem.Freshness)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(FreshnessStyle(fleetItem.Freshness)))" Fill="OmniFill.Solid" Tone="@FreshnessStyle(fleetItem.Freshness)">@FreshnessText(fleetItem.Freshness)</OmniBadge>
                             @if (fleetItem.PinnedVersion is { } pinnedVersion)
                             {
                                 <span>@($"v{pinnedVersion}")</span>

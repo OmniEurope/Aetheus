@@ -91,8 +91,14 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
     {
         return await db.Vaults
             .AsNoTracking()
+            // The project's own vaults, those of its environments and project servers, and the global
+            // ones (no owner at all). A vault of another project's environment has no project either
+            // and is never one of them (RBAC audit, finding 1).
             .Where(v => names.Contains(v.Name)
-                && (v.ProjectId == projectId || v.ProjectId == null))
+                && ((v.ProjectId != null && v.ProjectId == projectId)
+                    || (v.ProjectId == null && v.EnvironmentId != null && v.Environment!.ProjectId == projectId)
+                    || (v.ProjectId == null && v.ProjectServerId != null && v.ProjectServer!.ProjectId == projectId)
+                    || (v.ProjectId == null && v.EnvironmentId == null && v.ProjectServerId == null)))
             .Include(v => v.Secrets)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -100,12 +106,14 @@ public class VaultRepository(AppDbContext db, TimeProvider timeProvider) : IVaul
 
     public async Task<List<Vault>> FindByNamesWithCrossAccessAsync(List<string> names, int projectId, CancellationToken ct = default)
     {
+        // A vault reaches the run only through the run's own project: a row naming another project and
+        // this project's environment (written before the owner check) never does (RBAC audit, finding 1).
         return await db.Vaults
             .AsNoTracking()
             .Where(v => names.Contains(v.Name)
                 && (v.ProjectId == projectId
-                    || (v.EnvironmentId != null && v.Environment!.ProjectId == projectId)
-                    || (v.ProjectServerId != null && v.ProjectServer!.ProjectId == projectId)
+                    || (v.ProjectId == null && v.EnvironmentId != null && v.Environment!.ProjectId == projectId)
+                    || (v.ProjectId == null && v.ProjectServerId != null && v.ProjectServer!.ProjectId == projectId)
                     || (v.ProjectId == null && v.EnvironmentId == null && v.ProjectServerId == null)))
             .Include(v => v.Secrets)
             .ToListAsync(ct)

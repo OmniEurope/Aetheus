@@ -33,14 +33,14 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineArtifactDto" Property="RetentionPolicy" Title="@L["Type"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@PolicyText" >
                 <Template Context="a">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetPolicyBadge(a.RetentionPolicy)">@L.Localize(a.RetentionPolicy)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(GetPolicyBadge(a.RetentionPolicy)))" Fill="OmniFill.Solid" Tone="@GetPolicyBadge(a.RetentionPolicy)">@L.Localize(a.RetentionPolicy)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn Class="omni-data-grid__cell--text" TItem="PipelineArtifactDto" Property="EnvironmentName" Title="@L["Environment"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.EnvironmentNames" FilterSearchable="true" >
                 <Template Context="a">
                     @if (!string.IsNullOrEmpty(a.EnvironmentName))
                     {
-                        <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@a.EnvironmentName</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@a.EnvironmentName</OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>
@@ -59,6 +59,6 @@
                     @FormatSize(a.SizeBytes)
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="PipelineArtifactDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Width="140px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+            <OmniDataGridColumn TItem="PipelineArtifactDto" Property="CreatedAt" Title="@L["Date"]" FormatString="{0:g}" Width="140px" Filterable="true" />
         </Columns>
     </AetheusDataGrid>

@@ -2,17 +2,18 @@
 @inject GridExportContext ExportContext
 @* Compose tab of the Docker section: the stack grid and the inline compose-file editor. The editor
    content arrives asynchronously over SignalR, so the parent forwards task output here. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack>
+<OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredCompose.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterStacks"]" @bind-Value="_composeSearch" Placeholder="@L["FilterStacks"]" Class="docker-search" />
 </OmniStack>
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
-<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerCompose"])" ExportFields="@ExportContext.Fields()" Items="@FilteredCompose" TItem="DockerComposeStackDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
+<OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerCompose"])" ExportFields="@ExportContext.Fields()" Items="@FilteredCompose" TItem="DockerComposeStackDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true"
     OnRowClick="@(args => OpenComposeEditorAsync(args.Item.Name))">
     @* Recette R3-35: clicking a stack opens its compose file; the buttons of the row keep their own action. *@
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="DockerComposeStackDto" Property="Name" Title="@L["Stack"]" Filterable="true" />
-        <OmniDataGridColumn TItem="DockerComposeStackDto" Property="Status" Title="@L["Status"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
+        <OmniDataGridColumn TItem="DockerComposeStackDto" Property="Status" Value="@(s => ComposeStatusText(s.Status))" Title="@L["Status"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" />
         <OmniDataGridColumn TItem="DockerComposeStackDto" Title="@L["Services"]" Width="7.5rem" Sortable="false">
             <Template Context="s">
                 @s.RunningCount / @s.TotalCount
@@ -39,7 +40,7 @@
 
 @if (_composeEditorVisible)
 {
-    <OmniCard Class="omni-u-mt-md">
+    <OmniCard>
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Large">
                 <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["DockerCompose"] - @_composeEditorStack</OmniText>
@@ -58,13 +59,13 @@
             <div class="@(_composeFileLoading ? "omni-busy" : null)" aria-busy="@(_composeFileLoading ? "true" : "false")"
                  title="@(_composeFileLoading ? L["RequestingCompose"].Value : null)">
                 <OmniCodeEditor @bind-Value="_composeEditorContent" Language="yaml" Height="24rem"
-                                InteropModulePath="./js/omni-code-editor-frame.js?v=1"
+                                InteropModulePath="@EditorModules.Frame"
                                 Label="@L["DockerCompose"]" Disabled="@_composeFileLoading" />
             </div>
             @if (!_composeFileLoading)
             {
                 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@CloseComposeEditor"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                     @if (CanAdmin)
                     {
                         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@SaveComposeFileAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_composeEditorContent))" Class="@(_composeDeploying ? "btn-busy" : null)" Busy="@(_composeDeploying)"><Icon><OmniIcon Name="OmniIconName.RocketLaunch" /></Icon><ChildContent><span>@L["Deploy"]</span></ChildContent></OmniButton>
@@ -74,3 +75,4 @@
         </OmniStack>
     </OmniCard>
 }
+</OmniStack>

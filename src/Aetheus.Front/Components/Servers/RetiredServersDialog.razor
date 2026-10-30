@@ -1,10 +1,12 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-<OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md">
+@* R-99: OE's veil lies over the dialog while a server is being purged; its content stays mounted under it. *@
+<OmniStack Class="@(_purgingIds.Count > 0 ? "omni-busy" : null)" aria-busy="@(_purgingIds.Count > 0 ? "true" : "false")" data-testid="retired-servers-zone">
+<OmniAlert Severity="OmniSeverity.Info">
     @L["RetiredServersHint"]
 </OmniAlert>
 @if (_loadFailed)
 {
-    <OmniAlert Severity="OmniSeverity.Danger" Class="omni-u-mb-md">
+    <OmniAlert Severity="OmniSeverity.Danger">
         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
             <OmniText Element="OmniTextElement.Paragraph">@L["LoadFailed"]</OmniText>
             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@RetryAsync"><Icon><OmniIcon Name="OmniIconName.Refresh" /></Icon><ChildContent><span>@L["Retry"]</span></ChildContent></OmniButton>
@@ -23,11 +25,11 @@
             <Template Context="server">
                 @if (server.HasMachineIdentity)
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Success" title="@L["MachineIdentityKnownHint"]">@L["MachineIdentityKnown"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success" title="@L["MachineIdentityKnownHint"]">@L["MachineIdentityKnown"]</OmniBadge>
                 }
                 else
                 {
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@L["MachineIdentityHostnameOnlyHint"]">@L["MachineIdentityHostnameOnly"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral" title="@L["MachineIdentityHostnameOnlyHint"]">@L["MachineIdentityHostnameOnly"]</OmniBadge>
                 }
             </Template>
         </OmniDataGridColumn>
@@ -42,3 +44,4 @@
     </Columns>
 </AetheusDataGrid>
 <DialogFooter CancelText="@L["Close"]" OnCancel="@Close" />
+</OmniStack>

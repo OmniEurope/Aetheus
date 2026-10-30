@@ -2,22 +2,17 @@
 @using Aetheus.Front.Components.Pipelines
 
 @* Recette R-18: the database's expand/contract tracking on a production environment page. The last gate verdict
-   of a migrate step that ran on the environment's servers, and the contractions the plan still owes. *@
-@if (_schema is { } schema)
+   of a migrate step that ran on the environment's servers, and the contractions the plan still owes.
+   Recette R-81: only what this environment's own deployments recorded. Without a verdict the section is absent,
+   since the contraction plan is the one of Aetheus's own schema. *@
+@if (_schema is { LastGate: { } lastGate } schema)
 {
-    <OmniStack Class="omni-u-mt-lg" data-testid="environment-schema-tracking">
+    <OmniStack data-testid="environment-schema-tracking">
         <OmniHeading Level="OmniHeadingLevel.H5">@L["EnvironmentSchemaTrackingTitle"]</OmniHeading>
-        @if (schema.LastGate is { } lastGate)
-        {
-            <PipelineRunMigrationGate Gates="@(new[] { lastGate })" />
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
-                <a href="@RunHref(lastGate)" data-testid="environment-schema-run-link">@string.Format(L["EnvironmentSchemaLastGateRun"].Value, lastGate.RunId)</a>
-            </OmniText>
-        }
-        else
-        {
-            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted" data-testid="environment-schema-no-gate">@L["EnvironmentSchemaNoGate"]</OmniText>
-        }
+        <PipelineRunMigrationGate Gates="@(new[] { lastGate })" />
+        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted">
+            <a href="@RunHref(lastGate)" data-testid="environment-schema-run-link">@string.Format(L["EnvironmentSchemaLastGateRun"].Value, lastGate.RunId)</a>
+        </OmniText>
         <SchemaPendingContractions Contractions="@schema.PendingContractions" />
     </OmniStack>
 }

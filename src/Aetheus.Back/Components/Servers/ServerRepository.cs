@@ -401,9 +401,8 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
             .Select(psr => psr.PipelineRun.Pipeline.ProjectId)
             .Where(pid => pid != null)
             .Select(pid => pid!.Value);
-        var linkedProjectIds = db.ProjectServers
-            .Where(projectServer => projectServer.ServerId == serverId)
-            .Select(projectServer => projectServer.ProjectId);
+        // Linked directly, or through an environment of the project (R-83).
+        var linkedProjectIds = db.ProjectIdsOfServer(serverId);
         return executedProjectIds.Union(linkedProjectIds).Distinct();
     }
 
@@ -426,11 +425,13 @@ public class ServerRepository(AppDbContext db, TimeProvider timeProvider) : ISer
 
     public async Task<(List<Project> Items, int Total)> GetProjectsForServerPagedAsync(
         int serverId, string? search, int page, int pageSize, string? sortBy, bool sortDescending,
-        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null)
+        CancellationToken ct = default, IReadOnlyList<GridFilter>? filters = null, List<int>? readableProjectIds = null)
     {
         var query = db.Projects
             .Where(project => ProjectIdsForServer(serverId).Contains(project.Id))
             .AsNoTracking();
+        if (readableProjectIds is not null)
+            query = query.Where(project => readableProjectIds.Contains(project.Id));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var pattern = $"%{search.Trim()}%";

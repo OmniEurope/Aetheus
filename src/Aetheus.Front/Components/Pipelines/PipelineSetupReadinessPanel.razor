@@ -25,7 +25,7 @@
                         <strong>@L["PipelineSetupRecapTodoTitle"]</strong>
                         <PipelineInfoTip Text="@L["PipelineSetupRecapTodoHelp"].Value" />
                     </OmniStack>
-                    <OmniBadge Tone="@(ActionCount > 0 ? OmniTone.Warning : OmniTone.Success)" Fill="OmniFill.Outline"
+                    <OmniBadge Icon="@(BadgeIcon.ForState(ActionCount > 0 ? OmniTone.Warning : OmniTone.Success))" Tone="@(ActionCount > 0 ? OmniTone.Warning : OmniTone.Success)" Fill="OmniFill.Outline"
                                data-testid="setup-todo-state">@StateText</OmniBadge>
                 </OmniStack>
             </HeaderContent>
@@ -78,7 +78,7 @@
                             @foreach (var element in Elements)
                             {
                                 <OmniTooltip Text="@Purpose(element)" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
-                                    <OmniBadge Tone="@(element.Created ? OmniTone.Success : OmniTone.Neutral)" Fill="OmniFill.Tonal"
+                                    <OmniBadge Icon="@(BadgeIcon.Of(element.Created ? OmniIconName.Check : OmniIconName.Timer))" Tone="@(element.Created ? OmniTone.Success : OmniTone.Neutral)" Fill="OmniFill.Tonal"
                                                data-testid="@(element.Created ? "setup-provisioned-created" : "setup-provisioned-pending")">@ChipText(element)</OmniBadge>
                                 </OmniTooltip>
                             }
@@ -97,6 +97,7 @@
                 <ChildContent>
                     <OmniStack Gap="OmniSpacing.Medium">
                         <PipelineReadinessChecks Checks="@OtherChecks" ProjectId="@ProjectId" ReturnUrl="@ReturnUrl"
+                                                 EnvironmentReturnUrl="@($"/projects/{ProjectId}")" FillEmptyValuesInDialog="true"
                                                  BlockingAsAlert="false" OnChanged="@OnChanged" />
                     </OmniStack>
                 </ChildContent>

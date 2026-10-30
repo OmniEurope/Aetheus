@@ -27,11 +27,9 @@ public sealed class PortAllocationService(
         return new PortAllocationTargetsDto
         {
             Servers = targets,
-            // Pre-selected only when the library's own scope leaves no choice. A project-scoped library
-            // reaching one server today may reach two tomorrow, so it always asks.
-            PreselectedServerId = scope.ProjectId is not null
-                && (scope.ProjectServerId is not null || scope.EnvironmentId is not null)
-                && targets.Count == 1
+            // Pre-selected whenever exactly one server is reachable (R-88): a lone choice offered as a
+            // selection nobody can make leaves the button disabled. Two servers, and the operator asks.
+            PreselectedServerId = scope.ProjectId is not null && targets.Count == 1
                     ? targets[0].ServerId
                     : null,
             ProjectId = scope.ProjectId,
@@ -55,15 +53,39 @@ public sealed class PortAllocationService(
                 $"'{scope.LibraryName}' belongs to no project, so a reservation could not name a holder "
                 + "any deployment would recognise. Attach the library to a project first.");
 
+        // A key the library already holds is filled when it is empty (R-85: PORT_FRONT and PORT_BACK exist
+        // empty) and refused when it carries a value, before any port is reserved: a value somebody typed
+        // is not overwritten behind their back.
+        var existing = await repo.FindEntriesByKeyAsync(libraryId, normalized, ct).ConfigureAwait(false);
+        var holding = existing.Where(entry => !string.IsNullOrWhiteSpace(entry.Value)).Select(entry => entry.Key).ToList();
+        if (holding.Count > 0)
+            throw new BadRequestException(
+                $"{string.Join(", ", holding.Select(key => $"'{key}'"))} already holds a value in "
+                + $"'{scope.LibraryName}'; empty it first, or name another key.");
+        var existingIds = existing.ToDictionary(entry => entry.Key, entry => entry.Id, StringComparer.Ordinal);
+
         // One transaction, now that the scope is re-entrant: the library service opens its own inside
         // this one and joins it instead of making EF refuse a nested begin. The compensation below
         // stays as the belt for the provider that has no transactions at all.
         return transaction.IsRelational
             ? await transaction
                 .ExecuteInTransactionAsync(
-                    () => WriteAsync(libraryId, serverId, projectId, scope, normalized, ct), ct)
+                    () => WriteAsync(libraryId, serverId, projectId, scope, normalized, existingIds, ct), ct)
                 .ConfigureAwait(false)
-            : await WriteAsync(libraryId, serverId, projectId, scope, normalized, ct).ConfigureAwait(false);
+            : await WriteAsync(libraryId, serverId, projectId, scope, normalized, existingIds, ct)
+                .ConfigureAwait(false);
+    }
+
+    public async Task<int?> GetLibraryProjectIdAsync(int libraryId, CancellationToken ct = default)
+        => (await repo.FindLibraryScopeAsync(libraryId, ct).ConfigureAwait(false))?.ProjectId;
+
+    public async Task<List<int>> GetReleaseServerIdsAsync(int libraryId, CancellationToken ct = default)
+    {
+        var scope = await repo.FindLibraryScopeAsync(libraryId, ct).ConfigureAwait(false)
+            ?? throw new NotFoundException($"Variable library {libraryId} was not found.");
+        if (scope.ProjectId is null) return [];
+        var servers = await repo.GetCandidateServersAsync(scope, ct).ConfigureAwait(false);
+        return servers.Select(server => server.ServerId).ToList();
     }
 
     public async Task<PortCheckResultDto> CheckLibraryPortsAsync(
@@ -114,7 +136,7 @@ public sealed class PortAllocationService(
     /// </summary>
     private async Task<List<VariableEntryDto>> WriteAsync(
         int libraryId, int serverId, int projectId, LibraryScope scope,
-        IReadOnlyList<string> keys, CancellationToken ct)
+        IReadOnlyList<string> keys, IReadOnlyDictionary<string, int> existingIds, CancellationToken ct)
     {
         var ownerKey = PortRegistryService.ProjectOwnerKey(projectId);
         var ports = await registry
@@ -126,16 +148,17 @@ public sealed class PortAllocationService(
         {
             for (var index = 0; index < keys.Count; index++)
             {
-                created.Add(await libraries
-                    .CreateEntryAsync(
-                        libraryId,
-                        new CreateVariableEntryRequest
-                        {
-                            Key = keys[index],
-                            Value = ports[index].ToString(CultureInfo.InvariantCulture)
-                        },
-                        ct)
-                    .ConfigureAwait(false));
+                var key = keys[index];
+                var value = ports[index].ToString(CultureInfo.InvariantCulture);
+                created.Add(existingIds.TryGetValue(key, out var entryId)
+                    ? await libraries
+                          .UpdateEntryAsync(
+                              libraryId, entryId, new UpdateVariableEntryRequest { Key = key, Value = value }, ct)
+                          .ConfigureAwait(false)
+                      ?? throw new NotFoundException($"Entry '{key}' of library {libraryId} was not found.")
+                    : await libraries
+                        .CreateEntryAsync(libraryId, new CreateVariableEntryRequest { Key = key, Value = value }, ct)
+                        .ConfigureAwait(false));
             }
         }
         catch (Exception ex)

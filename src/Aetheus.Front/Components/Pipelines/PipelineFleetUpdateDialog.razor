@@ -24,7 +24,7 @@ else if (_preview is not null)
             </ChildContent></OmniAlert>
             <OmniCheckBox @bind-Value="_acknowledged">@L["AcknowledgeOrphanOverrides"]</OmniCheckBox>
         }
-        <MonacoDiffViewer OriginalValue="@_preview.CurrentResolvedYaml" ModifiedValue="@_preview.TargetResolvedYaml" />
+        <OmniDiffViewer Original="@_preview.CurrentResolvedYaml" Modified="@_preview.TargetResolvedYaml" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
         <DialogFooter OnCancel="@Cancel">
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_preview.RequiresOrphanAcknowledgement && !_acknowledged)" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["ConfirmUpdate"]</span></ChildContent></OmniButton>
         </DialogFooter>

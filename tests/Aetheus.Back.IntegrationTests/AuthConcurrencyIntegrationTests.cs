@@ -120,6 +120,7 @@ public sealed class AuthConcurrencyIntegrationTests(PostgresFixture fixture) : R
         var user = new User
         {
             Username = $"race-{Guid.NewGuid():N}",
+            Email = $"race-{Guid.NewGuid():N}@example.test",
             PasswordHash = "not-used",
             TotpRecoveryCodes = recoveryCodes,
             CreatedAt = DateTime.UtcNow,

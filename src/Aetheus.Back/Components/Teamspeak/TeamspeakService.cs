@@ -144,9 +144,18 @@ public class TeamspeakService(ITeamspeakRepository repo, IServerRepository serve
 
     public async Task ExecuteActionAsync(int serverId, TeamspeakActionRequest request, CancellationToken ct = default)
     {
-        var command = TeamspeakCommandHelper.BuildServiceCommand(request.Action);
+        // R-119: a typed operation (the agent resolves the unit and runs the argv-exact systemctl grant); its kind
+        // makes the agent collect its TeamSpeak inventory again at once.
+        var operation = request.Action switch
+        {
+            TeamspeakAction.Start => OperationKind.TeamspeakStart,
+            TeamspeakAction.Stop => OperationKind.TeamspeakStop,
+            TeamspeakAction.Restart => OperationKind.TeamspeakRestart,
+            _ => throw new BadRequestException($"Unknown TeamSpeak action: {request.Action}")
+        };
 
-        await QueueTaskAsync(ServerTaskFactory.Shell(serverId, $"TeamSpeak - {request.Action}", command, 30), ct).ConfigureAwait(false);
+        await QueueTaskAsync(ServerTaskFactory.Operation(serverId, $"TeamSpeak - {request.Action}", operation,
+            target: "-", timeoutSeconds: 60), ct).ConfigureAwait(false);
 
         await audit.LogAsync($"Teamspeak{request.Action}", "Teamspeak", serverId, request.Action.ToString(), ct).ConfigureAwait(false);
     }

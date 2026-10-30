@@ -29,6 +29,9 @@ public class PipelineApprovalService(
         List<int>? accessiblePipelineIds, CancellationToken ct = default)
         => repo.GetPendingApprovalsAsync(accessiblePipelineIds, ct);
 
+    public Task<PipelineApprovalScope?> GetApprovalScopeAsync(int approvalId, CancellationToken ct = default)
+        => repo.GetApprovalScopeAsync(approvalId, ct);
+
     /// <summary>Approval decisions and expirations are audited with actor, target and outcome.
     /// Refused transitions return a specific status and reason.</summary>
     public async Task<PipelineApprovalDto> DecideApprovalAsync(

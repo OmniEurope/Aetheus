@@ -63,13 +63,15 @@ public class GitBasicAuthenticationHandler(
         // the token owner so a copied token cannot masquerade as another account in audit trails.
         if (password.StartsWith(PatConstants.TokenPrefix, StringComparison.Ordinal))
             return await AuthenticatePersonalAccessTokenAsync(username, password).ConfigureAwait(false);
-        var valid = await smartHttp.ValidateBasicAuthAsync(username, password, Context.RequestAborted)
+        // An account password is a human sign-in: the Basic username is the account's e-mail address. The
+        // principal is named by the account's username, which is what the permission checks resolve.
+        var accountUsername = await smartHttp.AuthenticateBasicAsync(username, password, Context.RequestAborted)
             .ConfigureAwait(false);
-        if (!valid)
+        if (accountUsername is null)
             return AuthenticateResult.Fail("Invalid Git credentials.");
 
         return Success(
-            new Claim(ClaimTypes.Name, username),
+            new Claim(ClaimTypes.Name, accountUsername),
             new Claim(ClaimTypes.Role, "GitUser"));
     }
 

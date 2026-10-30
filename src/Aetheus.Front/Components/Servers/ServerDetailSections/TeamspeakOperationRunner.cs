@@ -14,13 +14,14 @@ internal sealed class TeamspeakOperationRunner(
     NotifyHelper toast, Func<bool> blockedByOfflineAgent, Func<ServerTaskFollower?>? follower = null)
 {
     /// <summary>Returns whether the task was queued; <paramref name="onSuccess"/> runs before the toast,
-    /// only when it was.</summary>
+    /// only when it was. <paramref name="settle"/> false for a read-only task (the logs): it changes
+    /// nothing, so the veil does not wait for a heartbeat after it ends (R-119).</summary>
     public async Task<bool> RunOperationAsync(
-        Func<Task<ApiStatus>> operation, string label, Action? onSuccess = null)
+        Func<Task<ApiStatus>> operation, string label, Action? onSuccess = null, bool settle = true)
     {
         if (blockedByOfflineAgent()) return false;
         var taskFollower = follower?.Invoke();
-        taskFollower?.Expect(label);
+        taskFollower?.Expect(label, settle: settle);
         try
         {
             var status = await operation();

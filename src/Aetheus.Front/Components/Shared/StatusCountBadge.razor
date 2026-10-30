@@ -1,11 +1,10 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
-@* Replace the visible status name with an icon on phones while retaining accessible text and
-   tooltip so count badges fit narrow headers; omit zero counts. *@
+@* A count and the status it counts ("20 Up"): a number badge, so no icon, on a phone too (recette R-44,
+   user rule of 2026-10-25). The status name stays the tooltip; zero counts are omitted. *@
 @if (Count > 0)
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="@Tone" Class="@CssClass" title="@Label">
-        <Icon><OmniIcon Name="@Icon" Class="status-count-badge__icon" /></Icon>
-        <ChildContent><span class="status-count-badge__count">@CountText</span> <span class="status-count-badge__label">@Label</span></ChildContent>
-    </OmniBadge>
+    <NumberBadge Fill="OmniFill.Solid" Tone="@Tone" Class="@CssClass" title="@Label" data-testid="status-count-badge">
+        <span class="status-count-badge__count">@CountText</span> <span class="status-count-badge__label">@Label</span>
+    </NumberBadge>
 }

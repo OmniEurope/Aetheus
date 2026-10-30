@@ -1,7 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Users
 
-<OmniCard Class="iam-detail-card">
     <AetheusDataGrid TItem="AuditLogDto" RowClick="@(log => ShowDetailsAsync(log))" Data="@_logs" Count="@_count"
         LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="25" IsLoading="@_loading"
         AllowSorting="true" Density="OmniDensity.Compact"
@@ -17,17 +16,16 @@
             <OmniDataGridColumn TItem="AuditLogDto" Property="Username" Title="@L["User"]" Filterable="true" />
             <OmniDataGridColumn TItem="AuditLogDto" Property="Action" Title="@L["Action"]" Width="220px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_actionOptions" FormatFilterValue="@ActionFilterText" FilterSearchable="true" >
                 <Template Context="log">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetActionBadge(log.Action)">@ActionText(log.Action)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.For(GetActionBadge(log.Action)))" Fill="OmniFill.Solid" Tone="@GetActionBadge(log.Action)">@ActionText(log.Action)</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="AuditLogDto" Property="Details" Truncate="true" Title="@L["Details"]" Filterable="true" />
             <OmniDataGridColumn TItem="AuditLogDto" Title="@L["Actions"]" Width="150px" Sortable="false" Filterable="false">
                 <Template Context="log">
                     <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
-                    <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => ShowDetailsAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
+                    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@(() => ShowDetailsAsync(log))" title="@L["ViewDetails"]" Label="@L["ViewDetails"]"><Icon><OmniIcon Name="OmniIconName.Eye" /></Icon></OmniButton>
                     </span>
                 </Template>
             </OmniDataGridColumn>
         </Columns>
     </AetheusDataGrid>
-</OmniCard>

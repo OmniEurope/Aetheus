@@ -18,24 +18,28 @@
     </OmniOverflowMenu>
 </SectionContent>
 
-@* --- Status bar --- *@
-<OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
-    <OmniBadge Fill="OmniFill.Solid" Tone="@GetStatusBadge(Apache.IsRunning)">@(Apache.IsRunning ? L["Running"] : L["Stopped"])</OmniBadge>
-    @if (!string.IsNullOrEmpty(Apache.Version))
-    {
-        <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">v@(Apache.Version)</OmniText>
-    }
-    @if (Apache.Pid.HasValue)
-    {
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">PID @Apache.Pid</OmniText>
-    }
-</OmniRow>
+@* --- Status bar ---
+   Recette R-120: the version moved into the page title and "Running" is the normal state, so it is no longer shown;
+   only a stopped Apache is flagged. The row exists only when there is something to say, to give the room back. *@
+@if (!Apache.IsRunning || Apache.Pid.HasValue)
+{
+    <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-lg">
+        @if (!Apache.IsRunning)
+        {
+            <OmniBadge Icon="@(BadgeIcon.ForState(GetStatusBadge(false)))" Fill="OmniFill.Solid" Tone="@GetStatusBadge(false)">@L["Stopped"]</OmniBadge>
+        }
+        @if (Apache.Pid.HasValue)
+        {
+            <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-m-0">PID @Apache.Pid</OmniText>
+        }
+    </OmniRow>
+}
 
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Apache" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Apache" SettleOnHeartbeat="true" />
 
 @if (Apache.CollectionDegraded)
 {
-        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-lg" Title="@L["ApacheCollectionDegraded"]">
+        <OmniAlert Severity="OmniSeverity.Warning" Title="@L["ApacheCollectionDegraded"]">
         @L["ApacheCollectionDegradedHint"]
         @if (!string.IsNullOrWhiteSpace(Apache.CollectionDiagnostics))
         {
@@ -49,12 +53,10 @@
 <UrlSyncedTabs Slugs="@(new[] { "sites", "modules", "logs", "relations" })">
     <Tabs>
         @* --- Sites tab (enabled + disabled, split) --- *@
-        <OmniTabsItem Key="sites" Title="@L["Sites"]">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
-                <CountBadge Value="@FilteredVirtualHosts.Count" Variant="OmniTone.Accent" />
-                <OmniTextBox aria-label="@L["FilterSites"]" @bind-Value="_vhostSearch" Placeholder="@L["FilterSites"]" />
-            </OmniStack>
-
+        <OmniTabsItem Key="sites" Title="@L["Sites"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("language")" /></Icon><ChildContent>
+            @* Recette R-120: no count and no free-text filter above the lists (the grids filter by column, in the
+               row under their header, and the headings carry the counts). Both grids are capped to about ten rows
+               and scroll inside, neither fills the remaining height. *@
             @* Item #5.1: one row per domain (ServerName), with port chips for each vhost the
                domain serves. A `:80` + `:443` pair that share the same .conf - the common case -
                collapses from 2 rows to 1. Per-port action buttons disable/edit the matching
@@ -62,7 +64,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-md omni-u-mb-sm">
                 @L["SitesEnabled"] (@EnabledVirtualHostGroups.Count)
             </OmniHeading>
-            <OmniDataGrid @ref="_enabledGrid" ExportTitle="@ExportContext.Title(L["SitesEnabled"])" ExportFields="@ExportContext.Fields()" Items="@EnabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight"
+            <OmniDataGrid @ref="_enabledGrid" ExportTitle="@ExportContext.Title(L["SitesEnabled"])" ExportFields="@ExportContext.Fields()" Items="@EnabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.TenRowsMaxHeight" ShowHeaderFilterMenu="false"
                 OnRowClick="@(args => OpenConfigEditorAsync(Path.GetFileName(args.Item.Primary.ConfigFile)))">
                 <Columns>
                     <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Filterable="true">
@@ -75,8 +77,8 @@
                             <OmniRow Gap="OmniSpacing.XSmall">
                                 @foreach (var m in g.Members)
                                 {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="@(m.Port == 443 ? OmniTone.Success : OmniTone.Accent)"
-                                        title="@($"{m.Port} → {System.IO.Path.GetFileName(m.ConfigFile)}")">@m.Port.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="@(m.Port == 443 ? OmniTone.Success : OmniTone.Accent)"
+                                        title="@($"{m.Port} → {System.IO.Path.GetFileName(m.ConfigFile)}")">@m.Port.ToString()</NumberBadge>
                                 }
                             </OmniRow>
                         </Template>
@@ -88,7 +90,7 @@
                                 <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
+                                    <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ExecuteActionAsync(ApacheAction.DisableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Disable"]} {Path.GetFileName(m.ConfigFile)} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
                                 }
                             </OmniRow>
                             </span>
@@ -100,7 +102,7 @@
             <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-lg omni-u-mb-sm">
                 @L["SitesDisabled"] (@DisabledVirtualHostGroups.Count)
             </OmniHeading>
-            <OmniDataGrid @ref="_disabledGrid" ExportTitle="@ExportContext.Title(L["SitesDisabled"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@DisabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3"
+            <OmniDataGrid @ref="_disabledGrid" ExportTitle="@ExportContext.Title(L["SitesDisabled"])" ExportFields="@ExportContext.Fields()" Items="@DisabledVirtualHostGroups" TItem="ApacheVirtualHostGroup" KeyOf="@(row => row.ServerName)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.TenRowsMaxHeight" ShowHeaderFilterMenu="false"
                 OnRowClick="@(args => OpenConfigEditorAsync(Path.GetFileName(args.Item.Primary.ConfigFile)))">
                 <Columns>
                     <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="ApacheVirtualHostGroup" Property="ServerName" Title="@L["ServerName"]" Filterable="true">
@@ -113,7 +115,7 @@
                             <OmniRow Gap="OmniSpacing.XSmall">
                                 @foreach (var m in g.Members)
                                 {
-                                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@m.Port.ToString()</OmniBadge>
+                                    <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@m.Port.ToString()</NumberBadge>
                                 }
                             </OmniRow>
                         </Template>
@@ -125,7 +127,7 @@
                                 <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => OpenConfigEditorAsync(Path.GetFileName(g.Primary.ConfigFile)))" title="@L["EditConfig"]" Label="@L["EditConfig"]"><Icon><OmniIcon Name="OmniIconName.Edit" /></Icon></OmniButton>
                                 @foreach (var m in g.Members)
                                 {
-                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
+                                <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Secondary" OnClick="@(() => ExecuteActionAsync(ApacheAction.EnableSite, Path.GetFileName(m.ConfigFile)))" title="@($"{L["Enable"]} {Path.GetFileName(m.ConfigFile)} ({m.Port})")"><Icon><OmniIcon Name="OmniIconName.Check" /></Icon><ChildContent><span>@($":{m.Port}")</span></ChildContent></OmniButton>
                                 }
                                 @* Recette R-12: a disabled site's file can be deleted, one entry per file of the row. *@
                                 <OmniOverflowMenu Label="@L["MoreActions"]">
@@ -140,27 +142,29 @@
                     </OmniDataGridColumn>
                 </Columns>
             </OmniDataGrid>
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
         @* --- Modules tab --- *@
-        <OmniTabsItem Key="modules" Title="@L["Modules"]">
-            <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
-                <CountBadge Value="@FilteredModules.Count" Variant="OmniTone.Accent" />
-                <OmniTextBox aria-label="@L["FilterModules"]" @bind-Value="_moduleSearch" Placeholder="@L["FilterModules"]" />
-            </OmniStack>
-            <OmniDataGrid @ref="_modulesGrid" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@FilteredModules" TItem="ApacheModuleDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3">
+        <OmniTabsItem Key="modules" Title="@L["Modules"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("extension")" /></Icon><ChildContent>
+            @* Recette R-120: no count and no free-text filter above the grid; the grid filters by column, in the row
+               under its header. *@
+            <OmniDataGrid @ref="_modulesGrid" ExportTitle="@ExportContext.Title(L["Modules"])" ExportFields="@ExportContext.Fields()" FillAvailableHeight="true" Items="@Apache.Modules" TItem="ApacheModuleDto" KeyOf="@(row => row.Name)" NewRowHighlight="@(TimeSpan.FromSeconds(5))" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" ShowHeaderFilterMenu="false">
                 <Columns>
                     <OmniDataGridColumn Frozen="true" TItem="ApacheModuleDto" Property="Name" Title="@L["Module"]" Filterable="true" />
                     <OmniDataGridColumn TItem="ApacheModuleDto" Property="Type" Title="@L["Type"]" Width="7.5rem" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect">
                         <Template Context="m">
-                            <OmniBadge Fill="OmniFill.Solid" Tone="@(m.Type == "static" ? OmniTone.Neutral : OmniTone.Accent)">@m.Type</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.Of(m.Type == "static" ? OmniIconName.Document : OmniIconName.ArrowRight))" Fill="OmniFill.Solid" Tone="@(m.Type == "static" ? OmniTone.Neutral : OmniTone.Accent)">@m.Type</OmniBadge>
                         </Template>
                     </OmniDataGridColumn>
                     <OmniDataGridColumn TItem="ApacheModuleDto" Title="@L["Actions"]" Width="10rem" Sortable="false">
                         <Template Context="m">
                             @if (m.Type == "shared")
                             {
-                                @if (m.IsEnabled)
+                                @if (m.IsEnabled && IsEssentialModule(m))
+                                {
+                                    <OmniBadge Icon="@BadgeIcon.Of(OmniIconName.Lock)" Fill="OmniFill.Tonal" Tone="OmniTone.Neutral">@L["ApacheModuleEssential"]</OmniBadge>
+                                }
+                                else if (m.IsEnabled)
                                 {
                                     <OmniButton Disabled="@AgentOffline" Variant="OmniButtonVariant.Danger" OnClick="@(() => ShowDestructiveConfirm(L["DisableModule"], string.Format(L["ConfirmDisableModule"], m.Name),
                                             () => ExecuteActionAsync(ApacheAction.DisableModule, m.Name.Replace("_module", "")), L["Disable"].Value, OmniIconName.Prohibit))" title="@L["Disable"]" Label="@L["Disable"]"><Icon><OmniIcon Name="OmniIconName.Prohibit" /></Icon></OmniButton>
@@ -174,10 +178,10 @@
                     </OmniDataGridColumn>
                 </Columns>
             </OmniDataGrid>
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
         @* --- Logs tab --- *@
-        <OmniTabsItem Key="logs" Title="@L["Logs"]">
+        <OmniTabsItem Key="logs" Title="@L["Logs"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("terminal")" /></Icon><ChildContent>
             <OmniRow Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-md">
                 <OmniDropDown aria-label="@L["SelectLogType"]" @bind-Value="_logType" TValue="string" Options="@((new[] { "error", "access" }).ToOptions(item => (string)item, item => item))"
                     Class="w-rem-8-75" />
@@ -194,11 +198,11 @@
             {
                 <OmniCodeBlock Code="@_logContent" Title="@($"{L["Logs"]} - {_logType}")" Wrap="true" Class="@(_logFollowing ? "apache-log-output code-block-bounded apache-log-follow" : "apache-log-output code-block-bounded")" />
             }
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
 
         @* --- Relations tab --- *@
-        <OmniTabsItem Key="relations" Title="@L["Relations"]">
+        <OmniTabsItem Key="relations" Title="@L["Relations"]"><Icon><OmniIcon Name="@MaterialIconMap.Resolve("link")" /></Icon><ChildContent>
             <ModuleLinksTab ServerId="ServerId" SourceType="ModuleLinkType.Apache" Resources="@ApacheResourceNames" />
-        </OmniTabsItem>
+        </ChildContent></OmniTabsItem>
     </Tabs>
 </UrlSyncedTabs>

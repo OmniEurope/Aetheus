@@ -68,6 +68,16 @@ public sealed record PipelineSetupDetectionDto
 
     /// <summary>An enrolled build runner of the organization reports Docker.</summary>
     public bool? HasDockerRunner { get; init; }
+
+    /// <summary>A <c>.csproj</c> below the root (R-105), which the quality pipeline's complexity measure reads. Asked
+    /// only when the quality pipeline is selected.</summary>
+    public bool? HasDotNetProject { get; init; }
+
+    /// <summary>A <c>.py</c> file below the root (R-105), which the quality pipeline lints with Ruff.</summary>
+    public bool? HasPython { get; init; }
+
+    /// <summary>A <c>.java</c> file below the root (R-105), which the quality pipeline checks with PMD.</summary>
+    public bool? HasJava { get; init; }
 }
 
 /// <summary>

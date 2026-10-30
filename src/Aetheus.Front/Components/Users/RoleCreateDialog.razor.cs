@@ -9,6 +9,10 @@ public partial class RoleCreateDialog
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
 
+    /// <summary>The organization the new role belongs to; null for a role of every organization (site Admin
+    /// only, owner decision 2026-10-28).</summary>
+    [Parameter] public int? OrganizationId { get; set; }
+
     private readonly RoleFormModel _model = new();
     private bool _saving;
     private string? _error;
@@ -23,7 +27,8 @@ public partial class RoleCreateDialog
             var created = await Api.Auth.CreateRoleAsync(new CreateRoleRequest
             {
                 Name = _model.Name,
-                Description = _model.Description
+                Description = _model.Description,
+                OrganizationId = OrganizationId
             });
 
             if (created is not null)

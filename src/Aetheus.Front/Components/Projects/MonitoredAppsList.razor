@@ -1,12 +1,18 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Projects
+@using Microsoft.AspNetCore.Components.Sections
 @* ADR-021 phase 1: monitored-apps (availability) list for a project. *@
-<OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between" Class="omni-u-mb-md">
-    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-0">@L["MonitoredApps"]</OmniHeading>
-    @if (_canWrite)
-    {
+@* The main action sits in the project header, on the title line. *@
+@if (_canWrite)
+{
+    <SectionContent SectionName="@PageHeaderActions.SectionName">
         <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OpenCreateDialogAsync"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["AddMonitoredApp"]</span></ChildContent></OmniButton>
-    }
+    </SectionContent>
+}
+
+<OmniStack>
+<OmniRow Gap="OmniSpacing.Large" Align="OmniAlignment.Center" Justify="OmniJustification.Between">
+    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-0">@L["MonitoredApps"]</OmniHeading>
 </OmniRow>
 
 <AetheusDataGrid @ref="_grid" Data="@_apps" TItem="MonitoredAppDto" RowClick="@(app => OpenEditDialogAsync(app))" PageSize="20" Virtualize="@(_apps.Count > 20)"
@@ -27,16 +33,16 @@
             <Template Context="app">
                 @if (app.CurrentStatus == AppHealthStatus.Unknown && app.LastCheckedAt is null)
                 {
-                    <OmniBadge Width="OmniBadgeWidth.Medium" Tone="OmniTone.Neutral" Fill="OmniFill.Outline">@L["AppHealthNeverProbed"]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Question))" Tone="OmniTone.Neutral" Fill="OmniFill.Outline">@L["AppHealthNeverProbed"]</OmniBadge>
                 }
                 else
                 {
-                    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@MonitoredAppsStatusGrid.HealthBadge(app.CurrentStatus)">@StatusLabel(app.CurrentStatus)</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(MonitoredAppsStatusGrid.HealthBadge(app.CurrentStatus)))" Fill="OmniFill.Solid" Tone="@MonitoredAppsStatusGrid.HealthBadge(app.CurrentStatus)">@StatusLabel(app.CurrentStatus)</OmniBadge>
                 }
                 @if (app.IngestDroppedCount > 0)
                 {
                     <span title="@L["AppThrottledHint"]" class="omni-u-ms-xs">
-                        <OmniBadge Width="OmniBadgeWidth.Medium" Tone="OmniTone.Warning" Fill="OmniFill.Outline">@L["AppThrottled"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Tone="OmniTone.Warning" Fill="OmniFill.Outline">@L["AppThrottled"]</OmniBadge>
                     </span>
                 }
             </Template>
@@ -92,3 +98,4 @@
         }
     </Columns>
 </AetheusDataGrid>
+</OmniStack>

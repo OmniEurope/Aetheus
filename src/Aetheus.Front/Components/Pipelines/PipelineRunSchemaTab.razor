@@ -3,7 +3,7 @@
 
 @* Recette R-18: the database's expand/contract tracking on a deploy run. The gate verdict card, the migrations the
    gate inspected on this run (expand or contract) and the contractions the plan still owes. *@
-<OmniStack data-testid="run-schema-tab" Class="omni-u-mt-md">
+<OmniStack data-testid="run-schema-tab">
     <PipelineRunMigrationGate Gates="@Schema.Gates" />
 
     @if (Schema.Migrations.Count > 0)
@@ -22,13 +22,13 @@
                     <OmniDataGridColumn TItem="RunSchemaMigrationDto" Title="@L["SchemaMigrationKind"]" Width="10rem" Sortable="false" Filterable="false" Key="kind"
                                         ExportValue="@(migration => L.Localize(migration.Kind))">
                         <Template Context="migration">
-                            <OmniBadge Fill="OmniFill.Tonal" Tone="@KindTone(migration.Kind)">@L.Localize(migration.Kind)</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.For(KindTone(migration.Kind)))" Fill="OmniFill.Tonal" Tone="@KindTone(migration.Kind)">@L.Localize(migration.Kind)</OmniBadge>
                         </Template>
                     </OmniDataGridColumn>
                     <OmniDataGridColumn TItem="RunSchemaMigrationDto" Title="@L["SchemaMigrationResult"]" Width="10rem" Sortable="false" Filterable="false" Key="result"
                                         ExportValue="@(migration => L[migration.Applied ? "SchemaMigrationApplied" : "SchemaMigrationNotApplied"].Value)">
                         <Template Context="migration">
-                            <OmniBadge Fill="OmniFill.Tonal" Tone="@(migration.Applied ? OmniTone.Success : OmniTone.Danger)">@L[migration.Applied ? "SchemaMigrationApplied" : "SchemaMigrationNotApplied"]</OmniBadge>
+                            <OmniBadge Icon="@(BadgeIcon.ForState(migration.Applied ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Tonal" Tone="@(migration.Applied ? OmniTone.Success : OmniTone.Danger)">@L[migration.Applied ? "SchemaMigrationApplied" : "SchemaMigrationNotApplied"]</OmniBadge>
                         </Template>
                     </OmniDataGridColumn>
                 </Columns>

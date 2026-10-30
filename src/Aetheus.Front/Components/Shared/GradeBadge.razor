@@ -1,16 +1,14 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @namespace Aetheus.Front.Components.Shared
 
-@* Render grades through one shared badge so colour meaning stays consistent; keep a neutral dash
-   for missing grades so card rows do not shift. *@
+@* A one-letter grade is a badge without icon, filled with the colour of its grade (recette R-59 as the user
+   corrected it, R-107, R2-050). Every grade goes through this one component so the colour meaning stays the
+   same everywhere; a missing grade keeps a neutral dash so card rows do not shift. *@
 @if (Value is { } grade)
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="@VariantFor(grade)" Class="@($"grade-badge grade-badge--{grade.ToString().ToLowerInvariant()} {Class}")" title="@Title">
-        @grade.ToString()
-    </OmniBadge>
+    <OmniBadge Fill="OmniFill.Solid" Tone="@VariantFor(grade)" Class="@($"grade-badge grade-badge--{grade.ToString().ToLowerInvariant()} {Class}".TrimEnd())" title="@Title">@grade.ToString()</OmniBadge>
 }
 else
 {
-    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="@($"grade-badge {Class}")" title="@Title">-</OmniBadge>
+    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral" Class="@($"grade-badge grade-badge--none {Class}".TrimEnd())" title="@Title">-</OmniBadge>
 }
-

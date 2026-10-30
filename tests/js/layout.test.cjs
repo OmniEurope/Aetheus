@@ -20,7 +20,8 @@ function loadLayout(markup = '<div id="app-splash"></div><link href="material-ba
     global.Node = dom.window.Node;
     global.localStorage = dom.window.localStorage;
     // jsdom has no ResizeObserver; layout.js only needs to be able to create one when it loads.
-    global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+    global.resizeCallbacks = [];
+    global.ResizeObserver = class { constructor(callback) { global.resizeCallbacks.push(callback); } observe() {} unobserve() {} disconnect() {} };
     global.requestAnimationFrame = callback => callback();
     global.Aetheus = {};
     dom.window.Aetheus = global.Aetheus;
@@ -118,5 +119,25 @@ test('approvals waiting: the tab title carries the count, follows the page title
     setVisibility('hidden');
     t.mock.timers.tick(2000);
     assert.equal(document.title, 'Pipelines - Aetheus');
+    dom.window.close();
+});
+
+test('R-46: the page scrollbar width is published for the header and follows the scrollbar', async () => {
+    const dom = loadLayout('<main id="main-content"></main>');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const root = document.documentElement;
+    assert.equal(root.style.getPropertyValue('--aetheus-scrollbar-width'), '0px');
+
+    // A classic scrollbar: the border box is wider than what the content can use.
+    const main = document.getElementById('main-content');
+    Object.defineProperty(main, 'offsetWidth', { configurable: true, value: 1103 });
+    Object.defineProperty(main, 'clientWidth', { configurable: true, value: 1088 });
+    global.resizeCallbacks.forEach(callback => callback());
+    assert.equal(root.style.getPropertyValue('--aetheus-scrollbar-width'), '15px');
+
+    // The content shrinks until nothing scrolls: the header gives the room back.
+    Object.defineProperty(main, 'clientWidth', { configurable: true, value: 1103 });
+    global.resizeCallbacks.forEach(callback => callback());
+    assert.equal(root.style.getPropertyValue('--aetheus-scrollbar-width'), '0px');
     dom.window.close();
 });

@@ -3,7 +3,7 @@
    not been checked yet. The detail wraps on a narrow screen. *@
 <OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small"
            Class="@($"mail-check-line {Class}".TrimEnd())" data-state="@State">
-    <OmniBadge Width="OmniBadgeWidth.Medium" Fill="OmniFill.Solid" Tone="@Tone">@BadgeText</OmniBadge>
+    <OmniBadge Icon="@(BadgeIcon.For(Tone))" Fill="OmniFill.Solid" Tone="@Tone">@BadgeText</OmniBadge>
     <OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@Label</OmniText>
     @if (!string.IsNullOrEmpty(Detail))
     {

@@ -21,7 +21,7 @@ else
     <OmniPageHeader Title="@Title" ShowBack="true" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("notifications")" /></Icon>
         <Badges>
-            <OmniBadge Fill="OmniFill.Solid" Tone="@SeverityTone">@L.Localize(_alert.Severity)</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.ForState(SeverityTone))" Fill="OmniFill.Solid" Tone="@SeverityTone">@L.Localize(_alert.Severity)</OmniBadge>
         </Badges>
         <ActionsContent>
             @if (_alert.ServerId is { } serverId)
@@ -31,9 +31,10 @@ else
         </ActionsContent>
     </OmniPageHeader>
 
+    <OmniStack>
     @if (_alert.Threshold is not null)
     {
-        <OmniTileGrid Columns="3" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
+        <OmniTileGrid Columns="3" Gap="OmniSpacing.Large">
             @if (_alert.ObservedValue is not null)
             {
                 <OmniStatTile Title="@L["AlertMeasuredValue"]" Value="@MeasuredValue" />
@@ -46,7 +47,7 @@ else
         </OmniTileGrid>
     }
 
-    <OmniCard Class="omni-u-mt-lg">
+    <OmniCard>
         <HeaderContent><OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Details"]</OmniText></HeaderContent>
         <ChildContent>
             <OmniDescriptionList Columns="2">
@@ -63,7 +64,7 @@ else
                 @if (_alert.Operator is not null)
                 {
                     <OmniDescriptionItem Term="@L["AlertRuleState"]">
-                        <OmniBadge Fill="OmniFill.Solid" Tone="@RuleStateTone">@RuleStateText</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(RuleStateTone))" Fill="OmniFill.Solid" Tone="@RuleStateTone">@RuleStateText</OmniBadge>
                     </OmniDescriptionItem>
                 }
             </OmniDescriptionList>
@@ -72,9 +73,10 @@ else
 
     @if (!string.IsNullOrWhiteSpace(_alert.Message))
     {
-        <OmniCard Class="omni-u-mt-lg">
+        <OmniCard>
             <HeaderContent><OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["AlertMessage"]</OmniText></HeaderContent>
             <ChildContent><OmniText Element="OmniTextElement.Paragraph" Class="omni-u-m-0">@_alert.Message</OmniText></ChildContent>
         </OmniCard>
     }
+    </OmniStack>
 }

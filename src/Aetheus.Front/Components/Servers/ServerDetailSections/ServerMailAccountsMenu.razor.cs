@@ -8,6 +8,7 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// </summary>
 public partial class ServerMailAccountsMenu
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
@@ -18,6 +19,9 @@ public partial class ServerMailAccountsMenu
 
     /// <summary>The preparation queues a mail-manage task: the agent must be online with the mail capability.</summary>
     [Parameter] public bool CanManage { get; set; }
+
+    /// <summary>R-119: follows the task the preparation queues; the page is veiled until it ends.</summary>
+    [Parameter] public ServerTaskFollower? Follower { get; set; }
 
     /// <summary>Raised once rows were deleted, so the grid reloads.</summary>
     [Parameter] public EventCallback OnAccountsChanged { get; set; }
@@ -39,14 +43,17 @@ public partial class ServerMailAccountsMenu
         _busy = true;
         try
         {
-            var result = await Api.Mail.PurgeMissingMailAccountsAsync(ServerId);
-            if (result is null)
+            await Veil.RunAsync(async () =>
             {
-                Toast.Error(L["ActionFailed"]);
-                return;
-            }
-            Toast.Success(string.Format(L["MailAccountsPurged"], result.Removed));
-            if (result.Removed > 0) await OnAccountsChanged.InvokeAsync();
+                var result = await Api.Mail.PurgeMissingMailAccountsAsync(ServerId);
+                if (result is null)
+                {
+                    Toast.Error(L["ActionFailed"]);
+                    return;
+                }
+                Toast.Success(string.Format(L["MailAccountsPurged"], result.Removed));
+                if (result.Removed > 0) await OnAccountsChanged.InvokeAsync();
+            });
         }
         finally
         {
@@ -61,6 +68,7 @@ public partial class ServerMailAccountsMenu
         try
         {
             var queued = await Api.Mail.PrepareMasterAccessAsync(ServerId);
+            if (queued is { } task) Follower?.Follow(L["MailMasterAccessPrepare"], task.TaskId);
             if (queued is null) Toast.Error(L["MailMasterAccessPrepareFailed"]);
             else Toast.Success(L["MailMasterAccessPrepareQueued"]);
         }

@@ -37,24 +37,25 @@ public class RbacUiTests : E2ETestBase
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true
         });
         var adminLogin = await http.PostAsJsonAsync($"{BackendUrl}/api/auth/login",
-            new { Username = AdminUser, Password = AdminPassword });
+            new { Email = AdminEmail, Password = AdminPassword });
         adminLogin.EnsureSuccessStatusCode();
         var adminBody = await adminLogin.Content.ReadFromJsonAsync<JsonElement>();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer", adminBody.GetProperty("token").GetString());
 
-        var create = await http.PostAsJsonAsync($"{BackendUrl}/api/users", new
+        await CreateUserWithPasswordAsync(http, new
         {
             Username = username,
-            Password = password,
-            MustChangePassword = false,
+            Email = $"{username}@example.com",
             Roles = Array.Empty<string>()
-        });
-        create.EnsureSuccessStatusCode();
+        }, $"{username}@example.com", password);
 
         await LoginAsAsync(username, password);
 
-        await Expect(Page.GetByText("Access denied.", new() { Exact = true })).ToBeVisibleAsync();
+        // R-43 (7f7f6694b): Home of a user who can read nothing is the minimal dashboard (active organization and
+        // notifications, or "Nothing to show yet"), never "Access denied.".
+        await Expect(Page.Locator(".dashboard-minimal, .dashboard-minimal-empty")).ToBeVisibleAsync();
+        await Expect(Page.GetByText("Access denied.", new() { Exact = true })).ToHaveCountAsync(0);
         await Expect(SidebarNavItem("Servers")).ToHaveCountAsync(0);
         await Expect(SidebarNavItem("Projects")).ToHaveCountAsync(0);
         await Expect(SidebarNavItem("Administration")).ToHaveCountAsync(0);
@@ -89,14 +90,13 @@ public class RbacUiTests : E2ETestBase
         });
         setPermissions.EnsureSuccessStatusCode();
 
-        var createUser = await http.PostAsJsonAsync($"{BackendUrl}/api/users", new
+        await CreateUserWithPasswordAsync(http, new
         {
             Username = username,
-            Password = password,
-            MustChangePassword = false,
-            Roles = new[] { roleName }
-        });
-        createUser.EnsureSuccessStatusCode();
+            Email = $"{username}@example.com",
+            // R-45 (PLAN-003 P3-1): only Admin is held site-wide; the custom role is held in the default organization.
+            OrganizationRoles = new[] { new { OrganizationId = await DefaultOrganizationIdAsync(http), Role = roleName } }
+        }, $"{username}@example.com", password);
 
         await LoginAsAsync(username, password);
 
@@ -132,7 +132,7 @@ public class RbacUiTests : E2ETestBase
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true
         });
         var adminLogin = await http.PostAsJsonAsync($"{BackendUrl}/api/auth/login",
-            new { Username = AdminUser, Password = AdminPassword });
+            new { Email = AdminEmail, Password = AdminPassword });
         adminLogin.EnsureSuccessStatusCode();
         var adminBody = await adminLogin.Content.ReadFromJsonAsync<JsonElement>();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
@@ -148,8 +148,8 @@ public class RbacUiTests : E2ETestBase
         await Page.WaitForSelectorAsync("[data-testid='blazor-ready']", new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
         await Page.EvaluateAsync("localStorage.clear()");
         await Page.GotoAsync($"{FrontendUrl}/login", new() { WaitUntil = WaitUntilState.DOMContentLoaded });
-        await Page.WaitForSelectorAsync("#Username", new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
-        await Page.FillAsync("#Username", username);
+        await Page.WaitForSelectorAsync("#Email", new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
+        await Page.FillAsync("#Email", $"{username}@example.com");
         await Page.FillAsync("#Password", password);
         await Page.ClickAsync("button[type='submit']");
         await Page.WaitForURLAsync($"{FrontendUrl}/");

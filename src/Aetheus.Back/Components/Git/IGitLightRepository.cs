@@ -27,6 +27,14 @@ public interface IGitLightRepository
     Task<GitInternalRepo?> FindBySlugAsync(int projectId, string slug, CancellationToken ct = default);
     Task<string?> GetProjectDefaultBranchAsync(int projectId, CancellationToken ct = default);
 
+    /// <summary>Whether the organization that owns the project asks for a <c>develop</c> branch on its new repositories
+    /// (<c>Organization.AutoCreateDevelopBranch</c>). False for an unknown project.</summary>
+    Task<bool> IsDevelopBranchAutoCreationEnabledAsync(int projectId, CancellationToken ct = default);
+
+    /// <summary>Whether the repository has no commit yet, read without tracking the row (a caller that is about to
+    /// record its first commit asks before it does). False for an unknown repository.</summary>
+    Task<bool> IsEmptyAsync(int id, CancellationToken ct = default);
+
     /// <summary>Where the project's own source lives, read from the project itself: its repository
     /// address and the external connection it is attached through. Null when the project does not
     /// exist.</summary>

@@ -19,15 +19,16 @@ else
         <Badges>
             @if (_artifact.ProjectId.HasValue)
             {
-                <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Neutral">@(_artifact.ProjectName ?? L["Project"])</OmniBadge>
+                <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.Folder))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral"><EntityNameLink Kind="EntityNameKind.Project" Id="_artifact.ProjectId" Name="@(_artifact.ProjectName ?? L["Project"])" /></OmniBadge>
             }
-            <OmniBadge Fill="OmniFill.Solid" Tone="@GetRetentionBadge(_artifact.RetentionPolicy)">@L.Localize(_artifact.RetentionPolicy)</OmniBadge>
+            <OmniBadge Icon="@(BadgeIcon.For(GetRetentionBadge(_artifact.RetentionPolicy)))" Fill="OmniFill.Solid" Tone="@GetRetentionBadge(_artifact.RetentionPolicy)">@L.Localize(_artifact.RetentionPolicy)</OmniBadge>
         </Badges>
         <ActionsContent>
             <OmniButton Variant="OmniButtonVariant.Primary" OnClick="DownloadAsync" Class="@(_downloading ? "btn-busy" : null)" Busy="@(_downloading)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["Download"]</span></ChildContent></OmniButton>
         </ActionsContent>
     </OmniPageHeader>
 
+    <OmniStack>
     @* Key facts *@
     <OmniTileGrid Columns="3">
         <OmniCard Class="run-overview-card">
@@ -45,7 +46,7 @@ else
     </OmniTileGrid>
 
     @* Provenance (where it comes from) vs Distribution (where it goes). R-3: two OE cards of one OmniTileGrid. *@
-    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large" Class="omni-u-mt-lg">
+    <OmniTileGrid Columns="2" Gap="OmniSpacing.Large">
             <OmniCard>
                 <div class="detail-panel-title">
                     <OmniIcon Name="OmniIconName.Graph" Class="run-tile-icon omni-u-text-accent" />
@@ -136,7 +137,7 @@ else
     </OmniTileGrid>
 
     @* File details *@
-    <OmniCard Class="omni-u-mt-lg omni-u-p-lg">
+    <OmniCard Class="omni-u-p-lg">
         <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="omni-u-mb-sm">
             <OmniIcon Name="OmniIconName.Document" Class="run-tile-icon" />
             <OmniText Element="OmniTextElement.Strong" Class="omni-u-m-0">@L["Details"]</OmniText>
@@ -163,4 +164,5 @@ else
             }
         </OmniStack>
     </OmniCard>
+    </OmniStack>
 }

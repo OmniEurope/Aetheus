@@ -43,6 +43,21 @@ public sealed class PortAllocationServiceTests : IDisposable
         _db.Environments.Add(new Data.Entities.Environment { Id = 61, Name = "shared", ProjectId = null });
         _db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 61, ServerId = 8 });
 
+        // The W6 shape: a server attached to the project's environment only, never to the project.
+        _db.Servers.Add(new Server { Id = 9, Name = "vps-w6", OrganizationId = 1 });
+        _db.Projects.Add(new Project { Id = 5, Name = "W6", OrganizationId = 1 });
+        _db.Environments.Add(new Data.Entities.Environment { Id = 62, Name = "prod", ProjectId = 5 });
+        _db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 62, ServerId = 9 });
+        // Two servers reached by different routes: one by the project, one by its environment.
+        _db.Servers.Add(new Server { Id = 10, Name = "vps-two-a", OrganizationId = 1 });
+        _db.Servers.Add(new Server { Id = 11, Name = "vps-two-b", OrganizationId = 1 });
+        _db.Projects.Add(new Project { Id = 6, Name = "Duo", OrganizationId = 1 });
+        _db.ProjectServers.Add(new ProjectServer { Id = 41, ProjectId = 6, ServerId = 10, DisplayName = "duo-a" });
+        _db.Environments.Add(new Data.Entities.Environment { Id = 63, Name = "prod", ProjectId = 6 });
+        _db.EnvironmentServers.Add(new EnvironmentServer { EnvironmentId = 63, ServerId = 11 });
+
+        _db.VariableLibraries.Add(new VariableLibrary { Id = 104, Name = "w6.prod", ProjectId = 5 });
+        _db.VariableLibraries.Add(new VariableLibrary { Id = 105, Name = "duo.prod", ProjectId = 6 });
         _db.VariableLibraries.Add(new VariableLibrary { Id = 100, Name = "portfolio-host", ProjectId = 4 });
         _db.VariableLibraries.Add(new VariableLibrary { Id = 101, Name = "prod-host", EnvironmentId = 60 });
         _db.VariableLibraries.Add(new VariableLibrary { Id = 102, Name = "server-host", ProjectServerId = 40 });
@@ -73,6 +88,18 @@ public sealed class PortAllocationServiceTests : IDisposable
                 _db.SaveChanges();
                 return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
             });
+        _libraries
+            .UpdateEntryAsync(
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<UpdateVariableEntryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var entry = _db.VariableLibraryEntries.Single(item => item.Id == call.ArgAt<int>(1));
+                var request = call.Arg<UpdateVariableEntryRequest>();
+                entry.Key = request.Key;
+                entry.Value = request.Value;
+                _db.SaveChanges();
+                return new VariableEntryDto { Id = entry.Id, Key = entry.Key, Value = entry.Value };
+            });
     }
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -97,13 +124,36 @@ public sealed class PortAllocationServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetTargetsAsync_ProjectScope_OffersItsServersWithoutPreselecting()
+    public async Task GetTargetsAsync_ProjectScopeWithOneServer_PreselectsIt()
     {
         var targets = await _sut.GetTargetsAsync(100, Ct);
 
         Assert.Equal(4, targets.ProjectId);
+        // Attached both to the project and to its environment, still one server, listed once.
         Assert.Equal("vps2577917", Assert.Single(targets.Servers).ServerName);
-        // A project reaching one server today may reach two tomorrow, so it still asks.
+        // R-88: a single reachable server is chosen for the operator, there is nothing to choose.
+        Assert.Equal(7, targets.PreselectedServerId);
+        Assert.Equal(PortAllocationBlocker.None, targets.Blocker);
+    }
+
+    [Fact]
+    public async Task GetTargetsAsync_ProjectLibraryWhoseServerIsOnlyInAnEnvironment_OffersItAndPreselectsIt()
+    {
+        // R-83: w6.prod is attached to the project; its server is attached to the project's environment.
+        var targets = await _sut.GetTargetsAsync(104, Ct);
+
+        Assert.Equal(5, targets.ProjectId);
+        Assert.Equal("vps-w6", Assert.Single(targets.Servers).ServerName);
+        Assert.Equal(9, targets.PreselectedServerId);
+        Assert.Equal(PortAllocationBlocker.None, targets.Blocker);
+    }
+
+    [Fact]
+    public async Task GetTargetsAsync_ProjectLibraryReachingTwoServers_OffersBothAndAsks()
+    {
+        var targets = await _sut.GetTargetsAsync(105, Ct);
+
+        Assert.Equal(["vps-two-a", "vps-two-b"], targets.Servers.Select(server => server.ServerName));
         Assert.Null(targets.PreselectedServerId);
         Assert.Equal(PortAllocationBlocker.None, targets.Blocker);
     }
@@ -155,6 +205,59 @@ public sealed class PortAllocationServiceTests : IDisposable
         // pipeline at its next launch.
         Assert.All(reservations, row => Assert.Equal("project:4", row.OwnerKey));
         Assert.All(reservations, row => Assert.Equal(4, row.ProjectId));
+    }
+
+    [Fact]
+    public async Task AllocateIntoLibraryAsync_ExistingEmptyKey_IsFilledNotRefused()
+    {
+        // R-85 / R-86: PORT_FRONT and PORT_BACK already exist, empty. Allocation fills them in place.
+        _db.VariableLibraryEntries.AddRange(
+            new VariableLibraryEntry { VariableLibraryId = 104, Key = "PORT_FRONT", Value = string.Empty },
+            new VariableLibraryEntry { VariableLibraryId = 104, Key = "PORT_BACK", Value = string.Empty });
+        await _db.SaveChangesAsync(Ct);
+
+        var written = await _sut.AllocateIntoLibraryAsync(104, 9, ["PORT_FRONT", "PORT_BACK"], Ct);
+
+        Assert.Equal(["PORT_FRONT", "PORT_BACK"], written.Select(entry => entry.Key));
+        Assert.Equal(["10000", "10001"], written.Select(entry => entry.Value));
+        var stored = await _db.VariableLibraryEntries.AsNoTracking()
+            .Where(entry => entry.VariableLibraryId == 104).OrderBy(entry => entry.Key).ToListAsync(Ct);
+        Assert.Equal(["PORT_BACK", "PORT_FRONT"], stored.Select(entry => entry.Key));
+        Assert.Equal(["10001", "10000"], stored.Select(entry => entry.Value));
+        await _libraries.DidNotReceive().CreateEntryAsync(
+            Arg.Any<int>(), Arg.Any<CreateVariableEntryRequest>(), Arg.Any<CancellationToken>());
+        Assert.All(
+            await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct),
+            row => Assert.Equal("project:5", row.OwnerKey));
+    }
+
+    [Fact]
+    public async Task AllocateIntoLibraryAsync_MixesAnEmptyExistingKeyAndAMissingOne()
+    {
+        _db.VariableLibraryEntries.Add(
+            new VariableLibraryEntry { VariableLibraryId = 104, Key = "PORT_FRONT", Value = "  " });
+        await _db.SaveChangesAsync(Ct);
+
+        var written = await _sut.AllocateIntoLibraryAsync(104, 9, ["PORT_FRONT", "PORT_BACK"], Ct);
+
+        Assert.Equal(["10000", "10001"], written.Select(entry => entry.Value));
+        Assert.Equal(2, await _db.VariableLibraryEntries.CountAsync(entry => entry.VariableLibraryId == 104, Ct));
+    }
+
+    [Fact]
+    public async Task AllocateIntoLibraryAsync_ExistingKeyWithAValue_IsRefusedAndReservesNothing()
+    {
+        // A value somebody typed is never overwritten behind their back.
+        _db.VariableLibraryEntries.Add(
+            new VariableLibraryEntry { VariableLibraryId = 104, Key = "PORT_FRONT", Value = "10031" });
+        await _db.SaveChangesAsync(Ct);
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() =>
+            _sut.AllocateIntoLibraryAsync(104, 9, ["PORT_BACK", "PORT_FRONT"], Ct));
+
+        Assert.Contains("PORT_FRONT", error.Message, StringComparison.Ordinal);
+        Assert.Empty(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct));
+        Assert.Equal("10031", (await _db.VariableLibraryEntries.AsNoTracking().SingleAsync(Ct)).Value);
     }
 
     [Fact]
@@ -303,6 +406,15 @@ public sealed class PortAllocationServiceTests : IDisposable
         var released = await _sut.ReleaseLibraryPortAsync(100, port, Ct);
 
         Assert.Equal(1, released);
+        Assert.Empty(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct));
+    }
+
+    [Fact]
+    public async Task ReleaseLibraryPortAsync_ReachesAServerAttachedOnlyToAnEnvironment()
+    {
+        await _registry.DeclareAsync(9, [10031], "project:5", "w6", 5, Ct);
+
+        Assert.Equal(1, await _sut.ReleaseLibraryPortAsync(104, 10031, Ct));
         Assert.Empty(await _db.ServerPortReservations.AsNoTracking().ToListAsync(Ct));
     }
 

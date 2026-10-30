@@ -113,7 +113,7 @@ public sealed class PipelineScannerManifestPreflightTests
                     manifest is null ? null : $"[\"scanner-manifest:sha256:{manifest}\"]")
             ]);
 
-    private async Task<PipelinePreflightOutcomeDto> LaunchAsync(string rootName) =>
+    private async Task<PipelinePreflightOutcome> LaunchAsync(string rootName) =>
         await BuildSut().FindBlockingProblemsAsync(
             Orchestrator(rootName),
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
@@ -128,7 +128,11 @@ public sealed class PipelineScannerManifestPreflightTests
 
         var outcome = await LaunchAsync("aetheus-candidate");
 
-        var problem = Assert.Single(outcome.Problems);
+        var found = Assert.Single(outcome.Problems);
+        Assert.Equal(PipelineProblemCodes.ScannerManifestNotReported, found.Code);
+        Assert.Equal(ScannerManifestCatalog.Sha256, found.Parameters["expected"]);
+        Assert.Equal("'vps2577917'", found.Parameters["runners"]);
+        var problem = found.English;
         Assert.Contains("aetheus-quality", problem, StringComparison.Ordinal);
         Assert.Contains("Lint and duplication", problem, StringComparison.Ordinal);
         Assert.Contains(ScannerManifestCatalog.Sha256, problem, StringComparison.Ordinal);
@@ -144,7 +148,7 @@ public sealed class PipelineScannerManifestPreflightTests
     {
         RunnerReports(null);
 
-        var problem = Assert.Single((await LaunchAsync("aetheus-candidate")).Problems);
+        var problem = Assert.Single((await LaunchAsync("aetheus-candidate")).Problems).English;
 
         Assert.Contains("'vps2577917' reports no manifest", problem, StringComparison.Ordinal);
         Assert.Contains(ScannerManifestCatalog.Sha256, problem, StringComparison.Ordinal);
@@ -189,7 +193,7 @@ public sealed class PipelineScannerManifestPreflightTests
                 TemplateReferenceVersion = 2
             });
 
-        var problem = Assert.Single((await LaunchAsync("portfolio-candidate")).Problems);
+        var problem = Assert.Single((await LaunchAsync("portfolio-candidate")).Problems).English;
 
         Assert.Contains(ScannerManifestCatalog.Sha256, problem, StringComparison.Ordinal);
         Assert.Contains(StaleManifest, problem, StringComparison.Ordinal);

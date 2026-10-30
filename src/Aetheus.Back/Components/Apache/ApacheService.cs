@@ -66,8 +66,7 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
     // Items #5.2/#5.3/#6: service-control actions go through typed operations (sudo + argv exact via the
     // controlled-sudo recipe). Recette R-12: enabling, disabling and deleting a site are typed operations
     // too - the `a2ensite`/`a2dissite` shell strings they used to send were refused by the agent's
-    // CommandValidator. Only the module actions are still shell strings, and the allow-list refuses them as
-    // well (no typed operation exists for mods-enabled yet).
+    // CommandValidator. R-119: the module actions followed (ApacheEnableModule, ApacheDisableModule).
     private static ServerTask BuildActionTask(int serverId, ApacheActionRequest request)
     {
         if (ServiceOperation(request.Action) is { } op)
@@ -81,15 +80,17 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
                 siteKind, target: siteFile, timeoutSeconds: 90);
         }
 
-        var command = request.Action switch
+        // R-119: a module change runs a2enmod/a2dismod, the configtest and a restart (and their rollback) through
+        // the root-owned aetheus-apache-module helper; the kind makes the agent collect its Apache inventory again.
+        var moduleKind = request.Action switch
         {
-            ApacheAction.EnableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildEnableModuleCommand),
-            ApacheAction.DisableModule => BuildModuleCommand(request, ApacheCommandHelper.BuildDisableModuleCommand),
+            ApacheAction.EnableModule => OperationKind.ApacheEnableModule,
+            ApacheAction.DisableModule => OperationKind.ApacheDisableModule,
             _ => throw new BadRequestException($"Unknown Apache action: {request.Action}")
         };
-        return ServerTaskFactory.Shell(serverId,
-            $"Apache {request.Action}{(request.TargetName is not null ? $" - {request.TargetName}" : "")}",
-            command, 30);
+        var module = ValidModule(request);
+        return ServerTaskFactory.Operation(serverId, $"Apache {request.Action} - {module}",
+            moduleKind, target: module, timeoutSeconds: 90);
     }
 
     private static OperationKind? ServiceOperation(ApacheAction action) => action switch
@@ -210,12 +211,12 @@ public class ApacheService(IApacheRepository repo, IAuditService audit, ITaskSer
         return request.TargetName;
     }
 
-    private static string BuildModuleCommand(ApacheActionRequest request, Func<string, string> commandBuilder)
+    private static string ValidModule(ApacheActionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.TargetName))
             throw new BadRequestException("Module name is required.");
-        if (!ApacheCommandHelper.IsValidModuleName(request.TargetName))
+        if (!OperationTargetValidator.ApacheModuleNameRegex().IsMatch(request.TargetName))
             throw new BadRequestException("Invalid module name.");
-        return commandBuilder(request.TargetName);
+        return request.TargetName;
     }
 }

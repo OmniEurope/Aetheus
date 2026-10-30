@@ -235,6 +235,61 @@ public sealed class PipelineFleetIntegrationTests(ApiSmokeFixture fixture)
         }
     }
 
+    /// <summary>A template whose required parameter has no default (application-deploy-prod's candidateVersion,
+    /// given at each run) still previews and applies its update: the preview has no run to supply it, so the
+    /// placeholder stays unresolved instead of refusing the whole update with 400 ParameterRequired.</summary>
+    [Fact]
+    public async Task FleetUpdate_OfATemplateWithARequiredParameterWithoutDefault_PreviewsAndApplies()
+    {
+        using var client = fixture.CreateAdminClient();
+        var ct = TestContext.Current.CancellationToken;
+        var suffix = Guid.NewGuid().ToString("N");
+        var projectResponse = await client.PostAsJsonAsync("/api/projects", new CreateProjectRequest
+        {
+            Name = $"required-{suffix}",
+            Description = "fleet update with a required parameter"
+        }, cancellationToken: ct);
+        projectResponse.EnsureSuccessStatusCode();
+        var project = await projectResponse.Content.ReadFromJsonAsync<ProjectDto>(IntegrationJsonOptions.Default, cancellationToken: ct);
+        Assert.NotNull(project);
+
+        PipelineTemplateDto? template = null;
+        PipelineDto? pipeline = null;
+        try
+        {
+            var templateResponse = await client.PostAsJsonAsync("/api/pipelines/templates",
+                new CreatePipelineTemplateRequest
+                {
+                    Name = $"required-deploy-{suffix}",
+                    Category = "Deploy",
+                    YamlContent = "name: required-deploy\nparameters:\n  - name: candidateVersion\n    required: true\nstages:\n  - name: deploy\n    agent: any\n    steps:\n      - name: restore\n        shell: echo ${{ parameters.candidateVersion }}",
+                    ChangelogEntry = "Initial version"
+                }, cancellationToken: ct);
+            Assert.True(templateResponse.IsSuccessStatusCode, await templateResponse.Content.ReadAsStringAsync(ct));
+            template = await templateResponse.Content.ReadFromJsonAsync<PipelineTemplateDto>(IntegrationJsonOptions.Default, cancellationToken: ct);
+            Assert.NotNull(template);
+            pipeline = await CreatePipelineAsync(client, project.Id, $"required-{suffix}",
+                $"name: required-{suffix}\nextends: {template.Name}@1\nstages: []");
+
+            var previewResponse = await client.PostAsJsonAsync($"/api/pipelines/{pipeline.Id}/fleet-update/preview",
+                new PipelineFleetUpdateRequest { TargetVersion = 1 }, cancellationToken: ct);
+            Assert.True(previewResponse.IsSuccessStatusCode, await previewResponse.Content.ReadAsStringAsync(ct));
+            var preview = await previewResponse.Content.ReadFromJsonAsync<PipelineFleetUpdatePreviewDto>(IntegrationJsonOptions.Default, cancellationToken: ct);
+            Assert.NotNull(preview);
+            Assert.Contains("parameters.candidateVersion", preview.TargetResolvedYaml, StringComparison.Ordinal);
+
+            var updateResponse = await client.PostAsJsonAsync($"/api/pipelines/{pipeline.Id}/fleet-update",
+                new PipelineFleetUpdateRequest { TargetVersion = 1, ExpectedSourceYamlHash = preview.SourceYamlHash }, cancellationToken: ct);
+            Assert.True(updateResponse.IsSuccessStatusCode, await updateResponse.Content.ReadAsStringAsync(ct));
+        }
+        finally
+        {
+            if (pipeline is not null) await client.DeleteAsync($"/api/pipelines/{pipeline.Id}", cancellationToken: ct);
+            if (template is not null) await client.DeleteAsync($"/api/pipelines/templates/{template.Id}", cancellationToken: ct);
+            await client.DeleteAsync($"/api/projects/{project.Id}", cancellationToken: ct);
+        }
+    }
+
     private static async Task<PipelineDto> CreatePipelineAsync(
         HttpClient client, int projectId, string name, string yaml)
     {

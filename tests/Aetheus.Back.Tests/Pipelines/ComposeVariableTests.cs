@@ -29,10 +29,14 @@ public sealed class ComposeVariableTests
               - Jwt__SigningKey=${JWT_KEY:?JWT_KEY is required}
               - Seed__AdminEmail=${ADMIN_EMAIL:?ADMIN_EMAIL is required}
               - Seed__AdminPassword=${ADMIN_PASSWORD:?}
+              - Seed__OwnerEmail=${OWNER_EMAIL:?OWNER_EMAIL is required}
               - Smtp__Host=${SMTP_HOST:?SMTP_HOST is required}
+              - Smtp__From=${SMTP_FROM:?SMTP_FROM is required}
+              - Certbot__Email=${CERTBOT_EMAIL:?}
               - Smtp__Port=${SMTP_PORT:-587}
               - Smtp__Password=${SMTP_PASSWORD:-}
               - Smtp__Credential=${SMTP_CREDENTIAL:?}
+              - Payment__Key=${PAYMENT_API_KEY:?}
               - Release=$APP_VERSION
           db:
             healthcheck:
@@ -50,8 +54,8 @@ public sealed class ComposeVariableTests
         Assert.Equal(
             [
                 "APPNAME", "ENV", "DOTNET_SDK_VERSION", "PORT_FRONT", "API_BASE_URL", "PORT_BACK", "DB_USER",
-                "DB_PASSWORD", "JWT_KEY", "ADMIN_EMAIL", "ADMIN_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_PASSWORD",
-                "SMTP_CREDENTIAL", "APP_VERSION"
+                "DB_PASSWORD", "JWT_KEY", "ADMIN_EMAIL", "ADMIN_PASSWORD", "OWNER_EMAIL", "SMTP_HOST", "SMTP_FROM",
+                "CERTBOT_EMAIL", "SMTP_PORT", "SMTP_PASSWORD", "SMTP_CREDENTIAL", "PAYMENT_API_KEY", "APP_VERSION"
             ],
             names);
         Assert.DoesNotContain("NOT_READ_FROM_A_COMMENT", names);
@@ -90,7 +94,6 @@ public sealed class ComposeVariableTests
     [Theory]
     [InlineData("DB_PASSWORD")]
     [InlineData("JWT_KEY")]
-    [InlineData("ADMIN_PASSWORD")]
     public void ASecretTheApplicationOwns_IsGeneratedIntoTheVault(string name)
     {
         var plan = Plans()[name];
@@ -103,7 +106,7 @@ public sealed class ComposeVariableTests
     [Fact]
     public void TheCredentialOfAnExternalService_IsAskedNeverInvented()
     {
-        var plan = Plans()["SMTP_CREDENTIAL"];
+        var plan = Plans()["PAYMENT_API_KEY"];
 
         Assert.Equal(ProductionVariableKind.NeedsValue, plan.Kind);
         Assert.True(plan.Secret);
@@ -118,9 +121,28 @@ public sealed class ComposeVariableTests
         Assert.Equal("prod", plans["ENV"].DefaultValue);
         Assert.Equal("wordmorrow", plans["DB_USER"].DefaultValue);
         Assert.Equal(ProductionVariableKind.DefaultValue, plans["DB_USER"].Kind);
-        Assert.Equal(ProductionVariableKind.NeedsValue, plans["ADMIN_EMAIL"].Kind);
-        Assert.Equal(ProductionVariableKind.NeedsValue, plans["SMTP_HOST"].Kind);
-        Assert.False(plans["SMTP_HOST"].Secret);
+        Assert.Equal(ProductionVariableKind.NeedsValue, plans["OWNER_EMAIL"].Kind);
+        Assert.False(plans["OWNER_EMAIL"].Secret);
+    }
+
+    /// <summary>Recette R-91 (decision 2026-10-25): the administrator, the mail server and the certificate contact may stay
+    /// empty and the deployment must succeed anyway, so the wizard neither asks for them, nor creates an entry that would block
+    /// the launch while empty, nor invents a password nobody knows. A Compose file that requires one of them with
+    /// <c>:?</c> still stops in Compose itself: the project's file is the one to adapt (<c>${NAME:-}</c>).</summary>
+    [Theory]
+    [InlineData("ADMIN_EMAIL", false)]
+    [InlineData("ADMIN_PASSWORD", true)]
+    [InlineData("SMTP_HOST", false)]
+    [InlineData("SMTP_FROM", false)]
+    [InlineData("SMTP_CREDENTIAL", true)]
+    [InlineData("CERTBOT_EMAIL", false)]
+    public void AValueTheOperatorMayLeaveEmpty_IsOptional_NeverAskedCreatedOrInvented(string name, bool secret)
+    {
+        var plan = Plans()[name];
+
+        Assert.Equal(ProductionVariableKind.Optional, plan.Kind);
+        Assert.Equal(secret, plan.Secret);
+        Assert.False(ProductionEnvSampleBuilder.Supplied(plan));
     }
 
     [Fact]
@@ -141,9 +163,8 @@ public sealed class ComposeVariableTests
 
         Assert.Equal(
             [
-                "ADMIN_EMAIL=#{ADMIN_EMAIL}#", "ADMIN_PASSWORD=#{ADMIN_PASSWORD}#", "APPNAME=#{APPNAME}#",
-                "DB_PASSWORD=#{DB_PASSWORD}#", "DB_USER=#{DB_USER}#", "ENV=#{DEPLOY_ENV}#", "JWT_KEY=#{JWT_KEY}#",
-                "SMTP_CREDENTIAL=#{SMTP_CREDENTIAL}#", "SMTP_HOST=#{SMTP_HOST}#"
+                "APPNAME=#{APPNAME}#", "DB_PASSWORD=#{DB_PASSWORD}#", "DB_USER=#{DB_USER}#", "ENV=#{DEPLOY_ENV}#",
+                "JWT_KEY=#{JWT_KEY}#", "OWNER_EMAIL=#{OWNER_EMAIL}#", "PAYMENT_API_KEY=#{PAYMENT_API_KEY}#"
             ],
             lines);
         Assert.DoesNotContain("PORT_FRONT", sample, StringComparison.Ordinal);
@@ -162,8 +183,11 @@ public sealed class ComposeVariableTests
         foreach (var required in ComposeVariableExtractor.Extract(Compose).Where(variable => variable.Form == ComposeVariableForm.Required))
         {
             var plan = Plans()[required.Name];
+            // The only exception is the user's decision of R-91: a value that may stay empty (administrator, mail server,
+            // certificate contact) is supplied by nobody, and the project's Compose file is the one to write `${NAME:-}`.
             var supplied = sampleNames.Contains(required.Name)
-                || plan.Kind is ProductionVariableKind.Provided or ProductionVariableKind.Port;
+                || plan.Kind is ProductionVariableKind.Provided or ProductionVariableKind.Port
+                || (plan.Kind == ProductionVariableKind.Optional && ProductionVariableClassifier.IsOptionalByNature(required.Name));
             Assert.True(supplied, $"{required.Name} is required by the Compose file and reaches it from nowhere.");
         }
     }

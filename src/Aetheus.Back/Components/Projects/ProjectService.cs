@@ -102,6 +102,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
             RepositoryUrl = project.RepositoryUrl,
             DefaultBranch = project.DefaultBranch,
             Status = project.Status,
+            DeletionRequestedAt = project.DeletionRequestedAt,
             Tags = TagsHelper.DeserializeTags(project.Tags),
             CreatedAt = project.CreatedAt,
             UpdatedAt = project.UpdatedAt,
@@ -172,6 +173,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
     {
         var project = await repo.FindProjectWithPipelinesAsync(id, ct).ConfigureAwait(false);
         if (project is null) return null;
+        RefuseWhileDeleting(project);
 
         project.Name = request.Name;
         project.Description = request.Description;
@@ -242,7 +244,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
     public async Task<List<ProjectServerDto>> GetProjectServersAsync(int projectId, CancellationToken ct = default)
     {
         var items = await repo.GetProjectServersAsync(projectId, ct).ConfigureAwait(false);
-        return items.Select(MapToProjectServerDto).ToList();
+        return items.Select(MapToProjectServerRowDto).ToList();
     }
 
     public async Task<PaginatedResult<ProjectServerDto>> GetProjectServersPageAsync(
@@ -254,7 +256,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
             page, pageSize, ct, request.Filters).ConfigureAwait(false);
         return new PaginatedResult<ProjectServerDto>
         {
-            Items = items.Select(MapToProjectServerDto).ToList(),
+            Items = items.Select(MapToProjectServerRowDto).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize
@@ -266,6 +268,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         // Validate the parent project exists so a missing FK surfaces as 404 rather than a 500 DbUpdateException.
         var project = await repo.FindProjectAsync(projectId, ct).ConfigureAwait(false)
             ?? throw new NotFoundException($"Project {projectId} not found.");
+        RefuseWhileDeleting(project);
 
         if (request.Type == ProjectServerType.AgentServer)
         {
@@ -303,6 +306,8 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
     {
         var entity = await repo.GetProjectServerAsync(projectId, projectServerId, ct).ConfigureAwait(false);
         if (entity is null) return null;
+        var project = await repo.FindProjectAsync(projectId, ct).ConfigureAwait(false);
+        if (project is not null) RefuseWhileDeleting(project);
 
         entity.DisplayName = request.DisplayName;
         entity.Host = request.Host;
@@ -313,7 +318,6 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await SyncProjectServerPortAsync(entity, projectId, ct).ConfigureAwait(false);
         await audit.LogAsync("Updated", "ProjectServer", entity.Id, entity.DisplayName, ct).ConfigureAwait(false);
-        var project = await repo.FindProjectAsync(projectId, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, projectId, EntityChangeOps.Updated, ct, organizationId: project?.OrganizationId).ConfigureAwait(false);
         return MapToProjectServerDto(entity);
     }
@@ -325,6 +329,7 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
 
         var name = entity.DisplayName;
         var project = await repo.FindProjectAsync(projectId, ct).ConfigureAwait(false);
+        if (project is not null) RefuseWhileDeleting(project);
         // Released before the row goes: the registry must not keep defending a port for a project
         // server that no longer exists.
         await portRegistry.SyncOwnedPortAsync(
@@ -334,6 +339,14 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         await audit.LogAsync("Deleted", "ProjectServer", projectServerId, name, ct).ConfigureAwait(false);
         await notifier.BroadcastAsync(ResourceType.Project, projectId, EntityChangeOps.Updated, ct, organizationId: project?.OrganizationId).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>Recette R-51 (ADR-058): a project deleted while something it deployed is still on a server is
+    /// kept only so its cleanup can be relaunched; nothing else may change it.</summary>
+    internal static void RefuseWhileDeleting(Project project)
+    {
+        if (project.DeletionRequestedAt is not null)
+            throw new ConflictException($"Project '{project.Name}' is deleted and waits for its server cleanup to be relaunched: it can no longer be changed.");
     }
 
     /// <summary>Registers a project server port so the preflight guard accounts for it. Only
@@ -439,6 +452,25 @@ public class ProjectService(IProjectRepository repo, IAuditService audit, IEntit
         ServerName = ps.Server?.Name,
         ServerHostname = ps.Server?.Hostname,
         ServerStatus = ps.Server?.Status
+    };
+
+    private static ProjectServerDto MapToProjectServerRowDto(ProjectServerRow row) => new()
+    {
+        Id = row.Id,
+        ProjectId = row.ProjectId,
+        ServerId = row.ServerId,
+        Type = row.Type,
+        DisplayName = row.DisplayName,
+        Host = row.Host,
+        Port = row.Port,
+        Notes = row.Notes,
+        CreatedAt = row.CreatedAt,
+        UpdatedAt = row.UpdatedAt,
+        ServerName = row.ServerName,
+        ServerHostname = row.ServerHostname,
+        ServerStatus = row.ServerStatus,
+        ViaEnvironmentId = row.ViaEnvironmentId,
+        ViaEnvironmentName = row.ViaEnvironmentName
     };
 
 }

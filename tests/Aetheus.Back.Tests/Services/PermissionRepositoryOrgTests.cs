@@ -22,34 +22,66 @@ public class PermissionRepositoryOrgTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    [Fact]
-    public async Task IsUserInResourceOrganizationAsync_Member_ReturnsTrue()
+    private async Task SeedRoleHeldForOrganizationAsync(bool member, bool active = true)
     {
-        _db.Users.Add(new User { Id = 1, Username = "bob", IsActive = true });
-        _db.Servers.Add(new Server { Id = 10, Name = "web", Hostname = "web.local", OrganizationId = 5, Status = ServerStatus.Online });
-        _db.OrganizationMembers.Add(new OrganizationMember { Id = 1, UserId = 1, OrganizationId = 5, Role = OrganizationRole.Member });
+        _db.Users.Add(new User { Id = 1, Username = "bob", IsActive = active });
+        _db.Organizations.AddRange(
+            new Organization { Id = 5, Name = "A", Slug = "a" },
+            new Organization { Id = 6, Name = "B", Slug = "b" });
+        _db.Roles.Add(new Role { Id = 3, Name = RoleNames.Reader });
+        _db.UserOrganizationRoles.Add(new UserOrganizationRole { Id = 1, UserId = 1, OrganizationId = 5, RoleId = 3 });
+        if (member)
+            _db.OrganizationMembers.Add(new OrganizationMember { Id = 1, UserId = 1, OrganizationId = 5, Role = OrganizationRole.Member });
         await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.True(await _repo.IsUserInResourceOrganizationAsync("bob", ResourceType.Server, 10, ct: TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task IsUserInResourceOrganizationAsync_NotMember_ReturnsFalse()
+    public async Task GetOrganizationRoleGrantsAsync_Member_ReturnsTheRoleForItsOrganization()
     {
-        _db.Users.Add(new User { Id = 1, Username = "bob", IsActive = true });
-        _db.Servers.Add(new Server { Id = 10, Name = "web", Hostname = "web.local", OrganizationId = 5, Status = ServerStatus.Online });
-        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+        await SeedRoleHeldForOrganizationAsync(member: true);
 
-        Assert.False(await _repo.IsUserInResourceOrganizationAsync("bob", ResourceType.Server, 10, ct: TestContext.Current.CancellationToken));
+        var grants = await _repo.GetOrganizationRoleGrantsAsync("bob", TestContext.Current.CancellationToken);
+
+        Assert.Equal([new OrganizationRoleGrant(5, 3, RoleNames.Reader)], grants);
     }
 
     [Fact]
-    public async Task IsUserInResourceOrganizationAsync_ResourceMissing_ReturnsFalse()
-        => Assert.False(await _repo.IsUserInResourceOrganizationAsync("bob", ResourceType.Project, 999, ct: TestContext.Current.CancellationToken));
+    public async Task GetOrganizationRoleGrantsAsync_NoLongerMember_ReturnsNothing()
+    {
+        await SeedRoleHeldForOrganizationAsync(member: false);
+
+        Assert.Empty(await _repo.GetOrganizationRoleGrantsAsync("bob", TestContext.Current.CancellationToken));
+    }
 
     [Fact]
-    public async Task IsUserInResourceOrganizationAsync_UnsupportedResourceType_ReturnsFalse()
-        => Assert.False(await _repo.IsUserInResourceOrganizationAsync("bob", ResourceType.Pipeline, 1, ct: TestContext.Current.CancellationToken));
+    public async Task GetOrganizationRoleGrantsAsync_InactiveUser_ReturnsNothing()
+    {
+        await SeedRoleHeldForOrganizationAsync(member: true, active: false);
+
+        Assert.Empty(await _repo.GetOrganizationRoleGrantsAsync("bob", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetRoleIdsForUserAsync_HonoursTheSiteWideAdminRoleOnly()
+    {
+        _db.Users.Add(new User { Id = 1, Username = "bob", IsActive = true });
+        _db.Roles.AddRange(new Role { Id = 1, Name = RoleNames.Admin }, new Role { Id = 3, Name = RoleNames.Reader });
+        _db.UserRoles.AddRange(new UserRole { UserId = 1, RoleId = 1 }, new UserRole { UserId = 1, RoleId = 3 });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal([1], await _repo.GetRoleIdsForUserAsync("bob", TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task GetResourceOrganizationIdAsync_ServerAndMissingResource()
+    {
+        _db.Servers.Add(new Server { Id = 10, Name = "web", Hostname = "web.local", OrganizationId = 5, Status = ServerStatus.Online });
+        await _db.SaveChangesAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(5, await _repo.GetResourceOrganizationIdAsync(ResourceType.Server, 10, TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.Project, 999, TestContext.Current.CancellationToken));
+        Assert.Null(await _repo.GetResourceOrganizationIdAsync(ResourceType.AgentPool, 1, TestContext.Current.CancellationToken));
+    }
 
     [Fact]
     public async Task GetResourceIdsByOrganizationsAsync_EmptyOrgs_ReturnsEmpty()
@@ -85,6 +117,6 @@ public class PermissionRepositoryOrgTests : IDisposable
     }
 
     [Fact]
-    public async Task GetResourceIdsByOrganizationsAsync_UnsupportedType_ReturnsEmpty()
-        => Assert.Empty(await _repo.GetResourceIdsByOrganizationsAsync(ResourceType.Pipeline, [5], ct: TestContext.Current.CancellationToken));
+    public async Task GetResourceIdsByOrganizationsAsync_TypeNoOrganizationOwns_ReturnsEmpty()
+        => Assert.Empty(await _repo.GetResourceIdsByOrganizationsAsync(ResourceType.AgentPool, [5], ct: TestContext.Current.CancellationToken));
 }

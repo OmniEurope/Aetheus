@@ -10,6 +10,13 @@ public static class LoginRedirect
     public const string ChangePasswordPath = "/account/change-password";
     private const string Parameter = "returnUrl";
 
+    /// <summary>
+    /// Recette R-24: the query parameter of a link that acts on opening (an approval mail's Approve or Reject).
+    /// It never survives a sign-in: a link opened while signed out leads to the page without its action, so
+    /// signing in decides nothing, and a crafted <c>/login?returnUrl=...&amp;action=approve</c> acts on no one.
+    /// </summary>
+    public const string OneShotActionParameter = "action";
+
     /// <summary>The login URL that brings the user back to where they are now.</summary>
     public static string ToLogin(NavigationManager nav) =>
         WithReturnUrl(LoginPath, Current(nav));
@@ -24,12 +31,30 @@ public static class LoginRedirect
     /// </summary>
     public static string WithReturnUrl(string path, string? returnUrl) =>
         IsSafe(returnUrl) && !IsAuthPage(returnUrl!)
-            ? $"{path}?{Parameter}={Uri.EscapeDataString(returnUrl!)}"
+            ? $"{path}?{Parameter}={Uri.EscapeDataString(WithoutOneShotAction(returnUrl!))}"
             : path;
 
-    /// <summary>Where to go after signing in: the requested page when it is safe, else the dashboard.</summary>
+    /// <summary>Where to go after signing in: the requested page when it is safe, else the dashboard; never with
+    /// its <see cref="OneShotActionParameter"/>.</summary>
     public static string Resolve(string? returnUrl) =>
-        IsSafe(returnUrl) && !IsAuthPage(returnUrl!) ? returnUrl! : "/";
+        IsSafe(returnUrl) && !IsAuthPage(returnUrl!) ? WithoutOneShotAction(returnUrl!) : "/";
+
+    /// <summary><paramref name="url"/> with every <see cref="OneShotActionParameter"/> of its query removed, the
+    /// rest of the query and the fragment kept as written.</summary>
+    internal static string WithoutOneShotAction(string url)
+    {
+        var hashAt = url.IndexOf('#', StringComparison.Ordinal);
+        var fragment = hashAt >= 0 ? url[hashAt..] : string.Empty;
+        var beforeFragment = hashAt >= 0 ? url[..hashAt] : url;
+        var queryAt = beforeFragment.IndexOf('?', StringComparison.Ordinal);
+        if (queryAt < 0) return url;
+        var kept = beforeFragment[(queryAt + 1)..]
+            .Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(pair => !string.Equals(Uri.UnescapeDataString(pair.Split('=')[0]), OneShotActionParameter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var path = beforeFragment[..queryAt];
+        return (kept.Count == 0 ? path : path + "?" + string.Join('&', kept)) + fragment;
+    }
 
     /// <summary>
     /// Only a path of this application: it starts with a single <c>/</c>, names no scheme or host

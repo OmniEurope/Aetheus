@@ -43,10 +43,14 @@ printf '%s\n' \
   '    "agent.self-update",' \
   '    "ai.run",' \
   '    "analysis.run",' \
+  '    "apache.modules",' \
   '    "artifact.collect",' \
   '    "artifact.restore",' \
+  '    "docker.manage",' \
   '    "pipeline.build",' \
-  '    "shell.execute"' \
+  '    "rkhunter.setup",' \
+  '    "shell.execute",' \
+  '    "teamspeak.control"' \
   '  ],' \
   '  "archives": [' \
   '    {' \

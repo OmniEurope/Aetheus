@@ -159,7 +159,7 @@ public sealed class ServerAndIdentityGridColumnsTests : IDisposable
         var members = new[]
         {
             new User { Id = 1, Username = "alice", Email = "alice@example.test", IsActive = true },
-            new User { Id = 2, Username = "bob", Email = null, IsActive = false }
+            new User { Id = 2, Username = "bob", Email = "bob@example.test", IsActive = false }
         }.AsQueryable();
 
         Assert.Equal([2], RoleListQuery.Columns.ApplyFilters(roles, [F("UserCount", GridFilterOperator.GreaterThan, "2")]).Select(r => r.Id));

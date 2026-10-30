@@ -46,7 +46,9 @@
         @* Give the owning project a dedicated sortable column so its name remains readable. *@
         @if (!IsProjectScope)
         {
-            <OmniDataGridColumn TItem="VaultDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" />
+            <OmniDataGridColumn TItem="VaultDto" Property="ProjectName" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.ProjectNames" FilterSearchable="true" >
+                <Template Context="v"><EntityNameLink Kind="EntityNameKind.Project" Id="v.ProjectId" Name="@v.ProjectName" /></Template>
+            </OmniDataGridColumn>
         }
         <OmniDataGridColumn TItem="VaultDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="10rem" Filterable="true" />
         <OmniDataGridColumn TItem="VaultDto" Title="@L["UsedBy"]" Sortable="false" Filterable="false" ExportValue="@(vault => string.Join(", ", UsersOf(vault.Id)?.Select(user => user.Name) ?? []))">
@@ -55,7 +57,7 @@
             </Template>
         </OmniDataGridColumn>
         <OmniDataGridColumn TItem="VaultDto" Property="SecretCount" Title="@L["Secrets"]" Width="100px" TextAlign="OmniAlignment.Center" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" />
-        <OmniDataGridColumn TItem="VaultDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
-        <OmniDataGridColumn TItem="VaultDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+        <OmniDataGridColumn TItem="VaultDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" />
+        <OmniDataGridColumn TItem="VaultDto" Property="UpdatedAt" Title="@L["Updated"]" FormatString="{0:g}" Width="160px" Filterable="true" />
     </Columns>
 </AetheusDataGrid>

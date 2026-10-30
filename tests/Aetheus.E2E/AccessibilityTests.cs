@@ -62,7 +62,55 @@ public class AccessibilityTests : E2ETestBase
         }
 
         WriteSarif(violations);
-        Assert.That(failures, Is.Empty, () => string.Join("\n\n", failures));
+        AssertNoBlockingViolation(failures);
+    }
+
+    /// <summary>
+    /// A content-sized grid has its rows hidden until OE has measured it (up to 5 s on a loaded agent), and its
+    /// viewport used to keep scrolling over those hidden rows: a scroll region with nothing a keyboard
+    /// can reach (scrollable-region-focusable). The dashboard calls are held so the scan lands on that
+    /// window, whatever the speed of the machine, and the test checks the tables really are hidden then.
+    /// </summary>
+    [Test]
+    public async Task Accessibility_DashboardWhileItsGridsLoad_HasNoSeriousOrCriticalViolations()
+    {
+        await NavigateToAsync("/");
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pattern = new System.Text.RegularExpressions.Regex(@"/api/(monitoring/dashboard|appmonitoring/summary)(\?|$)");
+        await Page.RouteAsync(pattern, async route =>
+        {
+            await release.Task;
+            await route.ContinueAsync();
+        });
+        try
+        {
+            await Page.ReloadAsync(new() { WaitUntil = WaitUntilState.DOMContentLoaded });
+            var bars = Page.Locator(".dashboard-tile thead > tr.omni-data-grid__progress .omni-loading-bar--active");
+            await Expect(bars).ToHaveCountAsync(4, new() { Timeout = PlaywrightConfig.AppReadyTimeoutMs });
+
+            var hiddenTables = Page.Locator(".dashboard-tile table.omni-data-grid__table[data-omni-sizing='content']:not([data-omni-sized])");
+            var hiddenBefore = await HiddenTableCountAsync();
+            var result = await Page.RunAxe(ScanOptions);
+            var hiddenAfter = await HiddenTableCountAsync();
+
+            // The window is the one under test: all four tables hidden before and after the scan.
+            Assert.That(new[] { hiddenBefore, hiddenAfter }, Is.EqualTo(new[] { 4, 4 }),
+                "The scan did not land while the four dashboard tables were hidden.");
+            var blocking = result.Violations
+                .Where(v => v.Impact is not null && BlockingImpacts.Contains(v.Impact, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            AssertNoBlockingViolation(blocking.Count == 0 ? [] : [BuildFailureMessage("/ (grids loading)", blocking)]);
+
+            // OE 1.10.0 hides the rows of such a table (tbody, tfoot) and keeps the table itself, with its
+            // progress bar, visible; OE 1.9.4 hid the whole table. The rows are what a user cannot reach.
+            async Task<int> HiddenTableCountAsync() => await hiddenTables.EvaluateAllAsync<int>(
+                "tables => tables.filter(table => { const rows = table.querySelector(':scope > tbody, :scope > tfoot'); "
+                + "return rows !== null && getComputedStyle(rows).visibility === 'hidden'; }).length");
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
     }
 
     /// <summary>The pages a user works in, each scanned once per run.</summary>
@@ -81,6 +129,22 @@ public class AccessibilityTests : E2ETestBase
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, AccessibilitySarif.FileName), AccessibilitySarif.Build(violations));
         TestContext.Out.WriteLine($"Accessibility: {violations.Count} violation(s) written to {AccessibilitySarif.FileName}.");
+    }
+
+    /// <summary>Serious or critical violations fail the release under test. Against the deployed
+    /// baseline's images (E2E_PREVIOUS_PAYLOAD_ONLY=true, the V-1 gate of a candidate) the pages still
+    /// have to load (rendering and 5xx checks of <see cref="E2ETestBase"/>), but a violation is the
+    /// baseline's own defect, one the candidate may be the fix of: it is logged, not failed (owner
+    /// decision of 2026-10-29, candidate #3010 refused on a contrast defect develop had fixed).</summary>
+    private static void AssertNoBlockingViolation(IReadOnlyList<string> failures)
+    {
+        if (failures.Count > 0 && NewSinceDeployedBaselineAttribute.TargetIsPayloadOnlyPrevious)
+        {
+            TestContext.Out.WriteLine("Accessibility violations of the deployed baseline, reported without failing its rollback gate:\n"
+                + string.Join("\n\n", failures));
+            return;
+        }
+        Assert.That(failures, Is.Empty, () => string.Join("\n\n", failures));
     }
 
     private static string BuildFailureMessage(string path, IReadOnlyList<AxeResultItem> blocking)

@@ -40,7 +40,13 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
     [HttpGet("names")]
     public async Task<ActionResult<List<string>>> GetVaultNames([FromQuery] int? projectId, CancellationToken ct)
     {
+        // RBAC audit, finding 5: the project named must be one the caller reads, and a caller without
+        // any readable vault gets nothing rather than a list cached for a wider caller.
+        if (projectId is not null
+            && !await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Read, ct))
+            return Forbid();
         var accessibleIds = await authz.GetAccessibleResourceIdsAsync(User, ResourceType.Vault, Permission.Read, ct);
+        if (accessibleIds is { Count: 0 }) return Ok(new List<string>());
         return Ok(await service.GetVaultNamesAsync(projectId, accessibleIds, ct));
     }
 
@@ -48,6 +54,10 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
     public async Task<ActionResult<VaultDto>> CreateVault([FromBody] CreateVaultRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Vault, null, Permission.Write, ct))
+            return Forbid();
+        // ADR-059: the owner named (project, environment or project server) is one the caller writes,
+        // in an organization that lets it create vaults (RBAC audit, findings 1 and 8).
+        if (!await authz.CanOwnAsync(User, ResourceType.Vault, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
             return Forbid();
 
         var vault = await service.CreateVaultAsync(request, ct);
@@ -58,6 +68,9 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
     public async Task<ActionResult<VaultDto>> UpdateVault(int id, [FromBody] UpdateVaultRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Vault, id, Permission.Write, ct))
+            return Forbid();
+        // The owner the resource ends up with must also let the caller write (no move out of reach).
+        if (!await authz.CanOwnAsync(User, ResourceType.Vault, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
             return Forbid();
 
         var vault = await service.UpdateVaultAsync(id, request, ct);
@@ -121,12 +134,12 @@ public class VaultsController(IVaultService service, IResourceAuthorizationServi
     }
 
     /// <summary> The clear value of one secret, for the copy button. POST so no URL, proxy log or
-    /// browser history ever carries it; Write permission (the right to change the value), never
+    /// browser history ever carries it; its own permission (R-11, Contributor by default), never
     /// Read; no-store so no cache keeps it; audited by the service. </summary>
     [HttpPost("{id:int}/secrets/{secretId:int}/reveal")]
     public async Task<ActionResult<RevealedSecretValueDto>> RevealSecretValue(int id, int secretId, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Vault, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.VaultSecretReveal, id, ct))
             return Forbid();
 
         var value = await service.RevealSecretValueAsync(id, secretId, ct);

@@ -155,7 +155,7 @@ internal sealed class PipelineStageApprovalGate(
         var approvalGroups = HubGroups.PipelineRunUpdates(runId, approvalPipelineId);
         await pipelineHub.Clients.Groups(approvalGroups).SendAsync("ApprovalRequired", runId, stageName, env?.Name, ct).ConfigureAwait(false);
         // Approval observers (audit, notifications) are non-blocking.
-        domainEvents.Publish(new PipelineApprovalRequestedEvent(runId, stageName, env?.Name));
+        domainEvents.Publish(new PipelineApprovalRequestedEvent(runId, stageName, env?.Name, approval.Id));
 
         return true;
     }

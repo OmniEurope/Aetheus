@@ -46,6 +46,17 @@ internal sealed class PipelineApprovalRepository(AppDbContext db) : IPipelineApp
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
+    public Task<PipelineApprovalScope?> GetApprovalScopeAsync(int approvalId, CancellationToken ct = default) =>
+        db.PipelineApprovals.AsNoTracking()
+            .Where(a => a.Id == approvalId)
+            .Select(a => new PipelineApprovalScope(
+                a.PipelineRun.PipelineId,
+                a.PipelineRun.Pipeline.ProjectId
+                    ?? (a.PipelineRun.Pipeline.Environment != null ? a.PipelineRun.Pipeline.Environment.ProjectId : null)
+                    ?? (a.PipelineRun.Pipeline.ProjectServer != null ? (int?)a.PipelineRun.Pipeline.ProjectServer.ProjectId : null),
+                a.EnvironmentId))
+            .FirstOrDefaultAsync(ct);
+
     /// <summary>F2: approvals still Pending whose environment's <c>ApprovalTimeoutMinutes</c> has
     /// elapsed since they were requested. Used by the reconcile sweep to auto-expire a request nobody
     /// answered instead of leaving the run parked forever.</summary>

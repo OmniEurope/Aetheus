@@ -2,23 +2,24 @@
 @inject GridExportContext ExportContext
 @* Images tab of the Docker section: the inventory grid plus the two write paths that only ever
    touch images (pull, build). Markup moved verbatim from the parent. *@
-<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Class="omni-u-mb-md" Gap="OmniSpacing.Small">
+<OmniStack>
+<OmniStack Orientation="OmniOrientation.Horizontal" Wrap="true" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
     <CountBadge Value="@FilteredImages.Count" Variant="OmniTone.Accent" />
     <OmniTextBox aria-label="@L["FilterImages"]" @bind-Value="_imageSearch" Placeholder="@L["FilterImages"]" Class="docker-search" />
     <div class="flex-spacer"></div>
     <OmniTextBox aria-label="@L["ImageNamePlaceholder"]" @bind-Value="_pullImageName" Placeholder="@L["ImageNamePlaceholder"]" maxlength="200" />
     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@PullImageAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_pullImageName))" Class="@(_imagePulling ? "btn-busy" : null)" Busy="@(_imagePulling)"><Icon><OmniIcon Name="OmniIconName.Download" /></Icon><ChildContent><span>@L["DockerPull"]</span></ChildContent></OmniButton>
 </OmniStack>
-<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" />
+<ServerTaskFollower @ref="_follower" ServerId="@ServerId" NamePrefix="Docker" SettleOnHeartbeat="true" />
 <OmniDataGrid @ref="_grid" ExportTitle="@ExportContext.Title(L["DockerImages"])" ExportFields="@ExportContext.Fields()" Items="@FilteredImages" TItem="DockerImageDto" KeyOf="@(row => row.ImageId)" NewRowHighlight="@(TimeSpan.FromSeconds(5))"
     AllowGrouping="true" ShowGroupPanel="true" @bind-Groups="_imageGroups"
-    AllGroupsExpanded="@_allImageGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" MaxHeight="@AetheusGrid.ScrollMaxHeight">
+    AllGroupsExpanded="@_allImageGroupsExpanded" ScrollMode="OmniDataGridScrollMode.Virtual" VirtualizationOverscanCount="3" FillAvailableHeight="true">
     <Columns>
         <OmniDataGridColumn Frozen="true" TItem="DockerImageDto" Property="Project" Title="@L["Project"]" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterSearchable="true" />
         <OmniDataGridColumn TItem="DockerImageDto" Property="Repository" Title="@L["Repository"]" Filterable="true" />
         <OmniDataGridColumn TItem="DockerImageDto" Property="Tag" Title="@L["Tag"]" Width="7.5rem" Filterable="true" />
         <OmniDataGridColumn TItem="DockerImageDto" Property="Size" Title="@L["Size"]" Width="6.25rem" Filterable="true"><Template Context="img">@DisplayFormatting.DockerSize(img.Size)</Template></OmniDataGridColumn>
-        <OmniDataGridColumn TItem="DockerImageDto" Property="Created" Title="@L["Created"]" Width="10rem" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange">
+        <OmniDataGridColumn TItem="DockerImageDto" Property="Created" Title="@L["Created"]" Width="10rem" Sortable="false" Filterable="true">
             <Template Context="img">
                 @img.Created.ToString("g")
             </Template>
@@ -43,7 +44,7 @@
 
 @if (CanAdmin)
 {
-    <OmniCard Class="omni-u-mt-md">
+    <OmniCard>
         <OmniText Element="OmniTextElement.Title" Class="omni-u-mb-sm">@L["DockerBuildImage"]</OmniText>
         <OmniStack Gap="OmniSpacing.Small">
             <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Small">
@@ -51,7 +52,7 @@
                 <OmniTextBox Id="docker-build-tag" @bind-Value="_buildImageTag" Placeholder="@L["BuildTagPlaceholder"]" maxlength="200" />
             </OmniStack>
             <OmniCodeEditor @bind-Value="_buildDockerfileContent" Language="dockerfile" Height="18rem"
-                            InteropModulePath="./js/omni-code-editor-frame.js?v=1"
+                            InteropModulePath="@EditorModules.Frame"
                             Label="@L["DockerfilePlaceholder"]" />
             <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Justify="OmniJustification.End">
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@BuildImageAsync" Disabled="@(AgentOffline || string.IsNullOrWhiteSpace(_buildImageTag) || string.IsNullOrWhiteSpace(_buildDockerfileContent))" Class="@(_buildingImage ? "btn-busy" : null)" Busy="@(_buildingImage)"><Icon><OmniIcon Name="OmniIconName.Wrench" /></Icon><ChildContent><span>@L["DockerBuild"]</span></ChildContent></OmniButton>
@@ -59,3 +60,4 @@
         </OmniStack>
     </OmniCard>
 }
+</OmniStack>

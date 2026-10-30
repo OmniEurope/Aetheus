@@ -70,6 +70,14 @@ internal sealed class TaskCompletionFinalizer(
                     await domainEvents
                         .DispatchStrictAsync(new PipelineStepMigrationGateReportedEvent(pipelineRunId, gateVerdicts), ct)
                         .ConfigureAwait(false);
+
+                // Recette R-75: a step that succeeded on purpose can still say that what it was meant to
+                // check did not happen; strict, for the same reason as the metrics.
+                var runWarnings = TaskRunWarningParser.Parse(outputVars);
+                if (runWarnings.Count > 0)
+                    await domainEvents
+                        .DispatchStrictAsync(new PipelineStepRunWarningsReportedEvent(pipelineRunId, runWarnings), ct)
+                        .ConfigureAwait(false);
             }
         }
         return stepRun;

@@ -17,11 +17,13 @@ namespace Aetheus.Front.Components.Servers.ServerDetailSections;
 /// </summary>
 public partial class DockerContainersTab
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
+    [Inject] private PermissionService Permissions { get; set; } = default!;
 
     /// <summary>
     /// The whole server, not just its containers: the project zoom dialog takes the server, and the
@@ -34,6 +36,10 @@ public partial class DockerContainersTab
     /// <summary>BACK-012: the backend takes Server.Admin for this tab's agent-reaching writes (compose
     /// deploy, image build and delete, container shell); without it they are not offered.</summary>
     [Parameter] public bool CanAdmin { get; set; }
+
+    /// <summary>R-11: a container's environment often carries its secrets; reading it is a permission of
+    /// its own (an Organization Admin's by default).</summary>
+    private bool CanViewEnv => Permissions.Can(PermissionKeys.ServerDockerContainerEnvView, ServerId);
 
     private ServerTaskFollower? _follower;
 
@@ -112,8 +118,22 @@ public partial class DockerContainersTab
         .Where(c => string.IsNullOrWhiteSpace(_containerSearch)
             || c.Name.Contains(_containerSearch, StringComparison.OrdinalIgnoreCase)
             || c.Image.Contains(_containerSearch, StringComparison.OrdinalIgnoreCase)
-            || c.State.Contains(_containerSearch, StringComparison.OrdinalIgnoreCase))
+            || c.State.Contains(_containerSearch, StringComparison.OrdinalIgnoreCase)
+            || StateText(c.State).Contains(_containerSearch, StringComparison.CurrentCultureIgnoreCase))
         .ToList();
+
+    /// <summary>The states Docker reports for a container (<c>docker ps --format {{.State}}</c>); each has a
+    /// <c>DockerContainerState_{state}</c> resource.</summary>
+    internal static readonly HashSet<string> KnownContainerStates = new(StringComparer.Ordinal)
+        { "created", "running", "paused", "restarting", "removing", "exited", "dead" };
+
+    /// <summary>The state in the user's language; a state Docker adds later is shown as Docker wrote it
+    /// rather than hidden.</summary>
+    internal string StateText(string state) =>
+        KnownContainerStates.Contains(state) ? L[$"DockerContainerState_{state}"].Value : state;
+
+    /// <summary>Docker's free status text ("Up 2 hours (healthy)") in the user's language (R-113).</summary>
+    internal string ContainerStatusText(string status) => DockerContainerStatusText.Format(status, L);
 
     /// <summary>
     /// Consumes one completed agent task forwarded by the parent, and repaints only if it was one of
@@ -224,7 +244,7 @@ public partial class DockerContainersTab
             L["RemoveContainer"].Value,
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed == true)
-            await DockerActionAsync(containerId, DockerContainerAction.Remove);
+            await Veil.RunAsync(() => DockerActionAsync(containerId, DockerContainerAction.Remove));
     }
 
     private async Task ToggleLogsAsync(string containerId)

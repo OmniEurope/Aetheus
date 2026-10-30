@@ -20,7 +20,9 @@ else
 {
     <EditForm Model="@_model" OnValidSubmit="@SubmitAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
-        <OmniRow Gap="OmniSpacing.Large" Class="omni-u-mt-md">
+        @* R-14: the blocks of the form (fields, help, YAML, actions) are separated only by this stack's gap. *@
+        <OmniStack>
+        <OmniRow Gap="OmniSpacing.Large">
             <OmniColumn Span="12" MediumSpan="6">
                 <OmniFormField For="oe-pages-pipelines-pipelinetemplateextract-1" Class="omni-u-w-100"><LabelContent>@L["Name"]</LabelContent><ChildContent>
                     <OmniTextBox @bind-Value="_model.TemplateName" Class="omni-u-w-100" Id="oe-pages-pipelines-pipelinetemplateextract-1" />
@@ -38,19 +40,20 @@ else
                 </ChildContent></OmniFormField>
             </OmniColumn>
         </OmniRow>
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mt-md">@L["ExtractionParametersHelp"]</OmniAlert>
-        <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-md omni-u-mb-sm">@L["NewTemplateYaml"]</OmniText>
+        <OmniAlert Severity="OmniSeverity.Info">@L["ExtractionParametersHelp"]</OmniAlert>
+        <OmniText Element="OmniTextElement.Strong">@L["NewTemplateYaml"]</OmniText>
         <MonacoEditor Value="@_model.TemplateYamlContent" ValueChanged="@(value => _model.TemplateYamlContent = value)" />
         <ValidationMessage For="@(() => _model.TemplateYamlContent)" />
-        <OmniCheckBox @bind-Value="_model.RewritePipeline" Class="omni-u-mt-md">@L["RewritePipelineToPin"]</OmniCheckBox>
+        <OmniCheckBox @bind-Value="_model.RewritePipeline">@L["RewritePipelineToPin"]</OmniCheckBox>
         @if (_model.RewritePipeline)
         {
-            <OmniText Element="OmniTextElement.Strong" Class="omni-u-mt-md omni-u-mb-sm">@L["RewrittenPipelineYaml"]</OmniText>
+            <OmniText Element="OmniTextElement.Strong">@L["RewrittenPipelineYaml"]</OmniText>
             <MonacoEditor Value="@_model.RewrittenPipelineYaml" ValueChanged="@(value => _model.RewrittenPipelineYaml = value)" />
         }
-        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+        <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small">
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Extract"]</span></ChildContent></OmniButton>
+        </OmniStack>
         </OmniStack>
     </EditForm>
 }

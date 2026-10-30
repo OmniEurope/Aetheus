@@ -34,6 +34,21 @@ internal sealed partial class PipelineSetupRepositoryProbe(
 
     private static readonly string[] ProjectExtensions = [".csproj", ".fsproj", ".vbproj"];
 
+    internal const string DotNetLanguage = "dotnet";
+    internal const string PythonLanguage = "python";
+    internal const string JavaLanguage = "java";
+
+    /// <summary>The product files of the languages the quality pipeline has a producer for, as its
+    /// <c>detect-project-languages</c> function reads them (case-sensitive extensions).</summary>
+    private static readonly (string Language, string Extension)[] LanguageExtensions =
+        [(DotNetLanguage, ".csproj"), (PythonLanguage, ".py"), (JavaLanguage, ".java")];
+
+    /// <summary>What that function never enters.</summary>
+    private static readonly HashSet<string> NotProductCodeDirectories = new(
+        [".git", ".claude", ".codex", "bin", "obj", "node_modules", ".venv", "target", "build",
+            "TestResults", ".analysis-coverage", "coverage"],
+        StringComparer.Ordinal);
+
     /// <summary>What marks a .NET test project in the default commands.</summary>
     [GeneratedRegex(@"Microsoft\.NET\.Test\.Sdk|Microsoft\.Testing\.Platform|xunit|nunit|MSTest|TUnit|IsTestProject", RegexOptions.CultureInvariant)]
     private static partial Regex TestProjectPattern { get; }
@@ -86,6 +101,38 @@ internal sealed partial class PipelineSetupRepositoryProbe(
         return (files, complete);
     }
 
+    /// <summary>R-66, R-68: the versioned files the production deployment renders with the project's variables, read as
+    /// the deployment reads them: the environment sample and the Apache templates below <c>.pipeline/configs/</c>.
+    /// A directory the branch does not hold is not listed, so a project without them costs no failed read.</summary>
+    public async Task<ProductionTemplates> ReadProductionTemplatesAsync(CancellationToken ct)
+    {
+        const string pipelineDirectory = ".pipeline";
+        const string configsDirectory = ".pipeline/configs";
+        var apache = new List<string>();
+        string? envSample = null;
+        if (!HasDirectory(await ListAsync(string.Empty, ct).ConfigureAwait(false), pipelineDirectory)
+            || await ListAsync(pipelineDirectory, ct).ConfigureAwait(false) is not { } pipeline
+            || !HasDirectory(pipeline, configsDirectory)
+            || await ListAsync(configsDirectory, ct).ConfigureAwait(false) is not { } configs)
+            return new ProductionTemplates(null, apache);
+
+        if (HasDirectory(configs, ProductionTemplateVariables.EnvDirectory)
+            && await ListAsync(ProductionTemplateVariables.EnvDirectory, ct).ConfigureAwait(false) is { } envFiles
+            && envFiles.Exists(entry => entry.Type == GitTreeEntryType.Blob && entry.Path == ProductionEnvSampleBuilder.Path))
+            envSample = await ReadFileAsync(ProductionEnvSampleBuilder.Path, ct).ConfigureAwait(false);
+
+        if (HasDirectory(configs, ProductionTemplateVariables.ApacheDirectory)
+            && await ListAsync(ProductionTemplateVariables.ApacheDirectory, ct).ConfigureAwait(false) is { } apacheFiles)
+            foreach (var file in apacheFiles.Where(entry =>
+                         entry.Type == GitTreeEntryType.Blob && entry.Name.EndsWith(".conf", StringComparison.OrdinalIgnoreCase)))
+                if (await ReadFileAsync(file.Path, ct).ConfigureAwait(false) is { } text)
+                    apache.Add(text);
+        return new ProductionTemplates(envSample, apache);
+    }
+
+    private static bool HasDirectory(List<GitLightTreeEntryDto>? entries, string path) =>
+        entries?.Exists(entry => entry.Type == GitTreeEntryType.Tree && entry.Path == path) == true;
+
     /// <summary>A <c>*.sln</c> or <c>*.slnx</c> at the root or within three levels of it.</summary>
     public async Task<bool?> HasSolutionAsync(CancellationToken ct)
     {
@@ -114,6 +161,43 @@ internal sealed partial class PipelineSetupRepositoryProbe(
         // except when every listing was made.
         return complete ? false : null;
     }
+
+    /// <summary>Which of the languages the quality pipeline has a producer for (.NET, Python, Java) the branch holds a
+    /// file of, the way the pipeline's own <c>detect-project-languages</c> function reads a workspace: a product file of the
+    /// language below the root, skipping the directories that never hold product code. Each answer is null when the
+    /// budget stopped the search before it found a file, since a file found is proof and the absence of one is not.</summary>
+    public async Task<(bool? DotNet, bool? Python, bool? Java)> FindLanguagesAsync(CancellationToken ct)
+    {
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var complete = true;
+        var pending = new Queue<string>();
+        pending.Enqueue(string.Empty);
+        while (pending.Count > 0 && found.Count < LanguageExtensions.Length)
+        {
+            var directory = pending.Dequeue();
+            var entries = await ListAsync(directory, ct).ConfigureAwait(false);
+            if (entries is null)
+            {
+                complete = false;
+                continue;
+            }
+
+            foreach (var entry in entries.Where(entry => entry.Type == GitTreeEntryType.Blob))
+                foreach (var (language, extension) in LanguageExtensions)
+                    if (entry.Name.EndsWith(extension, StringComparison.Ordinal)) found.Add(language);
+            foreach (var child in entries.Where(entry => entry.Type == GitTreeEntryType.Tree && !IsNotProductCode(entry, directory)))
+                pending.Enqueue(child.Path);
+        }
+
+        bool? Answer(string language) => found.Contains(language) ? true : complete ? false : null;
+        return (Answer(DotNetLanguage), Answer(PythonLanguage), Answer(JavaLanguage));
+    }
+
+    /// <summary>The directories the pipeline's language detection does not enter, and the annotated rule corpus of the
+    /// platform's own scanners (<c>tests/security-rules</c>).</summary>
+    private static bool IsNotProductCode(GitLightTreeEntryDto directory, string parent) =>
+        NotProductCodeDirectories.Contains(directory.Name)
+        || (directory.Name == "security-rules" && (parent == "tests" || parent.EndsWith("/tests", StringComparison.Ordinal)));
 
     /// <summary>A .NET test project that the default QA commands can run (not a browser end-to-end one).</summary>
     public async Task<bool?> HasRunnableTestProjectAsync(CancellationToken ct)

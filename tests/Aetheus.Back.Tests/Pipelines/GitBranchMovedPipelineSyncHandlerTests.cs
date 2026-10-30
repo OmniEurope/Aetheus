@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Back.Components.Git;
 using Aetheus.Back.Components.Git.Events;
+using Aetheus.Back.Components.Notifications;
 using Aetheus.Back.Components.Pipelines;
 using Aetheus.Back.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,11 +22,14 @@ public sealed class GitBranchMovedPipelineSyncHandlerTests
 
     private readonly IPipelineService _pipelineService = Substitute.For<IPipelineService>();
     private readonly IGitLightCliService _cli = Substitute.For<IGitLightCliService>();
+    private readonly IUserNotificationService _userNotifications = Substitute.For<IUserNotificationService>();
     private readonly GitBranchMovedPipelineSyncHandler _sut;
 
     public GitBranchMovedPipelineSyncHandlerTests() =>
         _sut = new GitBranchMovedPipelineSyncHandler(new PipelineDefinitionSynchronizer(
-            _pipelineService, _cli, NullLogger<PipelineDefinitionSynchronizer>.Instance));
+            _pipelineService, _cli,
+            new PipelineRunNotificationPublisher(Substitute.For<IPipelineRepository>(), _userNotifications),
+            NullLogger<PipelineDefinitionSynchronizer>.Instance));
 
     private static GitBranchMovedEvent Moved(string branch, string? defaultBranch = "main") =>
         new(7, 3, "repo", "Repo", defaultBranch, DiskPath,
@@ -88,5 +92,68 @@ public sealed class GitBranchMovedPipelineSyncHandlerTests
             _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken));
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Handle_ASyncThatFails_IsNotifiedWithRepositoryRefCommitAndMessage()
+    {
+        GivenDefinition("aetheus-demo.yaml", Yaml);
+        _pipelineService.UpsertPipelineFromYamlAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns<PipelineDto>(_ => throw new ConflictException("no resolvable owner"));
+
+        await _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            "pipeline.launch-refused",
+            Arg.Is<string>(payload => payload.Contains("\"PipelineName\":\"Repo\"")
+                && payload.Contains("\"ProjectId\":7")
+                && payload.Contains("push:main@0123456789ab")
+                && payload.Contains("no resolvable owner")),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task Handle_AGitReadThatFails_IsNotifiedToo()
+    {
+        _cli.GetTreeAsync(DiskPath, Commit, ".pipeline", Arg.Any<CancellationToken>())
+            .Returns<List<GitLightTreeEntryDto>>(_ => throw new InvalidOperationException("git worktree busy"));
+
+        await _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken);
+
+        await _userNotifications.Received(1).RecordProjectEventAsync(
+            "pipeline.launch-refused", Arg.Is<string>(payload => payload.Contains("git worktree busy")),
+            Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task Handle_ANotificationThatFails_IsLoggedAndNeverRethrown()
+    {
+        GivenDefinition("aetheus-demo.yaml", Yaml);
+        _pipelineService.UpsertPipelineFromYamlAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string>(),
+                Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>())
+            .Returns<PipelineDto>(_ => throw new ConflictException("no resolvable owner"));
+        _userNotifications.RecordProjectEventAsync(
+                Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>(), Arg.Any<string?>(), Arg.Any<string?>())
+            .Returns<int>(_ => throw new InvalidOperationException("inbox unavailable"));
+
+        var exception = await Record.ExceptionAsync(() =>
+            _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task Handle_ACancelledSync_IsNotSwallowedNorNotified()
+    {
+        _cli.GetTreeAsync(DiskPath, Commit, ".pipeline", Arg.Any<CancellationToken>())
+            .Returns<List<GitLightTreeEntryDto>>(_ => throw new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => _sut.HandleAsync(Moved("main"), TestContext.Current.CancellationToken));
+
+        await _userNotifications.DidNotReceiveWithAnyArgs().RecordProjectEventAsync(default!, default!, TestContext.Current.CancellationToken);
     }
 }

@@ -126,10 +126,10 @@ public sealed class UserNotificationService(
             // (the "Vos droits ont été modifiés" dialog opened after every local restart).
             if (!permissions.IsLoaded)
             {
-                permissions.SetPermissions(summary.EffectivePermissions, auth.IsAdmin);
+                permissions.SetPermissions(summary.EffectivePermissions, auth.IsAdmin, summary.PermissionKeys);
                 return;
             }
-            if (HasChanged(summary.EffectivePermissions))
+            if (HasChanged(summary))
                 Fire();
         }
         catch (Exception ex)
@@ -138,8 +138,10 @@ public sealed class UserNotificationService(
         }
     }
 
-    private bool HasChanged(List<EffectivePermissionDto> latest)
-        => EffectivePermissionsChanged(permissions.GetPermissions(), latest);
+    private bool HasChanged(UserPermissionSummaryDto latest)
+        => EffectivePermissionsChanged(permissions.GetPermissions(), latest.EffectivePermissions)
+            // R-11: an action key granted or withdrawn changes no level, so it is compared on its own.
+            || !permissions.GetPermissionKeys().ToHashSet().SetEquals(latest.PermissionKeys);
 
     internal static bool EffectivePermissionsChanged(
         IReadOnlyCollection<EffectivePermissionDto> current,

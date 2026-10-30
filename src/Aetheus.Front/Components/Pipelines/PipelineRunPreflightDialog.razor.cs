@@ -12,12 +12,19 @@ public partial class PipelineRunPreflightDialog
 
     private List<CauseGroup> Groups => BuildGroups();
 
-    /// <summary>One distinct blocking cause (one French sentence), the stages it blocks, what to do about
-    /// it, and the action that does it when there is a page for that.</summary>
-    internal sealed record CauseGroup(string Reason, List<string> Stages, string? Hint, Remediation? Remediation);
+    /// <summary>The stages blocked because no agent matches their target: the only ones the "no agent matches" summary
+    /// is about. A stage blocked by an empty server parameter is not one of them (R-63).</summary>
+    private int NoAgentCount => Unresolved.Count(stage => stage.EmptyTargetParameter is null);
 
-    /// <summary>An action that resolves a cause, rather than a message telling the user to go find it.</summary>
-    internal sealed record Remediation(string Explanation, string ActionLabel, string ActionIcon, string Href);
+    /// <summary>One distinct blocking cause (one French sentence), the stages it blocks, what to do about
+    /// it, and the action that does it when there is a page for that. A cause that is an empty server parameter is
+    /// said in that one sentence and its button alone: the stages it blocks are not listed (R-63).</summary>
+    internal sealed record CauseGroup(
+        string Reason, List<string> Stages, string? Hint, Remediation? Remediation, bool IsEmptyParameter = false);
+
+    /// <summary>An action that resolves a cause, rather than a message telling the user to go find it. An
+    /// <c>Href</c> that is null only closes the dialog, to give the choice back to the launch dialog.</summary>
+    internal sealed record Remediation(string? Explanation, string ActionLabel, string ActionIcon, string? Href);
 
     /// <summary>
     /// One cause per distinct target, whatever the number of stages that name it. A parameter left empty
@@ -27,15 +34,21 @@ public partial class PipelineRunPreflightDialog
     private List<CauseGroup> BuildGroups() =>
         [.. Unresolved
             .GroupBy(CauseKey, StringComparer.Ordinal)
-            .Select(group => new CauseGroup(
-                CauseText(group.First()),
-                [.. group.Select(Label)],
-                group.First().EmptyTargetParameter is not null ? L["PreflightEmptyParameterHint"].Value : null,
-                RemediationFor(group.First())))];
+            .Select(group => group.First().EmptyTargetParameter is not null
+                ? new CauseGroup(CauseText(group.First()), [], null, ChooseServer(group), IsEmptyParameter: true)
+                : new CauseGroup(CauseText(group.First()), [.. group.Select(Label)], null, RemediationFor(group.First())))];
+
+    /// <summary>R-63: the server is chosen where it is defined. A stage of a pipeline this one triggers (the deployment
+    /// chained from a candidate) takes it from the project's production environment, so the button opens the
+    /// environments; a stage of the pipeline being launched takes it from the launch dialog, which this one gives back.</summary>
+    private Remediation ChooseServer(IEnumerable<PreflightStageDto> stages) => new(
+        null, L["PreflightChooseServer"].Value, "dns",
+        stages.Any(stage => !string.IsNullOrEmpty(stage.PipelineName)) ? "environments" : null);
 
     private static string CauseKey(PreflightStageDto stage) =>
         stage.EmptyTargetParameter is { } empty ? $"parameter:{empty.Name}"
         : stage.Target.Length > 0 ? $"{stage.TargetKind}:{stage.Target}"
+        : stage.TargetKind == PreflightTargetKind.Agent ? "agent:any"
         : $"reason:{stage.Reason}";
 
     /// <summary>The cause in French, from what the stage targets rather than from the backend's English
@@ -44,6 +57,9 @@ public partial class PipelineRunPreflightDialog
     {
         if (stage.EmptyTargetParameter is { } empty)
             return string.Format(L["PreflightEmptyParameterCause"], ParameterText.Pick(empty.Label, empty.LabelFr));
+        // A stage that names no agent can run on any online agent: none is online.
+        if (stage.Target.Length == 0 && stage.TargetKind == PreflightTargetKind.Agent)
+            return L["PreflightCauseAnyAgent"];
         if (stage.Target.Length == 0)
             return Shorten(stage.Reason ?? L["PreflightUnknownReason"].Value);
         return string.Format(L[stage.TargetKind switch
@@ -97,10 +113,10 @@ public partial class PipelineRunPreflightDialog
         _ => null,
     };
 
-    private Task GoAsync(string href)
+    private Task GoAsync(string? href)
     {
         Dialog.Close(false);
-        Nav.NavigateTo(href);
+        if (href is not null) Nav.NavigateTo(href);
         return Task.CompletedTask;
     }
 }

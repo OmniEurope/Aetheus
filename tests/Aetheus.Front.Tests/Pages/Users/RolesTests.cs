@@ -38,6 +38,32 @@ public class RolesTests : BunitContext
     }
 
     [Fact]
+    public void BuiltInRoles_ShowTheirLocalizedDescription_AndCustomRolesKeepTheirOwn()
+    {
+        const string seededEnglish = "Full access to the resources of its organization, and management of its members";
+        _handler.SetJsonResponse("api/roles", new PaginatedResult<RoleDto>
+        {
+            Items =
+            [
+                new() { Id = 1, Name = "Organization Admin", Description = seededEnglish },
+                new() { Id = 2, Name = "Reader", Description = "Read access to the resources of its organization" },
+                new() { Id = 3, Name = "Auditor", Description = "Custom text kept as is" }
+            ],
+            TotalCount = 3
+        });
+
+        var cut = Render<Roles>();
+
+        cut.WaitForAssertion(() => Assert.Multiple(() =>
+        {
+            Assert.True(cut.Markup.Contains("RoleOrganizationAdminDescription", StringComparison.Ordinal), "Organization Admin description not localized");
+            Assert.True(cut.Markup.Contains("RoleReaderDescription", StringComparison.Ordinal), "Reader description not localized");
+            Assert.False(cut.Markup.Contains(seededEnglish, StringComparison.Ordinal), "raw seeded text shown");
+            Assert.True(cut.Markup.Contains("Custom text kept as is", StringComparison.Ordinal), "custom description lost");
+        }));
+    }
+
+    [Fact]
     public void Renders_RolesPage_Empty()
     {
         _handler.SetJsonResponse("api/roles", new PaginatedResult<RoleDto>());

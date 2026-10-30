@@ -154,31 +154,27 @@ public class PipelineService(
             : null;
         var actor = _ownership.CurrentUsername ?? "system";
 
-        // Git is authoritative. Rename/move and content replacement happen before the DB mirror and
-        // use one commit when source and destination share a repo/branch.
-        var (gitOutcome, gitError) = await pipelineGit.ApplyProjectPipelineChangeAsync(
-            previousLocation, nextLocation, request.YamlDefinition, actor, ct).ConfigureAwait(false);
+        // Git is authoritative, and Aetheus's copy of the definition may be older than the repository's:
+        // read the repository's file first, adopt it when the definition was not edited, refuse (409) to
+        // overwrite a repository change the caller has not seen.
+        var plan = nextLocation is null
+            ? new PipelineUpdatePlan(request.YamlDefinition, true, null)
+            : await PipelineRepositoryDefinitionGuard.PlanAsync(
+                pipelineGit, previousLocation, nextLocation, snapshot.YamlDefinition, request, ct).ConfigureAwait(false);
+        if (nextLocation is not null && !string.Equals(plan.Yaml, request.YamlDefinition, StringComparison.Ordinal))
+            await EnsureAdoptedDefinitionIsValidAsync(plan.Yaml, request, ct).ConfigureAwait(false);
+
+        // Rename/move and content replacement happen before the DB mirror and use one commit when
+        // source and destination share a repo/branch.
+        var (gitOutcome, gitError) = plan.WriteToGit
+            ? await pipelineGit.ApplyProjectPipelineChangeAsync(
+                previousLocation, nextLocation, plan.Yaml, actor, ct).ConfigureAwait(false)
+            : (GitWriteOutcome.NoRepo, null);
         if (gitOutcome == GitWriteOutcome.Failed)
             throw new ConflictException(
                 $"Pipeline definition could not be updated in the project's git repository: {gitError}");
 
-        pipeline.Name = request.Name;
-        pipeline.Description = request.Description;
-        pipeline.YamlDefinition = request.YamlDefinition;
-        PipelineTemplateReferenceMetadata.Apply(pipeline, request.YamlDefinition);
-        pipeline.TriggerType = ParseTriggerType(request.YamlDefinition);
-        pipeline.ProjectId = request.ProjectId;
-        pipeline.SourceRepositoryId = request.SourceRepositoryId;
-        pipeline.SourceBranch = nextBranch;
-        pipeline.EnvironmentId = request.EnvironmentId;
-        pipeline.ProjectServerId = request.ProjectServerId;
-        pipeline.AiRunnerProfileId = request.AiRunnerProfileId;
-        pipeline.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
-        // F-EXEC-1b: adopt ownership when a legacy/unowned pipeline is re-saved by an
-        // authorized user - this is the documented remediation to re-enable its automated
-        // (webhook/scheduler) triggers. Existing ownership is never silently reassigned.
-        if (string.IsNullOrEmpty(pipeline.CreatedByUsername))
-            pipeline.CreatedByUsername = _ownership.CurrentUsername;
+        ApplyUpdate(pipeline, request, plan.Yaml, nextBranch);
 
         try
         {
@@ -190,7 +186,7 @@ public class PipelineService(
             if (gitOutcome == GitWriteOutcome.Committed)
             {
                 var (rollbackOutcome, rollbackError) = await pipelineGit.ApplyProjectPipelineChangeAsync(
-                    nextLocation, previousLocation, snapshot.YamlDefinition, actor, ct).ConfigureAwait(false);
+                    nextLocation, previousLocation, plan.RollbackYaml ?? snapshot.YamlDefinition, actor, ct).ConfigureAwait(false);
                 if (rollbackOutcome != GitWriteOutcome.Committed)
                     throw new ConflictException(
                         $"Database update failed and the authoritative Git change could not be rolled back: {rollbackError}");
@@ -204,6 +200,60 @@ public class PipelineService(
         return PipelineDtoMapper.Map(pipeline);
     }
 
+    /// <summary>Mirrors the accepted update on the pipeline row, with the definition Git now holds.</summary>
+    private void ApplyUpdate(Pipeline pipeline, UpdatePipelineRequest request, string yaml, string? branch)
+    {
+        // RBAC audit, finding 3: automated runs (schedule, webhook) act as the owner. A caller who changes
+        // the definition (steps or triggers) becomes the owner, as a git push does, so writing a pipeline
+        // never borrows its owner's rights. A save that keeps the definition leaves the owner in place.
+        var definitionEdited = !string.Equals(request.YamlDefinition, pipeline.YamlDefinition, StringComparison.Ordinal);
+        if (definitionEdited && !string.IsNullOrEmpty(_ownership.CurrentUsername))
+            pipeline.CreatedByUsername = _ownership.CurrentUsername;
+        pipeline.Name = request.Name;
+        pipeline.Description = request.Description;
+        pipeline.YamlDefinition = yaml;
+        PipelineTemplateReferenceMetadata.Apply(pipeline, yaml);
+        pipeline.TriggerType = ParseTriggerType(yaml);
+        pipeline.ProjectId = request.ProjectId;
+        pipeline.SourceRepositoryId = request.SourceRepositoryId;
+        pipeline.SourceBranch = branch;
+        pipeline.EnvironmentId = request.EnvironmentId;
+        pipeline.ProjectServerId = request.ProjectServerId;
+        pipeline.AiRunnerProfileId = request.AiRunnerProfileId;
+        pipeline.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+        // F-EXEC-1b: adopt ownership when a legacy/unowned pipeline is re-saved by an
+        // authorized user - this is the documented remediation to re-enable its automated
+        // (webhook/scheduler) triggers. An edited definition moves ownership (above).
+        if (string.IsNullOrEmpty(pipeline.CreatedByUsername))
+            pipeline.CreatedByUsername = _ownership.CurrentUsername;
+    }
+
+    // The caller validated the definition it sent, not the repository's file that replaces it.
+    private async Task EnsureAdoptedDefinitionIsValidAsync(string yaml, UpdatePipelineRequest request, CancellationToken ct)
+    {
+        var validation = await ValidateYamlStrictAsync(
+            yaml, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct: ct).ConfigureAwait(false);
+        if (!validation.IsValid)
+            throw new ConflictException(
+                "The definition file in the project's git repository is invalid, so Aetheus cannot adopt it: "
+                + string.Join("; ", validation.Errors));
+    }
+
+    public async Task<PipelineRepositoryDefinitionDto?> GetRepositoryDefinitionAsync(
+        int id, string? sourceBranch, string? pipelineName, CancellationToken ct = default)
+    {
+        var fields = await repo.GetPipelineSourceFieldsAsync(id, ct).ConfigureAwait(false);
+        if (fields is null) return null;
+        if (fields.ProjectId is not { } projectId) return new PipelineRepositoryDefinitionDto();
+        var yaml = await pipelineGit.ReadProjectPipelineYamlAsync(
+            projectId,
+            string.IsNullOrWhiteSpace(pipelineName) ? fields.Name : pipelineName.Trim(),
+            ct,
+            string.IsNullOrWhiteSpace(sourceBranch) ? fields.SourceBranch : sourceBranch.Trim(),
+            fields.SourceRepositoryId).ConfigureAwait(false);
+        return PipelineRepositoryDefinitionGuard.Describe(yaml);
+    }
+
     public async Task<bool> DeletePipelineAsync(int id, CancellationToken ct = default)
     {
         var pipeline = await repo.FindPipelineAsync(id, ct).ConfigureAwait(false);
@@ -214,6 +264,12 @@ public class PipelineService(
                 projectId, pipeline.Name, pipeline.SourceBranch, pipeline.SourceRepositoryId)
             : null;
         var actor = _ownership.CurrentUsername ?? "system";
+        // What the repository holds right now, not Aetheus's copy, is what a failed delete must put back.
+        var repositoryYaml = location is null
+            ? null
+            : await pipelineGit.ReadProjectPipelineYamlAsync(
+                location.ProjectId, location.PipelineName, ct, location.SourceBranch, location.SourceRepositoryId)
+                .ConfigureAwait(false);
         var (gitOutcome, gitError) = await pipelineGit.ApplyProjectPipelineChangeAsync(
             location, null, null, actor, ct).ConfigureAwait(false);
         if (gitOutcome == GitWriteOutcome.Failed)
@@ -228,7 +284,8 @@ public class PipelineService(
             if (gitOutcome == GitWriteOutcome.Committed)
             {
                 var (rollbackOutcome, rollbackError) = await pipelineGit.ApplyProjectPipelineChangeAsync(
-                    null, location, pipeline.YamlDefinition, actor, ct).ConfigureAwait(false);
+                    null, location, string.IsNullOrWhiteSpace(repositoryYaml) ? pipeline.YamlDefinition : repositoryYaml,
+                    actor, ct).ConfigureAwait(false);
                 if (rollbackOutcome != GitWriteOutcome.Committed)
                     throw new ConflictException(
                         $"Database delete failed and the authoritative Git deletion could not be rolled back: {rollbackError}");
@@ -378,7 +435,7 @@ public class PipelineService(
     public async Task<PipelineDto> UpsertPipelineFromYamlAsync(
         string name, string yamlContent, int projectId, string triggerType,
         CancellationToken ct = default, string? sourceBranch = null, string? defaultBranch = null,
-        int? sourceRepositoryId = null)
+        int? sourceRepositoryId = null, string? actorUsername = null)
     {
         var configuredSourceBranch = ValidateYaml(yamlContent)?.SourceBranch?.Trim();
         var existing = await repo.FindPipelineByNameAndProjectAsync(name, projectId, ct).ConfigureAwait(false);
@@ -388,7 +445,7 @@ public class PipelineService(
                 sourceBranch, defaultBranch, sourceRepositoryId, ct).ConfigureAwait(false)
             : await UpdateSyncedPipelineAsync(
                 existing, name, yamlContent, projectId, triggerType, configuredSourceBranch,
-                sourceBranch, defaultBranch, sourceRepositoryId, ct).ConfigureAwait(false);
+                sourceBranch, defaultBranch, sourceRepositoryId, actorUsername, ct).ConfigureAwait(false);
     }
 
     private async Task<PipelineDto> CreateSyncedPipelineAsync(
@@ -431,11 +488,13 @@ public class PipelineService(
         string? sourceBranch,
         string? defaultBranch,
         int? sourceRepositoryId,
+        string? actorUsername,
         CancellationToken ct)
     {
         EnsureRepositoryBinding(existing, name, sourceRepositoryId);
         if (!MatchesRequestedSourceBranch(existing, configuredSourceBranch, sourceBranch, defaultBranch))
             return PipelineDtoMapper.Map(existing);
+        var definitionChanged = !string.Equals(existing.YamlDefinition, yamlContent, StringComparison.Ordinal);
         existing.YamlDefinition = yamlContent;
         PipelineTemplateReferenceMetadata.Apply(existing, yamlContent);
         existing.SourceRepositoryId = sourceRepositoryId ?? existing.SourceRepositoryId;
@@ -443,7 +502,7 @@ public class PipelineService(
             existing.SourceBranch = NormalizeSourceBranch(configuredSourceBranch, defaultBranch);
         existing.TriggerType = ParseTriggerTypeValue(triggerType);
         existing.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
-        await UpdateSyncOwnershipAsync(existing, projectId, name, ct).ConfigureAwait(false);
+        await UpdateSyncOwnershipAsync(existing, projectId, name, actorUsername, definitionChanged, ct).ConfigureAwait(false);
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
         await BroadcastPipelineChangeAsync(existing, EntityChangeOps.Updated, ct).ConfigureAwait(false);
         return PipelineDtoMapper.Map(existing);
@@ -478,10 +537,14 @@ public class PipelineService(
         Pipeline pipeline,
         int projectId,
         string name,
+        string? actorUsername,
+        bool definitionChanged,
         CancellationToken ct)
     {
-        var syncActor = _ownership.CurrentUsername;
-        if (!string.IsNullOrEmpty(syncActor))
+        // RBAC audit, finding 3: a git push is processed off the request, so the pusher comes with the event;
+        // ownership (Server.Admin for automated runs) moves only when the pushed definition really changed.
+        var syncActor = actorUsername ?? _ownership.CurrentUsername;
+        if (!string.IsNullOrEmpty(syncActor) && definitionChanged)
         {
             if (string.Equals(syncActor, pipeline.CreatedByUsername, StringComparison.Ordinal)) return;
             logger.LogInformation(

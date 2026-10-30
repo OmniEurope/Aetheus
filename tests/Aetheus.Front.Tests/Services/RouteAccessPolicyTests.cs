@@ -127,6 +127,24 @@ public class RouteAccessPolicyTests
         Assert.False(RouteAccessPolicy.CanAccess("settings", false, false, permissions));
     }
 
+    /// <summary>The page of the welcome mail's link is public like the login page: the visitor may or may not
+    /// hold a session, an administrator or not, permissions loaded or not.</summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void SetPasswordPage_IsPublic_WhateverTheVisitorsSession(bool isAuthenticated, bool isAdmin)
+    {
+        Assert.True(RouteAccessPolicy.CanAccess("login/set-password", isAuthenticated, isAdmin, new PermissionService()));
+        Assert.True(RouteAccessPolicy.CanAccess("login/set-password#token=abc", isAuthenticated, isAdmin, new PermissionService()));
+        Assert.True(RouteAccessPolicy.IsSetPasswordPath("/login/set-password#token=abc"));
+        Assert.False(RouteAccessPolicy.IsSetPasswordPath("login"));
+    }
+
+    [Fact]
+    public void OtherPagesUnderLogin_StayClosedToAnAnonymousVisitor() =>
+        Assert.False(RouteAccessPolicy.CanAccess("login/other", false, false, new PermissionService()));
+
     [Fact]
     public void Login_RemainsVisibleDuringAuthenticatedPermissionBootstrap()
     {
@@ -170,6 +188,25 @@ public class RouteAccessPolicyTests
         });
 
         Assert.False(RouteAccessPolicy.CanAccess("tasks/abc", true, false, permissions));
+    }
+
+    /// <summary>R-78: a template reader opens any template's page and its versions, a shared delivery template
+    /// included, which it holds no right on by id (the API decides, read only); creating one needs Write.</summary>
+    [Theory]
+    [InlineData("templates/15", true)]
+    [InlineData("templates/15/versions", true)]
+    [InlineData("templates/15/versions/3", true)]
+    [InlineData("templates/new", false)]
+    public void TemplateReader_OpensATemplateItHoldsNoRightOnById_ButDoesNotCreate(string route, bool expected)
+    {
+        var permissions = Loaded(new EffectivePermissionDto
+        {
+            ResourceType = ResourceType.PipelineTemplate,
+            ResourceId = 40,
+            Permission = Permission.Read
+        });
+
+        Assert.Equal(expected, RouteAccessPolicy.CanAccess(route, true, false, permissions));
     }
 
     private static PermissionService Loaded(params EffectivePermissionDto[] grants)

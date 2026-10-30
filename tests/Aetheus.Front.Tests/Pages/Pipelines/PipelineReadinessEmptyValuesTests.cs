@@ -53,6 +53,28 @@ public sealed class PipelineReadinessEmptyValuesTests : BunitContext
         Assert.DoesNotContain("href=\"/projects/4/libraries", cut.Markup, StringComparison.Ordinal);
     }
 
+    /// <summary>R-52: the content of an alert (or of the badge row of a finding) starts after the finding's icon, so a
+    /// table drawn inside it carried a useless offset on the left. It follows the finding as a block of its own.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TheTableOfEmptyValues_FollowsTheFindingOverTheFullWidth_NotInsideItsTextColumn(bool blockingAsAlert)
+    {
+        var cut = Render<PipelineReadinessChecks>(parameters => parameters
+            .Add(component => component.ProjectId, 4)
+            .Add(component => component.ReturnUrl, Summary)
+            .Add(component => component.BlockingAsAlert, blockingAsAlert)
+            .Add(component => component.Checks, new[] { LibraryCheck() }));
+
+        var finding = cut.Find("[data-testid='setup-readiness-check']");
+        Assert.Empty(finding.QuerySelectorAll("[data-testid='setup-readiness-empty-values']"));
+        var table = Assert.Single(cut.FindAll("[data-testid='setup-readiness-empty-values']"));
+        Assert.Same(finding.NextElementSibling, table);
+        Assert.Contains("pipeline-readiness-empty-values", table.ClassName ?? string.Empty, StringComparison.Ordinal);
+        // The finding keeps its title and its explanation, only the table moved out.
+        Assert.Contains("ReadinessEmptyLibraryValues", finding.TextContent, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void TheColumnsAreLibraryParameterAndPipeline()
     {

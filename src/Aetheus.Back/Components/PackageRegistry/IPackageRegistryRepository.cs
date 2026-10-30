@@ -6,6 +6,11 @@ namespace Aetheus.Back.Components.PackageRegistry;
 public interface IPackageRegistryRepository
 {
     Task<RegistryPackage?> GetPackageAsync(PackageRegistryKind kind, string normalizedName, CancellationToken ct = default);
+
+    /// <summary>True only when the package exists and an administrator opened it to anonymous reading
+    /// (R-58); an unknown package reads false, so an anonymous caller cannot tell it from a private one.</summary>
+    Task<bool> IsAnonymousDownloadAllowedAsync(
+        PackageRegistryKind kind, string normalizedName, CancellationToken ct = default);
     Task<PackageRegistryRegistrationPackage?> GetRegistrationPackageAsync(
         PackageRegistryKind kind,
         string normalizedName,

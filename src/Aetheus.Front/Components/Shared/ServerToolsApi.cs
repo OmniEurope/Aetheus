@@ -111,6 +111,12 @@ public sealed class ServerToolsApi(HttpClient http) : ApiClientBase(http)
     }
 
 
+    /// <summary>Recette R-69: the number of days before expiry the Certbot page marks a certificate "expires soon" from
+    /// (the longest alert lead time); the fixed fallback when the platform cannot say.</summary>
+    public async Task<int> GetCertbotExpiryWarningDaysAsync(CancellationToken ct = default) =>
+        (await GetJsonAsync<CertificateExpiryWarningDto>("api/certbot/expiry-warning", ct).ConfigureAwait(false))?.Days
+        ?? CertificateAlertLeadTimes.FallbackWarningDays;
+
     public Task<ApiStatus> ExecuteCertbotActionAsync(int serverId, CertbotActionRequest request, CancellationToken ct = default)
         => PostJsonNoBodyAsync<CertbotActionRequest>($"api/servers/{serverId}/certbot/action", request, ct);
 

@@ -1,8 +1,8 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @* Offer administrator-confirmed VACUUM FULL per purged table to return disk space, refusing while
    pipelines run. *@
-<div id="reclaim-space">
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["ReclaimSpace"]
+<OmniStack Id="reclaim-space">
+<OmniHeading Level="OmniHeadingLevel.H5">@L["ReclaimSpace"]
     <OmniTooltip Text="@L["ReclaimSpaceHelp"]" Focusable="true" MaxWidth="OmniTooltipWidth.Wide">
         <span role="img" aria-label="@L["ReclaimSpaceHelp"]" data-testid="reclaim-space-help"><OmniIcon Name="OmniIconName.Question" aria-hidden="true" /></span>
     </OmniTooltip>
@@ -19,13 +19,13 @@ else
 {
     @if (_status.ActivePipelineRuns > 0)
     {
-        <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mb-md" data-testid="reclaim-space-busy">@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["ReclaimSpacePipelinesRunning"], _status.ActivePipelineRuns)</OmniAlert>
+        <OmniAlert Severity="OmniSeverity.Warning" data-testid="reclaim-space-busy">@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["ReclaimSpacePipelinesRunning"], _status.ActivePipelineRuns)</OmniAlert>
     }
     @if (_status.RunningTable is { } running)
     {
-        <OmniAlert Severity="OmniSeverity.Info" Class="omni-u-mb-md" data-testid="reclaim-space-running">@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["ReclaimSpaceRunning"], running)</OmniAlert>
+        <OmniAlert Severity="OmniSeverity.Info" data-testid="reclaim-space-running">@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["ReclaimSpaceRunning"], running)</OmniAlert>
     }
-    <AetheusDataGrid Data="@_status.Tables" TItem="ReclaimSpaceTableDto" KeyProperty="Table" Virtualize="true" class="omni-u-mb-sm reclaim-space-grid">
+    <AetheusDataGrid Data="@_status.Tables" TItem="ReclaimSpaceTableDto" KeyProperty="Table" Virtualize="true" class="reclaim-space-grid">
         <Columns>
             <OmniDataGridColumn Frozen="true" TItem="ReclaimSpaceTableDto" Property="Table" Title="@L["AppDatabaseTable"]">
                 <Template Context="table"><code>@table.Table</code></Template>
@@ -43,7 +43,7 @@ else
     </AetheusDataGrid>
     @if (_status.History.Count > 0)
     {
-        <AetheusDataGrid Data="@_status.History" TItem="ReclaimSpaceResultDto" ExportName="@L["History"]" KeyProperty="" Virtualize="true" class="omni-u-mb-sm reclaim-space-history">
+        <AetheusDataGrid Data="@_status.History" TItem="ReclaimSpaceResultDto" ExportName="@L["History"]" KeyProperty="" Virtualize="true" class="reclaim-space-history">
             <Columns>
                 <OmniDataGridColumn TItem="ReclaimSpaceResultDto" Property="StartedAt" Title="@L["ReclaimSpaceStartedAt"]" Width="10rem" Filterable="false">
                     <Template Context="result">@result.StartedAt.ToString("g", System.Globalization.CultureInfo.CurrentCulture)</Template>
@@ -58,11 +58,11 @@ else
                     <Template Context="result"><span data-testid="reclaim-space-after">@Megabytes(result.BytesAfter)</span></Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ReclaimSpaceResultDto" Property="Succeeded" Title="@L["Status"]" Width="9rem" Filterable="false">
-                    <Template Context="result"><OmniBadge Width="OmniBadgeWidth.Medium" Tone="@ResultTone(result)" Fill="OmniFill.Tonal">@ResultText(result)</OmniBadge></Template>
+                    <Template Context="result"><OmniBadge Icon="@(BadgeIcon.ForState(ResultTone(result)))" Tone="@ResultTone(result)" Fill="OmniFill.Tonal">@ResultText(result)</OmniBadge></Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="ReclaimSpaceResultDto" Property="RequestedBy" Title="@L["ReclaimSpaceRequestedBy"]" Width="9rem" />
             </Columns>
         </AetheusDataGrid>
     }
 }
-</div>
+</OmniStack>

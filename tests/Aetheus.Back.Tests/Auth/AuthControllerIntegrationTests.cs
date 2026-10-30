@@ -43,7 +43,7 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
     {
         var response = await _anonClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = "admin",
+            Email = "admin@aetheus.local",
             Password = "admin"
         }, cancellationToken: TestContext.Current.CancellationToken);
 
@@ -59,11 +59,44 @@ public class AuthControllerIntegrationTests : IClassFixture<CustomWebApplication
     {
         var response = await _anonClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
         {
-            Username = "admin",
+            Email = "admin@aetheus.local",
             Password = "wrong-password"
         }, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_TheUsernameOfTheSeededAdmin_IsRefusedLikeAWrongPassword()
+    {
+        // "admin" is the seeded administrator's username and "admin" its password in this factory: the
+        // username typed in the e-mail field is no sign-in, whatever the password.
+        var byUsername = await _anonClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = "admin",
+            Password = "admin"
+        }, cancellationToken: TestContext.Current.CancellationToken);
+        var wrongPassword = await _anonClient.PostAsJsonAsync("/api/auth/login", new LoginRequest
+        {
+            Email = "admin@aetheus.local",
+            Password = "wrong-password"
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, byUsername.StatusCode);
+        Assert.Equal(
+            await wrongPassword.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
+            await byUsername.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Login_TheFormerUsernameField_IsNoSignInAndIssuesNoToken()
+    {
+        var response = await _anonClient.PostAsJsonAsync("/api/auth/login",
+            new { username = "admin", password = "admin" }, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.DoesNotContain("\"token\"",
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

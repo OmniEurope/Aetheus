@@ -36,7 +36,7 @@ public sealed class RoleUsersGridIntegrationTests(PostgresFixture fixture) : Rel
             roleId, "BO", 1, 10, "isactive", false, ct);
         Assert.Equal(1, searchedTotal);
         var bob = Assert.Single(searched);
-        Assert.Equal(("bob", (string?)null, false), (bob.Username, bob.Email, bob.IsActive));
+        Assert.Equal(("bob", (string?)"bob@other.test", false), (bob.Username, bob.Email, bob.IsActive));
 
         var (secondPage, total) = await repo.GetUsersInRolePagedAsync(roleId, null, 2, 2, null, false, ct);
         Assert.Equal(3, total);
@@ -64,15 +64,17 @@ public sealed class RoleUsersGridIntegrationTests(PostgresFixture fixture) : Rel
         await using var db = NewContext();
         var role = new Role { Name = $"grid-{Guid.NewGuid():N}", Description = "Role users grid" };
         var alice = new User { Username = "alice", Email = "alice@example.test", IsActive = true };
-        var bob = new User { Username = "bob", Email = null, IsActive = false };
+        var bob = new User { Username = "bob", Email = "bob@other.test", IsActive = false };
         var carol = new User { Username = "carol", Email = "carol@example.test", IsActive = true };
         var dave = new User { Username = "dave", Email = "dave@example.test", IsActive = true };
-        db.AddRange(role, alice, bob, carol, dave);
+        var organization = new Organization { Name = $"grid-{Guid.NewGuid():N}", Slug = $"grid{Guid.NewGuid():N}"[..20] };
+        db.AddRange(role, alice, bob, carol, dave, organization);
         await db.SaveChangesAsync(ct);
-        db.UserRoles.AddRange(
-            new UserRole { UserId = alice.Id, RoleId = role.Id },
-            new UserRole { UserId = bob.Id, RoleId = role.Id },
-            new UserRole { UserId = carol.Id, RoleId = role.Id });
+        // ADR-059: a role other than Admin is held for an organization.
+        db.UserOrganizationRoles.AddRange(
+            new UserOrganizationRole { UserId = alice.Id, OrganizationId = organization.Id, RoleId = role.Id },
+            new UserOrganizationRole { UserId = bob.Id, OrganizationId = organization.Id, RoleId = role.Id },
+            new UserOrganizationRole { UserId = carol.Id, OrganizationId = organization.Id, RoleId = role.Id });
         await db.SaveChangesAsync(ct);
         return (role.Id, dave.Id);
     }

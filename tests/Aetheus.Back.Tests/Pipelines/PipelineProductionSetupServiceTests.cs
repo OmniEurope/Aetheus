@@ -22,7 +22,7 @@ public sealed class PipelineProductionSetupServiceTests
     private const int ProjectId = 7;
     private const int LibraryId = 101;
     private const int VaultId = 201;
-    private const string ComposePath = "deploy/compose/remote.compose.yml";
+    internal const string ComposePath = "deploy/compose/remote.compose.yml";
 
     // The variables of a production Compose file with an API behind its front: a published port each, the database,
     // a signing key, a mail server and an administrator the operator names.
@@ -40,9 +40,40 @@ public sealed class PipelineProductionSetupServiceTests
             environment:
               - Password=${DB_PASSWORD:?}
               - Jwt__SigningKey=${JWT_KEY:?}
-              - Seed__AdminEmail=${ADMIN_EMAIL:?}
-              - Smtp__Host=${SMTP_HOST:?}
+              - Seed__OwnerEmail=${OWNER_EMAIL:?}
+              - Mail__Relay=${MAIL_RELAY:?}
               - Smtp__Port=${SMTP_PORT:-587}
+        """;
+
+    // The production Compose file of W6 as the 2026-10-25 trial found it (recette R-96): it requires the application name, the
+    // environment, the SDK, the database, the signing key, the administrator and the mail server, none of which the
+    // wizard may ask the operator for, and it reads the published ports of a replace deployment.
+    internal const string W6Compose = """
+        services:
+          front:
+            container_name: ${APPNAME:?}-${ENV:?}-front
+            build:
+              args:
+                DOTNET_SDK_VERSION: ${DOTNET_SDK_VERSION:?DOTNET_SDK_VERSION comes from global.json}
+            ports:
+              - "127.0.0.1:${PORT_FRONT:?}:80"
+            environment:
+              - API_BASE_URL=${API_BASE_URL:?}
+          back:
+            ports:
+              - "127.0.0.1:${PORT_BACK:?}:8080"
+            environment:
+              - ConnectionStrings__DefaultConnection=Host=db;Database=${APPNAME};Username=${DB_USER:?};Password=${DB_PASSWORD:?DB_PASSWORD is required}
+              - Jwt__SigningKey=${JWT_KEY:?JWT_KEY is required}
+              - App__Version=${APP_VERSION:?}
+              - App__FrontUrl=${FRONT_URL:?}
+              - Seed__AdminEmail=${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+              - Seed__AdminPassword=${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+              - Smtp__Host=${SMTP_HOST:?SMTP_HOST is required}
+              - Smtp__Port=${SMTP_PORT:-587}
+              - Smtp__User=${SMTP_USER:-}
+              - Smtp__Password=${SMTP_PASSWORD:-}
+              - Smtp__From=${SMTP_FROM:?SMTP_FROM is required}
         """;
 
     private const string BlueGreenCompose = """
@@ -67,6 +98,8 @@ public sealed class PipelineProductionSetupServiceTests
     private readonly IVaultService _vaults = Substitute.For<IVaultService>();
     private readonly IPortAllocationService _ports = Substitute.For<IPortAllocationService>();
     private readonly IProjectConfigRepositoryService _configuration = Substitute.For<IProjectConfigRepositoryService>();
+    private readonly IAuditService _audit = Substitute.For<IAuditService>();
+    private readonly IPipelineSetupServerRepository _setupServers = Substitute.For<IPipelineSetupServerRepository>();
     private readonly PipelineProductionSetupService _sut;
 
     private readonly List<CreateVariableEntryRequest> _libraryAdds = [];
@@ -76,7 +109,7 @@ public sealed class PipelineProductionSetupServiceTests
     public PipelineProductionSetupServiceTests()
     {
         _sut = new PipelineProductionSetupService(
-            _pipelines, _git, _libraries, _vaults, _ports, _configuration, Substitute.For<IAuditService>(),
+            _pipelines, _git, _libraries, _vaults, _ports, _configuration, _audit, _setupServers,
             NullLogger<PipelineProductionSetupService>.Instance);
         _pipelines.GetProjectNameAsync(ProjectId, Arg.Any<CancellationToken>()).Returns("Wordmorrow");
         _libraries.GetLibrariesAsync(Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<PaginationRequest?>(), Arg.Any<List<int>?>(), Arg.Any<CancellationToken>())
@@ -135,13 +168,15 @@ public sealed class PipelineProductionSetupServiceTests
         return entries;
     }
 
-    private static PipelineProductionApplyRequest Request(string? server = "vps", Dictionary<string, string>? values = null) => new()
-    {
-        ProjectId = ProjectId,
-        ComposeFile = ComposePath,
-        Server = server ?? string.Empty,
-        Values = values ?? []
-    };
+    private static PipelineProductionApplyRequest Request(
+        string? server = "vps", Dictionary<string, string>? values = null, string? strategy = null) => new()
+        {
+            ProjectId = ProjectId,
+            ComposeFile = ComposePath,
+            Server = server ?? string.Empty,
+            Values = values ?? [],
+            Strategy = strategy
+        };
 
     [Fact]
     public async Task TheAnalysis_ReadsTheComposeFileOfTheRepository_AndSaysWhereEachValueComesFrom()
@@ -156,7 +191,7 @@ public sealed class PipelineProductionSetupServiceTests
         Assert.Equal(ProductionVariableKind.Port, kinds["PORT_FRONT"]);
         Assert.Equal(ProductionVariableKind.GeneratedSecret, kinds["DB_PASSWORD"]);
         Assert.Equal(ProductionVariableKind.DefaultValue, kinds["APPNAME"]);
-        Assert.Equal(ProductionVariableKind.NeedsValue, kinds["SMTP_HOST"]);
+        Assert.Equal(ProductionVariableKind.NeedsValue, kinds["MAIL_RELAY"]);
         // What the deployment provides itself is never shown.
         Assert.DoesNotContain("API_BASE_URL", kinds.Keys);
         Assert.Equal(["vps"], analysis.Servers.Select(server => server.Name));
@@ -191,7 +226,7 @@ public sealed class PipelineProductionSetupServiceTests
     [Fact]
     public async Task Applying_CreatesEveryVariable_WhereItBelongs_AndReservesThePortsOfTheServer()
     {
-        var result = await _sut.ApplyAsync(Request(values: new() { ["SMTP_HOST"] = "smtp.example.test", ["ADMIN_EMAIL"] = "admin@example.test", ["DOMAIN"] = "example.test" }), Ct);
+        var result = await _sut.ApplyAsync(Request(values: new() { ["MAIL_RELAY"] = "mail.example.test", ["OWNER_EMAIL"] = "owner@example.test", ["DOMAIN"] = "example.test" }), Ct);
 
         // Secrets the application owns are generated into the vault, never read back.
         Assert.Equivalent(new[] { "DB_PASSWORD", "JWT_KEY" }, _vaultAdds.Select(secret => secret.Key));
@@ -202,8 +237,8 @@ public sealed class PipelineProductionSetupServiceTests
         // ENV is a name the agent refuses to hand a step: the entry is scoped, the sample maps it back (R-23).
         Assert.Equal("prod", library["DEPLOY_ENV"]);
         Assert.DoesNotContain("ENV", library.Keys);
-        Assert.Equal("smtp.example.test", library["SMTP_HOST"]);
-        Assert.Equal("admin@example.test", library["ADMIN_EMAIL"]);
+        Assert.Equal("mail.example.test", library["MAIL_RELAY"]);
+        Assert.Equal("owner@example.test", library["OWNER_EMAIL"]);
         Assert.Equal("example.test", library["DOMAIN"]);
         Assert.DoesNotContain("SMTP_PORT", library.Keys);
         await _ports.Received(1).AllocateIntoLibraryAsync(
@@ -221,8 +256,8 @@ public sealed class PipelineProductionSetupServiceTests
     {
         var result = await _sut.ApplyAsync(Request(), Ct);
 
-        Assert.Equal(string.Empty, _libraryAdds.Single(entry => entry.Key == "SMTP_HOST").Value);
-        Assert.Equal(ProductionEntryOutcome.NeedsValue, result.Entries.Single(entry => entry.Name == "SMTP_HOST").Outcome);
+        Assert.Equal(string.Empty, _libraryAdds.Single(entry => entry.Key == "MAIL_RELAY").Value);
+        Assert.Equal(ProductionEntryOutcome.NeedsValue, result.Entries.Single(entry => entry.Name == "MAIL_RELAY").Outcome);
         Assert.True(result.NeedsValues);
     }
 
@@ -274,17 +309,54 @@ public sealed class PipelineProductionSetupServiceTests
             Arg.Any<int>(), Arg.Any<int>(), Arg.Any<UpdateVariableEntryRequest>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>Recette R-96 line 5 (R-85): a first run without a server left PORT_FRONT and PORT_BACK empty in the library. The port
+    /// allocation now fills an empty key, so the setup run again with a server allocates them instead of reporting them missing
+    /// for the library page to fill.</summary>
+    [Fact]
+    public async Task APortEntryTheLibraryHoldsEmpty_IsAllocatedAtTheNextRun_NotLeftForTheLibraryPage()
+    {
+        _libraries.ExportEntriesAsync(LibraryId, Arg.Any<CancellationToken>()).Returns(
+        [
+            new VariableEntryDto { Id = 2, Key = "PORT_FRONT", Value = string.Empty },
+            new VariableEntryDto { Id = 3, Key = "PORT_BACK", Value = string.Empty }
+        ]);
+
+        var result = await _sut.ApplyAsync(Request(), Ct);
+
+        await _ports.Received(1).AllocateIntoLibraryAsync(
+            LibraryId, 4, Arg.Is<IReadOnlyList<string>>(keys => keys.Order(StringComparer.Ordinal).SequenceEqual(new[] { "PORT_BACK", "PORT_FRONT" })), Ct);
+        Assert.DoesNotContain(_libraryAdds, entry => entry.Key is "PORT_FRONT" or "PORT_BACK");
+        Assert.Equal(ProductionEntryOutcome.Allocated, result.Entries.Single(entry => entry.Name == "PORT_FRONT").Outcome);
+        Assert.Equal(ProductionEntryOutcome.Allocated, result.Entries.Single(entry => entry.Name == "PORT_BACK").Outcome);
+        Assert.DoesNotContain(result.Entries, entry => entry.Outcome == ProductionEntryOutcome.PortUnavailable);
+    }
+
+    /// <summary>Without a server the empty entries stay as they are (reported, not duplicated).</summary>
+    [Fact]
+    public async Task APortEntryTheLibraryHoldsEmpty_WithNoServer_IsReportedAndNeverCreatedTwice()
+    {
+        _libraries.ExportEntriesAsync(LibraryId, Arg.Any<CancellationToken>()).Returns(
+            [new VariableEntryDto { Id = 2, Key = "PORT_FRONT", Value = string.Empty }]);
+
+        var result = await _sut.ApplyAsync(Request(server: null), Ct);
+
+        Assert.DoesNotContain(_libraryAdds, entry => entry.Key == "PORT_FRONT");
+        Assert.Equal(string.Empty, _libraryAdds.Single(entry => entry.Key == "PORT_BACK").Value);
+        Assert.Equal(ProductionEntryOutcome.PortUnavailable, result.Entries.Single(entry => entry.Name == "PORT_FRONT").Outcome);
+        Assert.True(result.NeedsValues);
+    }
+
     [Fact]
     public async Task AnEmptyEntry_ReceivesTheValueTheOperatorGivesNow()
     {
         _libraries.ExportEntriesAsync(LibraryId, Arg.Any<CancellationToken>())
-            .Returns([new VariableEntryDto { Id = 6, Key = "SMTP_HOST", Value = string.Empty }]);
+            .Returns([new VariableEntryDto { Id = 6, Key = "MAIL_RELAY", Value = string.Empty }]);
 
-        await _sut.ApplyAsync(Request(values: new() { ["SMTP_HOST"] = "smtp.example.test" }), Ct);
+        await _sut.ApplyAsync(Request(values: new() { ["MAIL_RELAY"] = "mail.example.test" }), Ct);
 
         await _libraries.Received(1).UpdateEntryAsync(
-            LibraryId, 6, Arg.Is<UpdateVariableEntryRequest>(update => update.Key == "SMTP_HOST" && update.Value == "smtp.example.test"), Ct);
-        Assert.DoesNotContain(_libraryAdds, entry => entry.Key == "SMTP_HOST");
+            LibraryId, 6, Arg.Is<UpdateVariableEntryRequest>(update => update.Key == "MAIL_RELAY" && update.Value == "mail.example.test"), Ct);
+        Assert.DoesNotContain(_libraryAdds, entry => entry.Key == "MAIL_RELAY");
     }
 
     [Fact]
@@ -302,7 +374,7 @@ public sealed class PipelineProductionSetupServiceTests
             _configurationFiles.Keys.Order(StringComparer.Ordinal));
         var sample = _configurationFiles[".pipeline/configs/env/production.env"];
         Assert.Contains("DB_PASSWORD=#{DB_PASSWORD}#", sample, StringComparison.Ordinal);
-        Assert.Contains("SMTP_HOST=#{SMTP_HOST}#", sample, StringComparison.Ordinal);
+        Assert.Contains("MAIL_RELAY=#{MAIL_RELAY}#", sample, StringComparison.Ordinal);
         Assert.Contains("ENV=#{DEPLOY_ENV}#", sample, StringComparison.Ordinal);
         Assert.DoesNotContain("#{ENV}#", sample, StringComparison.Ordinal);
         // No value, no secret: only names; the ports and the defaults the file names are not in it.
@@ -335,6 +407,53 @@ public sealed class PipelineProductionSetupServiceTests
                 new[] { "PORT_BACK_BLUE", "PORT_BACK_GREEN", "PORT_FRONT_BLUE", "PORT_FRONT_GREEN" })),
             Ct);
         Assert.Contains("${#{UPSTREAM_DEFINE}#_FRONT_PORT}", _configurationFiles[".pipeline/configs/apache/app-https.conf"], StringComparison.Ordinal);
+    }
+
+    /// <summary>Recette R-89: the strategy is the user's choice, not only a deduction from the names the Compose file reads. W6's file
+    /// reads PORT_FRONT and PORT_BACK, yet the user wants a blue-green deployment: the setup then reserves the four colour ports, keeps
+    /// the Apache upstream entries and writes the virtual hosts that follow the live colour.</summary>
+    [Fact]
+    public async Task AReplaceComposeFile_ChosenAsBlueGreen_GetsTheColourPortsTheUpstreamAndTheBlueGreenVirtualHosts()
+    {
+        var result = await _sut.ApplyAsync(Request(strategy: "bluegreen"), Ct);
+
+        Assert.Equal("bluegreen", result.Strategy);
+        await _ports.Received(1).AllocateIntoLibraryAsync(
+            LibraryId, 4,
+            Arg.Is<IReadOnlyList<string>>(keys => keys.Order(StringComparer.Ordinal).SequenceEqual(
+                new[] { "PORT_BACK_BLUE", "PORT_BACK_GREEN", "PORT_FRONT_BLUE", "PORT_FRONT_GREEN" })),
+            Ct);
+        var library = _libraryAdds.ToDictionary(entry => entry.Key, entry => entry.Value);
+        Assert.Equal("WORDMORROW", library["UPSTREAM_DEFINE"]);
+        Assert.Contains("${#{UPSTREAM_DEFINE}#_FRONT_PORT}", _configurationFiles[".pipeline/configs/apache/app-https.conf"], StringComparison.Ordinal);
+        Assert.DoesNotContain(result.Entries, entry => entry.Name is "PORT_FRONT" or "PORT_BACK");
+    }
+
+    [Fact]
+    public async Task ABlueGreenComposeFile_ChosenAsReplace_GetsTheTwoPortsAndNoUpstream()
+    {
+        Repository(BlueGreenCompose);
+
+        var result = await _sut.ApplyAsync(Request(strategy: "replace"), Ct);
+
+        Assert.Equal("replace", result.Strategy);
+        await _ports.Received(1).AllocateIntoLibraryAsync(
+            LibraryId, 4,
+            Arg.Is<IReadOnlyList<string>>(keys => keys.Order(StringComparer.Ordinal).SequenceEqual(new[] { "PORT_BACK", "PORT_FRONT" })),
+            Ct);
+        Assert.DoesNotContain(_libraryAdds, entry => entry.Key == "UPSTREAM_DEFINE");
+        Assert.Contains("#{PORT_FRONT}#", _configurationFiles[".pipeline/configs/apache/app-https.conf"], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AStrategyThatIsNeitherBlueGreenNorReplace_IsRefused_BeforeAnythingIsWritten()
+    {
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyAsync(Request(strategy: "canary"), Ct));
+
+        await _configuration.DidNotReceive().EnsureAsync(
+            Arg.Any<int>(), Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<CancellationToken>());
+        await _libraries.DidNotReceive().ImportEntriesAsync(
+            Arg.Any<int>(), Arg.Any<List<CreateVariableEntryRequest>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -460,6 +579,55 @@ public sealed class PipelineProductionSetupServiceTests
         Assert.False(domain.Exists);
     }
 
+    /// <summary>Recette R-96, one case per line: a project with nothing prepared by hand, whose Compose file is W6's, comes out
+    /// of the wizard with what the trial did by hand, and is asked for its domain only. The numbers are the lines of R-96.</summary>
+    [Fact]
+    public async Task ABlankProjectWithTheW6ComposeFile_IsAskedForItsDomainOnly_AndGetsWhatTheTrialDidByHand()
+    {
+        Repository(W6Compose);
+
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, Ct);
+        var result = await _sut.ApplyAsync(Request(values: new() { ["DOMAIN"] = "w6.test" }), Ct);
+
+        // R-90, R-91, R-84: the operator is asked for the domain and nothing else; no host is asked, none is stored.
+        Assert.Equal(["DOMAIN"], analysis.Variables.Where(variable => variable.Kind == ProductionVariableKind.NeedsValue).Select(variable => variable.Name));
+        Assert.False(result.NeedsValues);
+        var library = _libraryAdds.ToDictionary(entry => entry.Key, entry => entry.Value);
+        Assert.DoesNotContain("APP_HOST", library.Keys);
+        Assert.DoesNotContain("API_HOST", library.Keys);
+        // (5) APPNAME, DEPLOY_ENV (ENV under its scoped name), DB_USER by convention, the domain as given; (8) nothing for CERTBOT_EMAIL.
+        Assert.Equal("wordmorrow", library["APPNAME"]);
+        Assert.Equal("prod", library["DEPLOY_ENV"]);
+        Assert.Equal("wordmorrow", library["DB_USER"]);
+        Assert.Equal("w6.test", library["DOMAIN"]);
+        // Provided by the deployment, never asked: the SDK, the URLs, the release.
+        Assert.All(new[] { "DOTNET_SDK_VERSION", "FRONT_URL", "API_BASE_URL", "APP_VERSION" },
+            name => Assert.DoesNotContain(name, library.Keys));
+        // (5) PORT_FRONT and PORT_BACK are reserved in the registry of the server, not typed.
+        await _ports.Received(1).AllocateIntoLibraryAsync(
+            LibraryId, 4, Arg.Is<IReadOnlyList<string>>(keys => keys.Order(StringComparer.Ordinal).SequenceEqual(new[] { "PORT_BACK", "PORT_FRONT" })), Ct);
+        // (4) the administrator and the mail server may stay empty: not asked, no entry that would block the launch, no password invented.
+        Assert.Equivalent(new[] { "DB_PASSWORD", "JWT_KEY" }, _vaultAdds.Select(secret => secret.Key));
+        Assert.All(new[] { "ADMIN_EMAIL", "ADMIN_PASSWORD", "SMTP_HOST", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD", "CERTBOT_EMAIL" },
+            name => Assert.DoesNotContain(name, library.Keys));
+        // (3) the Compose file and the API the pipeline will carry.
+        Assert.Equal(ComposePath, result.ComposeFile);
+        Assert.True(result.DeclaresApi);
+        // (1) the four generic virtual hosts, (2) the environment sample without the optional names.
+        Assert.Equal(
+            [
+                ".pipeline/configs/apache/api-http.conf", ".pipeline/configs/apache/api-https.conf",
+                ".pipeline/configs/apache/app-http.conf", ".pipeline/configs/apache/app-https.conf",
+                ".pipeline/configs/env/production.env"
+            ],
+            _configurationFiles.Keys.Order(StringComparer.Ordinal));
+        var sample = _configurationFiles[".pipeline/configs/env/production.env"]
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries).Where(line => !line.StartsWith('#'));
+        Assert.Equal(
+            ["APPNAME=#{APPNAME}#", "DB_PASSWORD=#{DB_PASSWORD}#", "DB_USER=#{DB_USER}#", "ENV=#{DEPLOY_ENV}#", "JWT_KEY=#{JWT_KEY}#"],
+            sample);
+    }
+
     [Fact]
     public async Task TheDomainGivenByTheOperator_IsWrittenToTheProductionLibrary_ButNotToTheEnvSample()
     {
@@ -468,5 +636,122 @@ public sealed class PipelineProductionSetupServiceTests
         Assert.Contains(_libraryAdds, entry => entry.Key == "DOMAIN" && entry.Value == "wordmorrow.test");
         var sample = _configurationFiles.Single(file => file.Key.EndsWith(".env", StringComparison.Ordinal)).Value;
         Assert.DoesNotContain("DOMAIN", sample, StringComparison.Ordinal);
+    }
+
+    /// <summary>A new project: no port target and no production environment server yet.</summary>
+    private void NoProjectServer() =>
+        _ports.GetTargetsAsync(LibraryId, Arg.Any<CancellationToken>())
+            .Returns(new PortAllocationTargetsDto { Servers = [], ProjectId = ProjectId });
+
+    /// <summary>Recette R-77: a project with no server is offered the servers the user administers, and only those.</summary>
+    [Fact]
+    public async Task AProjectWithNoServer_IsOfferedTheServersTheUserAdministers_AsCandidates()
+    {
+        NoProjectServer();
+        IReadOnlyCollection<int> administered = [4, 9];
+        _setupServers.ListServersAsync(administered, Arg.Any<CancellationToken>()).Returns([(4, "vpssim"), (9, "other")]);
+
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, new ProductionServerScope(administered), Ct);
+
+        Assert.Equal(["vpssim", "other"], analysis.Servers.Select(server => server.Name));
+        Assert.All(analysis.Servers, server => Assert.True(server.Candidate));
+        // With two candidates none is guessed.
+        Assert.Null(analysis.DefaultServer);
+    }
+
+    [Fact]
+    public async Task TheOnlyServerTheUserAdministers_IsPreselected()
+    {
+        NoProjectServer();
+        _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
+
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, new ProductionServerScope(null), Ct);
+
+        Assert.Equal("vpssim", analysis.DefaultServer);
+    }
+
+    /// <summary>The overload without a scope offers no candidate: nothing the caller was not checked for is listed.</summary>
+    [Fact]
+    public async Task WithoutAScope_NoCandidateIsOffered()
+    {
+        NoProjectServer();
+
+        var analysis = await _sut.AnalyzeAsync(ProjectId, null, Ct);
+
+        Assert.Empty(analysis.Servers);
+        await _setupServers.DidNotReceiveWithAnyArgs().ListServersAsync(default, Ct);
+    }
+
+    [Fact]
+    public async Task ApplyingWithACandidate_ReservesItsPorts_ThenAttachesItToTheProject()
+    {
+        NoProjectServer();
+        _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
+        _setupServers.AttachAgentServerAsync(ProjectId, 4, Arg.Any<CancellationToken>()).Returns(true);
+
+        var result = await _sut.ApplyAsync(Request(server: "vpssim"), new ProductionServerScope([4]), Ct);
+
+        Assert.Equal("vpssim", result.Server);
+        Received.InOrder(() =>
+        {
+            _ports.AllocateIntoLibraryAsync(LibraryId, 4, Arg.Any<IReadOnlyList<string>>(), Ct);
+            _configuration.EnsureAsync(ProjectId, Arg.Any<IReadOnlyDictionary<string, string>>(), Ct);
+            _setupServers.AttachAgentServerAsync(ProjectId, 4, Ct);
+        });
+        await _audit.Received(1).LogAsync("ProductionServerAttached", "Project", ProjectId, "vpssim", Ct);
+    }
+
+    /// <summary>A setup that fails while writing the variables and secrets leaves the candidate unattached: the
+    /// project never gains a server without its configuration.</summary>
+    [Fact]
+    public async Task ApplyingWithACandidate_WhenTheWritesFail_AttachesNothing()
+    {
+        NoProjectServer();
+        _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
+        _setupServers.AttachAgentServerAsync(ProjectId, 4, Arg.Any<CancellationToken>()).Returns(true);
+        _vaults.ImportSecretsAsync(VaultId, Arg.Any<List<CreateVaultSecretRequest>>(), Arg.Any<CancellationToken>())
+            .Returns<int>(_ => throw new InvalidOperationException("vault write failed"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ApplyAsync(Request(server: "vpssim"), new ProductionServerScope([4]), Ct));
+
+        await _setupServers.DidNotReceiveWithAnyArgs().AttachAgentServerAsync(default, default, Ct);
+        await _audit.DidNotReceive().LogAsync("ProductionServerAttached", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyingWithACandidate_WhenTheConfigurationRepositoryFails_AttachesNothing()
+    {
+        NoProjectServer();
+        _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
+        _setupServers.AttachAgentServerAsync(ProjectId, 4, Arg.Any<CancellationToken>()).Returns(true);
+        _configuration.EnsureAsync(ProjectId, Arg.Any<IReadOnlyDictionary<string, string>>(), Arg.Any<CancellationToken>())
+            .Returns<ProjectConfigRepositoryDto>(_ => throw new InvalidOperationException("repository creation failed"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.ApplyAsync(Request(server: "vpssim"), new ProductionServerScope([4]), Ct));
+
+        await _setupServers.DidNotReceiveWithAnyArgs().AttachAgentServerAsync(default, default, Ct);
+        await _audit.DidNotReceive().LogAsync("ProductionServerAttached", Arg.Any<string>(), Arg.Any<int>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ApplyingWithAServerOutsideTheScope_IsRefused_AndNothingIsAttached()
+    {
+        NoProjectServer();
+        _setupServers.ListServersAsync(Arg.Any<IReadOnlyCollection<int>?>(), Arg.Any<CancellationToken>()).Returns([(4, "vpssim")]);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => _sut.ApplyAsync(Request(server: "other"), new ProductionServerScope([4]), Ct));
+
+        await _setupServers.DidNotReceiveWithAnyArgs().AttachAgentServerAsync(default, default, Ct);
+    }
+
+    [Fact]
+    public async Task ApplyingWithAServerOfTheProject_AttachesNothing()
+    {
+        await _sut.ApplyAsync(Request(), new ProductionServerScope(null), Ct);
+
+        await _setupServers.DidNotReceiveWithAnyArgs().ListServersAsync(default, Ct);
+        await _setupServers.DidNotReceiveWithAnyArgs().AttachAgentServerAsync(default, default, Ct);
     }
 }

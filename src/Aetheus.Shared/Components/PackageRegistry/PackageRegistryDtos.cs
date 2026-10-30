@@ -11,6 +11,7 @@ public sealed record PackageRegistryPackageDto
     public string? LatestVersion { get; init; }
     public int VersionCount { get; init; }
     public long TotalSizeBytes { get; init; }
+    public bool AllowAnonymousDownload { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
 
@@ -20,6 +21,7 @@ public sealed record PackageRegistryPackageDetailDto
     public PackageRegistryKind Kind { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
+    public bool AllowAnonymousDownload { get; init; }
     public IReadOnlyList<PackageRegistryVersionDto> Versions { get; init; } = [];
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -45,4 +47,10 @@ public sealed record UpdatePackageRegistryVersionRequest
 public sealed record UpdatePackageRegistryVersionDeprecationRequest
 {
     public bool IsDeprecated { get; init; }
+}
+
+/// <summary>Opens or closes anonymous reading of one package (R-58). Publication stays authenticated.</summary>
+public sealed record UpdatePackageRegistryAnonymousDownloadRequest
+{
+    public bool AllowAnonymousDownload { get; init; }
 }

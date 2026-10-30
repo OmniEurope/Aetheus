@@ -173,9 +173,8 @@ public sealed class HeartbeatService(
     internal async Task CollectAndSendHeartbeatAsync(CancellationToken ct)
     {
         var heartbeat = metricsCollector.Collect();
-        // A mail operation just completed, the cached mail inventory is collected again.
-        if (runtimeHealth.ConsumeMailInventoryInvalidation())
-            _mailCache.Invalidate();
+        // An operation just changed what some cached inventories report (R-119): they are collected again.
+        InvalidateOutdatedInventories(runtimeHealth.ConsumeInventoryInvalidations());
 
         using var collectorCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var collectorToken = collectorCts.Token;
@@ -340,6 +339,8 @@ public sealed class HeartbeatService(
         }
         if (dockerAvailable)
             capabilities.Add(AgentCapabilities.DockerExecution);
+        else
+            capabilities.Remove(AgentCapabilities.DockerManagement);
 
         // Deployment functions act on a live environment: same grant and same probe as deployment.apply.
         if (sudoersHashes.ContainsKey("aetheus-deploy") && deploymentAvailable)
@@ -358,7 +359,19 @@ public sealed class HeartbeatService(
         AddGrantCapability("aetheus-cron", AgentCapabilities.CronManagement);
         AddGrantCapability("aetheus-service-enable", AgentCapabilities.ServiceManagement);
 
+        // R-119: this agent version runs the server sections' typed operations, each through a grant; without it the
+        // operation is not claimed, so the task says which right is missing instead of failing on a sudo refusal.
+        WithdrawWithoutGrants(AgentCapabilities.ApacheModules, "aetheus-apache");
+        WithdrawWithoutGrants(AgentCapabilities.RkhunterSetup, "aetheus-package", "aetheus-rkhunter");
+        WithdrawWithoutGrants(AgentCapabilities.TeamspeakServiceControl, "aetheus-teamspeak");
+
         return capabilities.Order(StringComparer.Ordinal).ToList();
+
+        void WithdrawWithoutGrants(string capability, params string[] grants)
+        {
+            if (!grants.All(sudoersHashes.ContainsKey))
+                capabilities.Remove(capability);
+        }
 
         void AddGrantCapability(string grant, string capability)
         {
@@ -386,6 +399,19 @@ public sealed class HeartbeatService(
                 return available;
             },
             timeProvider, static () => false, logger, "docker availability");
+    }
+
+    private void InvalidateOutdatedInventories(CachedInventory outdated)
+    {
+        if (outdated.HasFlag(CachedInventory.Apache)) _apacheCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Mail)) _mailCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Certbot)) _certbotCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Teamspeak)) _teamspeakCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Portsentry)) _portsentryCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Rkhunter)) _rkhunterCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Firewall)) _firewallCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.SecurityUpdates)) _securityUpdatesCache.Invalidate();
+        if (outdated.HasFlag(CachedInventory.Docker)) _dockerCache.Invalidate();
     }
 
     private static T CompletedValueOr<T>(Task<T> task, T fallback) =>

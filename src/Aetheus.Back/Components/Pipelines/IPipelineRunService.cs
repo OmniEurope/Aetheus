@@ -103,7 +103,8 @@ public interface IPipelineRunService
     /// </summary>
     Task RecordRefusedAutomatedLaunchAsync(
         int pipelineId, string triggerSource, string reason,
-        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default);
+        IReadOnlyDictionary<string, string>? additionalVariables = null, CancellationToken ct = default,
+        IReadOnlyList<ProblemDto>? problems = null);
 
     /// <summary>Resolves and authorizes an automated run without persisting it. Callers that
     /// coordinate replacement must complete this phase before cancelling an existing run. A refused
@@ -120,9 +121,11 @@ public interface IPipelineRunService
     /// CHILD pipeline's OWNER - the upstream caller may administer one pipeline's servers but not the next
     /// hop's. Fail-closed: returns <c>null</c> without launching when the child is unowned or its owner
     /// lacks <see cref="Aetheus.Shared.Components.Auth.Permission.Admin"/> on a resolvable target (audited as
-    /// <c>BlockedUnauthorizedChainedRun</c>).
+    /// <c>BlockedUnauthorizedChainedRun</c>). The outcome names each cause of a refusal (target gone,
+    /// definition not preparable, no owner, owner lacking a permission, no run returned) so the caller can
+    /// report it; a definition that cannot be prepared is reported, not thrown.
     /// </summary>
-    Task<PipelineRunDto?> TriggerChainedRunAsync(int childPipelineId, Dictionary<string, string> upstreamVariables, CancellationToken ct = default);
+    Task<PipelineChainedRunOutcome> TriggerChainedRunAsync(int childPipelineId, Dictionary<string, string> upstreamVariables, CancellationToken ct = default);
 
     /// <summary>
     /// Atomically mirrors a terminal child run onto its waiting trigger step and advances the parent

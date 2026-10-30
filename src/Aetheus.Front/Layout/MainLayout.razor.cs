@@ -28,6 +28,7 @@ public partial class MainLayout : IAsyncDisposable
     [Inject] private IWebAssemblyHostEnvironment HostEnv { get; set; } = default!;
     [Inject] private NotifyHelper Notify { get; set; } = default!;
     [Inject] private HubConnectionFactory HubFactory { get; set; } = default!;
+    [Inject] private BusyVeil Veil { get; set; } = default!;
 
     private bool _sidebarExpanded;
     private bool _initialized;
@@ -46,7 +47,9 @@ public partial class MainLayout : IAsyncDisposable
     private bool _appReady;
     private bool AppReady => _appReady;
     private bool _authenticatedSessionReady;
-    private bool AuthenticatedChromeReady => Auth.IsAuthenticated && _authenticatedSessionReady;
+    // The set-password page is framed like the login page whether or not the visitor holds a session.
+    private bool OnSetPasswordPage => RouteAccessPolicy.IsSetPasswordPath(Nav.ToBaseRelativePath(Nav.Uri));
+    private bool AuthenticatedChromeReady => Auth.IsAuthenticated && _authenticatedSessionReady && !OnSetPasswordPage;
     private bool CanAccessCurrentRoute => RouteAccessPolicy.CanAccess(
         Nav.ToBaseRelativePath(Nav.Uri),
         Auth.IsAuthenticated,
@@ -97,6 +100,7 @@ public partial class MainLayout : IAsyncDisposable
 
     protected override async Task OnInitializedAsync()
     {
+        Veil.Changed += OnVeilChanged;
         _isProduction = HostEnv.IsProduction();
         _envName = HostEnv.Environment;
         _devBranch = Configuration["DevBanner:Branch"];
@@ -532,6 +536,7 @@ public partial class MainLayout : IAsyncDisposable
         Auth.OnNeedsLogin -= OnNeedsLogin;
         Nav.LocationChanged -= OnLocationChanged;
         _scrollMemory?.Dispose();
+        Veil.Changed -= OnVeilChanged;
         Orgs.Changed -= OnOrgsChanged;
         if (TaskTracker is not null)
         {
@@ -571,6 +576,12 @@ public partial class MainLayout : IAsyncDisposable
     }
 
     private void OnOrgsChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>R-99: the page body is veiled while an action started from a confirmation runs.</summary>
+    private void OnVeilChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>R-99: OE's veil on the page body while an action started from a confirmation runs.</summary>
+    private string BusyClass => Veil.IsBusy ? "omni-busy" : string.Empty;
 
     internal Task OnActiveOrgChanged(object value)
     {

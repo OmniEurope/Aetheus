@@ -134,12 +134,19 @@ public sealed class SignalRBroadcastIntegrationTests(PostgresFixture fixture)
             var member = new User
             {
                 Username = username,
+                Email = $"{username}@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
                 IsActive = true
             };
             db.Users.Add(member);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-            db.UserRoles.Add(new UserRole { UserId = member.Id, RoleId = contributorRoleId });
+            // ADR-059: the Contributor role is held for the organization the member belongs to.
+            db.UserOrganizationRoles.Add(new UserOrganizationRole
+            {
+                UserId = member.Id,
+                OrganizationId = organizationId,
+                RoleId = contributorRoleId
+            });
             db.OrganizationMembers.Add(new OrganizationMember
             {
                 OrganizationId = organizationId,
@@ -149,9 +156,9 @@ public sealed class SignalRBroadcastIntegrationTests(PostgresFixture fixture)
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        var memberToken = await IntegrationAuth.LoginAsync(
+        var memberToken = await IntegrationAuth.LoginByEmailAsync(
             client,
-            username,
+            $"{username}@example.com",
             password,
             TestContext.Current.CancellationToken);
         await using var hub = BuildHubConnection(factory, "hubs/servers", memberToken);

@@ -161,7 +161,7 @@ public class DockerController(IDockerService dockerService, IResourceAuthorizati
     [HttpPost("containers/{containerId}/env")]
     public async Task<IActionResult> GetContainerEnvVars(int serverId, string containerId, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Server, serverId, Permission.Read, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.ServerDockerContainerEnvView, serverId, ct))
             return Forbid();
         await dockerService.GetContainerEnvVarsAsync(serverId, containerId, ct);
         return Ok();

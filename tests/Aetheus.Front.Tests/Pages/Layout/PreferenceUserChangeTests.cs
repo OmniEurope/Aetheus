@@ -94,11 +94,11 @@ public sealed class PreferenceUserChangeTests : BunitContext
     }
 
     [Fact]
-    public async Task SignedOut_TheShellIsDark_ThenSigningIn_ShowsTheUsersValues_WithoutTheSignedOutOnes()
+    public async Task SignedOut_TheShellFollowsTheSystem_ThenSigningIn_ShowsTheUsersValues_WithoutTheSignedOutOnes()
     {
         SeedAliceAndBob();
         var cut = RenderShell();
-        cut.WaitForAssertion(() => Assert.Equal(OmniAppearance.Dark, Appearance.Appearance), Wait);
+        cut.WaitForAssertion(() => Assert.Equal(OmniAppearance.System, Appearance.Appearance), Wait);
         // R1-25: full width is the default, signed out as for a user who never chose.
         Assert.True(Appearance.FullWidth);
         var preferences = Services.GetRequiredService<IUserPreferences>();
@@ -142,7 +142,7 @@ public sealed class PreferenceUserChangeTests : BunitContext
             Assert.Equal("bob-view", cut.Find(".probe").TextContent);
             Assert.Equal("bob", cut.Find(".omni-app-menu__trigger-name").TextContent);
             // Bob never chose a look: the Aetheus default, not Alice's light compact one.
-            Assert.Equal(OmniAppearance.Dark, Appearance.Appearance);
+            Assert.Equal(OmniAppearance.System, Appearance.Appearance);
             Assert.Equal(OmniDensity.Comfortable, Appearance.Density);
             Assert.True(Appearance.FullWidth);
         }, Wait);
@@ -152,7 +152,7 @@ public sealed class PreferenceUserChangeTests : BunitContext
         Assert.DoesNotContain(navigation.History, entry => entry.Options.ForceLoad);
         // Nothing of Alice's was written into Bob's account, and Bob's look is kept as his own.
         Assert.Equal("\"bob-view\"", _server.Value(BobId, PreferenceKeys.ProjectViewMode));
-        Assert.Contains("\"Dark\"", _server.Value(BobId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"System\"", _server.Value(BobId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"Light\"", _server.Value(AliceId, OmniAppearanceState.PreferenceKey), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -198,7 +198,7 @@ public sealed class PreferenceUserChangeTests : BunitContext
         _storedToken = null;
         await cut.InvokeAsync(_auth.LogoutAsync);
 
-        cut.WaitForAssertion(() => Assert.Equal(OmniAppearance.Dark, Appearance.Appearance), Wait);
+        cut.WaitForAssertion(() => Assert.Equal(OmniAppearance.System, Appearance.Appearance), Wait);
         Assert.Equal(OmniDensity.Comfortable, Appearance.Density);
         Assert.Null(await cut.InvokeAsync(() => preferences.GetAsync<string>(PreferenceKeys.ProjectViewMode)));
     }

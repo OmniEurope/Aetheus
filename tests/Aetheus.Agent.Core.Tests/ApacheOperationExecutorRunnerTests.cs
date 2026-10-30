@@ -46,6 +46,56 @@ public class ApacheOperationExecutorRunnerTests
     }
 
     [Fact]
+    public async Task R119_TheSyntaxOkVerdictOfTheConfigTest_IsInformation_NotAWarning()
+    {
+        // The process runner reports stderr as a warning, and apache2ctl configtest prints its verdict there.
+        var log = new OutputLog();
+        var executor = new ApacheOperationExecutor(
+            Options.Create(new AetheusAgentOptions { MinTimeoutSeconds = 5, MaxTimeoutSeconds = 100 }),
+            NullLogger<ApacheOperationExecutor>.Instance)
+        {
+            IsLinux = true,
+            RunProcessWithLoggerAsync = async (_, _, onOutput, _, _) =>
+            {
+                await onOutput("[stderr] Syntax OK", TaskLogLevel.Warning);
+                await onOutput("[stderr] AH00558: Could not reliably determine the server's fully qualified domain name", TaskLogLevel.Warning);
+                return new ExecutorResult(0, false);
+            }
+        };
+
+        var result = await Run(executor, OperationKind.ApacheTestConfig, "-", log);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(
+            [
+                ("[stderr] Syntax OK", TaskLogLevel.Info),
+                ("[stderr] AH00558: Could not reliably determine the server's fully qualified domain name", TaskLogLevel.Warning)
+            ],
+            log.Lines);
+    }
+
+    [Fact]
+    public async Task R119_ARealWarningOfAnotherOperation_KeepsItsLevel()
+    {
+        var log = new OutputLog();
+        var executor = new ApacheOperationExecutor(
+            Options.Create(new AetheusAgentOptions { MinTimeoutSeconds = 5, MaxTimeoutSeconds = 100 }),
+            NullLogger<ApacheOperationExecutor>.Instance)
+        {
+            IsLinux = true,
+            RunProcessWithLoggerAsync = async (_, _, onOutput, _, _) =>
+            {
+                await onOutput("[stderr] Syntax OK", TaskLogLevel.Warning);
+                return new ExecutorResult(0, false);
+            }
+        };
+
+        await Run(executor, OperationKind.ApacheReload, "-", log);
+
+        Assert.Equal([("[stderr] Syntax OK", TaskLogLevel.Warning)], log.Lines);
+    }
+
+    [Fact]
     public async Task AKindWithoutACommand_FailsWithoutRunningAnything()
     {
         var calls = new ProcessRunCalls();

@@ -9,11 +9,14 @@
 
 @* Group administration tiles by purpose and keep one entry per administration menu destination
    with matching icon and title. *@
-@foreach (var group in Groups)
+@* R-14: the groups are separated by this stack's gap, each title stays with its tiles in a smaller one. *@
+<OmniStack Gap="OmniSpacing.Large">
+@foreach (var group in Shown)
 {
-    <OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mb-sm">@L[group.TitleKey]</OmniHeading>
+    <OmniStack Gap="OmniSpacing.Small">
+    <OmniHeading Level="OmniHeadingLevel.H5">@L[group.TitleKey]</OmniHeading>
     @* R1-20: OE navigation tiles in an OE tile grid (same size, the whole tile one link). *@
-    <OmniTileGrid Columns="4" Gap="OmniSpacing.Small" Class="admin-tile-grid">
+    <OmniTileGrid Columns="4" Gap="OmniSpacing.Small">
         @foreach (var tile in group.Tiles)
         {
             <OmniNavTile Href="@tile.Href" Title="@L[tile.TitleKey]" Description="@L[tile.DescriptionKey]">
@@ -21,4 +24,6 @@
             </OmniNavTile>
         }
     </OmniTileGrid>
+    </OmniStack>
 }
+</OmniStack>

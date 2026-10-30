@@ -162,9 +162,11 @@ public sealed class BackupsPageActionTests : BunitContext
     {
         WirePolicies();
         _handler.SetJsonResponse(HttpMethod.Post, "api/backups", Policy());
-        var cut = Render<BackupsPage>(parameters => parameters.Add(page => page.ProjectId, 7));
+        // Inside a project, Create sits in the project header (R-109), so the page is rendered next to the header outlet.
+        var host = this.RenderWithPageHeader<BackupsPage>(parameters => parameters.Add(page => page.ProjectId, 7));
+        var cut = host.FindComponent<BackupsPage>();
 
-        Button(cut, "Create").Click();
+        host.Find(".test-outlet").QuerySelectorAll("button").First(button => button.TextContent.Contains("Create", StringComparison.Ordinal)).Click();
         FormInput(cut, "Name").Input("scoped");
         await PickOwnersAsync(cut, null, 2);
         PolicyForm(cut).Submit();
@@ -199,7 +201,7 @@ public sealed class BackupsPageActionTests : BunitContext
 
         Button(cut, "Create").Click();
         Assert.NotNull(PolicyForm(cut));
-        Button(cut, "Cancel").Click();
+        Button(cut, "GoBack").Click();
 
         Assert.Empty(cut.FindAll("input#oe-pages-backups-backups-1"));
         Assert.False(Sent("POST", "api/backups"));

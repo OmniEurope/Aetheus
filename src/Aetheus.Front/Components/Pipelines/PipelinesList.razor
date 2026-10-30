@@ -20,7 +20,7 @@
     }
     @* Follow pipeline and entity hub events so the list stays current without a manual refresh
        action. *@
-    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPipeline" Disabled="@(!_canWrite)" Class="pipeline-list-new-button" title="@(!_canWrite ? L["InsufficientPermissions"] : L["NewPipeline"])" Label="@L["NewPipeline"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+    <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@NewPipeline" Disabled="@(!_canWrite)" Class="pipeline-list-new-button" title="@(!_canWrite ? L["InsufficientPermissions"] : L["NewPipeline"])"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
     @* Keep Create visible as the primary blue action and place secondary Import in the header
        menu. *@
     @if (IsGlobal)

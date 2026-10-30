@@ -31,8 +31,9 @@ public sealed class UserNotificationDispatchTests : IDisposable
         _db = new AppDbContext(
             new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options,
             time);
-        _authz.HasPermissionAsync(Arg.Any<string>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
-            .Returns(true);
+        // Every subscriber still reads the project (one query for all of them, RBAC audit finding 12).
+        _authz.GetUsernamesWithPermissionAsync(Arg.Any<IReadOnlyCollection<string>>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(call => new HashSet<string>(call.ArgAt<IReadOnlyCollection<string>>(0), StringComparer.Ordinal));
         _channelRepo.GetRulesForEventAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
         _channelRepo.GetActiveAdministratorEmailsAsync(Arg.Any<CancellationToken>()).Returns(new List<string>());
         var users = new UserNotificationService(new UserNotificationRepository(_db), _authz, time);
@@ -108,8 +109,9 @@ public sealed class UserNotificationDispatchTests : IDisposable
     [Fact]
     public async Task SubscriberWhoLostReadAccess_GetsNoRow()
     {
-        _authz.HasPermissionAsync("carol", ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
-            .Returns(false);
+        _authz.GetUsernamesWithPermissionAsync(Arg.Any<IReadOnlyCollection<string>>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(call => new HashSet<string>(
+                call.ArgAt<IReadOnlyCollection<string>>(0).Where(username => username != "carol"), StringComparer.Ordinal));
 
         await _sut.SendEventAsync(
             NotificationEventTypes.PipelineFailed,

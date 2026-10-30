@@ -5,6 +5,14 @@ namespace Aetheus.Back.Components.Organizations;
 public interface IOrganizationService
 {
     Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(string? search, PaginationRequest request, CancellationToken ct);
+
+    /// <summary>The list limited to <paramref name="organizationIds"/> (the organizations an organization's
+    /// administrator administers); null lists every organization.</summary>
+    Task<PaginatedResult<OrganizationDto>> GetOrganizationsAsync(
+        string? search, PaginationRequest request, IReadOnlyList<int>? organizationIds, CancellationToken ct);
+
+    /// <summary>The organizations named (every organization when null), for the organization switcher.</summary>
+    Task<List<AdministeredOrganizationDto>> GetOrganizationNamesAsync(IReadOnlyList<int>? organizationIds, CancellationToken ct);
     Task<OrganizationDetailDto?> GetOrganizationAsync(int id, CancellationToken ct);
     Task<OrganizationDto> CreateOrganizationAsync(CreateOrganizationRequest request, CancellationToken ct);
     Task<OrganizationDto?> UpdateOrganizationAsync(int id, UpdateOrganizationRequest request, CancellationToken ct);

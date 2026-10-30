@@ -22,7 +22,7 @@ public class LoginOnSubmitTests : BunitContext
     {
         var model = typeof(Login).GetField("_model", Priv)!.GetValue(instance)!;
         var mt = model.GetType();
-        mt.GetProperty("Username")!.SetValue(model, user);
+        mt.GetProperty("Email")!.SetValue(model, user);
         mt.GetProperty("Password")!.SetValue(model, pass);
     }
 
@@ -46,13 +46,13 @@ public class LoginOnSubmitTests : BunitContext
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         nav.NavigateTo("/login");
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
         await InvokeSubmit(cut);
 
         var request = System.Text.Json.JsonSerializer.Deserialize<LoginRequest>(
             _handler.RequestDetails.Single(r => r.Method == "POST" && r.Url.EndsWith("api/auth/login", StringComparison.Ordinal)).Body!,
             JsonOptions.Web)!;
-        Assert.Equal("admin", request.Username);
+        Assert.Equal("admin@aetheus.local", request.Email);
         Assert.Equal("password123", request.Password);
         var auth = Services.GetRequiredService<AuthStateProvider>();
         Assert.True(auth.IsAuthenticated);
@@ -67,7 +67,7 @@ public class LoginOnSubmitTests : BunitContext
         var nav = Services.GetRequiredService<Bunit.TestDoubles.BunitNavigationManager>();
         nav.NavigateTo("/login?returnUrl=%2Fservers%2F7");
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
         await InvokeSubmit(cut);
 
         Assert.Equal("/servers/7", new Uri(nav.Uri).AbsolutePath);
@@ -79,7 +79,7 @@ public class LoginOnSubmitTests : BunitContext
         _handler.SetJsonResponse("api/auth/login", new LoginResponse { Token = null!, TotpRequired = true });
 
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
         await InvokeSubmit(cut);
 
         var totp = (bool)typeof(Login).GetField("_totpRequired", Priv)!.GetValue(cut.Instance)!;
@@ -91,7 +91,7 @@ public class LoginOnSubmitTests : BunitContext
     {
         _handler.SetJsonResponse("api/auth/login", new LoginResponse { Token = null!, TotpRequired = true });
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
         await InvokeSubmit(cut);
 
         cut.Render();
@@ -116,7 +116,7 @@ public class LoginOnSubmitTests : BunitContext
         _handler.SetResponse("api/auth/login", System.Net.HttpStatusCode.Unauthorized);
 
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "wrong");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "wrong");
         await InvokeSubmit(cut);
 
         var error = (string?)typeof(Login).GetField("_error", Priv)!.GetValue(cut.Instance);
@@ -128,7 +128,7 @@ public class LoginOnSubmitTests : BunitContext
     {
         _handler.SetResponse("api/auth/login", System.Net.HttpStatusCode.TooManyRequests);
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
 
         await InvokeSubmit(cut);
 
@@ -143,7 +143,7 @@ public class LoginOnSubmitTests : BunitContext
         _handler.SetJsonResponse("api/users/me/permissions", new UserPermissionSummaryDto { EffectivePermissions = [] });
 
         var cut = Render<Login>();
-        SetCredentials(cut.Instance, "admin", "password123");
+        SetCredentials(cut.Instance, "admin@aetheus.local", "password123");
         await InvokeSubmit(cut);
 
         var loading = (bool)typeof(Login).GetField("_loading", Priv)!.GetValue(cut.Instance)!;

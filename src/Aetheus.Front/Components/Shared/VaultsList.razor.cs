@@ -73,7 +73,8 @@ public partial class VaultsList
 
         await LoadFilterValuesAsync();
         await LoadUsageAsync();
-        await FollowEntitiesAsync(ResourceType.Vault);
+        // R-64: a pipeline created or changed afterwards changes who reads each vault.
+        await FollowEntitiesAsync(ResourceType.Vault, ResourceType.Pipeline);
     }
 
     /// <summary>Who reads each vault (R-66). A failed call leaves the column empty rather than claiming
@@ -84,6 +85,7 @@ public partial class VaultsList
         {
             _usage = (await Api.Variables.GetResourceUsageAsync()).Vaults;
             _usageLoaded = true;
+            StateHasChanged();
         }
         catch (HttpRequestException) { } // the list stays usable without the usage column
     }
@@ -180,7 +182,8 @@ public partial class VaultsList
         ? $"/vaults/new?projectId={ProjectId}"
         : "/vaults/new");
 
-    /// <summary>A vault changed, or the hub reconnected: the server scope reloads its list, then the grid refreshes.</summary>
+    /// <summary>A vault or a pipeline changed, or the hub reconnected: the server scope reloads its list, the
+    /// grid refreshes, and who reads each vault is asked again.</summary>
     protected override async Task OnEntitiesChangedAsync()
     {
         if (IsServerScope)
@@ -188,5 +191,7 @@ public partial class VaultsList
             try { await LoadServerVaultsAsync(); } catch (HttpRequestException) { } // hub-triggered reload - silent on auth failure
         }
         await RefreshGridAsync();
+        // Kept as is when the call fails, so a failure never turns into "Unused".
+        await LoadUsageAsync();
     }
 }

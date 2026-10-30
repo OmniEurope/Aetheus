@@ -7,7 +7,8 @@ namespace Aetheus.Back.Components.Pipelines;
 [Authorize]
 public sealed class PipelineFleetController(
     IPipelineFleetService fleetService,
-    IResourceAuthorizationService authz) : ControllerBase
+    IResourceAuthorizationService authz,
+    IPipelineTemplateService templateService) : ControllerBase
 {
     [HttpGet("fleet")]
     public async Task<ActionResult<PaginatedResult<PipelineFleetItemDto>>> GetFleet(
@@ -46,8 +47,7 @@ public sealed class PipelineFleetController(
             return Forbid();
         var item = await fleetService.GetItemAsync(id, ct);
         if (item.TemplateId is { } templateId
-            && !await authz.HasPermissionAsync(
-                User, ResourceType.PipelineTemplate, templateId, Permission.Read, ct))
+            && !await PipelineTemplateReadRule.CanReadAsync(authz, templateService, User, templateId, ct))
             return Forbid();
         return Ok(item);
     }
@@ -77,11 +77,14 @@ public sealed class PipelineFleetController(
                 User, ResourceType.PipelineTemplate, null, Permission.Write, ct))
             return Forbid();
         var item = await fleetService.GetItemAsync(id, ct);
-        if (!User.IsInRole("Admin"))
-        {
-            var organizationIds = await authz.GetUserOrganizationIdsAsync(User, ct);
-            if (!organizationIds.Contains(item.OrganizationId)) return Forbid();
-        }
+        // The extracted template goes to the pipeline's organization (ADR-059).
+        if (!await authz.CanCreateInOrganizationAsync(User, ResourceType.PipelineTemplate, item.OrganizationId, ct))
+            return Forbid();
+        // A catalog name in the platform organization would become the template every organization
+        // extends: a site Admin's decision (as in PipelineTemplatesController).
+        if (!User.IsInRole("Admin")
+            && await templateService.IsSharedCatalogNameAsync(request.TemplateName, item.OrganizationId, ct))
+            return Forbid();
         return Ok(await fleetService.ExtractAsync(id, request, ct));
     }
 
@@ -108,8 +111,15 @@ public sealed class PipelineFleetController(
                 User, ResourceType.Pipeline, pipelineId, Permission.Write, ct))
             return false;
         var item = await fleetService.GetItemAsync(pipelineId, ct);
-        return item.TemplateId is { } templateId
-            && await authz.HasPermissionAsync(
-                User, ResourceType.PipelineTemplate, templateId, templatePermission, ct);
+        if (item.TemplateId is not { } templateId) return false;
+        // Adopting a version only reads the template, which a shared delivery template allows (R-78).
+        if (templatePermission == Permission.Read)
+            return await PipelineTemplateReadRule.CanReadAsync(authz, templateService, User, templateId, ct);
+        return await authz.HasPermissionAsync(
+                User, ResourceType.PipelineTemplate, templateId, templatePermission, ct)
+            // Promoting publishes a new version of the template: a shipped catalog template is shared
+            // with every organization, so only a site Admin may version it.
+            && (User.IsInRole("Admin")
+                || !await templateService.IsSharedCatalogTemplateAsync(templateId, ct));
     }
 }

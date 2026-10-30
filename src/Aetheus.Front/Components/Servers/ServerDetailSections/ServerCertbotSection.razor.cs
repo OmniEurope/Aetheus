@@ -7,8 +7,6 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 
     [Parameter, EditorRequired] public int ServerId { get; set; }
 
-    private string _certSearch = string.Empty;
-
     private CertbotDataDto Certbot => Server.Certbot;
 
     // The renewal filter lists the translated conventions.
@@ -21,17 +19,31 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 
     protected override Task OnParametersSetAsync() => _liveRows.ObserveAsync(_grid, Server.Certbot, ServerId);
 
-    private List<CertbotCertificateDto> FilteredCertificates => string.IsNullOrWhiteSpace(_certSearch)
-        ? Certbot.Certificates
-        : Certbot.Certificates.Where(c =>
-            c.Name.Contains(_certSearch, StringComparison.OrdinalIgnoreCase) ||
-            c.Domains.Any(d => d.Contains(_certSearch, StringComparison.OrdinalIgnoreCase))).ToList();
+    /// <summary>The Domains column filter (R-121, inline row): a certificate passes when one of its names contains the text.</summary>
+    internal static bool DomainsMatch(CertbotCertificateDto cert, string filter) =>
+        cert.Domains.Any(domain => domain.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
     private List<string> CertbotResourceNames => Certbot.Certificates.Select(c => c.Name).ToList();
 
+    // Recette R-69: the horizon is the longest lead time of the certificate expiry alerts, 30 days until the
+    // platform has answered (or when no alert is configured).
+    private int _warningDays = CertificateAlertLeadTimes.FallbackWarningDays;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _warningDays = await Api.ServerTools.GetCertbotExpiryWarningDaysAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // Mandatory: the mark is a hint; a failed lookup keeps the fixed horizon and must not blank the page.
+        }
+    }
+
     // Time-dependent, so computed here (browser-local) rather than baked into the DTO contract.
     // ExpiryDate deserializes as Kind=Local in the WASM client, so compare against DateTime.Now.
-    private static bool IsExpiringSoon(CertbotCertificateDto cert) => cert.ExpiryDate <= DateTime.Now.AddDays(30);
+    private bool IsExpiringSoon(CertbotCertificateDto cert) => cert.ExpiryDate <= DateTime.Now.AddDays(_warningDays);
 
     // The agent's last renewal rehearsal and per-certificate convention verdict.
     private OmniTone RenewalCheckStyle => Certbot.RenewalCheckSucceeded switch
@@ -105,6 +117,10 @@ public partial class ServerCertbotSection : ServerActionSectionBase
 
     private static string ConventionDetail(CertbotCertificateDto cert) =>
         string.IsNullOrEmpty(cert.WebrootPath) ? cert.Authenticator : $"{cert.Authenticator}: {cert.WebrootPath}";
+
+    // R-56: every confirmed action here goes through ExecuteActionAsync, which makes the follower veil the section
+    // for the whole task; no second, page-wide veil.
+    protected override bool VeilsConfirmedActionOnPage => false;
 
     private async Task ExecuteActionAsync(CertbotAction action, string? certName = null, string? domainName = null)
     {

@@ -58,6 +58,8 @@ public class WorkItemService(IWorkItemRepository repo, IAuditService audit, Time
             if (parent is null || parent.ProjectId != request.ProjectId)
                 throw new BadRequestException("Parent work item must belong to the same project.");
         }
+        await ValidateReferencesAsync(request.ProjectId, request.AssigneeUserId, request.LinkedPipelineRunId, ct)
+            .ConfigureAwait(false);
 
         var entity = new WorkItem
         {
@@ -84,6 +86,12 @@ public class WorkItemService(IWorkItemRepository repo, IAuditService audit, Time
     {
         var entity = await repo.FindWorkItemAsync(id, ct).ConfigureAwait(false);
         if (entity is null) return null;
+        // An unchanged reference was accepted when it was set; only a new one is checked.
+        await ValidateReferencesAsync(
+            entity.ProjectId,
+            request.AssigneeUserId == entity.AssigneeUserId ? null : request.AssigneeUserId,
+            request.LinkedPipelineRunId == entity.LinkedPipelineRunId ? null : request.LinkedPipelineRunId,
+            ct).ConfigureAwait(false);
 
         entity.Type = request.Type;
         entity.Title = request.Title;
@@ -165,6 +173,19 @@ public class WorkItemService(IWorkItemRepository repo, IAuditService audit, Time
                 Items = dtos.Where(d => d.Status == status).ToList()
             })
             .ToList();
+    }
+
+    // Multi-organization isolation audit: an assignee outside the project's organization would be named
+    // to every reader of the item, and a run of another project would be linked to it.
+    private async Task ValidateReferencesAsync(
+        int projectId, int? assigneeUserId, int? linkedPipelineRunId, CancellationToken ct)
+    {
+        if (assigneeUserId is { } assignee
+            && !await repo.IsActiveProjectOrganizationMemberAsync(projectId, assignee, ct).ConfigureAwait(false))
+            throw new BadRequestException("The assignee must be an active member of the project's organization.");
+        if (linkedPipelineRunId is { } runId
+            && !await repo.PipelineRunBelongsToProjectAsync(runId, projectId, ct).ConfigureAwait(false))
+            throw new BadRequestException("The linked pipeline run must belong to the same project.");
     }
 
     private static WorkItemDto MapToDto(WorkItem w) => new()

@@ -72,6 +72,24 @@ internal static class PipelineStageTargetParameters
         return empty;
     }
 
+    /// <summary>R-23: the stage of a pipeline the launch will chain to (an <c>on_success</c> or trigger target), whose
+    /// definition is read before its own launch substitutes its parameters, with the targets built from those parameters
+    /// substituted from <paramref name="variables"/> (<c>parameters.X</c> keys). Only the <c>${{ parameters.X }}</c>
+    /// expressions are read: the stage of the pipeline being launched was substituted already, so it is unchanged.</summary>
+    internal static PipelineStageDefinition WithParameterTargets(
+        PipelineStageDefinition stage, IReadOnlyDictionary<string, string> variables) =>
+        HasExpression(stage.Pool) || HasExpression(stage.Environment) || HasExpression(stage.Agent)
+            ? stage with
+            {
+                Pool = SubstituteParameters(stage.Pool, variables),
+                Environment = SubstituteParameters(stage.Environment, variables),
+                Agent = SubstituteParameters(stage.Agent, variables) ?? string.Empty
+            }
+            : stage;
+
+    private static string? SubstituteParameters(string? selector, IReadOnlyDictionary<string, string> variables) =>
+        HasExpression(selector) ? Substitute(selector, variables) : selector;
+
     private static string? Substitute(string? selector, IReadOnlyDictionary<string, string> variables) =>
         string.IsNullOrEmpty(selector) ? selector : PipelineCommandBuilder.Substitute(selector, variables).Trim();
 

@@ -44,6 +44,31 @@ public class PipelineRunsSummaryTests
         Assert.Equal("/pipelines/runs/7?tab=gate", PipelineRunPresentation.GateHref(7, null, null));
     }
 
+    [Fact]
+    public void DeletedPipelineHref_ReturnsWhereTheUserCameFrom()
+    {
+        Assert.Equal("/projects/4/pipelines", PipelineRunPresentation.DeletedPipelineHref(4, null, "/somewhere"));
+        Assert.Equal("/servers/3/pipelines", PipelineRunPresentation.DeletedPipelineHref(null, 3, null));
+        Assert.Equal("/projects/4/releases", PipelineRunPresentation.DeletedPipelineHref(null, null, "/projects/4/releases"));
+        Assert.Equal("/pipelines", PipelineRunPresentation.DeletedPipelineHref(null, null, "https://evil.example/x"));
+        Assert.Equal("/pipelines", PipelineRunPresentation.DeletedPipelineHref(null, null, null));
+    }
+
+    [Fact]
+    public void AverageDurationLabel_IsTheMeanOfTheSuccessesOnly()
+    {
+        var summary = PipelineRunsSummary.Create(
+        [
+            Run(1, PipelineStatus.Success, minutes: 0, grade: null),
+            Run(2, PipelineStatus.Failed, minutes: 10, grade: null),
+            Run(3, PipelineStatus.Success, minutes: 20, grade: null)
+        ]);
+
+        Assert.Equal(TimeSpan.FromMinutes(2), summary.AverageSuccessDuration);
+        Assert.Equal(PipelineRunsSummary.FormatDuration(TimeSpan.FromMinutes(2)), summary.AverageDurationLabel("n/a"));
+        Assert.Equal("n/a", PipelineRunsSummary.Create([]).AverageDurationLabel("n/a"));
+    }
+
     private static PipelineRunDto Run(int id, PipelineStatus status, int minutes, AnalysisGrade? grade, bool completed = true) => new()
     {
         Id = id,

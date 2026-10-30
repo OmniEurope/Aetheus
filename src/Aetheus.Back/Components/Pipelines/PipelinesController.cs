@@ -77,10 +77,25 @@ public class PipelinesController(
         return source is null ? NoContent() : Ok(source);
     }
 
+    [HttpGet("{id:int}/repository-definition")]
+    public async Task<ActionResult<PipelineRepositoryDefinitionDto>> GetRepositoryDefinition(
+        int id, [FromQuery] string? sourceBranch, [FromQuery] string? name, CancellationToken ct)
+    {
+        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Write, ct))
+            return Forbid();
+
+        var definition = await pipelineService.GetRepositoryDefinitionAsync(id, sourceBranch, name, ct);
+        return definition is null ? NotFound() : Ok(definition);
+    }
+
     [HttpPost]
     public async Task<ActionResult<PipelineDto>> CreatePipeline([FromBody] CreatePipelineRequest request, CancellationToken ct)
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, null, Permission.Write, ct))
+            return Forbid();
+        // ADR-059: a pipeline goes to a project whose organization lets the caller write pipelines; one
+        // without a project belongs to no organization and is a site Admin's only.
+        if (!await authz.CanCreateInProjectAsync(User, ResourceType.Pipeline, request.ProjectId, ct))
             return Forbid();
         if (!await ownerAuthz.CanOwnAsync(User, request.ProjectId, request.EnvironmentId, request.ProjectServerId, ct))
             return Forbid();
@@ -104,6 +119,8 @@ public class PipelinesController(
 
         var existing = await pipelineService.GetPipelineAsync(id, ct);
         if (existing is null) return NotFound();
+        if (!await authz.CanCreateInProjectAsync(User, ResourceType.Pipeline, request.ProjectId, ct))
+            return Forbid();
 
         // Both owners: the one left behind and the one moved to. Checking only the incoming one would let
         // a pipeline be walked out of an environment the caller cannot touch, only the existing one into.
@@ -135,7 +152,7 @@ public class PipelinesController(
     [HttpPost("{id:int}/run")]
     public async Task<ActionResult<PipelineRunDto>> TriggerRun(int id, [FromBody] PipelineRunRequest? request, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, id, ct))
             return Forbid();
 
         var pipeline = await pipelineService.GetPipelineAsync(id, ct);
@@ -145,20 +162,35 @@ public class PipelinesController(
 
         // Resolve Git exactly once. Authorization below and execution use the same branch, commit and YAML.
         var preparation = await runService.PrepareRunAsync(id, request?.SourceBranch, ct);
+        // A YAML that cannot be read does not come back here: preparation throws a BadRequestException
+        // whose message names the parser's line and column. Null means the pipeline is gone.
         if (preparation is null)
-            return BadRequest("The authoritative pipeline YAML is invalid and cannot be run.");
+            return BadRequest("The pipeline was removed while the run was being prepared, so it cannot be run.");
         var runtimePreparation = await runService.ResolveRunParametersAsync(
             preparation, request?.Parameters, ct);
         if (!await CallerAdministersAllTargetsAsync(runtimePreparation.TargetServerIds, ct))
             return Forbid();
+        // R-72: deploying despite the quality gate also takes Write on the project, on top of the rights above.
+        var gateOverride = request?.GateOverride == true;
+        if (gateOverride && !await CallerMayOverrideTheGateAsync(runtimePreparation.EffectiveProjectId, ct))
+            return Forbid();
 
         // Invalid queue-time parameters surface as a BadRequestException and become HTTP 400.
         var run = await runService.TriggerPreparedRunAsync(
-            runtimePreparation with { RunToEnd = runToEndRequested }, parameters: request?.Parameters, ct: ct,
+            runtimePreparation with
+            {
+                RunToEnd = runToEndRequested,
+                GateOverrideBy = gateOverride ? User.Identity?.Name ?? "unknown" : null
+            }, parameters: request?.Parameters, ct: ct,
             idempotencyKey: request?.IdempotencyKey);
         if (run is null) return NotFound();
         return CreatedAtAction(nameof(GetRun), new { runId = run.Id }, run);
     }
+
+    /// <summary>R-72: Write on the pipeline's project. A pipeline with no project has no release to deploy
+    /// despite the gate, so no one may ask it.</summary>
+    private async Task<bool> CallerMayOverrideTheGateAsync(int? projectId, CancellationToken ct) =>
+        projectId is { } id && await authz.HasPermissionAsync(User, ResourceType.Project, id, Permission.Write, ct);
 
     /// <summary>The refusal of a launch's options, or null: an invalid source branch, or run-to-end
     /// where this instance does not allow it.</summary>
@@ -194,7 +226,7 @@ public class PipelinesController(
     [HttpGet("{id:int}/parameters")]
     public async Task<ActionResult<List<PipelineRunParameterDto>>> GetRunParameters(int id, [FromQuery] string? sourceBranch, CancellationToken ct)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, id, ct))
             return Forbid();
 
         if (!string.IsNullOrWhiteSpace(sourceBranch) && !PipelineBranchValidator.IsValid(sourceBranch))
@@ -210,7 +242,7 @@ public class PipelinesController(
         int id, CancellationToken ct, [FromQuery] string? sourceBranch = null,
         [FromBody] PipelineRunRequest? request = null)
     {
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, id, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, id, ct))
             return Forbid();
 
         var pipeline = await pipelineService.GetPipelineAsync(id, ct);
@@ -221,7 +253,7 @@ public class PipelinesController(
 
         var preparation = await runService.PrepareRunAsync(id, sourceBranch, ct);
         if (preparation is null)
-            return BadRequest("The authoritative pipeline YAML is invalid and cannot be checked.");
+            return BadRequest("The pipeline was removed while the check was being prepared, so it cannot be checked.");
 
         // F-EXEC-1: Preflight enumerates the resolved target servers - same Server.Admin gate
         // as TriggerRun so it cannot be used as a recon oracle for servers the caller may not
@@ -277,7 +309,9 @@ public class PipelinesController(
         int? organizationId = request.OrganizationId;
         if (!User.IsInRole("Admin"))
         {
-            var organizationIds = await authz.GetUserOrganizationIdsAsync(User, ct);
+            // ADR-059: membership alone grants nothing; a role must let the caller read pipelines there.
+            var organizationIds = await authz.GetOrganizationIdsWithPermissionAsync(
+                User, ResourceType.Pipeline, Permission.Read, ct);
             organizationId ??= organizationIds.FirstOrDefault();
             if (organizationId <= 0 || !organizationIds.Contains(organizationId.Value))
                 return Forbid();
@@ -311,15 +345,15 @@ public class PipelinesController(
     {
         var pipelineId = await runService.GetPipelineIdForRunAsync(runId, ct);
         if (pipelineId is null) return NotFound();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, pipelineId.Value, ct))
             return Forbid();
 
         var cancelled = await runService.CancelRunAsync(runId, PipelineRunCancellation.ByUser(User.Identity?.Name), ct);
         if (!cancelled) return NotFound();
         return NoContent();
     }
-    /// <summary>R-39: resumes a run waiting after a missed confirmation. Same permission as cancelling the
-    /// run or deciding its approval (Pipeline.Write): it replays steps that run already authorised. A run
+    /// <summary>R-39: resumes a run waiting after a missed confirmation. Requires pipeline.run (R-11) on the run's
+    /// pipeline and, like a retry, Server.Admin on every target server of the run's captured definition. A run
     /// that is not waiting, or whose window elapsed, answers 409 with the reason.</summary>
     [HttpPost("runs/{runId:int}/resume")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -328,7 +362,14 @@ public class PipelinesController(
     {
         var pipelineId = await runService.GetPipelineIdForRunAsync(runId, ct);
         if (pipelineId is null) return NotFound();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, pipelineId.Value, ct))
+            return Forbid();
+
+        // A resume replays the run's captured steps on its targets, like a retry (BACK-020): authorize the
+        // run's captured definition with the same Server.Admin gate.
+        var resumeTargets = await runService.GetRetryTargetServerIdsAsync(runId, ct);
+        if (resumeTargets is null) return NotFound();
+        if (!await CallerAdministersAllTargetsAsync(resumeTargets, ct))
             return Forbid();
 
         await runService.ResumeAwaitingRunAsync(runId, User.Identity?.Name, ct);
@@ -340,7 +381,7 @@ public class PipelinesController(
     {
         var pipelineId = await runService.GetPipelineIdForRunAsync(runId, ct);
         if (pipelineId is null) return NotFound();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, pipelineId.Value, ct))
             return Forbid();
 
         // BACK-020: a retry replays the run's captured definition, not the current one: authorize that.
@@ -360,7 +401,7 @@ public class PipelinesController(
     {
         var pipelineId = await runService.GetPipelineIdForRunAsync(runId, ct);
         if (pipelineId is null) return NotFound();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineRun, pipelineId.Value, ct))
             return Forbid();
 
         // Same Server.Admin gate as TriggerRun - a rerun launches free-form shell (= RCE). BACK-020: on the
@@ -417,13 +458,38 @@ public class PipelinesController(
     public async Task<ActionResult<PipelineApprovalDto>> DecideApproval(
         int approvalId, [FromBody] ApprovalDecisionRequest request, CancellationToken ct)
     {
-        var pipelineId = await runService.GetPipelineIdForApprovalAsync(approvalId, ct);
-        if (pipelineId is null) return NotFound();
-        if (!await authz.HasPermissionAsync(User, ResourceType.Pipeline, pipelineId.Value, Permission.Write, ct))
+        ArgumentNullException.ThrowIfNull(request);
+        // TimedOut is issued by the expiry sweep only; a user approves or rejects (RBAC audit, finding 11).
+        if (request.Decision is not (ApprovalStatus.Approved or ApprovalStatus.Rejected))
+            return BadRequest(new ApiError { Message = $"'{request.Decision}' is not a decision; an approval is approved or rejected." });
+        var scope = await approvalService.GetApprovalScopeAsync(approvalId, ct);
+        if (scope is null) return NotFound();
+        if (!await authz.HasPermissionAsync(User, PermissionKeys.PipelineApprovalDecide, scope.PipelineId, ct)
+            || !await MayApproveAsync(scope, ct))
             return Forbid();
 
         // A refused decision answers with its reason (ErrorHandlingMiddleware), never a bare 404.
         return Ok(await approvalService.DecideApprovalAsync(approvalId, request, ct));
+    }
+
+    // RBAC audit, finding 11: starting a run cannot also be what lets it through its gate, so deciding is
+    // pipeline.approval.decide (R-11) on top of this: the approver administers the gated project, or the environment the
+    // approval was asked for; a pipeline of neither needs Admin on the pipeline itself. Approving one's
+    // own run stays allowed (a decision of the product, not a gap).
+    private async Task<bool> MayApproveAsync(PipelineApprovalScope scope, CancellationToken ct)
+    {
+        if (scope.ProjectId is { } projectId)
+        {
+            if (await authz.HasPermissionAsync(User, ResourceType.Project, projectId, Permission.Admin, ct))
+                return true;
+        }
+        if (scope.EnvironmentId is { } environmentId)
+        {
+            if (await authz.HasPermissionAsync(User, ResourceType.Environment, environmentId, Permission.Admin, ct))
+                return true;
+        }
+        if (scope.ProjectId is not null || scope.EnvironmentId is not null) return false;
+        return await authz.HasPermissionAsync(User, ResourceType.Pipeline, scope.PipelineId, Permission.Admin, ct);
     }
 
     [AllowAnonymous]
@@ -616,8 +682,8 @@ public class PipelinesController(
 
     // F-EXEC-1: a pipeline step is a free-form shell command, i.e. arbitrary code execution on
     // the target server - exactly what the F-15 gate on POST /api/tasks requires Server Admin
-    // for. Triggering a run is only Pipeline.Write-gated, so without this check a user with
-    // pipeline edit rights but no Server Admin could escalate to RCE on servers they do not
+    // for. Triggering a run is only gated by pipeline.run, so without this check a user with
+    // the run permission but no Server Admin could escalate to RCE on servers they do not
     // administer. Require Server Admin on EVERY server any stage could resolve to (pool >
     // environment > agent, all statuses). An empty set means the run can target nothing and
     // will fail "no server matched" - nothing to authorize. Non-interactive triggers

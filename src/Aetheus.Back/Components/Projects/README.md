@@ -17,6 +17,13 @@ Gère les projets et leurs relations avec dépôts, serveurs et pipelines.
   abonnements, releases, analyses et dépôts Git. Une seule transaction, les grandes tables par lots ;
   refus (409) tant qu'une exécution du projet n'est pas terminée. `GET /api/projects/{id}/deletion-preview`
   compte ce qui partirait, et l'entrée d'audit reprend ces comptes.
+- Ce que le projet a déployé sur ses serveurs part aussi, en premier (recette R-97,
+  [ADR-058](../../../../docs/adr/ADR-058-project-deletion-removes-server-resources.md)). Le plan est lu dans les
+  bibliothèques (`ProjectServerCleanupPlanner`). Les agents découvrent puis suppriment, avec les opérations
+  `ProjectResourcesDiscover` et `ProjectResourcesRemove` (`ProjectServerCleanupService`), via
+  `POST /api/projects/{id}/deletion/discovery`, `GET .../deletion/tasks` et `POST .../deletion/cleanup`.
+  `DELETE /api/projects/{id}?serverTaskIds=...&force=` refuse (409) tant que ces tâches ne prouvent pas tout
+  supprimé, sauf choix explicite de forcer, que l'audit consigne.
 - « Conservation des données » (PLAN-013 lot 4) : profil Léger, Standard ou Complet et valeurs propres
   (`ProjectDataRetentionService`, `GET/PUT /api/projects/{id}/data-retention`), lues par les purges de la
   télémétrie, des journaux et du détail d'analyse et par la configuration de la clé d'ingestion.

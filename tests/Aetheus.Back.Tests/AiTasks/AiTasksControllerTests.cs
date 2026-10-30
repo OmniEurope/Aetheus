@@ -102,8 +102,8 @@ public sealed class AiTasksControllerTests
     {
         var ct = TestContext.Current.CancellationToken;
         _controller.ControllerContext = Context(new Claim(ClaimTypes.Name, "member"));
-        _authorization.GetUserOrganizationIdsAsync(
-                Arg.Any<ClaimsPrincipal>(),
+        _authorization.GetOrganizationIdsWithPermissionAsync(
+                Arg.Any<ClaimsPrincipal>(), ResourceType.Project, Permission.Read,
                 ct)
             .Returns([7]);
         _profiles.GetProfileOptionsAsync(

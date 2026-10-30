@@ -145,6 +145,26 @@ public class GitLightRepository(AppDbContext db) : IGitLightRepository
             .ConfigureAwait(false);
     }
 
+    public async Task<bool> IsDevelopBranchAutoCreationEnabledAsync(int projectId, CancellationToken ct = default)
+    {
+        return await db.Projects
+            .AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .Select(p => p.Organization.AutoCreateDevelopBranch)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsEmptyAsync(int id, CancellationToken ct = default)
+    {
+        return await db.GitInternalRepos
+            .AsNoTracking()
+            .Where(r => r.Id == id)
+            .Select(r => r.IsEmpty)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<bool> ProjectExistsAsync(int projectId, CancellationToken ct = default)
     {
         return await db.Projects

@@ -36,6 +36,8 @@ public class GitController(IGitService gitService, IResourceAuthorizationService
     {
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, request.ProjectId, Permission.Write, ct))
             return Forbid();
+        if (!await CanUseServiceConnectionAsync(request.ProjectId, request.ServiceConnectionId, ct))
+            return Forbid();
         var result = await gitService.CreateConnectionAsync(request, ct);
         return CreatedAtAction(nameof(GetConnection), new { id = result.Id }, result);
     }
@@ -47,6 +49,8 @@ public class GitController(IGitService gitService, IResourceAuthorizationService
         var projectId = await gitService.GetProjectIdForConnectionAsync(id, ct);
         if (projectId is null) return NotFound();
         if (!await authz.HasPermissionAsync(User, ResourceType.Project, projectId.Value, Permission.Write, ct))
+            return Forbid();
+        if (!await CanUseServiceConnectionAsync(projectId.Value, request.ServiceConnectionId, ct))
             return Forbid();
 
         var result = await gitService.UpdateConnectionAsync(id, request, ct);
@@ -172,5 +176,15 @@ public class GitController(IGitService gitService, IResourceAuthorizationService
         // provider's commit-status API (GitHub/GitLab) is not yet wired, so the response says so plainly
         // instead of a bare 200 that implies the provider was updated.
         return Ok(new { recorded = true, forwardedToProvider = false });
+    }
+
+    /// <summary>M4: the credentials a connection mirrors with are a service connection the caller can read
+    /// and that belongs to the project's organization, never another organization's.</summary>
+    private async Task<bool> CanUseServiceConnectionAsync(int projectId, int? serviceConnectionId, CancellationToken ct)
+    {
+        if (serviceConnectionId is not { } connectionId)
+            return true; // no credential named: the connection mirrors anonymously
+        return await authz.HasPermissionAsync(User, ResourceType.ServiceConnection, connectionId, Permission.Read, ct)
+            && await authz.BelongsToProjectOrganizationAsync(projectId, ResourceType.ServiceConnection, [connectionId], ct);
     }
 }

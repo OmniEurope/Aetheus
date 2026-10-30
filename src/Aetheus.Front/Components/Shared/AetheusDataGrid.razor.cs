@@ -66,6 +66,20 @@ public partial class AetheusDataGrid<TItem> where TItem : notnull
     /// <summary>Alternating row shades on every list by default.</summary>
     [Parameter] public bool AllowAlternatingRows { get; set; } = true;
 
+    /// <summary>OE row selection (a checkbox column, the selected rows filled). None by default: only a
+    /// grid whose rows are chosen and stay chosen asks for it (the release picker, recette R-58).</summary>
+    [Parameter] public OmniDataGridSelectionMode SelectionMode { get; set; }
+
+    /// <summary>A click on a row also selects it, when <see cref="SelectionMode"/> allows one.</summary>
+    [Parameter] public bool AllowRowSelectOnRowClick { get; set; }
+
+    /// <summary>The selected rows, matched to the rows on screen through the key; a new list from the host
+    /// replaces the grid's own selection.</summary>
+    [Parameter] public IReadOnlyList<TItem> Value { get; set; } = [];
+
+    /// <summary>Raised with the selected rows each time the selection changes.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<TItem>> ValueChanged { get; set; }
+
     // Expose typed export parameters so pages do not configure the grid through unmatched
     // attributes; eligible tables export all filtered rows with page context and place Markdown
     // actions at the footer's end.

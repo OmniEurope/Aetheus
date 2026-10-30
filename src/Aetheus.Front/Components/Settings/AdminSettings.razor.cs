@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Settings;
 
 public partial class AdminSettings : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -166,16 +167,19 @@ public partial class AdminSettings : IAsyncDisposable
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Settings.DeleteSecretAsync(id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            _secrets = await Api.Settings.GetSecretsAsync();
-            Toast.Success("Deleted", "SecretDeleted");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Settings.DeleteSecretAsync(id);
+            if (success)
+            {
+                _secrets = await Api.Settings.GetSecretsAsync();
+                Toast.Success("Deleted", "SecretDeleted");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private async Task GenerateToken()

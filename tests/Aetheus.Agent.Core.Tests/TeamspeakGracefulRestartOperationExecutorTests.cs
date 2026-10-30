@@ -121,6 +121,7 @@ public class TeamspeakGracefulRestartOperationExecutorTests
                 IsLinux = true,
                 CredentialPath = CredentialPath,
                 DelayAsync = (delay, _) => { Events.Add($"wait {delay.TotalSeconds}"); return Task.CompletedTask; },
+                UnitExistsAsync = (unit, _) => Task.FromResult(unit == "teamspeak3.service"),
                 RunProcessAsync = (startInfo, timeout, _, _, _) =>
                 {
                     Events.Add($"run {startInfo.FileName} {string.Join(' ', startInfo.ArgumentList)} timeout={timeout}");
@@ -164,13 +165,14 @@ public class TeamspeakGracefulRestartOperationExecutorTests
                 "query login serveradmin s3cret\\spass\nuse sid=1\ngm msg=Back\\sin\\s2\\smin\\pok\nquit\n",
                 "wait 30",
                 "query login serveradmin s3cret\\spass\nuse sid=1\nclientkick reasonid=5 reasonmsg=Restart cldbid=0\nquit\n",
-                // The restart timeout is clamped to the configured maximum.
-                "run sudo -n /bin/systemctl restart ts3server timeout=120",
+                // The restart timeout is clamped to the configured maximum. R-119: the unit teamspeak-setup installs,
+                // through the aetheus-teamspeak grant (ts3server named no unit on any host).
+                "run sudo -n /bin/systemctl restart teamspeak3.service timeout=120",
             ],
             harness.Events);
         await harness.Client.Received(2).ExecuteAsync(10011, Arg.Any<string>(), Arg.Any<CancellationToken>());
         Assert.Equal(
-            ["Broadcasting restart warning (grace 30s)…", "Kicking connected clients…", "Restarting ts3server…"],
+            ["Broadcasting restart warning (grace 30s)…", "Kicking connected clients…", "Restarting teamspeak3.service…"],
             harness.Output.Select(line => line.Message));
     }
 

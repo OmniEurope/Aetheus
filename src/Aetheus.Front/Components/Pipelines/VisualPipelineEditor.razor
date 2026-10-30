@@ -9,9 +9,11 @@
 }
 else
 {
+    @* R-14: the settings, toolbar, guide, inherited elements, canvas and stage panel are separated only by this stack's gap. *@
+    <OmniStack>
     @* Pipeline-level settings (collapsible) *@
     <OmniFieldset Collapsible="true" @bind-Expanded="_settingsExpanded"><Legend>@L["PipelineSettings"]</Legend><ChildContent>
-        <div class="vp-settings-panel">
+        <OmniStack Class="vp-settings-panel">
             <OmniRow Gap="OmniSpacing.Large">
                 <OmniColumn MediumSpan="4">
                     <OmniFormField Label="@L["Trigger"]" For="oe-formfield-pages-pipelines-visualpipelineeditor-1">
@@ -42,7 +44,7 @@ else
             </OmniRow>
 
             @* Pipeline-level variables *@
-            <OmniFieldset Collapsible="true" Expanded="false" Class="omni-u-mt-sm"><Legend>@L["PipelineVariables"]</Legend><ChildContent>
+            <OmniFieldset Collapsible="true" Expanded="false"><Legend>@L["PipelineVariables"]</Legend><ChildContent>
                 <div class="vp-var-grid">
                     @foreach (var kvp in _definition.Variables)
                     {
@@ -61,7 +63,7 @@ else
                     <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@OnAddPipelineVar" Disabled="@string.IsNullOrWhiteSpace(_newPipelineVarKey)" title="@L["Add"]"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon></OmniButton>
                 </OmniStack>
             </ChildContent></OmniFieldset>
-        </div>
+        </OmniStack>
     </ChildContent></OmniFieldset>
 
     @* Toolbar *@
@@ -86,7 +88,7 @@ else
         </OmniStack>
     </div>
 
-    <OmniAlert Severity="OmniSeverity.Info" Class="vp-editor-guide">
+    <OmniAlert Severity="OmniSeverity.Info">
         <OmniIcon Name="OmniIconName.Info" />
         <span>@L["VisualPipelineGuide"]</span>
     </OmniAlert>
@@ -97,7 +99,7 @@ else
             <OmniRow Gap="OmniSpacing.Small">
                 @foreach (var item in ProvenanceItems)
                 {
-                    <OmniBadge Fill="OmniFill.Solid"
+                    <OmniBadge Icon="@(BadgeIcon.For(ProvenanceStyle(item.Provenance)))" Fill="OmniFill.Solid"
                                  Tone="@ProvenanceStyle(item.Provenance)"
                                  Class="@(item.Provenance == PipelineElementProvenance.Inherited ? "vp-provenance-inherited" : null)">@($"{ProvenanceText(item.Provenance)}: {item.Path}")</OmniBadge>
                 }
@@ -180,4 +182,5 @@ else
                         EditStep="@(idx => OnEditStepInStage(_selectedStageId!, idx))"
                         AddStep="@(() => OnAddStepToStage(_selectedStageId!))" />
     }
+    </OmniStack>
 }

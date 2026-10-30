@@ -88,6 +88,18 @@ public class EnvironmentRepository(AppDbContext db) : IEnvironmentRepository
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<EnvironmentCopyReferences?> GetCopyReferencesAsync(int id, CancellationToken ct = default)
+    {
+        return await db.Environments
+            .AsNoTracking()
+            .Where(e => e.Id == id)
+            .Select(e => new EnvironmentCopyReferences(
+                e.ProjectId,
+                e.Servers.Select(link => link.ServerId).ToList(),
+                e.LinkedProjectServers.Select(link => link.ProjectServer.ProjectId).Distinct().ToList()))
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task<bool> NameExistsInProjectAsync(string name, int? projectId, CancellationToken ct = default)
     {
         return await db.Environments

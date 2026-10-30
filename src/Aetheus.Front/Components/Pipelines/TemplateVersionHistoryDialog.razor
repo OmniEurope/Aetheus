@@ -23,7 +23,7 @@
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="ChangelogEntry" Title="@L["Changelog"]" Filterable="true" />
             <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedByUsername" Title="@L["CreatedBy"]" Filterable="true" />
-            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+            <OmniDataGridColumn TItem="PipelineTemplateVersionSummaryDto" Property="CreatedAt" Title="@L["Date"]" Width="12rem" FormatString="{0:g}" Filterable="true" />
         </Columns>
     </AetheusDataGrid>
 
@@ -45,13 +45,13 @@
                 </OmniStack>
             </OmniAlert>
         }
-        else if (_yamlLoading)
-        {
-            <AetheusLoader Size="OmniControlSize.Small" />
-        }
         else
         {
-            <MonacoDiffViewer OriginalValue="@_originalYaml" ModifiedValue="@_modifiedYaml" />
+            @* Recette R-116: choosing another version reads its YAML under OE's busy veil; the diff stays mounted
+               underneath (the viewer repaints when the new values arrive), no loader replaces it. *@
+            <div class="@(_yamlLoading ? "omni-busy" : null)" aria-busy="@(_yamlLoading ? "true" : "false")" data-testid="template-yaml-zone">
+                <OmniDiffViewer Original="@_originalYaml" Modified="@_modifiedYaml" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
+            </div>
         }
     }
 

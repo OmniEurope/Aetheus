@@ -28,7 +28,6 @@ public class AuthServiceMustChangePasswordTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Auth:AdminUser"] = "admin",
                 ["Auth:AdminPassword"] = "admin",
                 ["Auth:JwtKey"] = "aetheus-dev-key-minimum-32-bytes!!"
             })
@@ -58,6 +57,7 @@ public class AuthServiceMustChangePasswordTests
     {
         Id = 1,
         Username = "testuser",
+        Email = "testuser@example.com",
         PasswordHash = PasswordHash,
         IsActive = true,
         MustChangePassword = mustChangePassword,
@@ -75,10 +75,10 @@ public class AuthServiceMustChangePasswordTests
     [Fact]
     public async Task R471_TheToken_CarriesAnOpaqueAudienceIdentifier_ThatIsNotTheAccount()
     {
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>())
             .Returns(MakeUser(mustChangePassword: false));
 
-        var response = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, TestContext.Current.CancellationToken);
+        var response = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, TestContext.Current.CancellationToken);
 
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(response!.Token);
         var visitor = jwt.Claims.Single(claim => claim.Type == AetheusClaimTypes.AnalyticsVisitor).Value;
@@ -93,10 +93,10 @@ public class AuthServiceMustChangePasswordTests
     [Fact]
     public async Task LoginAsync_UserMustChangePassword_ResponseFlagTrueAndClaimPresent()
     {
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>())
             .Returns(MakeUser(mustChangePassword: true));
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.True(result.MustChangePassword);
@@ -107,10 +107,10 @@ public class AuthServiceMustChangePasswordTests
     [Fact]
     public async Task LoginAsync_UserDoesNotNeedChange_ResponseFlagFalseAndClaimAbsent()
     {
-        _repo.FindUserWithRolesAsync("testuser", Arg.Any<CancellationToken>())
+        _repo.FindUserByEmailWithRolesAsync("testuser@example.com", Arg.Any<CancellationToken>())
             .Returns(MakeUser(mustChangePassword: false));
 
-        var result = await _sut.LoginAsync(new LoginRequest { Username = "testuser", Password = Password }, ct: TestContext.Current.CancellationToken);
+        var result = await _sut.LoginAsync(new LoginRequest { Email = "testuser@example.com", Password = Password }, ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         Assert.False(result.MustChangePassword);

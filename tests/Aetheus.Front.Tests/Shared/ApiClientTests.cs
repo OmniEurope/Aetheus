@@ -26,7 +26,7 @@ public class ApiClientTests
     {
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK) { Content = Json(new LoginResponse { Token = "tok" }) };
-        var result = await api.Auth.LoginAsync(new LoginRequest { Username = "u", Password = "p" }, Xunit.TestContext.Current.CancellationToken);
+        var result = await api.Auth.LoginAsync(new LoginRequest { Email = "u@example.com", Password = "p" }, Xunit.TestContext.Current.CancellationToken);
         Assert.True(result.IsSuccess);
         Assert.Equal("tok", result.Value!.Token);
     }
@@ -39,7 +39,7 @@ public class ApiClientTests
         {
             Content = Json(new ApiError { Message = "Invalid credentials." })
         };
-        var result = await api.Auth.LoginAsync(new LoginRequest { Username = "u", Password = "p" }, Xunit.TestContext.Current.CancellationToken);
+        var result = await api.Auth.LoginAsync(new LoginRequest { Email = "u@example.com", Password = "p" }, Xunit.TestContext.Current.CancellationToken);
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
         Assert.Equal("Invalid credentials.", result.Error?.Message);
@@ -464,7 +464,7 @@ public class ApiClientTests
     {
         var (api, h) = Create();
         h.Response = new HttpResponseMessage(HttpStatusCode.OK);
-        Assert.True(await api.Projects.DeleteProjectAsync(1, Xunit.TestContext.Current.CancellationToken));
+        Assert.Equal(ProjectDeletionOutcome.Deleted, await api.Projects.DeleteProjectAsync(1, [], Xunit.TestContext.Current.CancellationToken));
     }
 
     // --- Monitoring ---

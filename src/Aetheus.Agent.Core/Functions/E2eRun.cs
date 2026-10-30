@@ -106,6 +106,7 @@ internal sealed record E2eRun(
         "-e", $"E2E_FRONTEND_URL=http://{Front}:8080",
         "-e", $"E2E_BACKEND_URL=http://{Back}:8080",
         "-e", "E2E_ADMIN_USER=admin",
+        "-e", "E2E_ADMIN_EMAIL=admin@aetheus.local",
         "-e", $"E2E_ADMIN_PASSWORD={adminPassword}",
         "-e", $"E2E_PRESERVE_DATABASE={PreserveDatabase}",
         "-e", $"E2E_WORKERS={Workers}",

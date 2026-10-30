@@ -13,7 +13,7 @@
     <div class="@(Model.Loading ? "omni-busy" : null)" aria-busy="@(Model.Loading ? "true" : "false")"
          title="@(Model.Loading ? L["LoadingConfig"].Value : null)">
         <OmniCodeEditor @bind-Value="_content" Language="apache" Height="24rem"
-                        InteropModulePath="./js/omni-code-editor-frame.js?v=1"
+                        InteropModulePath="@EditorModules.Frame"
                         Label="@L["ApacheConfig"]" Disabled="@Model.Loading" />
     </div>
     <Aetheus.Front.Components.Shared.DialogFooter OnCancel="@Cancel">

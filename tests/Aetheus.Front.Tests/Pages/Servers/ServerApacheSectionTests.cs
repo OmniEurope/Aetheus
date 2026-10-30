@@ -40,8 +40,65 @@ public class ServerApacheSectionTests : BunitContext
     public void Renders_ApacheSection()
     {
         var cut = RenderSection();
-        // Running server renders the "Running" status badge in the header.
-        Assert.Contains("Running", cut.Markup);
+        // R-120: a running Apache shows no status badge (neither "Running" nor "Stopped"), the room goes to the lists.
+        Assert.DoesNotContain("Running", cut.Markup);
+        Assert.DoesNotContain("Stopped", cut.Markup);
+    }
+
+    [Fact]
+    public void R120_TheVersionIsNotInTheStatusLine_ItIsInThePageTitle()
+    {
+        var server = MakeServer();
+        server = server with { Apache = server.Apache with { Version = "2.4.58" } };
+
+        var cut = RenderSection(server);
+
+        Assert.DoesNotContain("2.4.58", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R120_TheSitesTab_HasNoCountAndNoFreeTextFilterAboveTheGrids()
+    {
+        var cut = RenderSection(MakeServer(vhosts:
+        [
+            new ApacheVirtualHostDto { ServerName = "example.com", DocumentRoot = "/var/www/html", Port = 80, IsEnabled = true }
+        ]));
+
+        // The sites tab is the first and active one: its free-text filter (placeholder and label were the key
+        // FilterSites) and its count badge are gone; the grid headings carry the counts.
+        Assert.DoesNotContain("FilterSites", cut.Markup, StringComparison.Ordinal);
+        Assert.Empty(cut.FindComponents<CountBadge>());
+        Assert.Contains("example.com", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R120_BothSitesGrids_AreCappedToAboutTenRows_AndFilterInlineUnderTheirHeader()
+    {
+        var cut = RenderSection(MakeServer(vhosts:
+        [
+            new ApacheVirtualHostDto { ServerName = "on.example.com", DocumentRoot = "/var/www/on", Port = 80, IsEnabled = true },
+            new ApacheVirtualHostDto { ServerName = "off.example.com", DocumentRoot = "/var/www/off", Port = 80, IsEnabled = false }
+        ]));
+
+        var grids = cut.FindComponents<OmniDataGrid<ServerApacheSection.ApacheVirtualHostGroup>>();
+
+        Assert.Equal(2, grids.Count);
+        Assert.All(grids, grid =>
+        {
+            Assert.Equal(Aetheus.Front.Components.Shared.AetheusGrid.TenRowsMaxHeight, grid.Instance.MaxHeight);
+            Assert.False(grid.Instance.FillAvailableHeight, "neither sites grid takes the whole remaining height");
+            Assert.False(grid.Instance.ShowHeaderFilterMenu, "the filter row sits under the header");
+        });
+    }
+
+    [Fact]
+    public void R120_AStoppedApache_ShowsTheStoppedBadge_ARunningOneDoesNot()
+    {
+        var stopped = RenderSection(MakeServer(running: false));
+        Assert.Single(stopped.FindAll(".omni-badge"), badge => badge.TextContent.Contains("Stopped", StringComparison.Ordinal));
+
+        var running = RenderSection(MakeServer(running: true));
+        Assert.DoesNotContain(running.FindAll(".omni-badge"), badge => badge.TextContent.Contains("Stopped", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -77,35 +134,22 @@ public class ServerApacheSectionTests : BunitContext
         Assert.Equal(expected, result);
     }
 
+    // R-120: a site with no ServerName (default-ssl.conf, for instance) shows its configuration file name, not an
+    // empty cell; two such sites stay two rows.
     [Fact]
-    public void FilteredModules_WithSearch_FiltersCorrectly()
-    {
-        var server = MakeServer(modules:
-        [
-            new ApacheModuleDto { Name = "mod_rewrite", IsEnabled = true },
-            new ApacheModuleDto { Name = "mod_ssl", IsEnabled = true },
-            new ApacheModuleDto { Name = "mod_headers", IsEnabled = false }
-        ]);
-        var cut = RenderSection(server);
-        typeof(ServerApacheSection).GetField("_moduleSearch", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "ssl");
-        var filtered = (List<ApacheModuleDto>)typeof(ServerApacheSection).GetProperty("FilteredModules", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Single(filtered);
-        Assert.Equal("mod_ssl", filtered[0].Name);
-    }
-
-    [Fact]
-    public void FilteredVirtualHosts_WithSearch_FiltersCorrectly()
+    public void ASiteWithoutAServerName_IsNamedAfterItsConfigurationFile()
     {
         var server = MakeServer(vhosts:
         [
-            new ApacheVirtualHostDto { ServerName = "example.com", DocumentRoot = "/var/www/html", Port = 80, IsEnabled = true },
-            new ApacheVirtualHostDto { ServerName = "api.example.com", DocumentRoot = "/var/www/api", Port = 443, IsEnabled = true }
+            new ApacheVirtualHostDto { ServerName = "", Port = 443, IsEnabled = false, ConfigFile = "/etc/apache2/sites-available/default-ssl.conf" },
+            new ApacheVirtualHostDto { ServerName = "", Port = 80, IsEnabled = false, ConfigFile = "/etc/apache2/sites-available/000-default.conf" },
+            new ApacheVirtualHostDto { ServerName = "named.example.com", Port = 80, IsEnabled = false, ConfigFile = "/etc/apache2/sites-available/named.conf" }
         ]);
         var cut = RenderSection(server);
-        typeof(ServerApacheSection).GetField("_vhostSearch", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(cut.Instance, "api");
-        var filtered = (List<ApacheVirtualHostDto>)typeof(ServerApacheSection).GetProperty("FilteredVirtualHosts", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(cut.Instance)!;
-        Assert.Single(filtered);
-        Assert.Equal("api.example.com", filtered[0].ServerName);
+
+        var names = cut.Instance.DisabledVirtualHostGroups.Select(group => group.ServerName).ToList();
+
+        Assert.Equal(["000-default.conf", "default-ssl.conf", "named.example.com"], names);
     }
 
     [Fact]

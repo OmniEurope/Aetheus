@@ -47,6 +47,11 @@ public class Project
     /// usage falls back under 80 %.</summary>
     public int StorageQuotaAlertLevel { get; set; }
 
+    /// <summary>Recette R-51 (ADR-058): set when the user deleted the project and something it deployed is
+    /// still on a server. The project is then "deleted, to clean up": listed, unusable (no run, no edit), and
+    /// its data is kept only so the cleanup can be relaunched; it goes once everything is removed.</summary>
+    public DateTime? DeletionRequestedAt { get; set; }
+
     public int OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
 

@@ -12,8 +12,8 @@ namespace Aetheus.Back.Components.Pipelines;
 /// </summary>
 public interface IPipelineReleaseArtifactPreflight
 {
-    /// <summary>One readable refusal per release restore that the dispatch would fail.</summary>
-    Task<IReadOnlyList<string>> FindProblemsAsync(
+    /// <summary>One refusal per release restore that the dispatch would fail.</summary>
+    Task<IReadOnlyList<PipelineProblem>> FindProblemsAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int projectId,
@@ -30,7 +30,7 @@ public interface IPipelineReleaseArtifactPreflight
 public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifacts, IArtifactStorageService storage)
     : IPipelineReleaseArtifactPreflight
 {
-    public async Task<IReadOnlyList<string>> FindProblemsAsync(
+    public async Task<IReadOnlyList<PipelineProblem>> FindProblemsAsync(
         PipelineYamlDefinition definition,
         IReadOnlyDictionary<string, string> resolvedVariables,
         int projectId,
@@ -40,7 +40,7 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
         ArgumentNullException.ThrowIfNull(resolvedVariables);
         var commit = resolvedVariables.GetValueOrDefault(PipelineRunService.SourceCommitVariable)
             ?? resolvedVariables.GetValueOrDefault("BUILD_SOURCEVERSION");
-        var problems = new List<string>();
+        var problems = new List<PipelineProblem>();
         foreach (var stage in YamlParsingHelper.FlattenJobs(definition))
         {
             var variables = StageVariables(stage, resolvedVariables);
@@ -53,13 +53,19 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
                     continue;
                 var reason = await FindReasonAsync(step, selector, name, projectId, commit, ct).ConfigureAwait(false);
                 if (reason is not null)
-                    problems.Add($"Stage '{stage.Name}', step '{step.Name}' of pipeline '{definition.Name}': {reason}");
+                    problems.Add(PipelineProblem.Of(
+                        reason.Code,
+                        $"Stage '{stage.Name}', step '{step.Name}' of pipeline '{definition.Name}': {reason.English}",
+                        [("stage", stage.Name), ("step", step.Name), ("pipeline", definition.Name), .. reason.Parameters]));
             }
         }
         return problems;
     }
 
-    private async Task<string?> FindReasonAsync(
+    /// <summary>Why one restore would fail, before the stage, step and pipeline it belongs to are added.</summary>
+    private sealed record Reason(string Code, string English, params (string Name, object? Value)[] Parameters);
+
+    private async Task<Reason?> FindReasonAsync(
         PipelineStepDefinition step, string selector, string name, int projectId, string? commit, CancellationToken ct)
     {
         var (artifact, error) = await PipelineReleaseArtifactRules.FindAsync(
@@ -67,8 +73,11 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
         if (artifact is not null)
         {
             if (artifact.Sha256 is not { Length: 64 } sha || !sha.All(Uri.IsHexDigit))
-                return $"the retained artifact '{artifact.Name}' of release '{selector}' has no valid SHA-256, "
-                    + "so the restore would be refused. Republish the release that carries it.";
+                return new Reason(
+                    PipelineProblemCodes.ReleaseArtifactInvalidSha256,
+                    $"the retained artifact '{artifact.Name}' of release '{selector}' has no valid SHA-256, "
+                    + "so the restore would be refused. Republish the release that carries it.",
+                    ("artifact", artifact.Name), ("release", selector));
             return await FindMissingPayloadAsync(artifact, selector, ct).ConfigureAwait(false);
         }
 
@@ -82,8 +91,11 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
         var why = step.AllowMissing
             ? " allow_missing does not apply: the retained release was sealed with a contract that requires it."
             : string.Empty;
-        return $"release '{selector}' has no retained artifact '{name}' in this project.{why} "
-            + "The step would fail. Deploy or publish a release that retains this artifact before launching.";
+        return new Reason(
+            step.AllowMissing ? PipelineProblemCodes.ReleaseArtifactRequiredByContract : PipelineProblemCodes.ReleaseArtifactNotRetained,
+            $"release '{selector}' has no retained artifact '{name}' in this project.{why} "
+            + "The step would fail. Deploy or publish a release that retains this artifact before launching.",
+            ("release", selector), ("artifact", name));
     }
 
     /// <summary>
@@ -91,7 +103,7 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
     /// file is gone answers 404 in the middle of the run. That is refused here, never skipped through
     /// <c>allow_missing</c>: the release exists, so a missing V-1 payload is a fault, not a bootstrap.
     /// </summary>
-    private async Task<string?> FindMissingPayloadAsync(PipelineArtifact artifact, string selector, CancellationToken ct)
+    private async Task<Reason?> FindMissingPayloadAsync(PipelineArtifact artifact, string selector, CancellationToken ct)
     {
         await using (var payload = storage.OpenArtifact(artifact.FilePath))
         {
@@ -99,10 +111,13 @@ public sealed class PipelineReleaseArtifactPreflight(IArtifactRepository artifac
         }
         var version = await artifacts.FindNewestReleaseVersionAsync(artifact.Id, ct).ConfigureAwait(false);
         var release = version is null ? $"release '{selector}'" : $"release '{selector}' (version {version})";
-        return $"{release} resolves to artifact #{artifact.Id} '{artifact.Name}', whose payload file is missing "
+        return new Reason(
+            version is null ? PipelineProblemCodes.ReleaseArtifactPayloadMissing : PipelineProblemCodes.ReleaseVersionArtifactPayloadMissing,
+            $"{release} resolves to artifact #{artifact.Id} '{artifact.Name}', whose payload file is missing "
             + "from the artifact storage, so the restore would fail with a 404 during the run. "
             + "allow_missing does not apply: the release exists, only its file is gone. "
-            + "Deploy again a release that retains this artifact, or restore the file in the artifact storage, before launching.";
+            + "Deploy again a release that retains this artifact, or restore the file in the artifact storage, before launching.",
+            ("release", selector), ("version", version), ("artifactId", artifact.Id), ("artifact", artifact.Name));
     }
 
     private static bool IsReleaseRestore(PipelineStepDefinition step) =>

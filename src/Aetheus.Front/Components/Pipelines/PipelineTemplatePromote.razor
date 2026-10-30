@@ -32,7 +32,7 @@ else
     <EditForm Model="@_model" OnValidSubmit="@SubmitAsync">
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniText Element="OmniTextElement.Strong" Class="omni-u-mb-md">@string.Format(L["PromoteTemplateVersion"], _preview.TemplateName, _preview.LatestVersion + 1)</OmniText>
-        <MonacoDiffViewer OriginalValue="@_preview.LatestTemplateYaml" ModifiedValue="@_preview.EffectivePipelineYaml" />
+        <OmniDiffViewer Original="@_preview.LatestTemplateYaml" Modified="@_preview.EffectivePipelineYaml" Language="yaml" Height="24rem" InteropModulePath="@EditorModules.Frame" ShowNavigation="true" Label="@L["Diff"]" />
         <OmniFormField For="oe-pages-pipelines-pipelinetemplatepromote-1" Class="omni-u-w-100 omni-u-mt-md"><LabelContent>@L["ChangelogEntry"]</LabelContent><ChildContent>
             <OmniTextBox @bind-Value="_model.ChangelogEntry" Class="omni-u-w-100" Id="oe-pages-pipelines-pipelinetemplatepromote-1" />
         </ChildContent></OmniFormField>
@@ -41,7 +41,7 @@ else
         <MonacoEditor Value="@_model.YamlContent" ValueChanged="@(value => _model.YamlContent = value)" />
         <OmniCheckBox @bind-Value="_model.RebaseSourcePipeline" Class="omni-u-mt-md">@L["RebaseSourcePipeline"]</OmniCheckBox>
         <OmniStack Orientation="OmniOrientation.Horizontal" Justify="OmniJustification.End" Gap="OmniSpacing.Small" Class="omni-u-mt-lg">
-            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+            <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Cancel"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
             <OmniButton Variant="OmniButtonVariant.Primary" ButtonType="OmniButtonType.Submit" Class="@(_saving ? "btn-busy" : null)" Busy="@(_saving)"><Icon><OmniIcon Name="OmniIconName.Upload" /></Icon><ChildContent><span>@L["PublishVersion"]</span></ChildContent></OmniButton>
         </OmniStack>
     </EditForm>

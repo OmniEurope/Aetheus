@@ -124,6 +124,12 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
             .Select(project => project.Name)
             .FirstOrDefaultAsync(ct);
 
+    public Task<int?> GetProjectOrganizationIdAsync(int projectId, CancellationToken ct = default) =>
+        db.Projects.AsNoTracking()
+            .Where(project => project.Id == projectId)
+            .Select(project => (int?)project.OrganizationId)
+            .FirstOrDefaultAsync(ct);
+
     public Task<List<UserNotificationPreference>> GetPreferencesAsync(int userId, CancellationToken ct = default) =>
         db.UserNotificationPreferences.AsNoTracking()
             .Where(preference => preference.UserId == userId)
@@ -237,9 +243,8 @@ public sealed class UserNotificationRepository(AppDbContext db) : IUserNotificat
             .ToListAsync(ct);
 
     public Task<List<int>> GetServerProjectIdsAsync(int serverId, CancellationToken ct = default) =>
-        db.ProjectServers.AsNoTracking()
-            .Where(link => link.ServerId == serverId)
-            .Select(link => link.ProjectId)
+        // Linked directly, or through an environment of the project (R-83).
+        db.ProjectIdsOfServer(serverId)
             .Distinct()
             .OrderBy(projectId => projectId)
             .ToListAsync(ct);

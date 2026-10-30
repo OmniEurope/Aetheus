@@ -247,7 +247,7 @@ public sealed class AgentCapabilitiesDialogTests : BunitContext
     {
         var cut = RenderDialog();
 
-        cut.FindAll("button").First(button => button.TextContent.Contains("Cancel", StringComparison.Ordinal)).Click();
+        cut.FindAll("button").First(button => button.TextContent.Contains("GoBack", StringComparison.Ordinal)).Click();
 
         Assert.Equal(1, Dialogs.CloseCount);
         Assert.Null(Dialogs.LastCloseResult);

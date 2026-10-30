@@ -20,7 +20,7 @@ else
             <OmniDataGridColumn Frozen="true" TItem="TaskLogDto" Property="Timestamp" Title="@L["Time"]" FormatString="{0:G}" Width="180px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="TaskLogDto" Property="Level" Title="@L["Level"]" Width="100px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FormatFilterValue="@LevelText" >
                 <Template Context="log">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L[log.Level.ToString()]</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.ForState(GetLevelBadge(log.Level)))" Fill="OmniFill.Solid" Tone="@GetLevelBadge(log.Level)">@L[log.Level.ToString()]</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="TaskLogDto" Property="Message" Truncate="true" Title="@L["Message"]" MinWidth="18rem" Filterable="true">

@@ -31,6 +31,50 @@ public sealed class LibraryPortCheckDialogTests : BunitContext
     }
 
     [Fact]
+    public void ALoneServerWithoutPreselection_IsChosenAndTheButtonEnabled()
+    {
+        // R-88: the select showed the only server as if chosen while the value stayed null and the
+        // button stayed disabled.
+        _handler.SetJsonResponse(HttpMethod.Get, "/ports/servers", new PortAllocationTargetsDto
+        {
+            Servers = [new PortAllocationTargetDto { ServerId = 7, ServerName = "vps2577917" }],
+            PreselectedServerId = null,
+            ProjectId = 4
+        });
+        _handler.SetJsonResponse(HttpMethod.Post, CheckUrl, new PortCheckResultDto { ServerId = 7, ServerName = "vps2577917" });
+
+        var cut = Render<LibraryPortCheckDialog>(parameters => parameters.Add(dialog => dialog.LibraryId, 100));
+        var button = cut.FindAll("button").First(b => b.TextContent.Contains("CheckPorts", StringComparison.Ordinal));
+        Assert.False(button.HasAttribute("disabled"));
+        button.Click();
+
+        cut.WaitForAssertion(() => Assert.Contains(_handler.RequestDetails, request => request.Method == "POST"
+            && request.Url.EndsWith(CheckUrl, StringComparison.Ordinal)
+            && request.Body!.Contains("\"serverId\":7", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void SeveralServersWithoutPreselection_ShowAnEmptyOptionAndKeepTheButtonDisabled()
+    {
+        _handler.SetJsonResponse(HttpMethod.Get, "/ports/servers", new PortAllocationTargetsDto
+        {
+            Servers =
+            [
+                new PortAllocationTargetDto { ServerId = 7, ServerName = "vps2577917" },
+                new PortAllocationTargetDto { ServerId = 8, ServerName = "vps-other" }
+            ],
+            ProjectId = 4
+        });
+
+        var cut = Render<LibraryPortCheckDialog>(parameters => parameters.Add(dialog => dialog.LibraryId, 100));
+
+        Assert.True(cut.FindAll("button").First(b => b.TextContent.Contains("CheckPorts", StringComparison.Ordinal)).HasAttribute("disabled"));
+        var options = cut.Find("#lib-check-server").QuerySelectorAll("option");
+        Assert.Equal(3, options.Length);
+        Assert.Equal(string.Empty, options[0].GetAttribute("value") ?? string.Empty);
+    }
+
+    [Fact]
     public void TheVerdict_ListsEachPortForTheChosenServer()
     {
         _handler.SetJsonResponse(HttpMethod.Post, CheckUrl, new PortCheckResultDto

@@ -4,7 +4,7 @@
 @* The one place a pipeline run status is drawn as a badge (recette R-37): tone and icon come from
    PipelineHelper, the text is the localized status name. Every run list, tile and panel uses this
    component so a status reads the same wherever it appears. A status without an icon (an unknown
-   value) keeps the text-only badge. *@
+   value) carries the question icon, a text badge always has one (recette R-59). *@
 @if (PipelineHelper.GetRunIcon(Status) is { } statusIcon)
 {
     <OmniBadge Width="Width" Fill="Fill" Tone="@PipelineHelper.GetRunBadge(Status)" @attributes="AdditionalAttributes">
@@ -14,5 +14,5 @@
 }
 else
 {
-    <OmniBadge Width="Width" Fill="Fill" Tone="@PipelineHelper.GetRunBadge(Status)" @attributes="AdditionalAttributes">@L.Localize(Status)</OmniBadge>
+    <OmniBadge Width="Width" Fill="Fill" Tone="@PipelineHelper.GetRunBadge(Status)" Icon="@BadgeIcon.Of(OmniIconName.Question)" @attributes="AdditionalAttributes">@L.Localize(Status)</OmniBadge>
 }

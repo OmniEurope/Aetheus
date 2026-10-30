@@ -4,6 +4,7 @@ namespace Aetheus.Front.Components.Projects.ProjectDetailSections;
 
 public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServerDto>
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -129,16 +130,19 @@ public partial class ProjectServersSection : ProjectPagedSectionBase<ProjectServ
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["Delete"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var success = await Api.Projects.DeleteProjectServerAsync(ProjectId, server.Id);
-        if (success)
+        await Veil.RunAsync(async () =>
         {
-            await LoadAsync();
-            Toast.Success("Deleted", "Deleted");
-        }
-        else
-        {
-            Toast.Error("Error", "DeleteFailed");
-        }
+            var success = await Api.Projects.DeleteProjectServerAsync(ProjectId, server.Id);
+            if (success)
+            {
+                await LoadAsync();
+                Toast.Success("Deleted", "Deleted");
+            }
+            else
+            {
+                Toast.Error("Error", "DeleteFailed");
+            }
+        });
     }
 
     private static OmniTone GetTypeBadge(ProjectServerType type) => type switch

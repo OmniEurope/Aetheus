@@ -10,15 +10,16 @@ public partial class Login
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
 
-    /// <summary>The account the public demo seeds and advertises (PUBLIC_ADMIN_PASSWORD of
-    /// aetheus-demo).</summary>
-    internal const string PublicDemoUsername = "admin";
+    /// <summary>The sign-in e-mail of the account the public demo seeds and advertises: the seed's default
+    /// administrator address, aetheus-demo setting no Auth:AdminEmail (PUBLIC_ADMIN_PASSWORD of
+    /// aetheus-demo is its password).</summary>
+    internal const string PublicDemoEmail = "admin@aetheus.local";
 
     /// <summary>The demo password: public by design, shown only when the backend reports the public demo.</summary>
     internal const string PublicDemoPassword = "aetheus-demo";
 
     // The read-only fields bind to members, not constants: an OE input's ValueExpression must name a member.
-    private string DemoUsername { get; } = PublicDemoUsername;
+    private string DemoEmail { get; } = PublicDemoEmail;
     private string DemoPassword { get; } = PublicDemoPassword;
 
     /// <summary>The return path validated by <see cref="LoginRedirect"/>.</summary>
@@ -51,7 +52,7 @@ public partial class Login
     /// Login.</summary>
     private void FillWithPublicDemoAccount()
     {
-        _model.Username = PublicDemoUsername;
+        _model.Email = PublicDemoEmail;
         _model.Password = PublicDemoPassword;
     }
 
@@ -89,7 +90,7 @@ public partial class Login
         {
             var outcome = await Api.Auth.LoginAsync(new LoginRequest
             {
-                Username = _model.Username,
+                Email = _model.Email,
                 Password = _model.Password,
                 RememberMe = _model.RememberMe,
                 TotpCode = _totpRequired && !_useRecoveryCode ? _model.TotpCode : null,
@@ -136,11 +137,52 @@ public partial class Login
         }
     }
 
-    private class LoginModel
+    private readonly ForgotPasswordModel _forgot = new();
+    private bool _forgotBusy;
+    private bool _resetRequested;
+    private string? _forgotError;
+
+    /// <summary>R-14: asks for a forgotten-password link. The server answers the same whether an account holds
+    /// the address or not, so the page says the same too; only a refused request (too many) is said apart.</summary>
+    private async Task OnForgotSubmit()
+    {
+        _forgotBusy = true;
+        _forgotError = null;
+        try
+        {
+            if (await Api.Auth.RequestPasswordResetAsync(new RequestPasswordResetRequest { Email = _forgot.Email.Trim() }))
+            {
+                _resetRequested = true;
+                // Neutral on purpose: the same words whether an account holds the address or not.
+                Toast.Info("ForgotPassword", "ForgotPasswordSent");
+            }
+            else
+                _forgotError = L["ForgotPasswordRefused"].Value;
+        }
+        catch (HttpRequestException)
+        {
+            _forgotError = L["NetworkError"].Value;
+        }
+        finally
+        {
+            _forgotBusy = false;
+        }
+    }
+
+    private sealed class ForgotPasswordModel
     {
         [Required]
-        [StringLength(100)]
-        public string Username { get; set; } = string.Empty;
+        [StringLength(200)]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
+    }
+
+    private class LoginModel
+    {
+        // PLAN-003 P3-2: people sign in by e-mail address.
+        [Required]
+        [StringLength(320)]
+        public string Email { get; set; } = string.Empty;
 
         [Required]
         [StringLength(200)]

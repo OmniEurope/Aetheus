@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 using Aetheus.Front.Components.Pipelines;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aetheus.Front.Tests.Pages.Pipelines;
 
@@ -85,6 +86,44 @@ public sealed class PipelineRunSpacingTests : BunitContext
         Assert.False(CarriesAMargin(cut.Find(".run-failed-step [data-testid=step-stop-reason]")));
     }
 
+    /// <summary>
+    /// R-14: under the tab rail every tab starts at the same distance, the gap of the page stack (the panel's own
+    /// padding, set in app.css). A tab whose first block carried <c>omni-u-mt-md</c> sat further from the rail than
+    /// the overview, which has none.
+    /// </summary>
+    [Theory]
+    [InlineData("coverage")]
+    [InlineData("tests")]
+    public void TheFirstBlockOfATab_CarriesNoMargin_SoEveryTabStartsAtTheSameGap(string tab)
+    {
+        var id = 910 + tab.Length;
+        _handler.SetJsonResponse($"api/pipelines/runs/{id}", new PipelineRunDto
+        {
+            Id = id,
+            PipelineId = 5,
+            PipelineName = "spacing",
+            Status = PipelineStatus.Success,
+            StartedAt = DateTime.UtcNow,
+            CoverageSummary = new PipelineCoverageSummaryDto
+            {
+                LineRate = 0.8,
+                BranchRate = 0.5,
+                LinesCovered = 80,
+                LinesValid = 100,
+                Files = [new CoverageFileDto { Assembly = "Aetheus.Shared", File = "src/Aetheus.Shared/C.cs", LineRate = 0.8, LinesCovered = 8, LinesValid = 10 }]
+            },
+            TestResultSummary = new PipelineTestResultSummaryDto { TotalTests = 4, Passed = 4 }
+        });
+        _handler.SetJsonResponse($"api/pipelines/runs/{id}/coverage-trend", new List<CoverageTrendPointDto>());
+        Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().NavigateTo($"/pipelines/runs/{id}?tab={tab}");
+
+        var cut = Render<PipelineRun>(parameters => parameters.Add(component => component.RunId, id));
+
+        var panel = cut.WaitForElement(".pipeline-run-tabs > .omni-tabs__panel:not([hidden])");
+        cut.WaitForAssertion(() => Assert.NotEmpty(panel.Children));
+        Assert.All(panel.Children, child => Assert.False(CarriesAMargin(child), child.ClassName));
+    }
+
     [Fact]
     public void TheOverviewTiles_FollowTheWidthOfTheirOwnGrid()
     {
@@ -96,12 +135,12 @@ public sealed class PipelineRunSpacingTests : BunitContext
     }
 
     [Fact]
-    public void TheOverviewTiles_EachTakeTheHeightOfTheirOwnContent()
+    public void R45_TheOverviewTiles_ShareTheHeightOfTheTallest()
     {
         var cut = RenderRun(903, PipelineStatus.Success);
 
-        // Owner decision of 2026-10-24 (recette R-15): no common height, the Quality tile no longer stretches
-        // the others.
-        Assert.Contains("omni-tile-grid--natural-heights", cut.Find(".run-overview-tiles").ClassName, StringComparison.Ordinal);
+        // Owner decision of 2026-10-25 (recette R-45, replacing the R-15 one): every tile of the overview has the same
+        // height; the Quality tile makes the others taller.
+        Assert.DoesNotContain("omni-tile-grid--natural-heights", cut.Find(".run-overview-tiles").ClassName, StringComparison.Ordinal);
     }
 }

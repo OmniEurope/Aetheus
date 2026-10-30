@@ -1,5 +1,6 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
 @page "/git-repositories"
+@using Microsoft.AspNetCore.Components.Sections
 
 <PageTitle>@L["GitRepositories"] - Aetheus</PageTitle>
 
@@ -10,7 +11,15 @@
     </Badges>
     <ActionsContent>
         @* Repository hub events keep the list current. *@
-        <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        @if (ShowsExternalTab)
+        {
+            @* The external repository panel fills its actions (Sync now, menu) in the page header (R-109). *@
+            <SectionOutlet SectionName="@PageHeaderActions.SectionName" />
+        }
+        else
+        {
+            <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ShowCreateDialog" Disabled="@(!_projectFilter.HasValue || !_canWrite)" title="@(!_canWrite ? L["InsufficientPermissions"] : "")"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Create"]</span></ChildContent></OmniButton>
+        }
     </ActionsContent>
 </OmniPageHeader>
 
@@ -75,22 +84,22 @@ else
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="Description" Truncate="true" Title="@L["Description"]" Width="auto" Filterable="true" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="DefaultBranch" Title="@L["DefaultBranch"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.MultiSelect" FilterValues="@_filterValues.DefaultBranches" FilterSearchable="true" >
                 <Template Context="r">
-                    <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Accent">@r.DefaultBranch</OmniBadge>
+                    <OmniBadge Icon="@(BadgeIcon.Of(OmniIconName.GitFork))" Fill="OmniFill.Solid" Tone="OmniTone.Accent">@r.DefaultBranch</OmniBadge>
                 </Template>
             </OmniDataGridColumn>
             <OmniDataGridColumn TItem="GitLightRepoDto" Key="IsEmpty" ExportValue="@StatusExport" Title="@L["Status"]" Width="100px" Sortable="false" Filterable="true" FilterType="OmniDataGridColumnFilterType.Select" FilterValues="@GridFilterText.Booleans" FormatFilterValue="@EmptyText" >
                 <Template Context="r">
                     @if (r.IsEmpty)
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.For(OmniTone.Warning))" Fill="OmniFill.Solid" Tone="OmniTone.Warning">@L["Empty"]</OmniBadge>
                     }
                     else
                     {
-                        <OmniBadge Width="OmniBadgeWidth.Small" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
+                        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Success))" Fill="OmniFill.Solid" Tone="OmniTone.Success">@L["Active"]</OmniBadge>
                     }
                 </Template>
             </OmniDataGridColumn>
-            <OmniDataGridColumn TItem="GitLightRepoDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" />
+            <OmniDataGridColumn TItem="GitLightRepoDto" Property="CreatedAt" Title="@L["Created"]" FormatString="{0:g}" Width="160px" Filterable="true" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Property="LastPushAt" Title="@L["LastPush"]" FormatString="{0:g}" Width="160px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
             <OmniDataGridColumn TItem="GitLightRepoDto" Title="@L["Actions"]" Sortable="false" TextAlign="OmniAlignment.End" Filterable="false" >
                 <Template Context="r">

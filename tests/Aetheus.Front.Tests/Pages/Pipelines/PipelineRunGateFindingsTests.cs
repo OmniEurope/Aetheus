@@ -544,4 +544,68 @@ public sealed class PipelineRunGateFindingsTests : BunitContext
         Assert.Contains("omni-tile-grid--columns-4", tiles.ClassName, StringComparison.Ordinal);
         Assert.Equal(2, tiles.QuerySelectorAll(".omni-stat-tile").Length);
     }
+
+    // Recette R-74, run #2920 of w6-candidate: 5 findings in the tile, 2 on the security line, 3 of architecture. Every
+    // domain counts in the grade (owner decision of 2026-10-25); the tile splits its total by domain so it adds up with
+    // the lines under it.
+    private static AnalysisRunGateDto GateWithFindingsInTwoDomains() => new()
+    {
+        PipelineRunId = 2920,
+        FindingCount = 5,
+        OpenFindingCounts =
+        [
+            new AnalysisRunGateCategoryCountDto { Category = AnalysisCategory.Architecture, Count = 3 },
+            new AnalysisRunGateCategoryCountDto { Category = AnalysisCategory.Sast, Count = 1 },
+            new AnalysisRunGateCategoryCountDto { Category = AnalysisCategory.Secrets, Count = 1 }
+        ],
+        Grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.B,
+            Completeness = AnalysisGradeCompleteness.Complete,
+            Domains =
+            [
+                new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Grade = AnalysisGrade.B, Required = true, Completeness = AnalysisGradeCompleteness.Complete },
+                new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Architecture, Grade = AnalysisGrade.B, Required = true, Completeness = AnalysisGradeCompleteness.Complete }
+            ]
+        }
+    };
+
+    [Fact]
+    public void R74_TheOpenFindingsOfTheGate_AreCountedPerDomain_AndAddUpToTheTotal()
+    {
+        var gate = GateWithFindingsInTwoDomains();
+
+        var byDomain = PipelineRunGatePresentation.OpenFindingsByDomain(gate);
+
+        Assert.Equal([(AnalysisGradeDomain.Security, 2), (AnalysisGradeDomain.Architecture, 3)], byDomain);
+        Assert.Equal(gate.FindingCount, byDomain.Sum(item => item.Count));
+        Assert.Empty(PipelineRunGatePresentation.OpenFindingsByDomain(new AnalysisRunGateDto { PipelineRunId = 1, FindingCount = 0 }));
+    }
+
+    [Fact]
+    public void R74_TheFindingsTile_SplitsItsTotalByDomain_WhateverTheRequiredDomains()
+    {
+        var gate = GateWithFindingsInTwoDomains();
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var tile = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile")[0];
+        // The test localizer returns each key as its text: "of which 2 in <security>, 3 in <architecture>".
+        Assert.Contains("GateFindingsByDomain 2 GateFindingsInDomain AnalysisApplicationSecurity", tile.TextContent, StringComparison.Ordinal);
+        Assert.Contains("3 GateFindingsInDomain AnalysisCodeArchitecture", tile.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("GateFindingsNotCounted", tile.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void R74_TheFindingsTile_HasNoSplit_WhenTheGateHoldsNoOpenFinding()
+    {
+        var gate = new AnalysisRunGateDto { PipelineRunId = 2921 };
+        ServeFindings(gate);
+
+        var cut = Render<PipelineRunGateFindings>(parameters => parameters.Add(component => component.Gate, gate));
+
+        var tile = cut.FindAll(".analysis-run-gate-metrics > .omni-stat-tile")[0];
+        Assert.DoesNotContain("GateFindingsByDomain", tile.TextContent, StringComparison.Ordinal);
+    }
 }

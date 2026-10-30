@@ -39,7 +39,8 @@ public sealed class ServerRepositoryScopeTests : IDisposable
 
     private async Task SaveAsync() => await _db.SaveChangesAsync(Ct);
 
-    private static Server Server(int id, string name) => new() { Id = id, Name = name, Hostname = name };
+    // Organization 7, as every project below: a server reaches only the projects of its own organization.
+    private static Server Server(int id, string name) => new() { Id = id, Name = name, Hostname = name, OrganizationId = 7 };
 
     /// <summary>
     /// Server 1 is linked to project 10 and, separately, executed a pipeline step of project 11.
@@ -214,7 +215,9 @@ public sealed class ServerRepositoryScopeTests : IDisposable
             new VariableLibrary { Id = 3, Name = "by-project-server", ProjectServerId = 100 },
             new VariableLibrary { Id = 4, Name = "by-environment-server", EnvironmentId = 500 },
             new VariableLibrary { Id = 5, Name = "by-environment-project-server", EnvironmentId = 501 },
-            new VariableLibrary { Id = 6, Name = "unrelated", ProjectId = 12 });
+            // R-83: the server sits in an environment of project 12, so project 12 is one of its projects.
+            new VariableLibrary { Id = 7, Name = "by-environment-server-project", ProjectId = 12 },
+            new VariableLibrary { Id = 6, Name = "unrelated", ProjectId = 13 });
         await SaveAsync();
         _db.ChangeTracker.Clear();
 
@@ -224,6 +227,7 @@ public sealed class ServerRepositoryScopeTests : IDisposable
             [
                 "by-environment-project-server",
                 "by-environment-server",
+                "by-environment-server-project",
                 "by-executed-project",
                 "by-linked-project",
                 "by-project-server"
@@ -241,14 +245,16 @@ public sealed class ServerRepositoryScopeTests : IDisposable
             new Vault { Id = 1, Name = "by-linked-project", ProjectId = 10 },
             new Vault { Id = 2, Name = "by-project-server", ProjectServerId = 100 },
             new Vault { Id = 3, Name = "by-environment-server", EnvironmentId = 500 },
-            new Vault { Id = 4, Name = "unrelated", ProjectId = 12 });
+            // R-83: the server sits in an environment of project 12, so project 12 is one of its projects.
+            new Vault { Id = 5, Name = "by-environment-server-project", ProjectId = 12 },
+            new Vault { Id = 4, Name = "unrelated", ProjectId = 13 });
         await SaveAsync();
         _db.ChangeTracker.Clear();
 
         var vaults = await _repository.GetVaultsForServerAsync(1, Ct);
 
         Assert.Equal(
-            ["by-environment-server", "by-linked-project", "by-project-server"],
+            ["by-environment-server", "by-environment-server-project", "by-linked-project", "by-project-server"],
             vaults.Select(vault => vault.Name));
     }
 

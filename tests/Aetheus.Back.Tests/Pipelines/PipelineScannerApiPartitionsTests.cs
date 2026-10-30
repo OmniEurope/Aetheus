@@ -72,7 +72,8 @@ public sealed class PipelineScannerApiPartitionsTests
 
         Assert.Equal(TaskExecutionStatus.Failed, step.Status);
         await _repo.Received(1).AppendRunWarningsAsync(
-            1, Arg.Is<IReadOnlyCollection<string>>(warnings => warnings.Single() == "Scanner step 'scan': scanner key is absent from scanner-manifest.json."),
+            1, Arg.Is<IReadOnlyCollection<string>>(warnings => StoredProblem.English(warnings.Single()) == "Scanner step 'scan': scanner key is absent from scanner-manifest.json."
+                && StoredProblem.CodeOf(warnings.Single()) == "StepFailedScanner"),
             Arg.Any<CancellationToken>());
         _repo.DidNotReceive().TrackTask(Arg.Any<ServerTask>());
     }

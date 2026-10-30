@@ -127,30 +127,30 @@ public class GitSmartHttpServiceTests : IDisposable
         await _lightRepoMock.Received(1).FindBySlugAsync(1, "my-repo", Arg.Any<CancellationToken>());
     }
 
-    // --- ValidateBasicAuthAsync (delegates to IAuthService) ---
+    // --- AuthenticateBasicAsync (delegates to IAuthService) ---
 
     [Fact]
-    public async Task ValidateBasicAuthAsync_DelegatesToAuthService_ReturnsFalse()
+    public async Task AuthenticateBasicAsync_DelegatesToAuthService_ReturnsNull()
     {
-        _authServiceMock.ValidateBasicAuthAsync("unknown", "password", Arg.Any<CancellationToken>())
-            .Returns(false);
+        _authServiceMock.AuthenticateBasicAsync("unknown@example.com", "password", Arg.Any<CancellationToken>())
+            .Returns((string?)null);
 
-        var result = await _sut.ValidateBasicAuthAsync("unknown", "password", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.AuthenticateBasicAsync("unknown@example.com", "password", ct: TestContext.Current.CancellationToken);
 
-        Assert.False(result);
-        await _authServiceMock.Received(1).ValidateBasicAuthAsync("unknown", "password", Arg.Any<CancellationToken>());
+        Assert.Null(result);
+        await _authServiceMock.Received(1).AuthenticateBasicAsync("unknown@example.com", "password", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ValidateBasicAuthAsync_DelegatesToAuthService_ReturnsTrue()
+    public async Task AuthenticateBasicAsync_DelegatesToAuthService_ReturnsTheUsername()
     {
-        _authServiceMock.ValidateBasicAuthAsync("admin", "correct", Arg.Any<CancellationToken>())
-            .Returns(true);
+        _authServiceMock.AuthenticateBasicAsync("admin@aetheus.local", "correct", Arg.Any<CancellationToken>())
+            .Returns("admin");
 
-        var result = await _sut.ValidateBasicAuthAsync("admin", "correct", ct: TestContext.Current.CancellationToken);
+        var result = await _sut.AuthenticateBasicAsync("admin@aetheus.local", "correct", ct: TestContext.Current.CancellationToken);
 
-        Assert.True(result);
-        await _authServiceMock.Received(1).ValidateBasicAuthAsync("admin", "correct", Arg.Any<CancellationToken>());
+        Assert.Equal("admin", result);
+        await _authServiceMock.Received(1).AuthenticateBasicAsync("admin@aetheus.local", "correct", Arg.Any<CancellationToken>());
     }
 
     // --- MarkPushedAsync ---
@@ -210,7 +210,7 @@ public class GitSmartHttpServiceTests : IDisposable
         disconnectedClient.Cancel();
 
         await _sut.MarkPushedAsync(
-            7, "repo", [new GitRefUpdate("refs/heads/main", commit)], disconnectedClient.Token);
+            7, "repo", [new GitRefUpdate("refs/heads/main", commit)], disconnectedClient.Token, "carol");
 
         await _lightRepoMock.Received(1).SaveChangesAsync(
             Arg.Is<CancellationToken>(token => token == _applicationLifetime.ApplicationStopping));
@@ -227,7 +227,8 @@ public class GitSmartHttpServiceTests : IDisposable
                 && push.GitRepoId == repo.Id
                 && push.DefaultBranch == "main"
                 && push.RefUpdates.Count == 1
-                && push.RefUpdates[0].NewObjectId == commit));
+                && push.RefUpdates[0].NewObjectId == commit
+                && push.PusherUsername == "carol"));
         await _domainEventsMock.DidNotReceive().DispatchAsync(
             Arg.Any<GitPushProcessedEvent>(), Arg.Any<CancellationToken>());
     }

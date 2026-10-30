@@ -40,6 +40,7 @@
             }
             else
             {
+              <OmniStack>
                 @if (_repos.Count > 1)
                 {
                     <OmniDropDown TValue="int" Id="ai-context-repo" Label="@L["Repository"]" @bind-Value:get="_repoId" @bind-Value:set="OnRepoChosenAsync" Options="@(_repos.ToOptions(item => item.Id, item => item.Name))" Class="omni-u-w-100" />
@@ -53,11 +54,12 @@
                 }
                 @if (_limitReached)
                 {
-                    <OmniAlert Severity="OmniSeverity.Warning" Class="omni-u-mt-md">@string.Format(L["AiContextLimit"], MaxPaths)</OmniAlert>
+                    <OmniAlert Severity="OmniSeverity.Warning">@string.Format(L["AiContextLimit"], MaxPaths)</OmniAlert>
                 }
+              </OmniStack>
             }
             <OmniRow Gap="OmniSpacing.Small" Justify="OmniJustification.End">
-                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["Cancel"]</span></ChildContent></OmniButton>
+                <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@Close"><Icon><OmniIcon Name="OmniIconName.Close" /></Icon><ChildContent><span>@L["GoBack"]</span></ChildContent></OmniButton>
                 <OmniButton Variant="OmniButtonVariant.Primary" OnClick="@ConfirmAsync" Disabled="@(_picked.Count == 0)"><Icon><OmniIcon Name="OmniIconName.Add" /></Icon><ChildContent><span>@L["Add"]</span></ChildContent></OmniButton>
             </OmniRow>
         </OmniCard>

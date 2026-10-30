@@ -135,7 +135,7 @@ public partial class ServerRkhunterSection : IAsyncDisposable
     private async Task GetLogsAsync()
     {
         if (BlockedByOfflineAgent()) return;
-        _follower?.Expect(L["ViewLogs"]);
+        _follower?.Expect(L["ViewLogs"], settle: false);
         var success = await Api.Security.GetRkhunterLogsAsync(ServerId, new RkhunterLogRequest());
         if (success)
             Toast.Success("TaskCreated");
@@ -261,6 +261,8 @@ public partial class ServerRkhunterSection : IAsyncDisposable
         "warning" => L["Warning"],
         "running" => L["Running"],
         "failed" => L["Failed"],
+        // The agent reports "none" until the first scan has run.
+        "none" => L["RkhunterStatusNone"],
         _ => string.Format(L["RkhunterStatusUnknown"], status)
     };
 }

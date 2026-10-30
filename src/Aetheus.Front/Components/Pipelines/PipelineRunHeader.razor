@@ -21,11 +21,11 @@
         }
         @if (BlockingWarningCount > 0)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@string.Format(L["BlockingWarningsCount"], BlockingWarningCount)</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Danger">@string.Format(L["BlockingWarningsCount"], BlockingWarningCount)</NumberBadge>
         }
         @if (InfoWarningCount > 0)
         {
-            <OmniBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@string.Format(L["WarningsCount"], InfoWarningCount)</OmniBadge>
+            <NumberBadge Fill="OmniFill.Solid" Tone="OmniTone.Warning">@string.Format(L["WarningsCount"], InfoWarningCount)</NumberBadge>
         }
     </Badges>
     @* R-30, R-31, R-40: Rerun is pinned (never folded, on a row of its own on a phone, the menu

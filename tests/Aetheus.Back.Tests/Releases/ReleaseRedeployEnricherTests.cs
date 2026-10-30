@@ -56,11 +56,22 @@ public sealed class ReleaseRedeployEnricherTests
         Assert.Null(Assert.Single(none).RevertPipelineId);
     }
 
+    /// <summary>R-72, owner decision of 2026-10-28: a release without a sealed grade (release-fast) is deployed
+    /// again despite the gate, after a confirmation, so its pipeline is offered like any other.</summary>
+    [Fact]
+    public async Task ThePreviousDeployment_WithoutASealedGrade_IsStillOffered()
+    {
+        var result = await EnrichAsync(new ReleaseRedeployTarget(2, 40), Release(2, grade: null, artifacts: true));
+
+        var previous = Assert.Single(result);
+        Assert.True(previous.IsPreviousDeployment);
+        Assert.Equal(40, previous.RedeployPipelineId);
+    }
+
     [Theory]
-    [InlineData(false, true, 40)]   // release-fast: no sealed grade, the gate cannot restore its seal
     [InlineData(true, false, 40)]   // payloads purged
     [InlineData(true, true, null)]  // no pipeline that takes a candidateVersion
-    public async Task ThePreviousDeployment_IsMarkedButNotOffered_WhenTheGateWouldRefuseIt(
+    public async Task ThePreviousDeployment_IsMarkedButNotOffered_WhenItCannotBeDeployed(
         bool sealedGrade, bool artifacts, int? pipelineId)
     {
         var result = await EnrichAsync(new ReleaseRedeployTarget(2, pipelineId),

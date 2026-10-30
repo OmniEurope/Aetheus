@@ -38,9 +38,12 @@ public sealed class AlertThresholdUnitTests : BunitContext
         {
             var disk = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Free disk", StringComparison.Ordinal));
             var cpu = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Hot CPU", StringComparison.Ordinal));
-            Assert.Contains("LessThan 20 Go", disk.TextContent, StringComparison.Ordinal);
+            // R-113: the comparison reads as a sign, never as the enum name ("LessThan").
+            Assert.Contains("< 20 Go", disk.TextContent, StringComparison.Ordinal);
             Assert.DoesNotContain("20%", disk.TextContent, StringComparison.Ordinal);
-            Assert.Contains("GreaterThan 90%", cpu.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("LessThan", disk.TextContent, StringComparison.Ordinal);
+            Assert.Contains("> 90%", cpu.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("GreaterThan", cpu.TextContent, StringComparison.Ordinal);
         });
     }
 

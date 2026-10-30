@@ -17,6 +17,11 @@ public class UrlSyncedTabsAuditTests
             5,
             "route-based tabs (/settings/{tab})"),
         new(
+            Path.Combine("Components", "Users", "AdminIdentityNav.razor"),
+            0,
+            3,
+            "route-based tabs (/admin/users, /admin/organizations, /admin/roles), R-7: each tab is its own page, no panel content"),
+        new(
             Path.Combine("Components", "Servers", "ServerDetailSections", "DockerProjectDialog.razor"),
             0,
             5,

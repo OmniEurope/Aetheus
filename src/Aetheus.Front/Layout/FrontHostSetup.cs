@@ -89,12 +89,13 @@ internal static class FrontHostSetup
         services.AddScoped<Aetheus.Front.Components.Shared.BreadcrumbService>();
         // OE's breadcrumb service, which OmniPageHeader reads, installs the Aetheus route trail.
         services.AddScoped<IOmniBreadcrumbResolver, Aetheus.Front.Components.Shared.AetheusBreadcrumbResolver>();
-        services.AddScoped<Aetheus.Front.Components.Users.AdminIdentitySearch>();
         services.AddScoped<Aetheus.Front.Components.Shared.ProjectNavContextService>();
         services.AddScoped<Aetheus.Front.Components.Shared.NotifyHelper>();
         services.AddScoped<Aetheus.Front.Components.Shared.GridExportContext>();
         services.AddScoped<Aetheus.Front.Components.Shared.ClipboardService>();
         services.AddScoped<Aetheus.Front.Components.Shared.UiActions>();
+        // R-99: the veil of the page body while an action started from a confirmation runs.
+        services.AddScoped<Aetheus.Front.Components.Shared.BusyVeil>();
         services.AddScoped<Aetheus.Front.Components.Shared.AppDialogs>();
         services.AddScoped<Aetheus.Front.Components.Shared.OmniDialogService>();
         services.AddScoped<Aetheus.Front.Components.Shared.ConfirmHelper>();
@@ -104,6 +105,8 @@ internal static class FrontHostSetup
         services.AddScoped<Aetheus.Front.Components.Pipelines.PipelineSetupProvisionState>();
         // Scoped (one scope per page in WASM, as a singleton was): it reads the user preferences, which are scoped.
         services.AddScoped<Aetheus.Front.Components.Shared.ActiveOrganizationService>();
+        // The Administration section's organization switcher (owner decision 2026-10-28), same lifetime.
+        services.AddScoped<Aetheus.Front.Components.Shared.AdministrationScopeService>();
         // Item #7: singleton (per Blazor WASM circuit = per browser session) so the hub stays alive
         // across page navigations and every page sees the same in-flight task list.
         services.AddSingleton<Aetheus.Front.Components.Shared.TaskTrackerService>();

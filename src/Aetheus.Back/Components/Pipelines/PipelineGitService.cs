@@ -373,6 +373,7 @@ public sealed class PipelineGitService(
             .Where(p => !string.IsNullOrWhiteSpace(p.YamlDefinition))
             .Select(p => (RelativePath: $"{PipelineDir}/{PipelineGitPathPolicy.Slugify(environmentName)}-{PipelineGitPathPolicy.Slugify(p.Name)}.yaml", Content: p.YamlDefinition))
             .ToList();
+        files = await WithoutFilesTheRepositoryAlreadyHoldsAsync(diskPath, branch, files, projectId, ct).ConfigureAwait(false);
         if (files.Count == 0) return 0;
 
         var (ok, _, error) = await cli.CommitFilesAsync(
@@ -386,6 +387,30 @@ public sealed class PipelineGitService(
             return 0;
         }
         return files.Count;
+    }
+
+    // R-95: a copy never overwrites a file the project's repository already holds. A file with the same
+    // content has nothing to write; one with other content is a change Aetheus has not seen and is kept
+    // (logged: the copy runs in the background, there is no caller to answer to).
+    private async Task<List<(string RelativePath, string Content)>> WithoutFilesTheRepositoryAlreadyHoldsAsync(
+        string diskPath, string branch, List<(string RelativePath, string Content)> files, int projectId,
+        CancellationToken ct)
+    {
+        var toWrite = new List<(string RelativePath, string Content)>();
+        foreach (var file in files)
+        {
+            var existing = await cli.GetBlobAsync(diskPath, branch, file.RelativePath, ct).ConfigureAwait(false);
+            if (existing is null || (!existing.IsBinary && string.IsNullOrWhiteSpace(existing.Content)))
+            {
+                toWrite.Add(file);
+                continue;
+            }
+            if (!existing.IsBinary && PipelineRepositoryDefinitionGuard.Same(existing.Content, file.Content)) continue;
+            logger.LogWarning(
+                "Not copying to {Path} in project {ProjectId}: the repository already holds a file there with different content.",
+                file.RelativePath, projectId);
+        }
+        return toWrite;
     }
 
     // A project with several repositories must bind the pipeline to one repository explicitly.

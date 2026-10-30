@@ -21,6 +21,7 @@ public sealed class UserNotificationEmailTests : IDisposable
     private readonly AppDbContext _db;
     private readonly INotificationEmailer _emailer = Substitute.For<INotificationEmailer>();
     private readonly UserNotificationService _sut;
+    private const string NoSenderMessage = "No sender is set up; nothing was sent.";
 
     public UserNotificationEmailTests()
     {
@@ -29,14 +30,15 @@ public sealed class UserNotificationEmailTests : IDisposable
             new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options,
             time);
         var authz = Substitute.For<IResourceAuthorizationService>();
-        authz.HasPermissionAsync(Arg.Any<string>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
-            .Returns(true);
+        // Every subscriber still reads the project (one query for all of them, RBAC audit finding 12).
+        authz.GetUsernamesWithPermissionAsync(Arg.Any<IReadOnlyCollection<string>>(), ResourceType.Project, ProjectId, Permission.Read, Arg.Any<CancellationToken>())
+            .Returns(call => new HashSet<string>(call.ArgAt<IReadOnlyCollection<string>>(0), StringComparer.Ordinal));
         _sut = new UserNotificationService(new UserNotificationRepository(_db), authz, time, emailer: _emailer);
 
         _db.Users.AddRange(
             new User { Id = 1, Username = "alice", Email = "alice@x.org" },
             new User { Id = 2, Username = "bob", Email = "bob@x.org" },
-            new User { Id = 3, Username = "carol" });
+            new User { Id = 3, Username = "carol", Email = "carol@x.org" });
         _db.Projects.Add(new Project { Id = ProjectId, Name = "Shop" });
         _db.ProjectSubscriptions.AddRange(
             new ProjectSubscription { UserId = 1, ProjectId = ProjectId },
@@ -60,10 +62,12 @@ public sealed class UserNotificationEmailTests : IDisposable
                 {
                     "alice@x.org" => EmailSendResult.Sent("no-reply@x.org"),
                     "bob@x.org" => EmailSendResult.Failed("552 5.2.2 mailbox full"),
-                    _ => EmailSendResult.NotConfigured(NotificationEmailer.NoAddressMessage)
+                    _ => EmailSendResult.NotConfigured(NoSenderMessage)
                 }).ToList();
             });
 
+        // Every account has an address (Users.Email NOT NULL since 20261028210000); the third outcome is a mail
+        // that could not be attempted, which the row keeps as well.
         var written = await _sut.RecordProjectEventAsync(
             NotificationEventTypes.PipelineFailed, $"{{\"ProjectId\":{ProjectId}}}", Ct);
 
@@ -76,13 +80,13 @@ public sealed class UserNotificationEmailTests : IDisposable
         Assert.Equal("552 5.2.2 mailbox full", rows[1].ErrorMessage);
         Assert.Null(rows[1].SentAt);
         Assert.Equal(NotificationDeliveryStatus.NotConfigured, rows[2].Status);
-        Assert.Equal(NotificationEmailer.NoAddressMessage, rows[2].ErrorMessage);
+        Assert.Equal(NoSenderMessage, rows[2].ErrorMessage);
 
         await _emailer.Received(1).SendAsync(
             Arg.Is<IReadOnlyList<NotificationEmail>>(emails =>
                 emails.Count == 3
                 && emails[0].To == "alice@x.org"
-                && emails[2].To == null
+                && emails[2].To == "carol@x.org"
                 && emails.All(email => email.Subject == "pipeline.failed in project Shop")),
             Arg.Any<CancellationToken>());
     }

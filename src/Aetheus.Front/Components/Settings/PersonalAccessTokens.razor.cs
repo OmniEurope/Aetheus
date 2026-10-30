@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Settings;
 
 public partial class PersonalAccessTokens
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private NotifyHelper Toast { get; set; } = default!;
     [Inject] private OmniDialogService Dialog { get; set; } = default!;
@@ -145,16 +146,19 @@ public partial class PersonalAccessTokens
             new OmniConfirmOptions { Destructive = true, OkButtonText = L["PatRevoke"].Value, CancelButtonText = L["GoBack"].Value });
         if (confirmed != true) return;
 
-        var status = await Api.Auth.RevokePersonalAccessTokenAsync(token.Id);
-        if (status.Success)
+        await Veil.RunAsync(async () =>
         {
-            Toast.Success("PatRevoked", "PatRevoked");
-            await LoadAsync();
-        }
-        else
-        {
-            Toast.Error("PatRevokeFailed", "PatRevokeFailed");
-        }
+            var status = await Api.Auth.RevokePersonalAccessTokenAsync(token.Id);
+            if (status.Success)
+            {
+                Toast.Success("PatRevoked", "PatRevoked");
+                await LoadAsync();
+            }
+            else
+            {
+                Toast.Error("PatRevokeFailed", "PatRevokeFailed");
+            }
+        });
     }
 
     private string ScopeLabel(PatScope scope) =>

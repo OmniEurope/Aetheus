@@ -5,7 +5,7 @@
 <OmniStack Orientation="OmniOrientation.Horizontal" Gap="OmniSpacing.Small" Align="OmniAlignment.Center" Class="release-gate" data-testid="release-gate">
     @if (Release.Deployable is { } deployable)
     {
-        <OmniBadge Fill="OmniFill.Solid" Tone="@(deployable ? OmniTone.Success : OmniTone.Danger)"
+        <OmniBadge Icon="@(BadgeIcon.For(deployable ? OmniTone.Success : OmniTone.Danger))" Fill="OmniFill.Solid" Tone="@(deployable ? OmniTone.Success : OmniTone.Danger)"
                    data-testid="release-gate-verdict">@L[deployable ? "ReleaseGateAccepted" : "ReleaseGateRejected"]</OmniBadge>
     }
     @if (Release.AssuranceGrade is { } grade)
@@ -14,7 +14,8 @@
     }
     @if (Release.Deployable is null && Release.AssuranceGrade is null)
     {
-        <OmniText Element="OmniTextElement.Small" Tone="OmniTextTone.Muted" Class="omni-u-text-muted omni-u-m-0"
-                  title="@L["ReleaseNotQualifiedHint"]">@L["ReleaseNotQualified"]</OmniText>
+        @* R-59: "Not qualified" is a state, so a text badge with its icon like the verdicts beside it. *@
+        <OmniBadge Icon="@(BadgeIcon.ForState(OmniTone.Neutral))" Fill="OmniFill.Solid" Tone="OmniTone.Neutral"
+                   title="@L["ReleaseNotQualifiedHint"]" data-testid="release-not-qualified">@L["ReleaseNotQualified"]</OmniBadge>
     }
 </OmniStack>

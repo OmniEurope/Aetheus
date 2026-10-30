@@ -37,6 +37,8 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
     private string? _trx;
     private int _testExit;
     private int _restoreExit;
+    private string? _rerunTrx;
+    private int _rerunExit;
 
     public RunQaIntegrationSuiteFunctionTests()
     {
@@ -90,10 +92,18 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         if (arguments[0] == "restore")
             return Task.FromResult((_restoreExit, Array.Empty<string>()));
         var results = arguments[Array.IndexOf(arguments, "--results-directory") + 1];
-        if (_trx is not null)
-            File.WriteAllText(Path.Combine(results, "integration.trx"), _trx);
-        return Task.FromResult((_testExit, new[] { "test output" }));
+        // The rerun names its own TRX, on either runner.
+        var rerun = arguments.Contains("integration-rerun.trx") || arguments.Contains("trx;LogFileName=integration-rerun.trx");
+        var trx = rerun ? _rerunTrx : _trx;
+        if (trx is not null)
+            File.WriteAllText(Path.Combine(results, rerun ? "integration-rerun.trx" : "integration.trx"), trx);
+        return Task.FromResult((rerun ? _rerunExit : _testExit, new[] { "test output" }));
     }
+
+    private string[][] Tests => _dotnet.Where(arguments => arguments[0] == "test").ToArray();
+
+    private static string Result(string method, string outcome) =>
+        FailedTestRerunTests.Trx(("Integration.Api", method, "Integration.Api." + method, outcome));
 
     private Task<(Executors.ExecutorResult Result, Dictionary<string, string> Variables)> RunAsync()
     {
@@ -111,6 +121,7 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Equal("0", variables["INTEGRATION_SUITE_STATUS"]);
         Assert.False(File.Exists(Path.Combine(Results, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
         var test = Assert.Single(_dotnet);
         Assert.Equal(
             ["test", "--project", Project, "--configuration", "Release", "--no-build", "--no-restore", "--no-progress",
@@ -167,6 +178,119 @@ public sealed class RunQaIntegrationSuiteFunctionTests : IDisposable
         Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
         Assert.Equal("Integration.LoginFails\nIntegration.RoleFails\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
         Assert.Contains(_harness.Log, entry => entry.Line == "Failed tests (2): Integration.LoginFails, Integration.RoleFails");
+    }
+
+    [Fact]
+    public async Task AFailureThatPassesOnItsRerun_IsFlakyNamedAndStillFailsTheSuite()
+    {
+        _harness.Executable("bin/docker");
+        _trx = FailedTestRerunTests.Trx(
+            ("Integration.Api", "Passes", "Integration.Api.Passes", "Passed"),
+            ("Integration.Api", "Login", "Integration.Api.Login", "Failed"));
+        _testExit = 2;
+        _rerunTrx = Result("Login", "Passed");
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        Assert.Equal(2, Tests.Length);
+        Assert.Equal(
+            ["test", "--project", Project, "--configuration", "Release", "--no-build", "--no-restore", "--no-progress",
+             "--report-trx", "--report-trx-filename", "integration-rerun.trx", "--results-directory", Results,
+             "--filter-method", "Integration.Api.Login"], Tests[1]);
+        // Both attempts are kept as evidence; the rerun ran in the first attempt's Testcontainers scope.
+        Assert.True(File.Exists(Path.Combine(Results, "integration.trx")));
+        Assert.True(File.Exists(Path.Combine(Results, "integration-rerun.trx")));
+        Assert.Equal(_testProcesses[0].Environment["AETHEUS_TESTCONTAINERS_RUN"], _testProcesses[1].Environment["AETHEUS_TESTCONTAINERS_RUN"]);
+        Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.Contains(_harness.Log, entry => entry.Line == "Failed tests (1): Integration.Api.Login");
+        Assert.Contains(_harness.Log, entry =>
+            entry.Line == "Flaky test in Integration suite current: Integration.Api.Login failed, then passed on its rerun." && entry.Level == TaskLogLevel.Warning);
+        Assert.Contains(_harness.Log, entry => entry.Line == "Flaky tests (1): Integration.Api.Login");
+        Assert.Contains(_harness.Log, entry => entry.Line == "Integration suite current produced an executed-test proof with findings status 1.");
+    }
+
+    [Fact]
+    public async Task AFailureThatFailsAgainOnItsRerun_StaysAFailureAndIsNotFlaky()
+    {
+        _trx = FailedTestRerunTests.Trx(
+            ("Integration.Api", "Passes", "Integration.Api.Passes", "Passed"),
+            ("Integration.Api", "Login", "Integration.Api.Login", "Failed"));
+        _testExit = 2;
+        _rerunTrx = Result("Login", "Failed");
+        _rerunExit = 2;
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        Assert.Equal(2, Tests.Length);
+        Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.Contains(_harness.Log, entry => entry.Line == "Failed tests (1): Integration.Api.Login");
+        Assert.DoesNotContain(_harness.Log, entry => entry.Line.StartsWith("Flaky test", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task MoreFailuresThanTheCap_AreNotRerun()
+    {
+        _trx = FailedTestRerunTests.Trx(Enumerable.Range(1, FailedTestRerun.MaxFailures + 1)
+            .Select(index => ("Integration.Api", $"Fails{index}", $"Integration.Api.Fails{index}", "Failed")).ToArray());
+        _testExit = 2;
+        _rerunTrx = Result("Fails1", "Passed");
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        Assert.Single(Tests);
+        Assert.Equal(FailedTestRerun.MaxFailures + 1, File.ReadAllLines(Path.Combine(Results, "failed-tests.txt")).Length);
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.Contains(_harness.Log, entry =>
+            entry.Line == "Integration suite current: 11 tests failed, more than the rerun cap of 10; nothing is rerun, so many failures are a break rather than flakiness.");
+    }
+
+    [Fact]
+    public async Task ARerunWithoutGradableEvidence_LeavesTheFirstAttemptsFailures()
+    {
+        _trx = Result("Login", "Failed");
+        _testExit = 2;
+        _rerunTrx = null;
+        _rerunExit = 1;
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        Assert.Equal(2, Tests.Length);
+        Assert.Equal("Integration.Api.Login\n", File.ReadAllText(Path.Combine(Results, "failed-tests.txt")));
+        Assert.False(File.Exists(Path.Combine(Results, "flaky-tests.txt")));
+        Assert.Contains(_harness.Log, entry => entry.Level == TaskLogLevel.Warning
+            && entry.Line.StartsWith("Integration suite current: the rerun evidence cannot be graded (", StringComparison.Ordinal)
+            && entry.Line.EndsWith("); the first attempt's failures stand.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AV1OnVSTest_RerunsThroughAFullyQualifiedNameFilter()
+    {
+        _parameters["source_root"] = ".nminus1-source";
+        _parameters["label"] = "previous";
+        Source(".nminus1-source");
+        _harness.Write("ws/.nminus1-source/global.json", """{ "sdk": { "version": "10.0.100" } }""");
+        _trx = Result("Login", "Failed");
+        _testExit = 1;
+        _rerunTrx = Result("Login", "Passed");
+
+        var (result, variables) = await RunAsync();
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("1", variables["INTEGRATION_SUITE_STATUS"]);
+        var rerun = Tests[1];
+        Assert.Equal("trx;LogFileName=integration-rerun.trx", rerun[Array.LastIndexOf(rerun, "--logger") + 1]);
+        Assert.Equal(["--filter", "FullyQualifiedName=Integration.Api.Login"], rerun[^2..]);
+        Assert.True(File.Exists(Path.Combine(_harness.Workspace, ".qa-test-results", "previous", "flaky-tests.txt")));
     }
 
     [Theory]

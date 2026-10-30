@@ -38,6 +38,7 @@ public class AppDbContext(
     public DbSet<ApacheVirtualHost> ApacheVirtualHosts => Set<ApacheVirtualHost>();
     public DbSet<CertbotCertificate> CertbotCertificates => Set<CertbotCertificate>();
     public DbSet<CertbotState> CertbotStates => Set<CertbotState>();
+    public DbSet<CertificateExpiryAlertMark> CertificateExpiryAlertMarks => Set<CertificateExpiryAlertMark>();
     public DbSet<MailState> MailStates => Set<MailState>();
     public DbSet<MailDomain> MailDomains => Set<MailDomain>();
     public DbSet<MailAccount> MailAccounts => Set<MailAccount>();
@@ -68,7 +69,9 @@ public class AppDbContext(
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserOrganizationRole> UserOrganizationRoles => Set<UserOrganizationRole>();
     public DbSet<ResourcePermission> ResourcePermissions => Set<ResourcePermission>();
+    public DbSet<RolePermissionGrant> RolePermissionGrants => Set<RolePermissionGrant>();
     public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
     public DbSet<Release> Releases => Set<Release>();
     public DbSet<ReleaseRollback> ReleaseRollbacks => Set<ReleaseRollback>();
@@ -92,6 +95,7 @@ public class AppDbContext(
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<MailTemplate> MailTemplates => Set<MailTemplate>();
+    public DbSet<OrganizationMailTemplate> OrganizationMailTemplates => Set<OrganizationMailTemplate>();
     public DbSet<ServiceConnection> ServiceConnections => Set<ServiceConnection>();
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
     public DbSet<TestResult> TestResults => Set<TestResult>();
@@ -119,6 +123,7 @@ public class AppDbContext(
     public DbSet<BranchProtectionRule> BranchProtectionRules => Set<BranchProtectionRule>();
     public DbSet<ProjectServer> ProjectServers => Set<ProjectServer>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordSetupToken> PasswordSetupTokens => Set<PasswordSetupToken>();
     public DbSet<PersonalAccessToken> PersonalAccessTokens => Set<PersonalAccessToken>();
     public DbSet<GitBranch> GitBranches => Set<GitBranch>();
     public DbSet<GitCommit> GitCommits => Set<GitCommit>();

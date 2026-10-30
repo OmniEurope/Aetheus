@@ -25,8 +25,10 @@ public class GitCommitRecorderTests
         _hub.Clients.Returns(clients);
     }
 
+    private readonly IGitDevelopBranchProvisioner _developBranches = Substitute.For<IGitDevelopBranchProvisioner>();
+
     private GitCommitRecorder Sut(IGitLightRepository repository) => new(
-        repository, _hub, new MemoryCache(new MemoryCacheOptions()), _time,
+        repository, _hub, new MemoryCache(new MemoryCacheOptions()), _time, _developBranches,
         NullLogger<GitCommitRecorder>.Instance);
 
     [Fact]
@@ -45,6 +47,23 @@ public class GitCommitRecorderTests
         Assert.Equal(_time.GetUtcNow().UtcDateTime, stored.LastPushAt);
         await _group.Received(1).SendCoreAsync(
             GitRealtimeEvents.RepositoryChanged, Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>R-76: only the commit that fills an empty repository asks for the develop branch.</summary>
+    [Fact]
+    public async Task RecordCommitAsync_TheFirstCommit_AsksForTheDevelopBranch_AndALaterOneDoesNot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"git-commit-recorder-{Guid.NewGuid():N}").Options);
+        db.GitInternalRepos.Add(new GitInternalRepo { Id = 7, ProjectId = 5, Name = "ats", Slug = "ats", IsEmpty = true });
+        await db.SaveChangesAsync(ct);
+        var sut = Sut(new GitLightRepository(db));
+
+        await sut.RecordCommitAsync(7, ct);
+        await sut.RecordCommitAsync(7, ct);
+
+        await _developBranches.Received(1).EnsureAfterFirstCommitAsync(7, Arg.Any<CancellationToken>());
     }
 
     [Fact]

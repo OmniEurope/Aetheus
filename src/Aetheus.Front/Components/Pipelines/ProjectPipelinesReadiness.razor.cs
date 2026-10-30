@@ -17,11 +17,23 @@ public partial class ProjectPipelinesReadiness
     /// <summary>Recette R3-68: raised once the first verdict is read (or failed to be), so the page can show banners and list together.</summary>
     [Parameter] public EventCallback Loaded { get; set; }
 
+    /// <summary>R-68: the project's overview shows only the values still to fill (empty variables and secrets), not the
+    /// other findings, which stay on the pipelines page.</summary>
+    [Parameter] public bool EmptyValuesOnly { get; set; }
+
     private PipelineSetupReadinessDto? _readiness;
     private int? _loadedProjectId;
 
+    private IReadOnlyList<PipelineSetupReadinessCheckDto> Checks => EmptyValuesOnly
+        ? [.. (_readiness?.Checks ?? []).Where(check =>
+            check.Kind is PipelineSetupReadinessKind.EmptyLibraryValues or PipelineSetupReadinessKind.EmptyVaultSecrets)]
+        : _readiness?.Checks ?? [];
+
+    private string TitleKey => EmptyValuesOnly ? "ProjectValuesToFill"
+        : _readiness?.HasBlocking == true ? "ProjectPipelinesNotReady" : "ProjectPipelinesToVerify";
+
     /// <summary>The pages opened to fix a finding come back to this project's pipelines.</summary>
-    private string ReturnUrl => $"/projects/{ProjectId}/pipelines";
+    private string ReturnUrl => EmptyValuesOnly ? $"/projects/{ProjectId}" : $"/projects/{ProjectId}/pipelines";
 
     protected override async Task OnParametersSetAsync()
     {

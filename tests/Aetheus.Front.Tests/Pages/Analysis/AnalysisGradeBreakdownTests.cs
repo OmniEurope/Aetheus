@@ -73,6 +73,316 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
             hint => hint.TextContent.Contains("AnalysisCriticalFindingNotDeliverable", StringComparison.Ordinal));
     }
 
+    // Recette R-73: run #2920, an A beside a B line. The generic templates now require every rule; a pipeline that
+    // marks one as not required (or a run made before) keeps the line saying it is not counted, the required line
+    // beside it does not.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AMeasureNotRequiredForTheGrade_SaysItIsNotCounted(bool gateRow)
+    {
+        var grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.A,
+            Completeness = AnalysisGradeCompleteness.Complete,
+            Domains =
+            [
+                new AnalysisGradeDomainDto
+                {
+                    Domain = AnalysisGradeDomain.Security, Grade = AnalysisGrade.A, Required = true,
+                    Completeness = AnalysisGradeCompleteness.Complete,
+                    Measures =
+                    [
+                        new AnalysisGradeMeasureDto { Key = "grade.security.high", Severity = AnalysisSeverity.High, Required = true, Observed = true, ObservedValue = 1, Grade = AnalysisGrade.A },
+                        new AnalysisGradeMeasureDto { Key = "grade.security.medium", Severity = AnalysisSeverity.Medium, Required = false, Observed = true, ObservedValue = 2, Grade = AnalysisGrade.B }
+                    ]
+                }
+            ]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.A));
+
+        // Only the medium line (not required) carries the hint, the high line (required) does not.
+        Assert.Equal(1, CountOf(cut.Markup, "GradeMeasureNotCounted"));
+        var notCounted = Assert.Single(cut.FindAll(".analysis-grade-measure-hint"),
+            hint => hint.TextContent.Contains("GradeMeasureNotCounted", StringComparison.Ordinal));
+        var line = notCounted.Closest(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")!;
+        Assert.Contains("AnalysisMediumVulnerabilities", line.TextContent, StringComparison.Ordinal);
+    }
+
+    // Recettes R-73 and R-74 (owner decision of 2026-10-25): a domain is never "Incomplete". A required measure nobody
+    // observed (its step skipped, or the repository has no such evidence) does not hide the grade of the others: the
+    // line says "not measured" and names the step that should have published its evidence.
+    private static AnalysisGradeSummaryDto GradeWithAMissingCoverage() => new()
+    {
+        OverallGrade = AnalysisGrade.B,
+        Completeness = AnalysisGradeCompleteness.Incomplete,
+        LimitingDomain = AnalysisGradeDomain.Architecture,
+        Domains =
+        [
+            new AnalysisGradeDomainDto
+            {
+                Domain = AnalysisGradeDomain.Architecture, Grade = AnalysisGrade.B, Required = true,
+                Completeness = AnalysisGradeCompleteness.Complete,
+                Measures =
+                [
+                    SeverityMeasure("grade.architecture.medium", AnalysisSeverity.Medium, 2, AnalysisGrade.B) with { Required = true }
+                ]
+            },
+            new AnalysisGradeDomainDto
+            {
+                Domain = AnalysisGradeDomain.Reliability, Grade = null, Required = true,
+                Completeness = AnalysisGradeCompleteness.Incomplete,
+                Measures =
+                [
+                    new AnalysisGradeMeasureDto
+                    {
+                        Key = "grade.coverage.line", Domain = AnalysisGradeDomain.Reliability, Required = true, Observed = false,
+                        ProducerStep = "Publish coverage evidence"
+                    }
+                ]
+            }
+        ]
+    };
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AMissingRequiredMeasure_SaysNotMeasuredAndNamesItsStep_NeverIncomplete(bool gateRow)
+    {
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, GradeWithAMissingCoverage())
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotEvaluated", cut.Markup, StringComparison.Ordinal);
+        var line = cut.FindAll(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")
+            .Single(element => element.TextContent.Contains("AnalysisTestedLines", StringComparison.Ordinal));
+        Assert.Contains("GradeMeasureNotMeasured", line.TextContent, StringComparison.Ordinal);
+        var hint = line.QuerySelector("[data-testid='grade-row-measure-missing']")!;
+        Assert.Contains("GradeMeasureMissingStep Publish coverage evidence", hint.TextContent, StringComparison.Ordinal);
+        // The missing measure is not a "not counted" one: it counts, it was just not measured.
+        Assert.DoesNotContain("GradeMeasureNotCounted", line.TextContent, StringComparison.Ordinal);
+    }
+
+    // Run #2958: a grading rule the validator rejected is an F; its line says it was rejected and why.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARejectedRule_SaysItWasRejectedAndWhy(bool gateRow)
+    {
+        var grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.F,
+            Completeness = AnalysisGradeCompleteness.Complete,
+            LimitingDomain = AnalysisGradeDomain.CodeQuality,
+            Domains =
+            [
+                new AnalysisGradeDomainDto
+                {
+                    Domain = AnalysisGradeDomain.CodeQuality, Grade = AnalysisGrade.F, Required = true,
+                    Completeness = AnalysisGradeCompleteness.Complete,
+                    Measures =
+                    [
+                        new AnalysisGradeMeasureDto
+                        {
+                            Key = "grade.duplication", Domain = AnalysisGradeDomain.CodeQuality, Required = true, Observed = true,
+                            Grade = AnalysisGrade.F, Rejection = "analysis grading rule 'grade.duplication' must define finite A, B, C, D and E thresholds."
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.F));
+
+        var line = cut.FindAll(gateRow ? "[data-testid='grade-row-measure']" : ".analysis-grade-measure")
+            .Single(element => element.TextContent.Contains("AnalysisDuplicatedCode", StringComparison.Ordinal));
+        Assert.Contains("GradeMeasureRejected", line.TextContent, StringComparison.Ordinal);
+        var hint = line.QuerySelector("[data-testid='grade-row-measure-rejected']")!;
+        Assert.Contains("must define finite A, B, C, D and E thresholds", hint.TextContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AGradeOnPartOfItsMeasures_KeepsItsLimitingDomain(bool gateRow)
+    {
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, GradeWithAMissingCoverage())
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        var limiting = Assert.Single(cut.FindAll(".analysis-grade-domain-limiting"));
+        Assert.Contains("AnalysisCodeArchitecture", limiting.TextContent, StringComparison.Ordinal);
+        Assert.Equal("grade.architecture.medium", AnalysisGradeBreakdown.FirstLimitingMeasure(GradeWithAMissingCoverage())?.Key);
+    }
+
+    [Fact]
+    public void TheMissingMeasures_AreCounted_OnlyWhenTheGradeRequiresThem()
+    {
+        var grade = GradeWithAMissingCoverage();
+        Assert.Equal(1, AnalysisGradeBreakdown.MissingMeasureCount(grade));
+        Assert.Equal(0, AnalysisGradeBreakdown.MissingMeasureCount(null));
+
+        var optional = grade with
+        {
+            Domains =
+            [
+                new AnalysisGradeDomainDto
+                {
+                    Domain = AnalysisGradeDomain.Reliability,
+                    Measures = [new AnalysisGradeMeasureDto { Key = "grade.coverage.line", Required = false, Observed = false }]
+                }
+            ]
+        };
+        Assert.Equal(0, AnalysisGradeBreakdown.MissingMeasureCount(optional));
+    }
+
+    // Owner decision of 2026-10-25 on the sealed candidate contract: a grade computed on part of its measures does not
+    // qualify the release, and its deployment then asks for the extra approval (the R-24 stage). The Gate tab says so.
+    [Fact]
+    public void APartialGrade_OnTheGateRow_SaysItDoesNotQualifyTheRelease()
+    {
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, GradeWithAMissingCoverage())
+            .Add(component => component.GateRow, true)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        var sentence = Assert.Single(cut.FindAll("[data-testid='grade-row-gate-partial']"));
+        Assert.Contains("GateGradePartialNotQualifying", sentence.TextContent, StringComparison.Ordinal);
+        Assert.NotNull(sentence.Closest("[data-testid='grade-row-gate']"));
+        Assert.True(AnalysisGradeBreakdown.IsPartialGrade(GradeWithAMissingCoverage()));
+    }
+
+    [Fact]
+    public void AGradeOnEveryMeasure_OnTheGateRow_SaysNothingAboutQualifying()
+    {
+        var complete = GradeWithAMissingCoverage() with { Completeness = AnalysisGradeCompleteness.Complete };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, complete)
+            .Add(component => component.GateRow, true)
+            .Add(component => component.GateGrade, AnalysisGrade.B));
+
+        Assert.Empty(cut.FindAll("[data-testid='grade-row-gate-partial']"));
+        Assert.DoesNotContain("GateGradePartialNotQualifying", cut.Markup, StringComparison.Ordinal);
+        Assert.False(AnalysisGradeBreakdown.IsPartialGrade(complete));
+    }
+
+    [Fact]
+    public void ANoMeasureGrade_IsNotAPartialGrade_SoItSaysNothingAboutQualifying()
+    {
+        // Nothing was graded at all: there is no letter that could be partial.
+        var nothing = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = null,
+            Completeness = AnalysisGradeCompleteness.Incomplete,
+            Domains = [new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Grade = null, Required = true, Completeness = AnalysisGradeCompleteness.Incomplete }]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, nothing)
+            .Add(component => component.GateRow, true)
+            .Add(component => component.GateGrade, AnalysisGrade.A));
+
+        Assert.Empty(cut.FindAll("[data-testid='grade-row-gate-partial']"));
+        Assert.False(AnalysisGradeBreakdown.IsPartialGrade(nothing));
+        Assert.False(AnalysisGradeBreakdown.IsPartialGrade(null));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARequiredDomainNobodyMeasured_SaysNoMeasure_NotIncomplete(bool gateRow)
+    {
+        var grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = null,
+            Completeness = AnalysisGradeCompleteness.Incomplete,
+            Domains = [new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Grade = null, Required = true, Completeness = AnalysisGradeCompleteness.Incomplete }]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.A));
+
+        Assert.Equal(1, CountOf(cut.Markup, ">AnalysisGradeNoMeasure<"));
+        Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ADomainNotRequiredAndWithNothingToShow_IsNotListed(bool gateRow)
+    {
+        var grade = new AnalysisGradeSummaryDto
+        {
+            OverallGrade = AnalysisGrade.A,
+            Completeness = AnalysisGradeCompleteness.Complete,
+            Domains =
+            [
+                new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Security, Grade = AnalysisGrade.A, Required = true, Completeness = AnalysisGradeCompleteness.Complete },
+                new AnalysisGradeDomainDto { Domain = AnalysisGradeDomain.Architecture, Grade = null, Required = false, Completeness = AnalysisGradeCompleteness.Incomplete }
+            ]
+        };
+
+        var cut = Render<AnalysisGradeBreakdown>(parameters => parameters
+            .Add(component => component.Grade, grade)
+            .Add(component => component.GateRow, gateRow)
+            .Add(component => component.GateGrade, AnalysisGrade.A));
+
+        Assert.Contains("AnalysisApplicationSecurity", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("AnalysisCodeArchitecture", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("NotEvaluated", cut.Markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Incomplete", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSeverityLines_ReadFromTheWorstToTheMildest_WhateverTheOrderOfTheirKeys()
+    {
+        // Alphabetical order of the keys: critical, high, info, low, medium.
+        var shown = AnalysisGradeBreakdown.ShownMeasures(
+        [
+            SeverityMeasure("grade.architecture.critical", AnalysisSeverity.Critical, 1, AnalysisGrade.F),
+            SeverityMeasure("grade.architecture.high", AnalysisSeverity.High, 1, AnalysisGrade.D),
+            SeverityMeasure("grade.architecture.info", AnalysisSeverity.Info, 2, AnalysisGrade.B),
+            SeverityMeasure("grade.architecture.low", AnalysisSeverity.Low, 2, AnalysisGrade.B),
+            SeverityMeasure("grade.architecture.medium", AnalysisSeverity.Medium, 2, AnalysisGrade.B)
+        ]);
+
+        Assert.Equal(
+            ["grade.architecture.critical", "grade.architecture.high", "grade.architecture.medium", "grade.architecture.low", "grade.architecture.info"],
+            shown.Select(measure => measure.Key));
+    }
+
+    [Fact]
+    public void ALineThatIsNotASeverityLine_KeepsItsPlaceBetweenTheSeverityLines()
+    {
+        var shown = AnalysisGradeBreakdown.ShownMeasures(
+        [
+            SeverityMeasure("grade.security.critical", AnalysisSeverity.Critical, 1, AnalysisGrade.F),
+            Measure("grade.coverage.line", 50, AnalysisGrade.D),
+            SeverityMeasure("grade.security.high", AnalysisSeverity.High, 1, AnalysisGrade.D),
+            SeverityMeasure("grade.security.info", AnalysisSeverity.Info, 1, AnalysisGrade.B),
+            SeverityMeasure("grade.security.medium", AnalysisSeverity.Medium, 1, AnalysisGrade.B)
+        ]);
+
+        Assert.Equal(
+            ["grade.security.critical", "grade.coverage.line", "grade.security.high", "grade.security.medium", "grade.security.info"],
+            shown.Select(measure => measure.Key));
+    }
+
+    private static int CountOf(string text, string word) => text.Split(word, StringSplitOptions.None).Length - 1;
+
     private static AnalysisGradeSummaryDto Summary(
         AnalysisGrade grade, AnalysisGradeFindingCountsDto counts, double score, bool weighted = false) => new()
         {
@@ -235,6 +545,13 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
     [InlineData("grade.security.critical", "AnalysisCriticalVulnerabilities")]
     [InlineData("grade.security.high", "AnalysisHighVulnerabilities")]
     [InlineData("grade.security.medium", "AnalysisMediumVulnerabilities")]
+    [InlineData("grade.security.low", "AnalysisLowVulnerabilities")]
+    [InlineData("grade.security.info", "AnalysisInfoFindings")]
+    [InlineData("grade.architecture.critical", "AnalysisArchitectureCritical")]
+    [InlineData("grade.architecture.high", "AnalysisArchitectureHigh")]
+    [InlineData("grade.architecture.medium", "AnalysisArchitectureMedium")]
+    [InlineData("grade.architecture.low", "AnalysisArchitectureLow")]
+    [InlineData("grade.architecture.info", "AnalysisArchitectureInfo")]
     [InlineData("grade.security.findings", "AnalysisOpenFindingCount")]
     [InlineData("grade.quality.findings", "AnalysisOpenFindingCount")]
     [InlineData("grade.coverage.line", "AnalysisTestedLines")]
@@ -391,8 +708,30 @@ public sealed class AnalysisGradeBreakdownTests : BunitContext
         var lower = new AnalysisGradeMeasureDto { Direction = AnalysisMetricDirection.LowerIsBetter, AThreshold = 0, BThreshold = 5, CThreshold = 15, DThreshold = 30 };
 
         Assert.Equal("A ≥ 75 %, B ≥ 65 %, C ≥ 55 %, D ≥ 40 %, E ≥ 20 %", AnalysisGradeBreakdown.ThresholdText(higher));
-        Assert.Equal("A ≤ 0, B ≤ 5, C ≤ 15, D ≤ 30", AnalysisGradeBreakdown.ThresholdText(lower));
+        Assert.Equal("A ≤ 0, B ≤ 5, C ≤ 15, D ≤ 30, E > 30", AnalysisGradeBreakdown.ThresholdText(lower));
         Assert.Null(AnalysisGradeBreakdown.ThresholdText(new AnalysisGradeMeasureDto()));
+    }
+
+    [Fact]
+    public void R73_ThresholdText_SaysWhatLiesBeyondTheLastThreshold_WhenARuleStopsEarly()
+    {
+        // Owner decision of 2026-10-25: any high is a D whatever the count, six medium or more a C, never worse.
+        var high = new AnalysisGradeMeasureDto
+        {
+            Direction = AnalysisMetricDirection.LowerIsBetter,
+            AThreshold = 0,
+            BThreshold = 0,
+            CThreshold = 0
+        };
+        var medium = new AnalysisGradeMeasureDto
+        {
+            Direction = AnalysisMetricDirection.LowerIsBetter,
+            AThreshold = 0,
+            BThreshold = 5
+        };
+
+        Assert.Equal("A ≤ 0, B ≤ 0, C ≤ 0, D > 0", AnalysisGradeBreakdown.ThresholdText(high));
+        Assert.Equal("A ≤ 0, B ≤ 5, C > 5", AnalysisGradeBreakdown.ThresholdText(medium));
     }
 
     [Fact]

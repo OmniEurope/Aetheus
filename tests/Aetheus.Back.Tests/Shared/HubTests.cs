@@ -75,7 +75,7 @@ public class ServerHubTests
         _contextMock.ConnectionId.Returns("conn-2");
         _authzMock.HasPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<int?>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(true);
         _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns((List<int>?)null);
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int>());
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int>());
         _sut = new ServerHub(_authzMock);
         typeof(Hub).GetProperty("Context")!.SetValue(_sut, _contextMock);
         typeof(Hub).GetProperty("Groups")!.SetValue(_sut, _groupsMock);
@@ -132,7 +132,7 @@ public class ServerHubTests
         // F-05 CREATE blind-spot fix: a non-admin joins its readable server-{id} groups AND the per-org
         // aggregate group(s), so a server enrolled later (empty server-{id}) still reaches it live.
         _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 5 });
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
 
         await _sut.JoinAllServers();
 
@@ -148,7 +148,7 @@ public class ServerHubTests
         // so the accessible set is empty - but org membership alone must still subscribe to the org group
         // so the FIRST enrolled server appears live.
         _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int>());
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
 
         await _sut.JoinAllServers();
 
@@ -326,7 +326,7 @@ public class EntityHubTests
     public EntityHubTests()
     {
         _contextMock.ConnectionId.Returns("conn-6");
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int>());
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int>());
         _sut = new EntityHub(_authzMock);
         typeof(Hub).GetProperty("Context")!.SetValue(_sut, _contextMock);
         typeof(Hub).GetProperty("Groups")!.SetValue(_sut, _groupsMock);
@@ -348,7 +348,7 @@ public class EntityHubTests
         // F-05 CREATE blind-spot fix for the org-scoped Project type: a project created later has an
         // empty entity-Project-{id} group, so the per-org group is what reaches a non-admin member live.
         _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Project, Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 5 });
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
 
         await _sut.JoinEntityUpdates(ResourceType.Project);
 
@@ -363,8 +363,9 @@ public class EntityHubTests
                 Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Pipeline,
                 Arg.Any<Permission>(), Arg.Any<CancellationToken>())
             .Returns(new List<int> { 8 });
-        _authzMock.GetUserOrganizationIdsAsync(
-                Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>())
+        _authzMock.GetOrganizationIdsWithPermissionAsync(
+                Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Pipeline, Permission.Read,
+                Arg.Any<CancellationToken>())
             .Returns(new List<int> { 3 });
 
         await _sut.JoinEntityUpdates(ResourceType.Pipeline);
@@ -388,7 +389,7 @@ public class EntityHubTests
     public async Task LeaveEntityUpdates_ProjectNonAdmin_LeavesPerResourceAndPerOrgGroups()
     {
         _authzMock.GetAccessibleResourceIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), ResourceType.Project, Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 5, 6 });
-        _authzMock.GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
+        _authzMock.GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>()).Returns(new List<int> { 3 });
 
         await _sut.LeaveEntityUpdates(ResourceType.Project);
 
@@ -406,7 +407,7 @@ public class EntityHubTests
 
         await _groupsMock.Received(1).RemoveFromGroupAsync("conn-6", "entity-Vault-9", Arg.Any<CancellationToken>());
         await _groupsMock.Received(1).RemoveFromGroupAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _authzMock.DidNotReceive().GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await _authzMock.DidNotReceive().GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -419,6 +420,6 @@ public class EntityHubTests
 
         await _groupsMock.Received(1).AddToGroupAsync("conn-6", "entity-Vault-9", Arg.Any<CancellationToken>());
         await _groupsMock.DidNotReceive().AddToGroupAsync("conn-6", Arg.Is<string>(g => g.Contains("-org-")), Arg.Any<CancellationToken>());
-        await _authzMock.DidNotReceive().GetUserOrganizationIdsAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<CancellationToken>());
+        await _authzMock.DidNotReceive().GetOrganizationIdsWithPermissionAsync(Arg.Any<System.Security.Claims.ClaimsPrincipal>(), Arg.Any<ResourceType>(), Arg.Any<Permission>(), Arg.Any<CancellationToken>());
     }
 }

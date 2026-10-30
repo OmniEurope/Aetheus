@@ -42,6 +42,16 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
         return await db.Users.FindByUsernameWithRolesAsync(username, ct).ConfigureAwait(false);
     }
 
+    public async Task<User?> FindUserByEmailWithRolesAsync(string email, CancellationToken ct = default)
+    {
+        return await db.Users.FindByEmailWithRolesAsync(email, ct).ConfigureAwait(false);
+    }
+
+    public async Task<bool> EmailInUseAsync(string normalizedEmail, int? exceptUserId, CancellationToken ct = default)
+    {
+        return await db.Users.AnyAsync(u => u.Email == normalizedEmail && u.Id != exceptUserId, ct).ConfigureAwait(false);
+    }
+
     public async Task<User?> FindUserByIdWithRolesAsync(int userId, CancellationToken ct = default)
     {
         return await db.Users
@@ -335,6 +345,24 @@ public class AuthRepository(AppDbContext db, TimeProvider timeProvider) : IAuthR
 
     public async Task ResetFailedLoginAsync(int userId, CancellationToken ct = default)
         => await UpdateUserAsync(userId, ClearLockout, ct).ConfigureAwait(false);
+
+    public async Task TouchLastActivityAsync(int userId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            // One UPDATE of the one column: no tracked entity, no UpdatedAt bump (that stamp is the administrator's edit).
+            await db.Users
+                .Where(u => u.Id == userId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(u => u.LastActivityAt, nowUtc), ct)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct).ConfigureAwait(false);
+        if (user is null) return;
+        user.LastActivityAt = nowUtc;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
 
     public async Task LockoutUserAsync(int userId, DateTime lockoutEndUtc, CancellationToken ct = default)
         => await UpdateUserAsync(userId, user => user.LockoutEndUtc = lockoutEndUtc, ct).ConfigureAwait(false);

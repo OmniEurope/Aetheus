@@ -32,15 +32,13 @@ public class CommandHelperValidationTests
     // shell-string validation.
 
     // ───────────────────────────────────────────────────────────────────
-    // Rkhunter - setup + getlogs are designed metacharacter-free so they PASS the default
-    // allow-list (apt-get/rkhunter/sed/export/echo patterns + tail). Locks the helper<->allow-list
+    // Rkhunter - getlogs is designed metacharacter-free so it PASSES the default allow-list (the
+    // setup is the typed RkhunterSetup operation since R-119). Locks the helper<->allow-list
     // lockstep the helper comments claim, so a format drift breaks the build instead of the agent.
     // ───────────────────────────────────────────────────────────────────
 
     public static TheoryData<string, string> RkhunterCommands_Allowed => new()
     {
-        { "Setup_noEmail",   RkhunterCommandHelper.BuildSetupCommand(null) },
-        { "Setup_withEmail", RkhunterCommandHelper.BuildSetupCommand("admin@example.com") },
         { "GetLogs",         RkhunterCommandHelper.BuildGetLogsCommand(100) },
     };
 
@@ -53,7 +51,7 @@ public class CommandHelperValidationTests
     }
 
     // ───────────────────────────────────────────────────────────────────
-    // Apache - every Build* helper string. Service/site/module/getlogs all carry shell
+    // Apache - every Build* helper string. Service/getlogs carry shell
     // metacharacters (||, &&, 2>&1, 2>/dev/null) by design and reach the shell via the
     // elevated apache path, so the default validator must REJECT them (they must never
     // travel the standard unelevated executor). This closes the guard's Apache blind spot.
@@ -66,8 +64,6 @@ public class CommandHelperValidationTests
         { "Restart",        ApacheCommandHelper.BuildServiceCommand(ApacheAction.Restart) },
         { "Reload",         ApacheCommandHelper.BuildServiceCommand(ApacheAction.Reload) },
         { "TestConfig",     ApacheCommandHelper.BuildServiceCommand(ApacheAction.TestConfig) },
-        { "EnableModule",   ApacheCommandHelper.BuildEnableModuleCommand("proxy") },
-        { "DisableModule",  ApacheCommandHelper.BuildDisableModuleCommand("proxy") },
         { "GetLogs_access", ApacheCommandHelper.BuildGetLogsCommand("access", 100) },
         { "GetLogs_error",  ApacheCommandHelper.BuildGetLogsCommand("error", 100) },
     };

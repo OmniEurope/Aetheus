@@ -10,7 +10,8 @@ public class EnvironmentService(
     IAuditService audit,
     IEntityChangeNotifier notifier,
     IDomainEventDispatcher domainEvents,
-    IEncryptionService encryption) : IEnvironmentService
+    IEncryptionService encryption,
+    IHttpContextAccessor? httpContextAccessor = null) : IEnvironmentService
 {
     public async Task<PaginatedResult<EnvironmentDto>> GetEnvironmentsAsync(int? projectId, PaginationRequest request, List<int>? accessibleIds = null, CancellationToken ct = default)
     {
@@ -223,14 +224,21 @@ public class EnvironmentService(
     internal static string ValuesToFillDescription(string sourceName) =>
         $"Copied from environment '{sourceName}': names only, the values are empty. Fill them in.";
 
-    private static Data.Entities.Pipeline ClonePipeline(Data.Entities.Pipeline pipeline) => new()
+    /// <summary>A copied pipeline belongs to whoever made the copy, never to the source's owner: automated
+    /// runs act as the owner, so inheriting it would let the copier run a definition with someone else's
+    /// rights (RBAC audit, finding 3). Without a caller the copy has no owner and its automated runs are
+    /// refused until an authorized user saves it (F-EXEC-1b).</summary>
+    private Data.Entities.Pipeline ClonePipeline(Data.Entities.Pipeline pipeline) => new()
     {
         Name = pipeline.Name,
         Description = pipeline.Description,
         YamlDefinition = pipeline.YamlDefinition,
         TriggerType = pipeline.TriggerType,
-        CreatedByUsername = pipeline.CreatedByUsername
+        CreatedByUsername = httpContextAccessor?.HttpContext?.User.Identity?.Name
     };
+
+    public Task<EnvironmentCopyReferences?> GetCopyReferencesAsync(int id, CancellationToken ct = default)
+        => repo.GetCopyReferencesAsync(id, ct);
 
     public Task<int?> GetProjectServerProjectIdAsync(int projectServerId, CancellationToken ct = default)
         => repo.GetProjectServerProjectIdAsync(projectServerId, ct);

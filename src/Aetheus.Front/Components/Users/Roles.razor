@@ -4,7 +4,7 @@
 <PageTitle>@L["Roles"] - Aetheus</PageTitle>
 
 <div class="iam-page iam-list-page">
-    <OmniPageHeader Title="@L["Roles"]" Class="iam-page-header" Subtitle="@Breadcrumb.Subtitle(L["RBACManagement"])">
+    <OmniPageHeader Title="@L["Roles"]" Subtitle="@Breadcrumb.Subtitle()">
         <Icon><OmniIcon Name="@MaterialIconMap.Resolve("admin_panel_settings")" /></Icon>
         <Badges>
         </Badges>
@@ -13,24 +13,37 @@
         </ActionsContent>
     </OmniPageHeader>
 
-    <AdminIdentityNav ActiveSection="roles" />
+    <AdminIdentityNav ActiveSection="roles" OrganizationChanged="@LoadAsync" />
 
-    @* Render the grid only for administrators because its initial render immediately requests
+    @* Render the grid only once the caller is let in, because its initial render immediately requests
        data. *@
-    @if (Auth.IsAdmin)
+    @if (_entered)
     {
     <div class="iam-grid-surface">
         <AetheusDataGrid @ref="_grid" TItem="RoleDto" Data="@_roles" Count="@_totalCount"
                 LoadData="@LoadDataAsync" ExportRead="@ReadExportAsync" PageSize="20" IsLoading="@_loading"
                 Virtualize="@AetheusGrid.RemoteVirtualization"
                 VirtualData="@(() => new OmniDataGridResult<RoleDto>(_roles, _totalCount))"
-                FullHeight="true" RowClick="@OnRowClick">
+                MinHeight="0" FullHeight="true" RowClick="@OnRowClick">
             <Columns>
                 <OmniDataGridColumn Class="omni-data-grid__cell--text" Frozen="true" TItem="RoleDto" Property="Name" Title="@L["Name"]" Filterable="true" >
                     <Template Context="role">
                         <OmniStack Orientation="OmniOrientation.Horizontal" Align="OmniAlignment.Center" Gap="OmniSpacing.Medium">
                             <a href="/admin/roles/@role.Id" class="server-name-link" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">@role.Name</a>
                         </OmniStack>
+                    </Template>
+                </OmniDataGridColumn>
+                @* Owner decision 2026-10-28: a role belongs to one organization, or to every organization. *@
+                <OmniDataGridColumn TItem="RoleDto" Property="OrganizationName" Title="@L["Organization"]" Width="200px" Filterable="false" Sortable="false">
+                    <Template Context="role">
+                        @if (role.OrganizationId is { } organizationId)
+                        {
+                            <EntityNameLink Kind="EntityNameKind.Organization" Id="organizationId" Name="@role.OrganizationName" />
+                        }
+                        else
+                        {
+                            @L["RoleEveryOrganization"]
+                        }
                     </Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="RoleDto" Property="Description" Truncate="true" Title="@L["Description"]" MinWidth="240px" Filterable="true" >
@@ -40,8 +53,14 @@
                     <Template Context="role"><CountBadge Value="@role.PermissionCount" Variant="OmniTone.Neutral" /></Template>
                 </OmniDataGridColumn>
                 <OmniDataGridColumn TItem="RoleDto" Property="UserCount" Title="@L["Users"]" Width="130px" Filterable="true" FilterType="OmniDataGridColumnFilterType.Number" FilterOperators="@GridFilterText.NumberOperators" FilterOperator="OmniDataGridFilterOperator.Equals" />
+                <OmniDataGridColumn TItem="RoleDto" Property="CreatedAt" Title="@L["CreatedOn"]" FormatString="{0:g}" Width="170px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
+                <OmniDataGridColumn TItem="RoleDto" Property="UpdatedAt" Title="@L["LastModified"]" FormatString="{0:g}" Width="190px" Filterable="true" FilterType="OmniDataGridColumnFilterType.DateRange" FilterIncludesTime="true" />
                 <OmniDataGridColumn TItem="RoleDto" Title="@L["Actions"]" Width="120px" Sortable="false" Filterable="false" >
                     <Template Context="role">
+                        @* An organization's administrator changes its organization's roles only; the built-in
+                           roles are read-only to it. *@
+                        @if (CanManage(role))
+                        {
                         <span @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
                             <OmniButton Variant="OmniButtonVariant.Secondary" OnClick="@(() => OnClone(role))" title="@L["CloneRole"]"><Icon><OmniIcon Name="OmniIconName.Copy" /></Icon></OmniButton>
                             @if (role.Name != "Admin")
@@ -49,6 +68,7 @@
                                 <OmniButton Variant="OmniButtonVariant.Danger" OnClick="@(() => OnDelete(role))" title="@L["Delete"]"><Icon><OmniIcon Name="OmniIconName.Delete" /></Icon></OmniButton>
                             }
                         </span>
+                        }
                     </Template>
                 </OmniDataGridColumn>
             </Columns>

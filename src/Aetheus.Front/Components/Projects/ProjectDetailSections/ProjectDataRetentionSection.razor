@@ -1,5 +1,5 @@
 @* SPDX-License-Identifier: EUPL-1.2 *@
-<OmniHeading Level="OmniHeadingLevel.H5" Class="omni-u-mt-xl omni-u-mb-sm">@L["DataRetention"]</OmniHeading>
+<OmniHeading Level="OmniHeadingLevel.H5">@L["DataRetention"]</OmniHeading>
 @if (_loadFailed)
 {
     <OmniAlert Severity="OmniSeverity.Warning">@L["DataRetentionLoadFailed"]</OmniAlert>
@@ -10,7 +10,7 @@ else if (_model is null)
 }
 else
 {
-    <OmniText Class="omni-u-mb-md">@L["DataRetentionHelp"]</OmniText>
+    <OmniText>@L["DataRetentionHelp"]</OmniText>
     <OmniTemplateForm TModel="DataRetentionFormModel" Model="@_model" OnValidSubmit="@OnSubmit" Class="project-data-retention">
         <OmniDataAnnotationsValidator Localizer="@L" />
         <OmniRow Gap="OmniSpacing.Large">

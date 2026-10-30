@@ -58,7 +58,9 @@ public sealed class DeliveryPipelineTemplateSeederTests
             Assert.Equal(Enumerable.Range(1, shippedFiles), template.Versions.Select(version => version.Version).Order());
         });
         var candidate = Assert.Single(templates, template => template.Name == "application-candidate");
-        Assert.Equal(3, candidate.LatestVersion);
+        Assert.Equal(4, candidate.LatestVersion);
+        Assert.Contains("R-23", candidate.Versions.Single(version => version.Version == 4).ChangelogEntry,
+            StringComparison.Ordinal);
         Assert.Contains("R2-1", candidate.Versions.Single(version => version.Version == 3).ChangelogEntry,
             StringComparison.Ordinal);
         Assert.Contains("R2-121", candidate.Versions.Single(version => version.Version == 2).ChangelogEntry,
@@ -184,7 +186,10 @@ public sealed class DeliveryPipelineTemplateSeederTests
                 .Replace("AETHEUS_GIT_HISTORY_DEPTH", string.Empty, StringComparison.Ordinal)
                 // ADR-057: the name of the variable the platform hands a step its rendered environment file in
                 // (`env_template`): the platform's own interface, like the two above, not the product.
-                .Replace("AETHEUS_ENV_FILE_B64", string.Empty, StringComparison.Ordinal);
+                .Replace("AETHEUS_ENV_FILE_B64", string.Empty, StringComparison.Ordinal)
+                // ADR-044 (R-77): the name of the run variable the `advance-branch` step reads the delivered release
+                // from: the platform's own interface, like the ones above, not the product.
+                .Replace("AETHEUS_CANDIDATE_VERSION", string.Empty, StringComparison.Ordinal);
             Assert.DoesNotContain("Aetheus", withoutPlatformInterface, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("sonytumen.com", yaml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("/var/lib/", yaml, StringComparison.Ordinal);

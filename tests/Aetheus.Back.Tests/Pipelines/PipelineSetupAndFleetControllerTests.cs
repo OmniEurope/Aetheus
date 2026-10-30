@@ -28,15 +28,21 @@ public sealed class PipelineSetupAndFleetControllerTests
         }
     };
 
-    private PipelineFleetController Fleet(bool admin) => new(_fleet, _authz) { ControllerContext = As(admin) };
+    private PipelineFleetController Fleet(bool admin) => new(_fleet, _authz, Substitute.For<IPipelineTemplateService>()) { ControllerContext = As(admin) };
 
     private PipelineSetupController Setup(bool admin = false) => new(
         _readiness, _provisioner, Substitute.For<IPipelineProductionSetupService>(), Substitute.For<IPipelineProjectCopyService>(),
         Substitute.For<IPipelineOwnerAuthorization>(), _authz)
     { ControllerContext = As(admin) };
 
-    private void Allow(ResourceType type, int? id, Permission permission, bool allowed) =>
+    // A right with no id is also what the project's own organization gives (RBAC audit, finding 9: the
+    // provisioning reads library and vault rights there).
+    private void Allow(ResourceType type, int? id, Permission permission, bool allowed)
+    {
         _authz.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), type, id, permission, Arg.Any<CancellationToken>()).Returns(allowed);
+        if (id is null)
+            _authz.CanCreateInProjectAsync(Arg.Any<ClaimsPrincipal>(), type, Arg.Any<int?>(), Arg.Any<CancellationToken>()).Returns(allowed);
+    }
 
     private void AccessibleIds(ResourceType type, List<int>? ids) =>
         _authz.GetAccessibleResourceIdsAsync(Arg.Any<ClaimsPrincipal>(), type, Permission.Read, Arg.Any<CancellationToken>()).Returns(ids);

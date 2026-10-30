@@ -16,9 +16,10 @@ internal static class AnalysisGradeEngine
         AnalysisRunContext context,
         DateTime now)
     {
-        var grading = Resolve(context.PipelineYaml, report.Category);
-        if (grading is null)
+        var resolved = Resolve(context.PipelineYaml, report.Category);
+        if (resolved is null)
             return AnalysisGradeEvaluation.Empty;
+        var (grading, stages, scope) = resolved.Value;
 
         PipelineAnalysisGradingValidator.TryParseGrade(grading.MinimumGrade, out var minimumGrade);
         var requiredDomains = grading.RequiredDomains
@@ -29,13 +30,22 @@ internal static class AnalysisGradeEngine
             .Select(domain => domain!.Value)
             .ToHashSet();
 
+        // Owner decision after run #2958: the valid rules are always graded, and each rule the validator rejects is
+        // an F carrying the validator's message, as is a block that cannot be used at all. A problem counts, so the
+        // domain of a rejected measure counts in the overall grade.
+        var diagnosis = PipelineAnalysisGradingValidator.Diagnose(scope, grading);
+        var evidenceAvailable = report.Status is AnalysisReportStatus.Passed or AnalysisReportStatus.Failed;
         var measures = grading.Rules
-            .OrderBy(rule => rule.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(rule => EvaluateRule(
-                rule,
-                report,
-                report.Status is AnalysisReportStatus.Passed or AnalysisReportStatus.Failed))
+            .Take(diagnosis.RuleErrors.Count)
+            .Select((rule, index) => (Rule: rule, Errors: diagnosis.RuleErrors[index]))
+            .OrderBy(item => item.Rule.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(item => item.Errors.Count == 0
+                ? WithProducerStep(EvaluateRule(item.Rule, report, evidenceAvailable), stages, item.Rule)
+                : AnalysisGradeRejections.Rule(item.Rule, item.Errors, scope))
             .ToList();
+        if (diagnosis.GradingErrors.Count > 0)
+            measures.Add(AnalysisGradeRejections.Grading(diagnosis.GradingErrors, requiredDomains, scope));
+        requiredDomains.UnionWith(measures.Where(measure => measure.Rejection is not null).Select(measure => measure.Domain));
         var summary = BuildSummary(
             measures,
             requiredDomains,
@@ -48,10 +58,15 @@ internal static class AnalysisGradeEngine
             .Where(measure => measure.Required
                 && (!measure.Category.HasValue || measure.Category.Value == report.Category))
             .ToList();
-        var complete = applicableRequiredMeasures.Count > 0
-            && applicableRequiredMeasures.All(measure => measure.Observed && measure.Grade.HasValue);
+        // The grade is the worst of the measures that were observed (recette R-73, R-74): a report with no finding
+        // is an A, and a measure nobody observed does not hide the others. Completeness only says whether every
+        // required measure was observed; the sealed candidate contract reads it, nothing shows it as a grade state.
+        var observed = applicableRequiredMeasures
+            .Where(measure => measure.Observed && measure.Grade.HasValue)
+            .ToList();
+        var complete = applicableRequiredMeasures.Count > 0 && observed.Count == applicableRequiredMeasures.Count;
         return new AnalysisGradeEvaluation(
-            complete ? applicableRequiredMeasures.Max(measure => measure.Grade) : null,
+            observed.Count > 0 ? observed.Max(measure => measure.Grade) : null,
             complete ? AnalysisGradeCompleteness.Complete : AnalysisGradeCompleteness.Incomplete,
             json,
             Hash(json));
@@ -111,23 +126,32 @@ internal static class AnalysisGradeEngine
         int pipelineRunId) =>
         WithHash(AnalysisGradeMerge.MergeRuns(runs, pipelineRunId));
 
-    private static PipelineAnalysisGradingDefinition? Resolve(
+    /// <summary>The grading of the pipeline's analysis gate for the report's scope, with the pipeline's stages (to name
+    /// the step that produces each measure) and the scope; null when the pipeline grades nothing. A grading the
+    /// validator rejects, in part or whole, is returned: <see cref="Evaluate"/> grades its problems F.</summary>
+    private static (PipelineAnalysisGradingDefinition Grading, IReadOnlyList<PipelineStageDefinition> Stages, string Scope)? Resolve(
         string yaml,
         AnalysisCategory category)
     {
         var definition = YamlParsingHelper.ParseAndValidate(yaml);
         if (definition is null) return null;
         var scope = AnalysisGateScopes.ForCategory(category);
-        var grading = YamlParsingHelper.FlattenJobs(definition)
+        var stages = YamlParsingHelper.FlattenJobs(definition);
+        var grading = stages
             .SelectMany(stage => stage.Steps)
             .FirstOrDefault(step =>
                 string.Equals(step.Type, "analysis-gate", StringComparison.OrdinalIgnoreCase)
                 && AnalysisGateScopes.Normalize(step.AnalysisScope) == scope)
             ?.AnalysisGrading;
-        return PipelineAnalysisGradingValidator.Validate(scope, grading).Count == 0
-            ? grading
-            : null;
+        return grading is not null ? (grading, stages, scope) : null;
     }
+
+    // The measure names the step that publishes its evidence, so a measure nobody observed can say which one to look at.
+    private static AnalysisGradeMeasureDto WithProducerStep(
+        AnalysisGradeMeasureDto measure,
+        IEnumerable<PipelineStageDefinition> stages,
+        PipelineAnalysisGradeRuleDefinition rule) =>
+        measure with { ProducerStep = AnalysisGradeProducerSteps.Find(stages, rule) };
 
     private static AnalysisGradeMeasureDto EvaluateRule(
         PipelineAnalysisGradeRuleDefinition rule,
@@ -197,6 +221,8 @@ internal static class AnalysisGradeEngine
     private static AnalysisGradeMeasureDto AggregateMeasure(
         IGrouping<string, AnalysisGradeMeasureDto> group)
     {
+        // A rejected rule stays the F it is, with its reason, whatever the other reports say.
+        if (group.FirstOrDefault(measure => measure.Rejection is not null) is { } rejected) return rejected;
         var first = group.First();
         var observed = group
             .Where(measure => measure.Observed && measure.ObservedValue.HasValue)
@@ -291,17 +317,19 @@ internal static class AnalysisGradeEngine
     {
         // One open critical finding makes a weighted finding score not deliverable.
         if (measure.FindingCounts is { Critical: > 0 }) return AnalysisGrade.F;
+        // A rule on findings may stop its thresholds after B, C or D (the validator refuses it elsewhere):
+        // everything beyond the last one is then the next grade and never worse, so "at least one high
+        // finding" is a D and "six medium findings or more" a C (owner decision of 2026-10-25, R-73).
+        var open = measure.Direction == AnalysisMetricDirection.HigherIsBetter
+            ? double.NegativeInfinity
+            : double.PositiveInfinity;
         var thresholds = new[]
         {
             measure.AThreshold!.Value,
-            measure.BThreshold!.Value,
-            measure.CThreshold!.Value,
-            measure.DThreshold!.Value,
-            // Only a weighted finding score may leave E open (the validator refuses it elsewhere):
-            // everything above D is then E.
-            measure.EThreshold ?? (measure.Direction == AnalysisMetricDirection.HigherIsBetter
-                ? double.NegativeInfinity
-                : double.PositiveInfinity)
+            measure.BThreshold ?? open,
+            measure.CThreshold ?? open,
+            measure.DThreshold ?? open,
+            measure.EThreshold ?? open
         };
         for (var index = 0; index < thresholds.Length; index++)
         {
@@ -327,12 +355,17 @@ internal static class AnalysisGradeEngine
                 var domainMeasures = measures.Where(measure => measure.Domain == domain).ToList();
                 var gradingMeasures = domainMeasures.Where(measure => measure.Required).ToList();
                 var required = requiredDomains.Contains(domain);
-                var complete = gradingMeasures.Count > 0
-                    && gradingMeasures.All(measure => measure.Observed && measure.Grade.HasValue);
+                // A domain is graded by the measures observed (recette R-73, R-74): no finding is an A, never a
+                // missing grade. A required measure nobody observed stays in the list, unobserved, with the step
+                // that should have produced it; completeness only records that some are missing.
+                var observed = gradingMeasures
+                    .Where(measure => measure.Observed && measure.Grade.HasValue)
+                    .ToList();
+                var complete = gradingMeasures.Count > 0 && observed.Count == gradingMeasures.Count;
                 return new AnalysisGradeDomainDto
                 {
                     Domain = domain,
-                    Grade = complete ? gradingMeasures.Max(measure => measure.Grade) : null,
+                    Grade = observed.Count > 0 ? observed.Max(measure => measure.Grade) : null,
                     Required = required,
                     Completeness = complete
                         ? AnalysisGradeCompleteness.Complete

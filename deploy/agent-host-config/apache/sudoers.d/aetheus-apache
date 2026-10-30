@@ -17,6 +17,21 @@ Cmnd_Alias AETHEUS_APACHE_MANAGE = \
     /bin/systemctl stop apache2.service, \
     /bin/systemctl restart apache2.service
 
+# 3. Enable or disable a module (recette R-119): the root-owned helper with one fixed word; the module name
+#    travels on stdin and the helper re-validates it. noexec is omitted (ADR-019 vetted-helper exception):
+#    the helper must exec a2enmod / a2dismod, apache2ctl configtest and systemctl restart.
+Cmnd_Alias AETHEUS_APACHE_MODULE = \
+    #{APACHE_MODULE_HELPER_PATH}# enable, \
+    #{APACHE_MODULE_HELPER_PATH}# disable
+
+# 4. Read one Apache site file the agent account cannot open (certbot writes <site>-le-ssl.conf as root, 0600): the
+#    root-owned READ-ONLY helper with one fixed word; the path travels on stdin and the helper re-validates it (a plain
+#    file name of sites-enabled or sites-available; a followed link must stay directly in those two directories; a
+#    regular file of at most 1 MiB). noexec is omitted (ADR-019 vetted-helper exception): the helper must exec stat,
+#    readlink, timeout and cat, and it writes nothing.
+Cmnd_Alias AETHEUS_APACHE_READ = \
+    #{APACHE_READ_SITE_HELPER_PATH}# read
+
 Defaults!AETHEUS_APACHE_MANAGE noexec
 Defaults!AETHEUS_APACHE_MANAGE timestamp_timeout=0
 Defaults!AETHEUS_APACHE_MANAGE env_reset
@@ -24,6 +39,14 @@ Defaults!AETHEUS_APACHE_MANAGE secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
 Defaults!AETHEUS_APACHE_TEST timestamp_timeout=0
 Defaults!AETHEUS_APACHE_TEST env_reset
 Defaults!AETHEUS_APACHE_TEST secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults!AETHEUS_APACHE_MODULE timestamp_timeout=0
+Defaults!AETHEUS_APACHE_MODULE env_reset
+Defaults!AETHEUS_APACHE_MODULE secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults!AETHEUS_APACHE_READ timestamp_timeout=0
+Defaults!AETHEUS_APACHE_READ env_reset
+Defaults!AETHEUS_APACHE_READ secure_path="/usr/sbin:/usr/bin:/sbin:/bin"
 
 #{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_APACHE_MANAGE
 #{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_APACHE_TEST
+#{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_APACHE_MODULE
+#{AGENT_USER}# ALL=(root) NOPASSWD: AETHEUS_APACHE_READ

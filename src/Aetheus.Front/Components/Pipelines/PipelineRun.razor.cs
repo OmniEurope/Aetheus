@@ -6,6 +6,7 @@ namespace Aetheus.Front.Components.Pipelines;
 
 public partial class PipelineRun : IAsyncDisposable
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
     [Inject] private PageStateCache PageState { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
@@ -32,6 +33,7 @@ public partial class PipelineRun : IAsyncDisposable
         ? $"/pipelines/{_run!.PipelineId}?projectId={projectId}"
         : ServerId is { } serverId ? $"/pipelines/{_run!.PipelineId}?serverId={serverId}" : $"/pipelines/{_run!.PipelineId}";
     private PipelineRunDto? _run;
+    private PipelineRunsSummary? _pipelineRunsSummary;
     private PipelineRunMetrics _metrics = new();
     private readonly PipelineRunGateState _gateState = new();
     private readonly PipelineRunSchemaState _schemaState = new();
@@ -198,6 +200,8 @@ public partial class PipelineRun : IAsyncDisposable
         var releasesTask = Api.Projects.GetReleasesByRunAsync(runId, ct);
         var aiResultsTask = PipelineRunAiResults.LoadAsync(Api, runId, ct);
         var failedLogsTask = LoadFailedStepLogsAsync();
+        // R-43: the same summary the pipeline page shows, for its average duration of successes.
+        var summaryTask = PipelineRunsSummary.LoadAsync(Api, rootRun.PipelineId);
         // Approval requires only the run ID and status, so it can load independently of child-run
         // metrics.
         var approvalTask = approvalLoaded ? Task.CompletedTask : _approval!.LoadAsync(rootRun, ct);
@@ -221,6 +225,7 @@ public partial class PipelineRun : IAsyncDisposable
         _repoId = await repositoryTask;
         _releases = await LoadReleasesAsync(releasesTask).ConfigureAwait(false);
         _aiResults = await aiResultsTask;
+        _pipelineRunsSummary = await summaryTask;
         if (!IsCurrentLoad(runId, generation)) return false;
         return await AutoSelectStepAsync(runId, generation).ConfigureAwait(false);
     }
@@ -431,14 +436,19 @@ public partial class PipelineRun : IAsyncDisposable
 
     // Recette R-16: a notice (PipelineRunNotices) is information, not a warning of the run: it is neither
     // blocking, nor orange, nor counted in "Avertissements (n)".
+    // A warning is either a sentence written before problems had codes or a stored problem
+    // (StoredProblem): it is classified on its English sentence and shown in the user's language.
     private IReadOnlyList<string> BlockingWarnings =>
-        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && IsBlockingWarning(w)).ToList();
+        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && IsBlockingWarning(StoredProblem.English(w))).ToList();
 
     private IReadOnlyList<string> InfoWarnings =>
-        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && !IsBlockingWarning(w)).ToList();
+        _run is null ? [] : _run.Warnings.Where(w => PipelineRunNotices.CodeOf(w) is null && !IsBlockingWarning(StoredProblem.English(w))).ToList();
 
     private IReadOnlyList<BlockingWarningView> BlockingWarningViews =>
-        _run is null ? [] : BlockingWarnings.Select(ToBlockingView).ToList();
+        _run is null ? [] : BlockingWarnings.Select(w => ToBlockingView(StoredProblem.English(w)) with { Message = SayWarning(w) }).ToList();
+
+    /// <summary>A warning of the run in the user's language.</summary>
+    private string SayWarning(string warning) => LaunchProblemText.DescribeStored(warning, L);
 
     /// <summary>The codes of the run's notices, each once.</summary>
     private IReadOnlyList<string> RunNoticeCodes =>
@@ -471,7 +481,7 @@ public partial class PipelineRun : IAsyncDisposable
     private bool CanRerun => PipelineRunRerunCoordinator.CanRerun(_run);
 
     private PipelineRunCommandCoordinator Commands =>
-        _commandCoordinator ??= new(Api, Dialog, Toast, L, Js);
+        _commandCoordinator ??= new(Api, Dialog, Toast, L, Js, Veil);
 
     private async Task OnRerunClick(string? mode)
     {
@@ -596,6 +606,23 @@ public partial class PipelineRun : IAsyncDisposable
         _run is null || _run.ResolvedVariables.Count == 0
             ? Task.CompletedTask
             : Commands.ShowVariablesAsync(_run);
+
+    // R-37: parsed from the run's definition snapshot, once per snapshot (the page re-renders on every live update).
+    private string? _usedResourcesSnapshot;
+    private PipelineRunResources.Used _usedResources = PipelineRunResources.Used.None;
+
+    private PipelineRunResources.Used UsedResources
+    {
+        get
+        {
+            if (!ReferenceEquals(_usedResourcesSnapshot, _run?.YamlSnapshot))
+            {
+                _usedResourcesSnapshot = _run?.YamlSnapshot;
+                _usedResources = PipelineRunResources.Of(_usedResourcesSnapshot, _run?.ProjectName, _run?.ProjectId);
+            }
+            return _usedResources;
+        }
+    }
 
     private Task ShowParameters() =>
         _run is null || _run.Parameters.Count == 0

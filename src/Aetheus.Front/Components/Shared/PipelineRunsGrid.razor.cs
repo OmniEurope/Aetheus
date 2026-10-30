@@ -5,6 +5,7 @@ namespace Aetheus.Front.Components.Shared;
 
 public partial class PipelineRunsGrid
 {
+    [Inject] private BusyVeil Veil { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [Inject] private IStringLocalizer<AppStrings> L { get; set; } = default!;
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -109,20 +110,23 @@ public partial class PipelineRunsGrid
         _cancelling = run.RunId;
         try
         {
-            var status = await Api.Pipelines.CancelPipelineRunAsync(run.RunId);
-            if (status.Success)
+            await Veil.RunAsync(async () =>
             {
-                Toast.Info("RunCancelled", "RunCancelledDetail");
-                await OnRunCancelled.InvokeAsync();
-            }
-            else if (status.Forbidden)
-            {
-                Toast.Error("PipelineRunFailed", "PipelineRunForbidden");
-            }
-            else
-            {
-                Toast.Error("PipelineRunFailed", "Error");
-            }
+                var status = await Api.Pipelines.CancelPipelineRunAsync(run.RunId);
+                if (status.Success)
+                {
+                    Toast.Info("RunCancelled", "RunCancelledDetail");
+                    await OnRunCancelled.InvokeAsync();
+                }
+                else if (status.Forbidden)
+                {
+                    Toast.Error("PipelineRunFailed", "PipelineRunForbidden");
+                }
+                else
+                {
+                    Toast.Error("PipelineRunFailed", "Error");
+                }
+            });
         }
         finally
         {

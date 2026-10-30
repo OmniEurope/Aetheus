@@ -14,29 +14,69 @@ public sealed class PipelineRunGate(
     /// <param name="parameters">The values chosen for the launch, when they are known: the preview then
     /// resolves the targets a parameter names (the production server) as the launch will.</param>
     public async Task<bool> ConfirmPreflightAsync(
-        int pipelineId, string? sourceBranch = null, Dictionary<string, string>? parameters = null)
+        int pipelineId, string? sourceBranch = null, Dictionary<string, string>? parameters = null) =>
+        await ConfirmLaunchAsync(pipelineId, sourceBranch, parameters, offerGateOverride: false)
+            != PipelineLaunchConsent.Refused;
+
+    /// <summary>
+    /// The preflight of a launch that may deploy a release despite the quality gate (R-72, "Redéployer cette
+    /// version"). When the gate holds something against the release, one confirmation lists every reason
+    /// first; confirming it is the consent the launch then sends as its override. Nothing against it: no
+    /// extra dialog, the launch is an ordinary one.
+    /// </summary>
+    public async Task<PipelineLaunchConsent> ConfirmLaunchAsync(
+        int pipelineId, string? sourceBranch, Dictionary<string, string>? parameters, bool offerGateOverride)
     {
         var pre = await api.Pipelines.PreflightPipelineAsync(pipelineId, sourceBranch, parameters);
-        if (NotifyRefusal(pre)) return false;
+        if (NotifyRefusal(pre)) return PipelineLaunchConsent.Refused;
 
-        var warnings = pre.Value?.Warnings ?? [];
+        var despiteGate = false;
+        if (offerGateOverride && pre.Value?.GateWarnings is { Count: > 0 } gateWarnings)
+        {
+            if (!await ConfirmDespiteGateAsync(gateWarnings)) return PipelineLaunchConsent.Refused;
+            despiteGate = true;
+        }
+
+        if (!await ConfirmStagesAsync(pipelineId, pre.Value)) return PipelineLaunchConsent.Refused;
+        return despiteGate ? PipelineLaunchConsent.ProceedDespiteGate : PipelineLaunchConsent.Proceed;
+    }
+
+    private async Task<bool> ConfirmDespiteGateAsync(IReadOnlyList<DeploymentGateWarningDto> warnings)
+    {
+        var confirmed = await dialog.OpenAsync<DeploymentGateOverrideDialog>(
+            localizer["GateOverrideTitle"].Value,
+            new Dictionary<string, object?> { [nameof(DeploymentGateOverrideDialog.Warnings)] = warnings },
+            new OmniDialogOptions
+            {
+                Width = "min(36rem, 92vw)",
+                // docs/contracts/ui-patterns.md: the title must be announced before the first control.
+                AutoFocusFirstElement = false
+            });
+        return confirmed is true;
+    }
+
+    private async Task<bool> ConfirmStagesAsync(int pipelineId, PipelinePreflightDto? preflight)
+    {
+        var warnings = preflight?.Warnings ?? [];
         if (warnings.Count > 0)
         {
             toast.Notify(
                 OmniSeverity.Warning,
                 "Warnings",
-                string.Join("\n", warnings.Select(warning => $"• {warning}")));
+                string.Join("\n", warnings.Select(warning => $"• {LaunchProblemText.DescribeStored(warning, localizer)}")));
         }
 
-        var stages = pre.Value?.Stages ?? [];
+        var stages = preflight?.Stages ?? [];
         var unresolved = stages.Where(s => !s.Resolved).ToList();
         if (unresolved.Count == 0) return await ConfirmReadinessAsync(pipelineId);
 
         // A plain Confirm repeated one full sentence per unresolved stage, so an eleven-stage pipeline
         // rendered eleven copies of the same cause and the dialog became unreadable. The dedicated
         // dialog groups the stages by cause and offers the action that actually fixes it.
+        // R-63: when every blocked stage lacks a server choice, the title says so rather than "no agent online".
+        var title = unresolved.All(stage => stage.EmptyTargetParameter is not null) ? "PreflightNoServerTitle" : "PreflightNoAgentTitle";
         var confirmed = await dialog.OpenAsync<PipelineRunPreflightDialog>(
-            localizer["PreflightNoAgentTitle"].Value,
+            localizer[title].Value,
             new Dictionary<string, object?> { [nameof(PipelineRunPreflightDialog.Unresolved)] = unresolved },
             new OmniDialogOptions
             {
@@ -54,7 +94,7 @@ public sealed class PipelineRunGate(
         // populate the typed Errors collection.
         if (pre.Error is not null || pre.ErrorMessage is not null)
         {
-            toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", pre.ErrorMessage ?? string.Empty);
+            toast.Notify(OmniSeverity.Danger, "PipelineRunFailed", pre.LocalizedErrorMessage(localizer) ?? string.Empty);
             return true;
         }
 
@@ -101,4 +141,17 @@ public sealed class PipelineRunGate(
             new OmniConfirmOptions { OkButtonText = localizer["RunAnyway"].Value, CancelButtonText = localizer["GoBack"].Value });
         return confirmed == true;
     }
+}
+
+/// <summary>What the user agreed to before a launch.</summary>
+public enum PipelineLaunchConsent
+{
+    /// <summary>The launch stops: refused by the preflight, or the user went back.</summary>
+    Refused,
+
+    /// <summary>An ordinary launch.</summary>
+    Proceed,
+
+    /// <summary>R-72: the user confirmed deploying despite what the quality gate holds against the release.</summary>
+    ProceedDespiteGate
 }

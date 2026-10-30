@@ -201,7 +201,7 @@ public class ReleasesControllerTests
     private PipelineRunPreparation AllowLaunch(int pipelineId, params int[] targets)
     {
         var preparation = new PipelineRunPreparation { PipelineId = pipelineId, YamlSnapshot = "name: p", TargetServerIds = targets };
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, pipelineId, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.PipelineRun, pipelineId, Arg.Any<CancellationToken>())
             .Returns(true);
         _pipelineRunService.PrepareRunAsync(pipelineId, Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(preparation);
         _pipelineRunService.ResolveRunParametersAsync(
@@ -253,7 +253,7 @@ public class ReleasesControllerTests
     {
         _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
             .Returns(true);
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Pipeline, 10, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.PipelineRun, 10, Arg.Any<CancellationToken>())
             .Returns(true);
         _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>()).Returns(new ReleaseDto
         {
@@ -308,7 +308,7 @@ public class ReleasesControllerTests
     }
 
     [Fact]
-    public async Task TriggerBuild_WithoutPipelineWrite_ReturnsForbidBeforeLaunch()
+    public async Task TriggerBuild_WithoutTheRunPermission_ReturnsForbidBeforeLaunch()
     {
         _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
             .Returns(true);
@@ -324,7 +324,7 @@ public class ReleasesControllerTests
     [Fact]
     public async Task Rollback_WithoutServerAdminOnAPipelineTarget_ReturnsForbidBeforeLaunch()
     {
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ReleaseRollback, 1, Arg.Any<CancellationToken>())
             .Returns(true);
         _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>())
             .Returns(new ReleaseDto { Id = 1, ProjectId = 7, Version = "1.0.0" });
@@ -344,7 +344,7 @@ public class ReleasesControllerTests
     [Fact]
     public async Task Rollback_Authorized_ReturnsAccepted()
     {
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ReleaseRollback, 1, Arg.Any<CancellationToken>())
             .Returns(true);
         _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>())
             .Returns(new ReleaseDto { Id = 1, ProjectId = 7, Version = "1.0.0" });
@@ -362,7 +362,7 @@ public class ReleasesControllerTests
     [Fact]
     public async Task Rollback_WithoutProjectWrite_ReturnsForbid()
     {
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 1, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ReleaseRollback, 1, Arg.Any<CancellationToken>())
             .Returns(true);
         _serviceMock.GetReleaseAsync(1, Arg.Any<CancellationToken>())
             .Returns(new ReleaseDto { Id = 1, ProjectId = 7, Version = "1.0.0" });
@@ -474,19 +474,19 @@ public class ReleasesControllerTests
     private static readonly RestoreReleaseStatusRequest RestoreToDeployed =
         new() { Status = ReleaseStatus.Deployed, Reason = "production still serves it" };
 
-    private void GrantRestore(bool releaseWrite, bool projectAdmin)
+    private void GrantRestore(bool restoreKey, bool projectAdmin)
     {
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 9, Permission.Write, Arg.Any<CancellationToken>())
-            .Returns(releaseWrite);
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ReleaseStatusRestore, 9, Arg.Any<CancellationToken>())
+            .Returns(restoreKey);
         _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Project, 5, Permission.Admin, Arg.Any<CancellationToken>())
             .Returns(projectAdmin);
         _serviceMock.GetReleaseAsync(9, Arg.Any<CancellationToken>()).Returns(new ReleaseDto { Id = 9, ProjectId = 5, Status = ReleaseStatus.Failed });
     }
 
     [Fact]
-    public async Task R_13_RestoreStatus_WithReleaseWriteAndProjectAdmin_RestoresTheStatus()
+    public async Task R_13_RestoreStatus_WithTheRestorePermissionAndProjectAdmin_RestoresTheStatus()
     {
-        GrantRestore(releaseWrite: true, projectAdmin: true);
+        GrantRestore(restoreKey: true, projectAdmin: true);
         _statusRestore.RestoreAsync(9, RestoreToDeployed, Arg.Any<CancellationToken>())
             .Returns(new ReleaseDto { Id = 9, ProjectId = 5, Status = ReleaseStatus.Deployed });
 
@@ -499,7 +499,7 @@ public class ReleasesControllerTests
     [Fact]
     public async Task R_13_RestoreStatus_WithoutProjectAdmin_IsForbiddenAndChangesNothing()
     {
-        GrantRestore(releaseWrite: true, projectAdmin: false);
+        GrantRestore(restoreKey: true, projectAdmin: false);
 
         var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
 
@@ -508,9 +508,9 @@ public class ReleasesControllerTests
     }
 
     [Fact]
-    public async Task R_13_RestoreStatus_WithoutReleaseWrite_IsForbiddenAndChangesNothing()
+    public async Task R_13_RestoreStatus_WithoutTheRestorePermission_IsForbiddenAndChangesNothing()
     {
-        GrantRestore(releaseWrite: false, projectAdmin: true);
+        GrantRestore(restoreKey: false, projectAdmin: true);
 
         var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);
 
@@ -521,7 +521,7 @@ public class ReleasesControllerTests
     [Fact]
     public async Task R_13_RestoreStatus_OfAnUnknownRelease_IsNotFound()
     {
-        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), ResourceType.Release, 9, Permission.Write, Arg.Any<CancellationToken>())
+        _authzMock.HasPermissionAsync(Arg.Any<ClaimsPrincipal>(), PermissionKeys.ReleaseStatusRestore, 9, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var result = await _sut.RestoreStatus(9, RestoreToDeployed, CancellationToken.None);

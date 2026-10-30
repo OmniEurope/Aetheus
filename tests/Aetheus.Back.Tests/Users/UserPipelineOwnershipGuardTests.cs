@@ -32,7 +32,7 @@ public sealed class UserPipelineOwnershipGuardTests
         Id = 1,
         Username = "admin",
         IsActive = true,
-        UserRoles = [new UserRole { Role = new Role { Name = "Contributor" } }],
+        UserRoles = [],
     };
 
     public UserPipelineOwnershipGuardTests()
@@ -53,13 +53,15 @@ public sealed class UserPipelineOwnershipGuardTests
     private static UserService NewService(
         IUserRepository repo, IHttpContextAccessor http, IAuditService audit, IDomainEventDispatcher events) =>
         new(repo, http, audit, Substitute.For<IResourceAuthorizationService>(), new MemoryCache(new MemoryCacheOptions()),
-            TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), Substitute.For<IUserChangeNotifier>(), events);
+            TimeProvider.System, Substitute.For<IAdminChangeNotifier>(), Substitute.For<IUserChangeNotifier>(), events,
+            Substitute.For<Aetheus.Back.Services.IOrganizationRoleAssignmentService>());
 
     private static UpdateUserRequest Deactivate(string? transferTo = null, bool force = false) => new()
     {
         Username = "admin",
+        Email = "admin@test.com",
         IsActive = false,
-        Roles = ["Contributor"],
+        Roles = [], // ADR-059: only Admin is held site-wide; the legacy Contributor row is inert.
         TransferPipelinesToUsername = transferTo,
         ForceWithOwnedPipelines = force,
     };
